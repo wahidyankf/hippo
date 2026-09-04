@@ -1,6 +1,6 @@
 .cache/
 coverage/
 dist/
-generated-output/
+generated-reports/
 local-tmp/
 node_modules/

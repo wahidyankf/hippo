@@ -20,6 +20,6 @@ Feature: Resource guard build artifacts
   @e2e-exempt
   Scenario: Machine-local configuration and binaries stay private
     When tracked and ignored paths are inspected
-    Then local config and generated artifacts are ignored and untracked
+    Then local config, generated artifacts, and generated-reports are ignored and untracked
     And the local config example remains tracked
     And the standalone layout has no Nx metadata

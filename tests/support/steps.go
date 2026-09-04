@@ -181,7 +181,7 @@ func (driver *Driver) artifactBindings() []contract.StepBinding {
 		step(`^the current bootstrap generation runs$`, driver.runCurrentBootstrap),
 		step(`^only the current and two recent generations remain$`, driver.requireRetention),
 		step(`^tracked and ignored paths are inspected$`, driver.inspectArtifactPolicy),
-		step(`^local config and generated artifacts are ignored and untracked$`, driver.requirePrivateArtifacts),
+		step(`^local config, generated artifacts, and generated-reports are ignored and untracked$`, driver.requirePrivateArtifacts),
 		step(`^the local config example remains tracked$`, driver.requireExampleTracked),
 		step(`^the standalone layout has no Nx metadata$`, driver.requireApplicationLayout),
 	}

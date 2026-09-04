@@ -2611,7 +2611,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 		"dist/example",
 		"coverage/example",
 		"local-tmp/example",
-		"generated-output/example",
+		"generated-reports/example",
 		"node_modules/example",
 		"example.test",
 	}
@@ -2634,7 +2634,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 		"dist/**",
 		"coverage/**",
 		"local-tmp/**",
-		"generated-output/**",
+		"generated-reports/**",
 		"node_modules/**",
 		"*.test",
 	)
@@ -2684,7 +2684,7 @@ func pathExists(path string) bool {
 
 func (driver *Driver) requirePrivateArtifacts() error {
 	if !driver.privateArtifacts {
-		return errors.New("local config or generated artifacts are not both ignored and untracked")
+		return errors.New("local config, generated artifacts, or generated reports are not ignored and untracked")
 	}
 	return nil
 }

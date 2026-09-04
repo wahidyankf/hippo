@@ -243,7 +243,7 @@ npm test
 
 Commits follow Conventional Commits. Pre-commit formats supported staged Go, shell, Markdown, JSON, and YAML files; pre-push runs the direct no-Nx quick gate. The quick gate enforces at least 99% statement coverage over deterministic production policy, configuration, host-parsing, and fixed-memory evidence aggregation logic. Platform, filesystem, and process boundaries remain covered by strict integration and compiled-binary E2E adapters.
 
-Release artifacts are built with `./scripts/build-release.sh <version> <commit> <output-dir>`. Generated outputs and local configuration are enforced by the artifact suite and `.gitignore`.
+Release artifacts are built with `./scripts/build-release.sh <version> <commit> <output-dir>`. Disposable scratch belongs in `local-tmp/`; requested non-authoritative reports belong in `generated-reports/`. Both directories, generated build output, and local configuration are enforced by the artifact suite and `.gitignore`.
 
 ## License
 

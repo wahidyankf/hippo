@@ -5,7 +5,7 @@ These scenarios are shared by unit, local integration, and safe compiled-binary 
 ## Directory Map
 
 - [`admission.feature`](admission.feature) specifies admission and resource classification.
-- [`artifacts.feature`](artifacts.feature) specifies generated artifact privacy and retention.
+- [`artifacts.feature`](artifacts.feature) specifies generated artifact and report privacy and retention.
 - [`evidence.feature`](evidence.feature) specifies bounded runtime evidence and lifetime summaries.
 - [`execution.feature`](execution.feature) specifies leases, generic concurrency mapping, and child-process stream behavior.
 - [`public-cli.feature`](public-cli.feature) specifies the safe executable and Unix stream boundary.

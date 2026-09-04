@@ -131,7 +131,7 @@ Admission failures return before child creation. An admitted child inherits the 
 - One shared state root admits at most 20 live evidence streams across all consuming repositories. Each live stream keeps five rotating 400 KiB raw chunks, for about 2 MiB per session and about 40 MiB at the maximum live count.
 - Completed raw chunks and summaries share a 50 MiB inactive cap. Raw chunks expire after seven days, summaries after thirty days, and active streams are protected from cleanup by process-owned markers.
 - Lifetime summaries use fixed-memory aggregates and remain complete even after older raw chunks rotate away. Evidence excludes command arguments, repository origins, paths, credentials, and user payloads.
-- Local configuration, runtime state, build caches, coverage, release artifacts, and scratch output remain untracked.
+- Local configuration, runtime state, build caches, coverage, and release artifacts remain untracked. Disposable scratch uses `local-tmp/`; requested non-authoritative reports use `generated-reports/`.
 - Release monitoring requires explicit health inputs, emits generic bounded file evidence or caller-owned stdout streams, rejects mixed raw and summary schemas on one stream, and keeps compatibility with supported retained summary schemas.
 - Tagged release assets are immutable, built through the owned release script for the supported OS and architecture matrix, and published with SHA-256 checksums.
 
