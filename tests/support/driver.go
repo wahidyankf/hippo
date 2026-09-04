@@ -60,6 +60,10 @@ type Driver struct {
 	approvedExemptions  bool
 	serialCompliance    bool
 	e2ePlacement        bool
+	conventionalCommits bool
+	stagedFormatting    bool
+	pushQuickGate       bool
+	coreCoverage        bool
 	resolution          guard.Resolution
 	requestedProfile    string
 	taskClass           string
@@ -1007,6 +1011,91 @@ func (driver *Driver) requireE2EPlacement() error {
 	return nil
 }
 
+func (driver *Driver) contributorGateContract() {}
+
+func (driver *Driver) inspectContributorEnforcement() error {
+	root := toolRoot()
+	read := func(parts ...string) (string, error) {
+		data, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
+		return string(data), err
+	}
+	commitHook, err := read(".husky", "commit-msg")
+	if err != nil {
+		return err
+	}
+	preCommitHook, err := read(".husky", "pre-commit")
+	if err != nil {
+		return err
+	}
+	prePushHook, err := read(".husky", "pre-push")
+	if err != nil {
+		return err
+	}
+	stagedConfig, err := read("lint-staged.config.mjs")
+	if err != nil {
+		return err
+	}
+	workflow, err := read(".github", "workflows", "ci.yml")
+	if err != nil {
+		return err
+	}
+	manifest, err := read("package.json")
+	if err != nil {
+		return err
+	}
+	quick, err := read("scripts", "test-quick.sh")
+	if err != nil {
+		return err
+	}
+
+	driver.conventionalCommits = strings.Contains(commitHook, "commitlint --edit") &&
+		strings.Contains(workflow, "commitlint --from") &&
+		strings.Contains(workflow, "Validate pull request commits") &&
+		strings.Contains(workflow, "Validate pushed commits")
+	driver.stagedFormatting = strings.Contains(preCommitHook, "lint-staged") &&
+		strings.Contains(stagedConfig, "goimports -w") &&
+		strings.Contains(stagedConfig, "gofumpt -w") &&
+		strings.Contains(stagedConfig, "shfmt -w") &&
+		strings.Contains(stagedConfig, "prettier --write")
+	driver.pushQuickGate = strings.Contains(prePushHook, "npm run test:quick") &&
+		strings.Contains(manifest, `"test:quick": "./scripts/test-quick.sh"`) &&
+		!strings.Contains(prePushHook, "npm exec -- nx") &&
+		!strings.Contains(prePushHook, "npx nx") &&
+		!strings.Contains(manifest, `"nx":`)
+	driver.coreCoverage = strings.Contains(quick, "--minimum 99") &&
+		strings.Contains(quick, "internal/policy,./internal/config,./internal/host") &&
+		strings.Contains(quick, "internal/host/collector.go,internal/host/linux_parsers.go")
+	return nil
+}
+
+func (driver *Driver) requireConventionalCommits() error {
+	if !driver.conventionalCommits {
+		return errors.New("conventional commits are not enforced locally and in CI")
+	}
+	return nil
+}
+
+func (driver *Driver) requireStagedFormatting() error {
+	if !driver.stagedFormatting {
+		return errors.New("pre-commit does not format every supported staged file type")
+	}
+	return nil
+}
+
+func (driver *Driver) requirePushQuickGate() error {
+	if !driver.pushQuickGate {
+		return errors.New("pre-push does not run the direct no-Nx quick gate")
+	}
+	return nil
+}
+
+func (driver *Driver) requireCoreCoverage() error {
+	if !driver.coreCoverage {
+		return errors.New("deterministic core coverage does not require 99 percent")
+	}
+	return nil
+}
+
 func capacitySample(memory, available int64) guard.Sample {
 	sample := healthySample(time.Unix(0, 0))
 	sample.Platform = "linux"
@@ -1151,10 +1240,28 @@ func (driver *Driver) inspectArtifactPolicy() {
 	_, exampleError := os.Stat(filepath.Join(root, examplePath))
 	driver.exampleTracked = example.Run() != nil && exampleError == nil
 	moduleData, moduleError := os.ReadFile(filepath.Join(root, "go.mod"))
+	packageData, packageError := os.ReadFile(filepath.Join(root, "package.json"))
+	manifest := map[string]any{}
+	manifestError := json.Unmarshal(packageData, &manifest)
+	private, privateOK := manifest["private"].(bool)
+	_, hasWorkspaces := manifest["workspaces"]
+	hasNxDependency := false
+	for _, section := range []string{"dependencies", "devDependencies", "peerDependencies", "optionalDependencies"} {
+		dependencies, ok := manifest[section].(map[string]any)
+		if !ok {
+			continue
+		}
+		_, hasNxDependency = dependencies["nx"]
+		if hasNxDependency {
+			break
+		}
+	}
 	driver.applicationLayout = moduleError == nil &&
 		bytes.Contains(moduleData, []byte("module github.com/wahidyankf/resource-guard")) &&
+		packageError == nil && manifestError == nil && privateOK && private &&
+		!hasWorkspaces && !hasNxDependency &&
 		!pathExists(filepath.Join(root, "project.json")) &&
-		!pathExists(filepath.Join(root, "package.json")) &&
+		!pathExists(filepath.Join(root, "nx.json")) &&
 		pathExists(filepath.Join(root, "specs", "behaviours"))
 }
 

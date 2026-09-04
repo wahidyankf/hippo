@@ -48,11 +48,15 @@ New summaries use schema 5 with generic health fields. Assessment remains compat
 
 The executable specification lives in [`specs/behaviours`](specs/behaviours/README.md). Its shared contract enforces strict unit, integration, and compiled-binary E2E adapters, reviewed exemptions, and complete step resolution.
 
+Source contributors need Go 1.26.1 and Node.js 24. Install the locked contributor tooling once; npm's prepare lifecycle installs the repository hooks:
+
 ```sh
-./scripts/test-quick.sh
-./scripts/test.sh
-go tool govulncheck ./...
+npm ci
+npm run test:quick
+npm test
 ```
+
+Commits follow Conventional Commits. Pre-commit formats supported staged Go, shell, Markdown, JSON, and YAML files; pre-push runs the direct no-Nx quick gate. The quick gate enforces at least 99% statement coverage over deterministic production policy, configuration, and host-parsing logic. Platform and process boundaries remain covered by strict integration and compiled-binary E2E adapters.
 
 Release artifacts are built with `./scripts/build-release.sh <version> <commit> <output-dir>`. Generated outputs and local configuration are enforced by the artifact suite and `.gitignore`.
 

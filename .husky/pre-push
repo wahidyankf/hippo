@@ -1,0 +1,5 @@
+set -e
+
+# Keep the public module self-hosting: its quick gate uses Go and npm directly,
+# without requiring Nx or a previously built resource-guard binary.
+npm run test:quick

@@ -4,8 +4,10 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 
-# Fail cheap first: compile, lint, and targeted unit coverage precede the
-# behavior adapters and repository artifact contract.
+# The quick contract covers formatting, compilation, strict lint, unit tests,
+# 99% deterministic-core coverage, behavior adapters, and repository policy
+# before a push is allowed.
+./scripts/format-check.sh
 go test -run '^$' ./...
 go tool golangci-lint run
 go test -count=1 ./internal/release ./tests/unit

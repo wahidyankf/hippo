@@ -10,6 +10,8 @@
 /local-tmp/
 /generated-output/
 *.log
+/node_modules/
+/.husky/_/
 
 # Resource Guard build and runtime inputs
 /.cache/

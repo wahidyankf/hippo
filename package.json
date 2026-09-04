@@ -1,0 +1,22 @@
+{
+  "name": "resource-guard-contributor-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Contributor-only quality tooling for resource-guard.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "format:check": "./scripts/format-check.sh",
+    "test:quick": "./scripts/test-quick.sh",
+    "test": "./scripts/test.sh"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6"
+  }
+}

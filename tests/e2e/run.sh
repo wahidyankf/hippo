@@ -9,7 +9,7 @@ temporary_dir=$(mktemp -d "$temporary_parent/resource-guard-e2e.XXXXXX")
 # Every outcome removes the compiled fixture; signal-specific exits make an
 # interrupted harness visible without leaking temporary binaries.
 cleanup() {
-  rm -rf -- "$temporary_dir"
+	rm -rf -- "$temporary_dir"
 }
 
 trap cleanup EXIT
@@ -21,6 +21,6 @@ cd "$tool_dir"
 # Exercise the public process boundary with the same embedded identity used by
 # tagged binaries, while keeping compilation concurrency bounded.
 GOMAXPROCS=2 "$go_binary" build -p=1 -trimpath \
-  -ldflags "-X github.com/wahidyankf/resource-guard/internal/cli.Version=v0.0.0-test -X github.com/wahidyankf/resource-guard/internal/cli.Commit=0000000000000000000000000000000000000000" \
-  -o "$temporary_dir/resource-guard" ./cmd/resource-guard
+	-ldflags "-X github.com/wahidyankf/resource-guard/internal/cli.Version=v0.0.0-test -X github.com/wahidyankf/resource-guard/internal/cli.Commit=0000000000000000000000000000000000000000" \
+	-o "$temporary_dir/resource-guard" ./cmd/resource-guard
 RESOURCE_GUARD_BIN="$temporary_dir/resource-guard" "$go_binary" test -count=1 ./tests/e2e

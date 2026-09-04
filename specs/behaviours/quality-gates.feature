@@ -17,3 +17,12 @@ Feature: Resource guard quality gates
     And every behavior exemption has an approved adapter reason
     And behavior compliance runs serially for every adapter
     And full end-to-end behavior remains outside quick checks
+
+  @unit-exempt @e2e-exempt
+  Scenario: Contributor changes pass local and remote gates
+    Given the resource guard contributor gate contract
+    When contributor enforcement is inspected
+    Then conventional commits are enforced locally and in CI
+    And staged source and documentation files are formatted before commit
+    And pushes run the quick gate without Nx
+    And deterministic core coverage requires 99 percent

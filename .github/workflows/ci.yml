@@ -9,6 +9,32 @@ permissions:
   contents: read
 
 jobs:
+  commit-policy:
+    name: Conventional commits
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate pull request commits
+        if: github.event_name == 'pull_request'
+        env:
+          COMMITLINT_FROM: ${{ github.event.pull_request.base.sha }}
+          COMMITLINT_TO: ${{ github.event.pull_request.head.sha }}
+        run: npm exec -- commitlint --from "$COMMITLINT_FROM" --to "$COMMITLINT_TO" --verbose
+      - name: Validate pushed commits
+        if: github.event_name == 'push'
+        env:
+          COMMITLINT_FROM: ${{ github.event.before }}
+          COMMITLINT_TO: ${{ github.sha }}
+        run: npm exec -- commitlint --from "$COMMITLINT_FROM" --to "$COMMITLINT_TO" --verbose
+
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -23,6 +49,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
       - run: ./scripts/test.sh
 
   release-build:

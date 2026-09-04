@@ -1,0 +1,6 @@
+.cache/
+coverage/
+dist/
+generated-output/
+local-tmp/
+node_modules/
