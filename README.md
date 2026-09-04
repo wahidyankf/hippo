@@ -56,7 +56,7 @@ New summaries use schema 5 with generic health fields. Assessment remains compat
 
 ## Development
 
-The executable specification lives in [`specs/behaviours`](specs/behaviours/README.md). Its shared contract enforces strict unit, integration, and compiled-binary E2E adapters, reviewed exemptions, and complete step resolution.
+The canonical specification includes the current [C4 architecture](specs/architecture.md) and executable [`specs/behaviours`](specs/behaviours/README.md). The shared behavior contract enforces strict unit, integration, and compiled-binary E2E adapters, reviewed exemptions, and complete step resolution.
 
 Source contributors need Go 1.26.1 and Node.js 24. Install the locked contributor tooling once; npm's prepare lifecycle installs the repository hooks:
 
