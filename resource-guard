@@ -6,6 +6,8 @@ cache_root=${RESOURCE_GUARD_BUILD_CACHE:-"$tool_dir/.cache"}
 goos=$(go env GOOS)
 goarch=$(go env GOARCH)
 
+# Keep the bootstrap portable across GNU/Linux and macOS without adding a
+# checksum dependency to the repository.
 hash_stream() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$@"
@@ -18,6 +20,8 @@ modified_time() {
   stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1"
 }
 
+# The binary cache is content-addressed by every production Go source and its
+# module graph. Changing either produces a new immutable cache generation.
 source_hash=$(
   cd "$tool_dir"
   find cmd internal -type f -name '*.go' -print | LC_ALL=C sort | while IFS= read -r source_file; do hash_stream "$source_file"; done
@@ -36,6 +40,8 @@ acquire_retention_lock() {
     return 0
   fi
 
+  # Reclaim only a lock whose recorded owner no longer exists. A live or
+  # malformed lock is left alone so concurrent bootstraps cannot prune it.
   if [ -f "$retention_lock/pid" ]; then
     retention_pid=$(sed -n '1p' "$retention_lock/pid" 2>/dev/null || true)
     case "$retention_pid" in
@@ -79,6 +85,8 @@ prune_cache() {
     done
   ) | LC_ALL=C sort -rn > "$candidates"
 
+  # Retain the current generation plus two recent fallbacks. Candidate names
+  # are validated hashes before any recursive removal is allowed.
   recent=0
   while IFS=' ' read -r _ candidate; do
     [ -n "$candidate" ] || continue
@@ -99,6 +107,8 @@ prune_cache() {
 if [ ! -x "$binary" ]; then
   mkdir -p "$cache_root/$goos-$goarch"
   attempts=0
+  # mkdir is the cross-platform atomic lock. The bounded wait maps contention
+  # to retryable exit 75 instead of starting parallel Go builds.
   while ! mkdir "$lock" 2>/dev/null; do
     if [ -f "$lock/pid" ]; then
       lock_pid=$(sed -n '1p' "$lock/pid" 2>/dev/null || true)
@@ -125,6 +135,8 @@ if [ ! -x "$binary" ]; then
   if [ ! -x "$binary" ]; then
     mkdir -p "$binary_dir"
     temporary="$binary.tmp.$$"
+    # Build with bounded compiler parallelism, then atomically publish the
+    # executable so another process never observes a partial binary.
     (
       cd "$tool_dir"
       GOMAXPROCS=2 go build -p=1 -trimpath -o "$temporary" ./cmd/resource-guard
@@ -138,6 +150,8 @@ if [ ! -x "$binary" ]; then
 fi
 
 prune_cache
+# A consumer may override configuration explicitly; otherwise the optional
+# repository-local file is discovered without making it authoritative.
 RESOURCE_GUARD_DEFAULT_CONFIG=${RESOURCE_GUARD_DEFAULT_CONFIG:-"$tool_dir/resource-guard.local.json"}
 export RESOURCE_GUARD_DEFAULT_CONFIG
 exec "$binary" "$@"

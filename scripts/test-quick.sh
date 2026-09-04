@@ -4,6 +4,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 
+# Fail cheap first: compile, lint, and targeted unit coverage precede the
+# behavior adapters and repository artifact contract.
 go test -run '^$' ./...
 go tool golangci-lint run
 go test -count=1 ./internal/release ./tests/unit

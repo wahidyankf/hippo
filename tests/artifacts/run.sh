@@ -4,6 +4,8 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$repo_root"
 
+# Private configuration and generated state must be ignored at their exact
+# repository-relative locations.
 for ignored in resource-guard.local.json .env .env.local .cache/example dist/example coverage/example local-tmp/example generated-output/example; do
   git check-ignore --quiet "$ignored"
 done
@@ -13,6 +15,7 @@ if git ls-files --error-unmatch resource-guard.local.json >/dev/null 2>&1; then
   exit 1
 fi
 
+# Conversely, source, specs, examples, and enforcement must remain publishable.
 for tracked in go.mod go.sum resource-guard resource-guard.local.json.example specs/behaviours/README.md scripts/test.sh scripts/test-quick.sh scripts/build-release.sh; do
   git check-ignore --quiet "$tracked" && {
     echo "$tracked must remain committable" >&2
@@ -28,6 +31,8 @@ if [ -n "$tracked_artifacts" ]; then
   exit 1
 fi
 
+# These layout assertions prevent the standalone module from drifting back
+# into a workspace-specific package or tool tree.
 test "$(sed -n '1p' resource-guard)" = '#!/bin/sh'
 test ! -e project.json
 test ! -e package.json
