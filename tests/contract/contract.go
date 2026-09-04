@@ -234,6 +234,7 @@ func AdapterByName(name string) (Adapter, error) {
 			return adapter, nil
 		}
 	}
+
 	return Adapter{}, fmt.Errorf("unknown behavior adapter %q", name)
 }
 
@@ -243,16 +244,29 @@ func SuiteOptions(adapter Adapter) *godog.Options {
 	if adapter.ExemptionTag != "" {
 		tags = "~" + adapter.ExemptionTag
 	}
-	return &godog.Options{Format: "progress", Paths: []string{FeaturePath}, Tags: tags, Strict: true}
+
+	return &godog.Options{
+		Format: "progress",
+		Paths:  []string{FeaturePath},
+		Tags:   tags,
+		Strict: true,
+	}
 }
 
 // Run executes the canonical corpus through one strict adapter.
 func Run(t *testing.T, adapter Adapter, driver Driver) {
 	t.Helper()
 	defer driver.Close()
+
 	options := SuiteOptions(adapter)
 	options.TestingT = t
-	status := godog.TestSuite{Name: "resource-guard-" + adapter.Name, ScenarioInitializer: driver.Initialize, Options: options}.Run()
+
+	status := godog.TestSuite{
+		Name:                "resource-guard-" + adapter.Name,
+		ScenarioInitializer: driver.Initialize,
+		Options:             options,
+	}.Run()
+
 	if status != 0 {
 		t.Fatalf("%s behavior suite exited %d", adapter.Name, status)
 	}
@@ -261,6 +275,7 @@ func Run(t *testing.T, adapter Adapter, driver Driver) {
 // ValidateScenarioStructure requires an explicit action and outcome.
 func ValidateScenarioStructure(name string, keywordTypes []string) error {
 	hasAction, hasOutcome := false, false
+
 	for _, keywordType := range keywordTypes {
 		hasAction = hasAction || keywordType == "Action"
 		hasOutcome = hasOutcome || keywordType == "Outcome"
@@ -268,6 +283,7 @@ func ValidateScenarioStructure(name string, keywordTypes []string) error {
 	if !hasAction || !hasOutcome {
 		return fmt.Errorf("scenario %q requires explicit When and Then steps", name)
 	}
+
 	return nil
 }
 
@@ -275,6 +291,7 @@ func ValidateScenarioStructure(name string, keywordTypes []string) error {
 func ValidateBindings(definitions []StepDefinition, steps []string) []error {
 	compiled := make([]*regexp.Regexp, len(definitions))
 	errorsFound := []error{}
+
 	for index, definition := range definitions {
 		expression, err := regexp.Compile(definition.Pattern)
 		if err != nil {
@@ -283,14 +300,18 @@ func ValidateBindings(definitions []StepDefinition, steps []string) []error {
 		}
 		compiled[index] = expression
 	}
+
 	used := make([]bool, len(definitions))
+
 	for _, step := range steps {
 		matches := []int{}
+
 		for index, expression := range compiled {
 			if expression != nil && expression.MatchString(step) {
 				matches = append(matches, index)
 			}
 		}
+
 		switch len(matches) {
 		case 0:
 			errorsFound = append(errorsFound, fmt.Errorf("undefined behavior step %q", step))
@@ -300,11 +321,13 @@ func ValidateBindings(definitions []StepDefinition, steps []string) []error {
 			errorsFound = append(errorsFound, fmt.Errorf("ambiguous behavior step %q", step))
 		}
 	}
+
 	for index, wasUsed := range used {
 		if !wasUsed && compiled[index] != nil {
 			errorsFound = append(errorsFound, fmt.Errorf("unused behavior binding %q", definitions[index].Pattern))
 		}
 	}
+
 	return errorsFound
 }
 
@@ -312,22 +335,27 @@ func ValidateBindings(definitions []StepDefinition, steps []string) []error {
 func ValidateExemptions(adapter Adapter, scenarios []Scenario) []error {
 	errorsFound := []error{}
 	approved := map[string]string{}
+
 	for _, exemption := range ApprovedExemptions[adapter.Name] {
 		if strings.TrimSpace(exemption.Reason) == "" {
 			errorsFound = append(errorsFound, fmt.Errorf("%s exemption %q has no reason", adapter.Name, exemption.Scenario))
 		}
 		approved[exemption.Scenario] = exemption.Reason
 	}
+
 	seen := map[string]bool{}
 	knownTags := map[string]bool{"@unit-exempt": true, "@e2e-exempt": true}
+
 	for _, scenario := range scenarios {
 		tagged := false
+
 		for _, tag := range scenario.Tags {
 			if strings.HasSuffix(tag, "-exempt") && !knownTags[tag] {
 				errorsFound = append(errorsFound, fmt.Errorf("scenario %q uses unknown exemption tag %q", scenario.Name, tag))
 			}
 			tagged = tagged || tag == adapter.ExemptionTag
 		}
+
 		_, expected := approved[scenario.Name]
 		if tagged != expected {
 			errorsFound = append(errorsFound, fmt.Errorf("%s exemption mismatch for scenario %q", adapter.Name, scenario.Name))
@@ -336,11 +364,13 @@ func ValidateExemptions(adapter Adapter, scenarios []Scenario) []error {
 			seen[scenario.Name] = true
 		}
 	}
+
 	for scenario := range approved {
 		if !seen[scenario] {
 			errorsFound = append(errorsFound, fmt.Errorf("approved %s exemption %q is absent", adapter.Name, scenario))
 		}
 	}
+
 	return errorsFound
 }
 
@@ -362,6 +392,7 @@ func countDiskFeatures() (int, error) {
 		}
 		return nil
 	})
+
 	return count, err
 }
 
@@ -370,6 +401,7 @@ func inspectScenario(scenario *messages.Scenario) error {
 	for _, step := range scenario.Steps {
 		keywords = append(keywords, step.KeywordType.String())
 	}
+
 	return ValidateScenarioStructure(scenario.Name, keywords)
 }
 
@@ -379,6 +411,7 @@ func inspectFeature(uri string, feature *messages.Feature, pickles []*messages.P
 		inspection.structuralError = append(inspection.structuralError, fmt.Errorf("%s has no Feature declaration", uri))
 		return inspection
 	}
+
 	for _, child := range feature.Children {
 		if scenario := child.Scenario; scenario != nil {
 			inspection.astScenarios++
@@ -390,7 +423,9 @@ func inspectFeature(uri string, feature *messages.Feature, pickles []*messages.P
 			inspection.inspectRule(rule)
 		}
 	}
+
 	inspection.inspectPickles(pickles)
+
 	return inspection
 }
 
@@ -408,6 +443,7 @@ func (inspection *corpusInspection) inspectRule(rule *messages.Rule) {
 func (inspection *corpusInspection) inspectPickles(pickles []*messages.Pickle) {
 	for _, pickle := range pickles {
 		scenario := Scenario{Name: pickle.Name}
+
 		for _, step := range pickle.Steps {
 			scenario.Steps = append(scenario.Steps, step.Text)
 			inspection.steps = append(inspection.steps, step.Text)
@@ -415,6 +451,7 @@ func (inspection *corpusInspection) inspectPickles(pickles []*messages.Pickle) {
 		for _, tag := range pickle.Tags {
 			scenario.Tags = append(scenario.Tags, tag.Name)
 		}
+
 		inspection.scenarios = append(inspection.scenarios, scenario)
 	}
 }
@@ -428,15 +465,19 @@ func mergeInspection(target *corpusInspection, source corpusInspection) {
 
 func runnableScenarios(adapter Adapter, scenarios []Scenario) int {
 	count := 0
+
 	for _, scenario := range scenarios {
 		exempt := false
+
 		for _, tag := range scenario.Tags {
 			exempt = exempt || tag == adapter.ExemptionTag
 		}
+
 		if !exempt {
 			count++
 		}
 	}
+
 	return count
 }
 
@@ -444,11 +485,14 @@ func combineErrors(errorsFound []error) error {
 	if len(errorsFound) == 0 {
 		return nil
 	}
+
 	messagesFound := make([]string, 0, len(errorsFound))
 	for _, found := range errorsFound {
 		messagesFound = append(messagesFound, found.Error())
 	}
+
 	sort.Strings(messagesFound)
+
 	return errors.New(strings.Join(messagesFound, "\n"))
 }
 
@@ -459,6 +503,7 @@ func Verify(adapter Adapter) error {
 	if err != nil {
 		return fmt.Errorf("retrieve behavior corpus: %w", err)
 	}
+
 	diskFeatures, err := countDiskFeatures()
 	if err != nil {
 		return fmt.Errorf("walk behavior corpus: %w", err)
@@ -468,9 +513,11 @@ func Verify(adapter Adapter) error {
 	}
 
 	inspection := corpusInspection{}
+
 	for _, feature := range features {
 		mergeInspection(&inspection, inspectFeature(feature.Uri, feature.Feature, feature.Pickles))
 	}
+
 	if inspection.astScenarios == 0 || len(inspection.scenarios) == 0 {
 		inspection.structuralError = append(inspection.structuralError, errors.New("behavior corpus has no scenarios"))
 	}
@@ -479,5 +526,6 @@ func Verify(adapter Adapter) error {
 	if runnableScenarios(adapter, inspection.scenarios) == 0 {
 		inspection.structuralError = append(inspection.structuralError, fmt.Errorf("%s adapter runs no scenarios", adapter.Name))
 	}
+
 	return combineErrors(inspection.structuralError)
 }

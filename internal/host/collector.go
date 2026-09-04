@@ -41,11 +41,14 @@ func ParseAvailableEstimate(output string, physicalBytes int64) *int64 {
 	if len(match) != 2 {
 		return nil
 	}
+
 	percentage, err := strconv.ParseInt(match[1], 10, 64)
 	if err != nil || percentage < 0 || percentage > 100 {
 		return nil
 	}
+
 	value := physicalBytes * percentage / 100
+
 	return &value
 }
 
@@ -60,19 +63,24 @@ func ParseVMStat(output string) *VMStat {
 	if len(pageMatch) != 2 {
 		return nil
 	}
+
 	pageSize, err := strconv.ParseInt(pageMatch[1], 10, 64)
 	if err != nil {
 		return nil
 	}
+
 	value := func(label string) (int64, bool) {
 		pattern := regexp.MustCompile(regexp.QuoteMeta(label) + `:\s+(\d+)\.`)
 		match := pattern.FindStringSubmatch(output)
 		if len(match) != 2 {
 			return 0, false
 		}
+
 		parsed, parseError := strconv.ParseInt(match[1], 10, 64)
+
 		return parsed, parseError == nil
 	}
+
 	stored, ok1 := value("Pages stored in compressor")
 	occupied, ok2 := value("Pages occupied by compressor")
 	ins, ok3 := value("Swapins")
@@ -80,6 +88,7 @@ func ParseVMStat(output string) *VMStat {
 	if !ok1 || !ok2 || !ok3 || !ok4 {
 		return nil
 	}
+
 	return &VMStat{pageSize, stored, occupied, ins, outs}
 }
 
@@ -92,7 +101,9 @@ func ParseSwapUsage(output string) *SwapUsage {
 	if len(match) != 4 {
 		return nil
 	}
+
 	values := make([]int64, 3)
+
 	for index, text := range match[1:] {
 		value, err := strconv.ParseFloat(text, 64)
 		if err != nil {
@@ -100,6 +111,7 @@ func ParseSwapUsage(output string) *SwapUsage {
 		}
 		values[index] = int64(value * float64(guard.MiB))
 	}
+
 	return &SwapUsage{values[0], values[1], values[2]}
 }
 
@@ -108,21 +120,27 @@ func CPUUtilization(previous, current CPUState) *float64 {
 	if len(previous) == 0 || len(previous) != len(current) || len(current) < 4 {
 		return nil
 	}
+
 	var total, idle uint64
+
 	for index, after := range current {
 		if after < previous[index] {
 			return nil
 		}
+
 		delta := after - previous[index]
 		total += delta
 		if index == 3 {
 			idle += delta
 		}
 	}
+
 	if total == 0 {
 		return nil
 	}
+
 	value := float64(total-idle) * 100 / float64(total)
+
 	return &value
 }
 
@@ -131,7 +149,9 @@ func ParseProcessCPU(output string, parallelism int) *float64 {
 	if parallelism <= 0 {
 		return nil
 	}
+
 	total := 0.0
+
 	for field := range strings.FieldsSeq(output) {
 		value, err := strconv.ParseFloat(strings.TrimSuffix(field, "%"), 64)
 		if err != nil || value < 0 {
@@ -139,6 +159,8 @@ func ParseProcessCPU(output string, parallelism int) *float64 {
 		}
 		total += value
 	}
+
 	value := min(100, total/float64(parallelism))
+
 	return &value
 }

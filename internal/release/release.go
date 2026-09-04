@@ -29,35 +29,44 @@ func CheckWithPolicy(collector guard.Collector, diskPath string, pause func(time
 	if collector == nil {
 		return errors.New("host collector is required")
 	}
+
 	if pause == nil {
 		pause = time.Sleep
 	}
+
 	var previous guard.CPUState
 	consecutive := 0
+
 	for attempt := range 31 {
 		reading, err := collector.Collect(previous, diskPath)
 		if err != nil {
 			return err
 		}
+
 		previous = reading.CPUState
+
 		if guard.MemoryState(reading.Sample, policy) != "normal" {
 			return errors.New("memory pressure does not leave safe release headroom")
 		}
 		if reading.Sample.DiskFreeBytes == nil || *reading.Sample.DiskFreeBytes < policy.DiskWarningBytes {
 			return errors.New("release disk reserve is unavailable")
 		}
+
 		if guard.CPUAdmissionReady(reading.Sample, policy) {
 			consecutive++
 		} else {
 			consecutive = 0
 		}
+
 		if consecutive >= 3 {
 			return nil
 		}
+
 		if attempt < 30 {
 			pause(500 * time.Millisecond)
 		}
 	}
+
 	return errors.New("CPU use does not leave release and safety headroom")
 }
 
@@ -67,16 +76,19 @@ func AssessFile(path string) (guard.ReleaseSummary, error) {
 	if err != nil {
 		return guard.ReleaseSummary{}, err
 	}
+
 	var summary guard.ReleaseSummary
 	if err = json.Unmarshal(data, &summary); err != nil {
 		return guard.ReleaseSummary{}, err
 	}
+
 	if summary.SchemaVersion < 2 || summary.SchemaVersion > 5 || summary.SampleCount <= 0 || summary.AvailableParallelism <= 0 {
 		return summary, errors.New("resource evidence summary is invalid")
 	}
 	if !guard.ReleaseHeadroomAvailable(summary) {
 		return summary, errors.New("release overlap exhausted resource or routed responsiveness headroom")
 	}
+
 	return summary, nil
 }
 
@@ -93,6 +105,7 @@ type MonitorConfig struct {
 	RoutedHealth                            func() (int, float64)
 	LoadAverage                             func() float64
 }
+
 type releaseSample struct {
 	guard.Sample
 
@@ -109,28 +122,34 @@ func output(command string, arguments ...string) string {
 	if err != nil {
 		return ""
 	}
+
 	return strings.TrimSpace(string(value))
 }
 
 func serviceRSSBytes(ports []int) int64 {
 	pids := map[string]bool{}
+
 	for _, port := range ports {
 		for pid := range strings.FieldsSeq(output("lsof", "-nP", fmt.Sprintf("-iTCP:%d", port), "-sTCP:LISTEN", "-t")) {
 			pids[pid] = true
 		}
 	}
+
 	if len(pids) == 0 {
 		return 0
 	}
+
 	list := make([]string, 0, len(pids))
 	for pid := range pids {
 		list = append(list, pid)
 	}
+
 	var total int64
 	for field := range strings.FieldsSeq(output("ps", "-o", "rss=", "-p", strings.Join(list, ","))) {
 		value, _ := strconv.ParseInt(field, 10, 64)
 		total += value * 1024
 	}
+
 	return total
 }
 
@@ -146,6 +165,7 @@ func probeHTTPWithRedirects(target string, followRedirects bool) (int, float64) 
 	arguments := HTTPProbeArguments(target, followRedirects)
 	value := output("curl", arguments...)
 	fields := strings.Fields(value)
+
 	if len(fields) != 2 {
 		return 0, 3000
 	}
@@ -154,16 +174,20 @@ func probeHTTPWithRedirects(target string, followRedirects bool) (int, float64) 
 	if err != nil {
 		return 0, 3000
 	}
+
 	return status, seconds * 1000
 }
 
 // HTTPProbeArguments returns the bounded curl arguments for one health or routed probe.
 func HTTPProbeArguments(target string, followRedirects bool) []string {
 	arguments := []string{"-sS"}
+
 	if followRedirects {
 		arguments = append(arguments, "--location", "--max-redirs", "3")
 	}
+
 	arguments = append(arguments, "--max-time", "3", "-o", "/dev/null", "-w", "%{http_code} %{time_total}", target)
+
 	return arguments
 }
 
@@ -172,15 +196,24 @@ func localHealth(target string) (func() (int, float64), error) {
 	if err != nil || parsed.Scheme != "http" && parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
 		return nil, errors.New("HTTP(S) health URL is required for release monitoring")
 	}
+
 	return func() (int, float64) { return probeHTTP(target) }, nil
 }
 
 func routedHealth(origin string) (func() (int, float64), error) {
 	parsed, err := url.Parse(origin)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" && parsed.Path != "/" {
+	if err != nil ||
+		parsed.Scheme != "https" ||
+		parsed.Host == "" ||
+		parsed.User != nil ||
+		parsed.RawQuery != "" ||
+		parsed.Fragment != "" ||
+		parsed.Path != "" && parsed.Path != "/" {
 		return nil, errors.New("bare HTTPS routed origin is required for release monitoring")
 	}
+
 	target := strings.TrimSuffix(origin, "/") + "/"
+
 	return func() (int, float64) { return probeRoutedHTTP(target) }, nil
 }
 
@@ -193,6 +226,7 @@ func oneMinuteLoad() float64 {
 			}
 		}
 	}
+
 	fields := strings.Fields(strings.Trim(output("sysctl", "-n", "vm.loadavg"), "{} "))
 	if len(fields) == 0 {
 		return 0
@@ -201,6 +235,7 @@ func oneMinuteLoad() float64 {
 	if err != nil {
 		return 0
 	}
+
 	return value
 }
 
@@ -212,6 +247,7 @@ func RunMonitor(config MonitorConfig) error { //nolint:gocognit // Validation an
 	if config.Collector == nil {
 		return errors.New("host collector is required")
 	}
+
 	if config.ServiceRSS == nil {
 		config.ServiceRSS = func() int64 { return serviceRSSBytes(config.ServicePorts) }
 	}
@@ -229,18 +265,21 @@ func RunMonitor(config MonitorConfig) error { //nolint:gocognit // Validation an
 		}
 		config.RoutedHealth = probe
 	}
+
 	if config.LoadAverage == nil {
 		config.LoadAverage = oneMinuteLoad
 	}
 	if config.Interval == 0 {
 		config.Interval = time.Second
 	}
+
 	if err := guard.CleanupEvidence(filepath.Dir(config.OutputPath), time.Now(), config.OutputPath, config.SummaryPath); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(config.OutputPath), 0o700); err != nil {
 		return err
 	}
+
 	file, err := os.OpenFile(config.OutputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
@@ -249,26 +288,41 @@ func RunMonitor(config MonitorConfig) error { //nolint:gocognit // Validation an
 	written := bufio.NewWriter(file)
 	samples := []releaseSample{}
 	var previous guard.CPUState
+
 	sample := func() error {
 		reading, collectError := config.Collector.Collect(previous, config.DeploymentRoot)
 		if collectError != nil {
 			return collectError
 		}
+
 		previous = reading.CPUState
 		status, latency := config.Health()
 		routedStatus, routedLatency := config.RoutedHealth()
-		value := releaseSample{Sample: reading.Sample, OneMinuteLoad: config.LoadAverage(), ServiceRSSBytes: config.ServiceRSS(), HealthStatus: status, HealthLatencyMs: latency, RoutedJourneyStatus: routedStatus, RoutedJourneyLatencyMs: routedLatency}
+		value := releaseSample{
+			Sample:                 reading.Sample,
+			OneMinuteLoad:          config.LoadAverage(),
+			ServiceRSSBytes:        config.ServiceRSS(),
+			HealthStatus:           status,
+			HealthLatencyMs:        latency,
+			RoutedJourneyStatus:    routedStatus,
+			RoutedJourneyLatencyMs: routedLatency,
+		}
+
 		samples = append(samples, value)
+
 		encoded, marshalError := json.Marshal(value)
 		if marshalError != nil {
 			return marshalError
 		}
+
 		_, writeError := written.Write(append(encoded, '\n'))
 		if writeError != nil {
 			return writeError
 		}
+
 		return written.Flush()
 	}
+
 	if err := sample(); err != nil {
 		return err
 	}
@@ -277,12 +331,14 @@ func RunMonitor(config MonitorConfig) error { //nolint:gocognit // Validation an
 	defer signal.Stop(signals)
 	ticker := time.NewTicker(config.Interval)
 	defer ticker.Stop()
+
 	var duration <-chan time.Time
 	if config.Duration > 0 {
 		timer := time.NewTimer(config.Duration)
 		defer timer.Stop()
 		duration = timer.C
 	}
+
 loop:
 	for {
 		select {
@@ -296,12 +352,14 @@ loop:
 			break loop
 		}
 	}
+
 	return writeSummary(config.SummaryPath, samples)
 }
 
 func recordRoutedEvidence(summary *guard.ReleaseSummary, latencies *[]float64, sample releaseSample) {
 	*latencies = append(*latencies, sample.RoutedJourneyLatencyMs)
 	summary.RoutedJourneyLatencyMaxMs = max(summary.RoutedJourneyLatencyMaxMs, sample.RoutedJourneyLatencyMs)
+
 	if sample.RoutedJourneyStatus != 200 {
 		summary.RoutedJourneyFailures++
 	}
@@ -311,14 +369,29 @@ func writeSummary(path string, samples []releaseSample) error {
 	if len(samples) == 0 {
 		return errors.New("release monitor has no samples")
 	}
-	summary := guard.ReleaseSummary{SchemaVersion: 5, Platform: samples[0].Platform, Capabilities: append([]string(nil), samples[0].Capabilities...), SampleCount: len(samples), AvailableParallelism: samples[0].AvailableParallelism, CompressorAvailableAll: true, MemoryPressureLevelMax: 0, AvailableNonCompressedEstimateMinBytes: math.MaxInt64, DiskFreeMinBytes: math.MaxInt64, SwapFreeMinBytes: math.MaxInt64}
+
+	summary := guard.ReleaseSummary{
+		SchemaVersion:                          5,
+		Platform:                               samples[0].Platform,
+		Capabilities:                           append([]string(nil), samples[0].Capabilities...),
+		SampleCount:                            len(samples),
+		AvailableParallelism:                   samples[0].AvailableParallelism,
+		CompressorAvailableAll:                 true,
+		MemoryPressureLevelMax:                 0,
+		AvailableNonCompressedEstimateMinBytes: math.MaxInt64,
+		DiskFreeMinBytes:                       math.MaxInt64,
+		SwapFreeMinBytes:                       math.MaxInt64,
+	}
+
 	cpu, latency, routedLatency := []float64{}, []float64{}, []float64{}
 	first, last := samples[0], samples[len(samples)-1]
+
 	for _, sample := range samples {
 		available := sample.AvailableMemoryBytes
 		if available == nil {
 			available = sample.AvailableNonCompressedEstimateBytes
 		}
+
 		if available != nil {
 			summary.AvailableNonCompressedEstimateMinBytes = min(summary.AvailableNonCompressedEstimateMinBytes, *available)
 		}
@@ -342,18 +415,22 @@ func writeSummary(path string, samples []releaseSample) error {
 		}
 		summary.ServiceRSSPeakBytes = max(summary.ServiceRSSPeakBytes, sample.ServiceRSSBytes)
 		latency = append(latency, sample.HealthLatencyMs)
+
 		if sample.HealthStatus != 200 {
 			summary.HealthFailures++
 		}
 		recordRoutedEvidence(&summary, &routedLatency, sample)
 	}
+
 	summary.PhysicalMemoryBytes = first.PhysicalMemoryBytes
+
 	if first.SwapIns != nil && last.SwapIns != nil {
 		summary.SwapInsDelta = max(0, *last.SwapIns-*first.SwapIns)
 	}
 	if first.SwapOuts != nil && last.SwapOuts != nil {
 		summary.SwapOutsDelta = max(0, *last.SwapOuts-*first.SwapOuts)
 	}
+
 	if value := guard.Percentile(cpu, .95); value != nil {
 		summary.CPUUtilizationP95Percent = *value
 	}
@@ -363,15 +440,19 @@ func writeSummary(path string, samples []releaseSample) error {
 	if value := guard.Percentile(routedLatency, .95); value != nil {
 		summary.RoutedJourneyLatencyP95Ms = *value
 	}
+
 	encoded, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = file.Close() }()
+
 	_, err = file.Write(append(encoded, '\n'))
+
 	return err
 }

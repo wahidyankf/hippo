@@ -26,23 +26,36 @@ func TestLinuxCollectorUsesCgroupCapacityAndAllowsNoSwap(t *testing.T) {
 		"/sys/fs/cgroup/actions/job/memory.events":       "oom 0\noom_kill 0\n",
 		"/proc/vmstat":                                   "pswpin 3\npswpout 4\n",
 	}
+
 	read := func(path string) ([]byte, error) {
 		value, exists := files[path]
 		if !exists {
 			return nil, errors.New("fixture path is unavailable")
 		}
+
 		return []byte(value), nil
 	}
-	collector := host.SystemCollector{ReadFile: read, Now: func() time.Time { return time.Unix(0, 0) }}
+
+	collector := host.SystemCollector{
+		ReadFile: read,
+		Now:      func() time.Time { return time.Unix(0, 0) },
+	}
 	reading, err := collector.Collect(nil, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reading.Sample.Platform != "linux" || reading.Sample.EffectiveMemoryLimitBytes != 4*guard.GiB || reading.Sample.AvailableMemoryBytes == nil || *reading.Sample.AvailableMemoryBytes != 3*guard.GiB || reading.Sample.AvailableParallelism != 2 || reading.Sample.SwapState != "unavailable" {
+	if reading.Sample.Platform != "linux" ||
+		reading.Sample.EffectiveMemoryLimitBytes != 4*guard.GiB ||
+		reading.Sample.AvailableMemoryBytes == nil ||
+		*reading.Sample.AvailableMemoryBytes != 3*guard.GiB ||
+		reading.Sample.AvailableParallelism != 2 ||
+		reading.Sample.SwapState != "unavailable" {
 		t.Fatalf("unexpected Linux sample %+v", reading.Sample)
 	}
+
 	files["/proc/stat"] = "cpu 20 0 20 140 0\n"
 	second, err := collector.Collect(reading.CPUState, t.TempDir())
+
 	if err != nil || second.Sample.CPUUtilizationPercent == nil || *second.Sample.CPUUtilizationPercent != 25 {
 		t.Fatalf("unexpected Linux CPU sample %+v error=%v", second.Sample, err)
 	}

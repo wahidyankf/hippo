@@ -6,6 +6,7 @@
 - Install locked contributor tooling with `npm ci`; hooks enforce Conventional Commits, staged formatting, and the quick pre-push gate.
 - Run `npm run test:quick` for fast verification and `npm test` before release; never introduce Nx.
 - Keep deterministic production core coverage at or above 99%; prove platform and process boundaries through integration and E2E adapters.
+- Separate distinct setup, validation, decision, mutation, and return phases in Go functions with blank lines; automated formatters do not replace semantic grouping.
 - Keep generated binaries, coverage, local configuration, runtime evidence, and scratch artifacts ignored.
 - Never commit credentials, personal or machine identifiers, absolute local paths, or private infrastructure values.
 - Comment non-obvious shell safety invariants and lifecycle boundaries; avoid line-by-line narration.

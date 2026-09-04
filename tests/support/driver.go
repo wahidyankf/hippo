@@ -36,9 +36,14 @@ func (collector *sequenceCollector) Collect(previous guard.CPUState, _ string) (
 	if len(collector.samples) == 0 {
 		return guard.Reading{}, errors.New("no samples")
 	}
+
 	index := min(collector.index, len(collector.samples)-1)
 	collector.index++
-	return guard.Reading{CPUState: previous, Sample: collector.samples[index]}, nil
+
+	return guard.Reading{
+		CPUState: previous,
+		Sample:   collector.samples[index],
+	}, nil
 }
 
 // Driver carries isolated scenario state for one adapter suite.
@@ -87,13 +92,36 @@ func NewDriver(adapter contract.Adapter) *Driver {
 }
 
 func healthySample(at time.Time) guard.Sample {
-	return guard.Sample{SchemaVersion: 3, MeasuredAt: at.UTC().Format(time.RFC3339Nano), Platform: "darwin", Capabilities: []string{"compressor", "memory-pressure", "swap"}, EffectiveMemoryLimitBytes: 32 * guard.GiB, AvailableMemoryBytes: new(12 * guard.GiB), AvailableNonCompressedEstimateBytes: new(12 * guard.GiB), MemoryPressureLevel: new(1), CompressorAvailable: new(true), CompressorPayloadBytes: new(7 * guard.GiB), PhysicalMemoryBytes: 32 * guard.GiB, AvailableParallelism: 8, CPUUtilizationPercent: new(20.0), DiskFreeBytes: new(40 * guard.GiB), DiskTotalBytes: new(512 * guard.GiB), PageSizeBytes: new(int64(16_384)), SwapIns: new(int64(10)), SwapOuts: new(int64(20)), SwapFreeBytes: new(2 * guard.GiB), SwapState: "idle"}
+	return guard.Sample{
+		SchemaVersion:                       3,
+		MeasuredAt:                          at.UTC().Format(time.RFC3339Nano),
+		Platform:                            "darwin",
+		Capabilities:                        []string{"compressor", "memory-pressure", "swap"},
+		EffectiveMemoryLimitBytes:           32 * guard.GiB,
+		AvailableMemoryBytes:                new(12 * guard.GiB),
+		AvailableNonCompressedEstimateBytes: new(12 * guard.GiB),
+		MemoryPressureLevel:                 new(1),
+		CompressorAvailable:                 new(true),
+		CompressorPayloadBytes:              new(7 * guard.GiB),
+		PhysicalMemoryBytes:                 32 * guard.GiB,
+		AvailableParallelism:                8,
+		CPUUtilizationPercent:               new(20.0),
+		DiskFreeBytes:                       new(40 * guard.GiB),
+		DiskTotalBytes:                      new(512 * guard.GiB),
+		PageSizeBytes:                       new(int64(16_384)),
+		SwapIns:                             new(int64(10)),
+		SwapOuts:                            new(int64(20)),
+		SwapFreeBytes:                       new(2 * guard.GiB),
+		SwapState:                           "idle",
+	}
 }
 
 func (driver *Driver) reset() {
 	driver.cleanup()
 	mode := driver.mode
+
 	*driver = Driver{mode: mode}
+
 	if mode == contract.E2E {
 		driver.binary = os.Getenv("RESOURCE_GUARD_BIN")
 	}
@@ -107,18 +135,26 @@ func (driver *Driver) cleanup() {
 }
 
 // Close removes temporary scenario resources.
-func (driver *Driver) Close() { driver.cleanup() }
+func (driver *Driver) Close() {
+	driver.cleanup()
+}
 
-func toolRoot() string { return filepath.Clean(filepath.Join("..", "..")) }
+func toolRoot() string {
+	return filepath.Clean(filepath.Join("..", ".."))
+}
 
 func environmentWith(values map[string]string) []string {
 	prefixes := make([]string, 0, len(values))
+
 	for name := range values {
 		prefixes = append(prefixes, name+"=")
 	}
+
 	environment := make([]string, 0, len(os.Environ())+len(values))
+
 	for _, value := range os.Environ() {
 		replaced := false
+
 		for _, prefix := range prefixes {
 			if strings.HasPrefix(value, prefix) {
 				replaced = true
@@ -129,9 +165,11 @@ func environmentWith(values map[string]string) []string {
 			environment = append(environment, value)
 		}
 	}
+
 	for name, value := range values {
 		environment = append(environment, name+"="+value)
 	}
+
 	return environment
 }
 
@@ -142,6 +180,7 @@ func (driver *Driver) threeHealthy() {
 
 func stableWarningSamples(base time.Time, interval time.Duration) []guard.Sample {
 	samples := make([]guard.Sample, 16)
+
 	for index := range samples {
 		sample := healthySample(base.Add(time.Duration(index) * interval))
 		level := 2
@@ -151,6 +190,7 @@ func stableWarningSamples(base time.Time, interval time.Duration) []guard.Sample
 		sample.AvailableNonCompressedEstimateBytes = &available
 		samples[index] = sample
 	}
+
 	return samples
 }
 
@@ -189,19 +229,26 @@ func (driver *Driver) compressorGrowth() {
 func (driver *Driver) assessAdmission() {
 	if len(driver.samples) == 0 {
 		driver.assessment = guard.ResourceAssessment(nil, guard.DevelopmentPolicy)
+
 		return
 	}
+
 	resolution, err := guard.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		driver.errorOutput = err.Error()
 		driver.exitCode = guard.ReplanRequiredExitCode
+
 		return
 	}
+
 	driver.resolution = resolution
 	driver.exitCode = resolution.ExitCode
 	driver.assessment = guard.ResourceAssessment(driver.samples, resolution.Policy)
 	driver.admitted = resolution.ExitCode == 0 && guard.AdmissionReady(driver.samples, resolution.Policy)
-	if !driver.admitted && driver.taskClass == taskClassEphemeral && resolution.ResolvedProfile == profileBalanced && guard.WarningAdmissionReady(driver.samples, resolution.Policy) {
+	if !driver.admitted &&
+		driver.taskClass == taskClassEphemeral &&
+		resolution.ResolvedProfile == profileBalanced &&
+		guard.WarningAdmissionReady(driver.samples, resolution.Policy) {
 		driver.resolution.Concurrency = 1
 		driver.admitted = true
 	}
@@ -210,13 +257,17 @@ func (driver *Driver) assessAdmission() {
 func (driver *Driver) assessPressure() {
 	if len(driver.samples) == 0 {
 		driver.assessment = guard.ResourceAssessment(nil, guard.DevelopmentPolicy)
+
 		return
 	}
+
 	resolution, err := guard.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		driver.errorOutput = err.Error()
+
 		return
 	}
+
 	driver.resolution = resolution
 	driver.assessment = guard.ResourceAssessment(driver.samples, resolution.Policy)
 }
@@ -225,6 +276,7 @@ func (driver *Driver) requireAdmitted() error {
 	if !driver.admitted {
 		return errors.New("work was not admitted")
 	}
+
 	return nil
 }
 
@@ -261,7 +313,9 @@ func (driver *Driver) temporaryRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	driver.temporaryPaths = append(driver.temporaryPaths, directory)
+
 	return directory, nil
 }
 
@@ -270,8 +324,10 @@ func (driver *Driver) liveLease() error {
 	if err != nil {
 		return err
 	}
+
 	driver.leaseRoot = root
 	driver.leaseHolder = os.Getpid()
+
 	holder, err := guard.AcquireSession(root, "", taskClassEphemeral, time.Second, func(time.Duration) {})
 	if err != nil {
 		return err
@@ -279,7 +335,9 @@ func (driver *Driver) liveLease() error {
 	if holder == nil {
 		return errors.New("the first heavy owner was deferred")
 	}
+
 	driver.heavySession = holder
+
 	return nil
 }
 
@@ -288,12 +346,16 @@ func (driver *Driver) waitLease() error {
 	if err != nil {
 		return err
 	}
+
 	if second != nil {
 		driver.exitCode = 0
+
 		return nil
 	}
+
 	driver.exitCode = guard.CapacityDeferredExitCode
 	driver.errorOutput = guard.DescribeHeavyLease(driver.leaseRoot)
+
 	return nil
 }
 
@@ -317,7 +379,9 @@ func (driver *Driver) liveServiceLease() error {
 	if err != nil {
 		return err
 	}
+
 	driver.leaseRoot = root
+
 	service, err := guard.AcquireSession(root, "", "service", time.Second, func(time.Duration) {})
 	if err != nil {
 		return err
@@ -325,7 +389,9 @@ func (driver *Driver) liveServiceLease() error {
 	if service == nil {
 		return errors.New("service session was deferred")
 	}
+
 	driver.serviceSessions = []*guard.Session{service}
+
 	return nil
 }
 
@@ -334,7 +400,9 @@ func (driver *Driver) heavyRequestsLease() error {
 	if err != nil {
 		return err
 	}
+
 	driver.heavySession = heavy
+
 	return nil
 }
 
@@ -350,22 +418,27 @@ func (driver *Driver) twoServiceSessions() error {
 	if err != nil {
 		return err
 	}
+
 	driver.leaseRoot = root
+
 	for range 2 {
 		service, acquireError := guard.AcquireSession(root, "", "service", time.Second, func(time.Duration) {})
 		if acquireError != nil {
 			return acquireError
 		}
+
 		if service == nil {
 			return errors.New("a concurrent service session was deferred")
 		}
 		driver.serviceSessions = append(driver.serviceSessions, service)
 	}
+
 	return nil
 }
 
 func (driver *Driver) validateInheritedSessions() {
 	driver.inheritedSessions = true
+
 	for _, service := range driver.serviceSessions {
 		if !guard.InheritedSession(driver.leaseRoot, service.Token) {
 			driver.inheritedSessions = false
@@ -380,16 +453,28 @@ func (driver *Driver) requireInheritedSessionsValid() error {
 	return nil
 }
 
-func (driver *Driver) inherited()       { driver.exitCode = 0 }
-func (driver *Driver) successfulChild() {}
+func (driver *Driver) inherited() {
+	driver.exitCode = 0
+}
+
+func (driver *Driver) successfulChild() {
+}
+
 func (driver *Driver) requirePreserved() error {
 	if driver.exitCode != 0 {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
 	return nil
 }
-func (driver *Driver) givenAdmitted() { driver.exitCode = 0 }
-func (driver *Driver) child17()       { driver.exitCode = 17 }
+
+func (driver *Driver) givenAdmitted() {
+	driver.exitCode = 0
+}
+
+func (driver *Driver) child17() {
+	driver.exitCode = 17
+}
+
 func (driver *Driver) require17() error {
 	if driver.exitCode != 17 {
 		return fmt.Errorf("got exit %d", driver.exitCode)
@@ -402,7 +487,9 @@ func (driver *Driver) stubbornChild() error {
 	if err != nil {
 		return err
 	}
+
 	driver.leaseRoot = root
+
 	return nil
 }
 
@@ -413,27 +500,44 @@ func (driver *Driver) interruptGuard() error {
 	policy.AdmissionWindow = time.Second
 	policy.TerminationGrace = 200 * time.Millisecond
 	policy.LeaseWait = time.Second
+
 	marker := filepath.Join(driver.leaseRoot, "terminations")
 	interrupt := make(chan struct{})
 	time.AfterFunc(300*time.Millisecond, func() { close(interrupt) })
+
 	started := time.Now()
 	_, err := guard.Run(guard.RunConfig{
-		Command:   "/bin/sh",
-		Arguments: []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
-		TaskClass: taskClassEphemeral, EvidenceRoot: driver.leaseRoot, DiskPath: ".",
-		Collector: &sequenceCollector{samples: []guard.Sample{healthySample(base), healthySample(base.Add(time.Millisecond)), healthySample(base.Add(2 * time.Millisecond))}},
-		Policy:    policy, Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{},
-		Environment: append(os.Environ(), "GUARD_TERM_MARKER="+marker), Interrupt: interrupt,
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
+		TaskClass:    taskClassEphemeral,
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker),
+		EvidenceRoot: driver.leaseRoot,
+		Interrupt:    interrupt,
+		DiskPath:     ".",
+		Collector: &sequenceCollector{samples: []guard.Sample{
+			healthySample(base),
+			healthySample(base.Add(time.Millisecond)),
+			healthySample(base.Add(2 * time.Millisecond)),
+		}},
+		Policy: policy,
+		Sleep:  func(time.Duration) {},
+		Now:    time.Now,
+		Stderr: &bytes.Buffer{},
 	})
+
 	driver.forceStopElapsed = time.Since(started)
+
 	if err != nil {
 		return err
 	}
+
 	delivered, readError := os.ReadFile(marker)
 	if readError != nil {
 		return fmt.Errorf("child recorded no termination signal: %w", readError)
 	}
+
 	driver.terminationSignals = len(delivered)
+
 	return nil
 }
 
@@ -441,14 +545,20 @@ func (driver *Driver) requireForceStopped() error {
 	if driver.terminationSignals != 1 {
 		return fmt.Errorf("guard delivered %d termination signals, want exactly 1", driver.terminationSignals)
 	}
+
 	if driver.forceStopElapsed > 1500*time.Millisecond {
 		return fmt.Errorf("a child ignoring SIGTERM was not force-stopped: guard returned after %s", driver.forceStopElapsed)
 	}
 	return nil
 }
 
-func (driver *Driver) criticalChild()   { driver.exitCode = 75 }
-func (driver *Driver) observeCritical() {}
+func (driver *Driver) criticalChild() {
+	driver.exitCode = 75
+}
+
+func (driver *Driver) observeCritical() {
+}
+
 func (driver *Driver) requireShed() error {
 	if driver.exitCode != 75 {
 		return fmt.Errorf("got exit %d", driver.exitCode)
@@ -461,7 +571,9 @@ func (driver *Driver) degradedGrowthChild() error {
 	if err != nil {
 		return err
 	}
+
 	driver.leaseRoot = root
+
 	return nil
 }
 
@@ -474,7 +586,9 @@ func (driver *Driver) observeDegradedWarning() error {
 	policy.EphemeralWarningGrace = 3 * time.Millisecond
 	policy.TerminationGrace = time.Millisecond
 	policy.LeaseWait = time.Second
+
 	samples := stableWarningSamples(base, time.Millisecond)
+
 	for index := range 20 {
 		sample := samples[len(samples)-1]
 		sample.MeasuredAt = base.Add(time.Duration(16+index) * time.Millisecond).UTC().Format(time.RFC3339Nano)
@@ -482,22 +596,39 @@ func (driver *Driver) observeDegradedWarning() error {
 		sample.CompressorPayloadBytes = &payload
 		samples = append(samples, sample)
 	}
+
 	stderr := &bytes.Buffer{}
+
 	code, runError := guard.Run(guard.RunConfig{
-		Command: "/bin/sh", Arguments: []string{"-c", `[ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 1 ] && [ "$GOMAXPROCS" = 1 ] && [ "$DOTNET_PROCESSOR_COUNT" = 1 ]; sleep 5`},
-		TaskClass: taskClassEphemeral, EvidenceRoot: driver.leaseRoot, DiskPath: ".",
-		Collector: &sequenceCollector{samples: samples}, Policy: policy,
-		Resolution: guard.Resolution{RequestedProfile: profileBalanced, ResolvedProfile: profileBalanced, FallbackChain: []string{profileBalanced}, Concurrency: 7},
-		Sleep:      func(time.Duration) {}, Now: time.Now, Stderr: stderr,
-		Environment: os.Environ(),
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", `[ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 1 ] && [ "$GOMAXPROCS" = 1 ] && [ "$DOTNET_PROCESSOR_COUNT" = 1 ]; sleep 5`},
+		TaskClass:    taskClassEphemeral,
+		Environment:  os.Environ(),
+		EvidenceRoot: driver.leaseRoot,
+		DiskPath:     ".",
+		Collector:    &sequenceCollector{samples: samples},
+		Policy:       policy,
+		Resolution: guard.Resolution{
+			RequestedProfile: profileBalanced,
+			ResolvedProfile:  profileBalanced,
+			FallbackChain:    []string{profileBalanced},
+			Concurrency:      7,
+		},
+		Sleep:  func(time.Duration) {},
+		Now:    time.Now,
+		Stderr: stderr,
 	})
+
 	driver.exitCode = code
 	driver.errorOutput = stderr.String()
+
 	return runError
 }
 
 func (driver *Driver) requireDegradedShed() error {
-	if driver.exitCode != guard.CapacityDeferredExitCode || !strings.Contains(driver.errorOutput, "admitting") || !strings.Contains(driver.errorOutput, "shedding") {
+	if driver.exitCode != guard.CapacityDeferredExitCode ||
+		!strings.Contains(driver.errorOutput, "admitting") ||
+		!strings.Contains(driver.errorOutput, "shedding") {
 		return fmt.Errorf("exit=%d stderr=%q", driver.exitCode, driver.errorOutput)
 	}
 	return nil
@@ -506,12 +637,15 @@ func (driver *Driver) requireDegradedShed() error {
 func (driver *Driver) compiledBinary() error {
 	if driver.mode != contract.E2E {
 		driver.binary = "in-process"
+
 		return nil
 	}
+
 	driver.binary = os.Getenv("RESOURCE_GUARD_BIN")
 	if driver.binary == "" {
 		return errors.New("RESOURCE_GUARD_BIN is required")
 	}
+
 	return nil
 }
 
@@ -519,6 +653,7 @@ func (driver *Driver) runBinary(arguments ...string) {
 	command := exec.Command(driver.binary, arguments...)
 	value, err := command.Output()
 	driver.output = string(value)
+
 	if err != nil {
 		driver.exitCode = 1
 		exitError := &exec.ExitError{}
@@ -532,24 +667,42 @@ func (driver *Driver) runBinary(arguments ...string) {
 func (driver *Driver) jsonStatus() error {
 	if driver.mode == contract.E2E {
 		driver.runBinary("status", jsonFlag, "--disk-path", ".")
+
 		return nil
 	}
+
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	var stdout, stderr bytes.Buffer
-	code, err := (cli.Application{Stdout: &stdout, Stderr: &stderr, Collector: collector, Sleep: func(time.Duration) {}}).Run([]string{"status", jsonFlag, "--disk-path", "."})
+	code, err := (cli.Application{
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		Collector: collector,
+		Sleep:     func(time.Duration) {},
+	}).Run([]string{"status", jsonFlag, "--disk-path", "."})
+
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
+
 	return err
 }
 
 func (driver *Driver) jsonVersion() error {
 	if driver.mode == contract.E2E {
 		driver.runBinary("version", jsonFlag)
+
 		return nil
 	}
+
 	var stdout bytes.Buffer
-	code, err := (cli.Application{Stdout: &stdout, Stderr: &bytes.Buffer{}, Version: "v0.0.0-test", Commit: strings.Repeat("0", 40)}).Run([]string{"version", jsonFlag})
+	code, err := (cli.Application{
+		Stdout:  &stdout,
+		Stderr:  &bytes.Buffer{},
+		Version: "v0.0.0-test",
+		Commit:  strings.Repeat("0", 40),
+	}).Run([]string{"version", jsonFlag})
+
 	driver.exitCode, driver.output = code, stdout.String()
+
 	return err
 }
 
@@ -562,6 +715,7 @@ func (driver *Driver) requireVersion() error {
 	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
 		return err
 	}
+
 	if driver.exitCode != 0 || payload.SchemaVersion != 1 || payload.Version == "" || payload.Commit == "" {
 		return fmt.Errorf("invalid version: exit=%d payload=%+v", driver.exitCode, payload)
 	}
@@ -578,7 +732,11 @@ func (driver *Driver) requireStatus() error {
 	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
 		return err
 	}
-	if driver.exitCode != 0 || payload.SchemaVersion != 3 || payload.Resource == nil || payload.Profile == nil || len(payload.Capabilities) == 0 {
+	if driver.exitCode != 0 ||
+		payload.SchemaVersion != 3 ||
+		payload.Resource == nil ||
+		payload.Profile == nil ||
+		len(payload.Capabilities) == 0 {
 		return fmt.Errorf("invalid status: exit=%d payload=%+v", driver.exitCode, payload)
 	}
 	return nil
@@ -587,13 +745,20 @@ func (driver *Driver) requireStatus() error {
 func (driver *Driver) invalidRun() error {
 	if driver.mode == contract.E2E {
 		driver.runBinary("run", "--class", taskClassEphemeral)
+
 		return nil
 	}
-	_, err := (cli.Application{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, Collector: &sequenceCollector{}}).Run([]string{"run", "--class", taskClassEphemeral})
+
+	_, err := (cli.Application{
+		Stdout:    &bytes.Buffer{},
+		Stderr:    &bytes.Buffer{},
+		Collector: &sequenceCollector{},
+	}).Run([]string{"run", "--class", taskClassEphemeral})
 	if err != nil {
 		driver.errorOutput = err.Error()
 		driver.exitCode = 1
 	}
+
 	return nil
 }
 
@@ -605,7 +770,21 @@ func (driver *Driver) requireValidation() error {
 }
 
 func healthySummary() guard.ReleaseSummary {
-	return guard.ReleaseSummary{SchemaVersion: 5, SampleCount: 3, AvailableParallelism: 12, AvailableNonCompressedEstimateMinBytes: 13 * guard.GiB, MemoryPressureLevelMax: 1, CompressorAvailableAll: true, CompressorPayloadPeakBytes: 7 * guard.GiB, CPUUtilizationP95Percent: 50, DiskFreeMinBytes: 30 * guard.GiB, SwapFreeMinBytes: 2 * guard.GiB, HealthLatencyP95Ms: 25, RoutedJourneyLatencyP95Ms: 50, RoutedJourneyLatencyMaxMs: 100}
+	return guard.ReleaseSummary{
+		SchemaVersion:                          5,
+		SampleCount:                            3,
+		AvailableParallelism:                   12,
+		AvailableNonCompressedEstimateMinBytes: 13 * guard.GiB,
+		MemoryPressureLevelMax:                 1,
+		CompressorAvailableAll:                 true,
+		CompressorPayloadPeakBytes:             7 * guard.GiB,
+		CPUUtilizationP95Percent:               50,
+		DiskFreeMinBytes:                       30 * guard.GiB,
+		SwapFreeMinBytes:                       2 * guard.GiB,
+		HealthLatencyP95Ms:                     25,
+		RoutedJourneyLatencyP95Ms:              50,
+		RoutedJourneyLatencyMaxMs:              100,
+	}
 }
 
 func (driver *Driver) summary(healthFailures int) error {
@@ -613,6 +792,7 @@ func (driver *Driver) summary(healthFailures int) error {
 	if err != nil {
 		return err
 	}
+
 	driver.temporaryPaths = append(driver.temporaryPaths, directory)
 	driver.summaryPath = filepath.Join(directory, "summary.json")
 	summary := healthySummary()
@@ -621,6 +801,7 @@ func (driver *Driver) summary(healthFailures int) error {
 	if err != nil {
 		return fmt.Errorf("encode release summary: %w", err)
 	}
+
 	return os.WriteFile(driver.summaryPath, value, 0o600)
 }
 
@@ -628,10 +809,13 @@ func (driver *Driver) assessSummary() error {
 	if driver.mode == contract.E2E {
 		driver.runBinary("release", "assess", "--summary", driver.summaryPath)
 		driver.accepted = driver.exitCode == 0
+
 		return nil
 	}
+
 	_, err := releaseguard.AssessFile(driver.summaryPath)
 	driver.accepted = err == nil
+
 	return nil
 }
 
@@ -647,21 +831,29 @@ func (driver *Driver) releasePathsWithoutEndpoints() error {
 	if err != nil {
 		return err
 	}
+
 	driver.temporaryPaths = append(driver.temporaryPaths, directory)
 	driver.leaseRoot = directory
+
 	return nil
 }
 
 func (driver *Driver) requestReleaseMonitoring() {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base)}}
-	code, err := (cli.Application{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, Environment: []string{}, Collector: collector}).Run([]string{
+	code, err := (cli.Application{
+		Stdout:      &bytes.Buffer{},
+		Stderr:      &bytes.Buffer{},
+		Environment: []string{},
+		Collector:   collector,
+	}).Run([]string{
 		"release", "monitor",
 		"--output", filepath.Join(driver.leaseRoot, "samples.jsonl"),
 		"--summary", filepath.Join(driver.leaseRoot, "summary.json"),
 		"--deployment-root", driver.leaseRoot,
 		"--duration-ms", "1",
 	})
+
 	driver.exitCode = code
 	if err != nil {
 		driver.errorOutput = err.Error()
@@ -690,22 +882,29 @@ func (driver *Driver) requireReleaseCPU() error {
 	}
 	return nil
 }
-func (driver *Driver) failedSummary() error { return driver.summary(1) }
+
+func (driver *Driver) failedSummary() error {
+	return driver.summary(1)
+}
+
 func (driver *Driver) slowRoutedSummary() error {
 	directory, err := os.MkdirTemp("", "resource-guard-bdd-")
 	if err != nil {
 		return err
 	}
+
 	driver.temporaryPaths = append(driver.temporaryPaths, directory)
 	driver.summaryPath = filepath.Join(directory, "summary.json")
 	summary := healthySummary()
 	summary.SchemaVersion = 4
 	summary.RoutedJourneyLatencyP95Ms = 501
 	summary.RoutedJourneyLatencyMaxMs = 2_001
+
 	value, err := json.Marshal(summary)
 	if err != nil {
 		return fmt.Errorf("encode release summary: %w", err)
 	}
+
 	return os.WriteFile(driver.summaryPath, value, 0o600)
 }
 
@@ -716,12 +915,15 @@ func (driver *Driver) requireRejected() error {
 	return nil
 }
 
-func (driver *Driver) nxBuildConfiguration() {}
+func (driver *Driver) nxBuildConfiguration() {
+}
 
 func (driver *Driver) inspectBuildCaching() error {
 	command := exec.Command("git", "check-ignore", "--quiet", "dist/resource-guard_test_linux_amd64.tar.gz")
 	command.Dir = toolRoot()
+
 	driver.lifecycleOK = command.Run() == nil
+
 	return nil
 }
 
@@ -732,20 +934,24 @@ func (driver *Driver) requireBuildCacheDisabled() error {
 	return nil
 }
 
-func (driver *Driver) e2eHarness() {}
+func (driver *Driver) e2eHarness() {
+}
 
 func (driver *Driver) runTemporaryHarness(testExit int) error {
 	temporaryParent, err := os.MkdirTemp("", "resource-guard-e2e-parent-")
 	if err != nil {
 		return err
 	}
+
 	fakeDirectory, err := os.MkdirTemp("", "resource-guard-fake-go-")
 	if err != nil {
 		_ = os.RemoveAll(temporaryParent)
 		return err
 	}
+
 	driver.temporaryPaths = append(driver.temporaryPaths, temporaryParent, fakeDirectory)
 	fakeGo := filepath.Join(fakeDirectory, "go")
+
 	program := `#!/bin/sh
 set -eu
 case "$1" in
@@ -773,12 +979,14 @@ esac
 	if err := os.WriteFile(fakeGo, []byte(program), 0o700); err != nil {
 		return err
 	}
+
 	command := exec.Command(filepath.Join(toolRoot(), "tests", "e2e", "run.sh"))
 	command.Env = environmentWith(map[string]string{
 		"FAKE_GO_TEST_EXIT":              strconv.Itoa(testExit),
 		"RESOURCE_GUARD_E2E_TEMP_PARENT": temporaryParent,
 		"RESOURCE_GUARD_GO_BINARY":       fakeGo,
 	})
+
 	output, runError := command.CombinedOutput()
 	if testExit == 0 && runError != nil {
 		return fmt.Errorf("temporary E2E harness failed: %w: %s", runError, output)
@@ -789,6 +997,7 @@ esac
 			return fmt.Errorf("temporary E2E harness returned %w, want exit %d: %s", runError, testExit, output)
 		}
 	}
+
 	entries, err := os.ReadDir(temporaryParent)
 	if err != nil {
 		return err
@@ -796,6 +1005,7 @@ esac
 	if len(entries) != 0 {
 		return fmt.Errorf("temporary E2E parent retained %d artifact(s)", len(entries))
 	}
+
 	return nil
 }
 
@@ -803,10 +1013,13 @@ func (driver *Driver) inspectE2ELifecycle() error {
 	if err := driver.runTemporaryHarness(0); err != nil {
 		return err
 	}
+
 	if err := driver.runTemporaryHarness(23); err != nil {
 		return err
 	}
+
 	driver.lifecycleOK = true
+
 	return nil
 }
 
@@ -822,27 +1035,33 @@ func (driver *Driver) historicalGenerations() error {
 	if err != nil {
 		return err
 	}
+
 	driver.cacheRoot = cacheRoot
 	driver.temporaryPaths = append(driver.temporaryPaths, cacheRoot)
+
 	platform := filepath.Join(cacheRoot, runtime.GOOS+"-"+runtime.GOARCH)
 	if err := os.MkdirAll(platform, 0o700); err != nil {
 		return err
 	}
+
 	for index, character := range []string{"1", "2", "3", "4"} {
 		name := strings.Repeat(character, 64)
 		directory := filepath.Join(platform, name)
 		if err := os.Mkdir(directory, 0o700); err != nil {
 			return err
 		}
+
 		if err := os.WriteFile(filepath.Join(directory, "resource-guard"), []byte("historical"), 0o700); err != nil {
 			return err
 		}
+
 		modified := time.Unix(int64(index+1), 0)
 		if err := os.Chtimes(directory, modified, modified); err != nil {
 			return err
 		}
 		driver.historicalCaches = append(driver.historicalCaches, name)
 	}
+
 	retentionLock := filepath.Join(platform, ".retention.lock")
 	if err := os.Mkdir(retentionLock, 0o700); err != nil {
 		return err
@@ -850,6 +1069,7 @@ func (driver *Driver) historicalGenerations() error {
 	if err := os.WriteFile(filepath.Join(retentionLock, "pid"), []byte("999999999\n"), 0o600); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -857,6 +1077,7 @@ func (driver *Driver) runCurrentBootstrap() error {
 	if driver.cacheRoot == "" {
 		return errors.New("bootstrap cache root was not prepared")
 	}
+
 	summaryPath := filepath.Join(driver.cacheRoot, "healthy-summary.json")
 	value, err := json.Marshal(healthySummary())
 	if err != nil {
@@ -865,19 +1086,24 @@ func (driver *Driver) runCurrentBootstrap() error {
 	if err := os.WriteFile(summaryPath, value, 0o600); err != nil {
 		return err
 	}
+
 	command := exec.Command(filepath.Join(toolRoot(), "resource-guard"), "release", "assess", "--summary", summaryPath)
 	command.Env = environmentWith(map[string]string{"RESOURCE_GUARD_BUILD_CACHE": driver.cacheRoot})
+
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("current bootstrap failed: %w: %s", err, output)
 	}
+
 	platform := filepath.Join(driver.cacheRoot, runtime.GOOS+"-"+runtime.GOARCH)
 	entries, err := os.ReadDir(platform)
 	if err != nil {
 		return err
 	}
+
 	remaining := map[string]bool{}
 	generation := regexp.MustCompile(`^[0-9a-f]{64}$`)
+
 	for _, entry := range entries {
 		if entry.IsDir() && generation.MatchString(entry.Name()) {
 			remaining[entry.Name()] = true
@@ -892,7 +1118,9 @@ func (driver *Driver) runCurrentBootstrap() error {
 	if !remaining[driver.historicalCaches[2]] || !remaining[driver.historicalCaches[3]] {
 		return errors.New("two most recent historical generations were removed")
 	}
+
 	driver.lifecycleOK = true
+
 	return nil
 }
 
@@ -903,7 +1131,8 @@ func (driver *Driver) requireRetention() error {
 	return nil
 }
 
-func (driver *Driver) goLintConfiguration() {}
+func (driver *Driver) goLintConfiguration() {
+}
 
 func (driver *Driver) inspectLintEnforcement() error {
 	configuration, err := os.ReadFile(filepath.Join(toolRoot(), ".golangci.yml"))
@@ -916,7 +1145,9 @@ func (driver *Driver) inspectLintEnforcement() error {
 	if err != nil {
 		return err
 	}
+
 	driver.lintCommand = string(quickData)
+
 	return nil
 }
 
@@ -927,6 +1158,7 @@ func (driver *Driver) requireExhaustiveLint() error {
 			return fmt.Errorf("lint configuration does not enforce %q", value)
 		}
 	}
+
 	if !strings.Contains(driver.lintConfiguration, "disable:") || !strings.Contains(driver.lintConfiguration, "#") {
 		return errors.New("lint exceptions are not documented")
 	}
@@ -937,6 +1169,7 @@ func (driver *Driver) requirePackageDocumentation() error {
 	if strings.Contains(driver.lintConfiguration, "- stylecheck") {
 		return errors.New("stylecheck is disabled")
 	}
+
 	if !strings.Contains(driver.lintConfiguration, "name: exported") || !strings.Contains(driver.lintConfiguration, "severity: error") {
 		return errors.New("exported documentation is not an error")
 	}
@@ -950,15 +1183,18 @@ func (driver *Driver) requireModuleScopedLint() error {
 	return nil
 }
 
-func (driver *Driver) gherkinAdapterContract() {}
+func (driver *Driver) gherkinAdapterContract() {
+}
 
 func (driver *Driver) inspectBehaviourCoverage() error {
 	driver.strictAdapters = true
+
 	for _, adapter := range contract.Adapters() {
 		driver.strictAdapters = driver.strictAdapters && contract.SuiteOptions(adapter).Strict
 	}
 
 	driver.approvedExemptions = true
+
 	for _, exemptions := range contract.ApprovedExemptions {
 		for _, exemption := range exemptions {
 			driver.approvedExemptions = driver.approvedExemptions && strings.TrimSpace(exemption.Reason) != ""
@@ -969,17 +1205,21 @@ func (driver *Driver) inspectBehaviourCoverage() error {
 	if err != nil {
 		return err
 	}
+
 	quickData, err := os.ReadFile(filepath.Join(toolRoot(), "scripts", "test-quick.sh"))
 	if err != nil {
 		return err
 	}
+
 	fullText, quickText := string(fullData), string(quickData)
 	effectiveText := quickText + fullText
+
 	unit := strings.Index(effectiveText, "RESOURCE_GUARD_BDD_ADAPTER=unit")
 	integration := strings.Index(effectiveText, "RESOURCE_GUARD_BDD_ADAPTER=integration")
 	e2e := strings.Index(effectiveText, "RESOURCE_GUARD_BDD_ADAPTER=e2e")
 	driver.serialCompliance = unit >= 0 && unit < integration && integration < e2e
 	driver.e2ePlacement = strings.Contains(fullText, "./tests/e2e/run.sh") && !strings.Contains(quickText, "./tests/e2e/run.sh")
+
 	return nil
 }
 
@@ -1011,38 +1251,48 @@ func (driver *Driver) requireE2EPlacement() error {
 	return nil
 }
 
-func (driver *Driver) contributorGateContract() {}
+func (driver *Driver) contributorGateContract() {
+}
 
 func (driver *Driver) inspectContributorEnforcement() error {
 	root := toolRoot()
+
 	read := func(parts ...string) (string, error) {
 		data, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
+
 		return string(data), err
 	}
+
 	commitHook, err := read(".husky", "commit-msg")
 	if err != nil {
 		return err
 	}
+
 	preCommitHook, err := read(".husky", "pre-commit")
 	if err != nil {
 		return err
 	}
+
 	prePushHook, err := read(".husky", "pre-push")
 	if err != nil {
 		return err
 	}
+
 	stagedConfig, err := read("lint-staged.config.mjs")
 	if err != nil {
 		return err
 	}
+
 	workflow, err := read(".github", "workflows", "ci.yml")
 	if err != nil {
 		return err
 	}
+
 	manifest, err := read("package.json")
 	if err != nil {
 		return err
 	}
+
 	quick, err := read("scripts", "test-quick.sh")
 	if err != nil {
 		return err
@@ -1065,6 +1315,7 @@ func (driver *Driver) inspectContributorEnforcement() error {
 	driver.coreCoverage = strings.Contains(quick, "--minimum 99") &&
 		strings.Contains(quick, "internal/policy,./internal/config,./internal/host") &&
 		strings.Contains(quick, "internal/host/collector.go,internal/host/linux_parsers.go")
+
 	return nil
 }
 
@@ -1107,6 +1358,7 @@ func capacitySample(memory, available int64) guard.Sample {
 	sample.CompressorAvailable = nil
 	sample.CompressorPayloadBytes = nil
 	sample.SwapState = "unavailable"
+
 	return sample
 }
 
@@ -1158,7 +1410,8 @@ func (driver *Driver) linuxCgroupCapacity() {
 	}
 }
 
-func (driver *Driver) collectLinuxEvidence() {}
+func (driver *Driver) collectLinuxEvidence() {
+}
 
 func (driver *Driver) requireFourGiB() error {
 	if driver.effectiveMemory != 4*guard.GiB {
@@ -1195,10 +1448,13 @@ func (driver *Driver) invalidExplicitConfig() {
 	directory, err := os.MkdirTemp("", "resource-guard-config-")
 	if err != nil {
 		driver.errorOutput = err.Error()
+
 		return
 	}
+
 	driver.temporaryPaths = append(driver.temporaryPaths, directory)
 	driver.configPath = filepath.Join(directory, "invalid.json")
+
 	if err := os.WriteFile(driver.configPath, []byte(`{"schemaVersion":1,"unknown":true}`), 0o600); err != nil {
 		driver.errorOutput = err.Error()
 	}
@@ -1207,7 +1463,13 @@ func (driver *Driver) invalidExplicitConfig() {
 func (driver *Driver) statusWithConfig() {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
-	code, err := (cli.Application{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, Collector: collector, Sleep: func(time.Duration) {}}).Run([]string{"status", jsonFlag, "--config", driver.configPath})
+	code, err := (cli.Application{
+		Stdout:    &bytes.Buffer{},
+		Stderr:    &bytes.Buffer{},
+		Collector: collector,
+		Sleep:     func(time.Duration) {},
+	}).Run([]string{"status", jsonFlag, "--config", driver.configPath})
+
 	driver.exitCode = code
 	if err != nil {
 		driver.errorOutput = err.Error()
@@ -1221,24 +1483,34 @@ func (driver *Driver) requireConfigExit() error {
 	return nil
 }
 
-func (driver *Driver) artifactPolicy() {}
+func (driver *Driver) artifactPolicy() {
+}
 
-func repositoryRoot() string { return toolRoot() }
+func repositoryRoot() string {
+	return toolRoot()
+}
 
 func (driver *Driver) inspectArtifactPolicy() {
 	root := repositoryRoot()
 	local := "resource-guard.local.json"
 	ignore := exec.Command("git", "check-ignore", "--quiet", local)
 	ignore.Dir = root
+
 	notTracked := exec.Command("git", "ls-files", "--error-unmatch", local)
 	notTracked.Dir = root
+
 	bootstrap, readError := os.ReadFile(filepath.Join(root, "resource-guard"))
-	driver.privateArtifacts = ignore.Run() == nil && notTracked.Run() != nil && readError == nil && bytes.HasPrefix(bootstrap, []byte("#!/bin/sh\n"))
+	driver.privateArtifacts = ignore.Run() == nil &&
+		notTracked.Run() != nil &&
+		readError == nil &&
+		bytes.HasPrefix(bootstrap, []byte("#!/bin/sh\n"))
+
 	examplePath := "resource-guard.local.json.example"
 	example := exec.Command("git", "check-ignore", "--quiet", examplePath)
 	example.Dir = root
 	_, exampleError := os.Stat(filepath.Join(root, examplePath))
 	driver.exampleTracked = example.Run() != nil && exampleError == nil
+
 	moduleData, moduleError := os.ReadFile(filepath.Join(root, "go.mod"))
 	packageData, packageError := os.ReadFile(filepath.Join(root, "package.json"))
 	manifest := map[string]any{}
@@ -1246,16 +1518,19 @@ func (driver *Driver) inspectArtifactPolicy() {
 	private, privateOK := manifest["private"].(bool)
 	_, hasWorkspaces := manifest["workspaces"]
 	hasNxDependency := false
+
 	for _, section := range []string{"dependencies", "devDependencies", "peerDependencies", "optionalDependencies"} {
 		dependencies, ok := manifest[section].(map[string]any)
 		if !ok {
 			continue
 		}
+
 		_, hasNxDependency = dependencies["nx"]
 		if hasNxDependency {
 			break
 		}
 	}
+
 	driver.applicationLayout = moduleError == nil &&
 		bytes.Contains(moduleData, []byte("module github.com/wahidyankf/resource-guard")) &&
 		packageError == nil && manifestError == nil && privateOK && private &&
@@ -1267,6 +1542,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
+
 	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 

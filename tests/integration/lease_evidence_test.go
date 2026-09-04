@@ -18,6 +18,7 @@ func marshalJSON(t *testing.T, value any) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return data
 }
 
@@ -27,6 +28,7 @@ func TestHeavyLeaseLifecycleAndInheritance(t *testing.T) {
 	if err != nil || session == nil || session.Inherited {
 		t.Fatalf("acquire failed: session=%+v error=%v", session, err)
 	}
+
 	if !guard.InheritedSession(root, session.Token) || guard.InheritedSession(root, "") || guard.InheritedSession(root, "wrong") {
 		t.Fatal("inheritance validation failed")
 	}
@@ -34,10 +36,12 @@ func TestHeavyLeaseLifecycleAndInheritance(t *testing.T) {
 	if err != nil || !inherited.Inherited {
 		t.Fatalf("inherit failed: %+v %v", inherited, err)
 	}
+
 	deferred, err := guard.AcquireSession(root, "wrong", "ephemeral", 0, func(time.Duration) {})
 	if err != nil || deferred != nil {
 		t.Fatalf("second owner was not deferred: %+v %v", deferred, err)
 	}
+
 	if err := guard.ReleaseSession(root, inherited); err != nil {
 		t.Fatal(err)
 	}
@@ -55,20 +59,24 @@ func TestHeavyLeaseRejectsInvalidReleaseAndReclaimsStaleOwner(t *testing.T) {
 	if err := os.Mkdir(lock, 0o700); err != nil {
 		t.Fatal(err)
 	}
+
 	marker := map[string]any{"schemaVersion": 1, "pid": 2_147_483_647, "token": "stale"}
 	data := marshalJSON(t, marker)
 	if err := os.WriteFile(filepath.Join(lock, "owner.json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	session, err := guard.AcquireSession(root, "", "ephemeral", time.Second, func(time.Duration) {})
 	if err != nil || session == nil {
 		t.Fatalf("stale reclaim failed: %+v %v", session, err)
 	}
+
 	invalid := *session
 	invalid.Path = filepath.Join(root, "other")
 	if guard.ReleaseSession(root, &invalid) == nil {
 		t.Fatal("invalid path release accepted")
 	}
+
 	ownerPath := filepath.Join(lock, "owner.json")
 	ownerData, _ := os.ReadFile(ownerPath)
 	var owner map[string]any
@@ -79,6 +87,7 @@ func TestHeavyLeaseRejectsInvalidReleaseAndReclaimsStaleOwner(t *testing.T) {
 	if guard.ReleaseSession(root, session) == nil {
 		t.Fatal("foreign owner release accepted")
 	}
+
 	owner["token"] = session.Token
 	ownerData = marshalJSON(t, owner)
 	_ = os.WriteFile(ownerPath, ownerData, 0o600)
@@ -92,13 +101,16 @@ func TestPortLeaseLifecycleValidationAndStaleRecovery(t *testing.T) {
 	if _, err := guard.AcquirePortLease(root, 10, "owner", 20, 30); err == nil {
 		t.Fatal("out-of-range port accepted")
 	}
+
 	if _, err := guard.AcquirePortLease(root, 25, "INVALID", 20, 30); err == nil {
 		t.Fatal("invalid owner accepted")
 	}
+
 	lease, err := guard.AcquirePortLease(root, 25, "first-owner", 20, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := guard.AcquirePortLease(root, 25, "second-owner", 20, 30); err == nil {
 		t.Fatal("live collision accepted")
 	}
@@ -107,6 +119,7 @@ func TestPortLeaseLifecycleValidationAndStaleRecovery(t *testing.T) {
 	if guard.ReleasePortLease(root, &invalid) == nil {
 		t.Fatal("invalid release accepted")
 	}
+
 	ownerPath := filepath.Join(lease.Path, "owner.json")
 	data, _ := os.ReadFile(ownerPath)
 	var owner map[string]any
@@ -117,6 +130,7 @@ func TestPortLeaseLifecycleValidationAndStaleRecovery(t *testing.T) {
 	if guard.ReleasePortLease(root, lease) == nil {
 		t.Fatal("foreign port release accepted")
 	}
+
 	owner["owner"] = lease.Owner
 	data = marshalJSON(t, owner)
 	_ = os.WriteFile(ownerPath, data, 0o600)
@@ -126,10 +140,12 @@ func TestPortLeaseLifecycleValidationAndStaleRecovery(t *testing.T) {
 	if err := guard.ReleasePortLease(root, nil); err != nil {
 		t.Fatal(err)
 	}
+
 	stalePath := filepath.Join(root, "26.lock")
 	_ = os.Mkdir(stalePath, 0o700)
 	stale := marshalJSON(t, map[string]any{"schemaVersion": 1, "pid": 2_147_483_647, "port": 26, "owner": "stale"})
 	_ = os.WriteFile(filepath.Join(stalePath, "owner.json"), stale, 0o600)
+
 	replacement, err := guard.AcquirePortLease(root, 26, "replacement", 20, 30)
 	if err != nil {
 		t.Fatal(err)
@@ -145,6 +161,7 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 	if err := guard.CleanupEvidence(root, now); err != nil {
 		t.Fatal(err)
 	}
+
 	old := filepath.Join(root, "old.jsonl")
 	summaryOld := filepath.Join(root, "old.summary.json")
 	preserve := filepath.Join(root, "preserve.jsonl")
@@ -155,6 +172,7 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 		stale := now.Add(-31 * 24 * time.Hour)
 		_ = os.Chtimes(path, stale, stale)
 	}
+
 	if err := guard.CleanupEvidence(root, now, preserve); err != nil {
 		t.Fatal(err)
 	}
@@ -167,33 +185,73 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 	if _, err := os.Stat(preserve); err != nil {
 		t.Fatal("preserved evidence removed")
 	}
+
 	writer, err := guard.NewEvidenceWriter(root, guard.EvidenceIdentifier("integration/test", now, os.Getpid()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer.SetContext(guard.Resolution{RequestedProfile: "balanced", ResolvedProfile: "minimal", FallbackChain: []string{"balanced", "minimal"}, Concurrency: 1}, "config-hash")
+	writer.SetContext(guard.Resolution{
+		RequestedProfile: "balanced",
+		ResolvedProfile:  "minimal",
+		FallbackChain:    []string{"balanced", "minimal"},
+		Concurrency:      1,
+	}, "config-hash")
+
 	one := int64(1)
 	two := int64(2)
 	levelOne := 1
 	levelTwo := 2
 	yes := true
-	no := false
+	compressorUnavailable := false
 	cpuOne, cpuTwo := 10.0, 20.0
-	first := guard.Sample{AvailableParallelism: 8, AvailableNonCompressedEstimateBytes: &two, MemoryPressureLevel: &levelOne, CompressorAvailable: &yes, CompressorPayloadBytes: &one, CPUUtilizationPercent: &cpuOne, DiskFreeBytes: &two, SwapIns: &one, SwapOuts: &one, SwapFreeBytes: &two}
-	second := guard.Sample{AvailableParallelism: 8, AvailableNonCompressedEstimateBytes: &one, MemoryPressureLevel: &levelTwo, CompressorAvailable: &no, CompressorPayloadBytes: &two, CPUUtilizationPercent: &cpuTwo, DiskFreeBytes: &one, SwapIns: &two, SwapOuts: &two, SwapFreeBytes: &one}
+
+	first := guard.Sample{
+		AvailableParallelism:                8,
+		AvailableNonCompressedEstimateBytes: &two,
+		MemoryPressureLevel:                 &levelOne,
+		CompressorAvailable:                 &yes,
+		CompressorPayloadBytes:              &one,
+		CPUUtilizationPercent:               &cpuOne,
+		DiskFreeBytes:                       &two,
+		SwapIns:                             &one,
+		SwapOuts:                            &one,
+		SwapFreeBytes:                       &two,
+	}
+	second := guard.Sample{
+		AvailableParallelism:                8,
+		AvailableNonCompressedEstimateBytes: &one,
+		MemoryPressureLevel:                 &levelTwo,
+		CompressorAvailable:                 &compressorUnavailable,
+		CompressorPayloadBytes:              &two,
+		CPUUtilizationPercent:               &cpuTwo,
+		DiskFreeBytes:                       &one,
+		SwapIns:                             &two,
+		SwapOuts:                            &two,
+		SwapFreeBytes:                       &one,
+	}
+
 	if err := writer.Append(first); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Append(second); err != nil {
 		t.Fatal(err)
 	}
+
 	summary, err := writer.Finalize("ephemeral", "passed", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary.SchemaVersion != 3 || summary.SampleCount != 2 || summary.CompressorAvailableAll || summary.SwapInsDelta != 1 || summary.SwapOutsDelta != 1 || summary.HealthFailures != 1 || summary.ResolvedProfile != "minimal" || summary.ConfigHash != "config-hash" {
+	if summary.SchemaVersion != 3 ||
+		summary.SampleCount != 2 ||
+		summary.CompressorAvailableAll ||
+		summary.SwapInsDelta != 1 ||
+		summary.SwapOutsDelta != 1 ||
+		summary.HealthFailures != 1 ||
+		summary.ResolvedProfile != "minimal" ||
+		summary.ConfigHash != "config-hash" {
 		t.Fatalf("unexpected summary %+v", summary)
 	}
+
 	if _, err := writer.Finalize("ephemeral", "passed", 0); err == nil {
 		t.Fatal("second finalize accepted")
 	}
@@ -206,6 +264,7 @@ func TestServiceSessionsDoNotHoldTheHeavyLease(t *testing.T) {
 	if err != nil || service == nil {
 		t.Fatalf("service acquire failed: session=%+v error=%v", service, err)
 	}
+
 	if _, statError := os.Stat(filepath.Join(root, "heavy.lock")); !os.IsNotExist(statError) {
 		t.Fatal("a service session took the heavy-work lease")
 	}
@@ -213,12 +272,14 @@ func TestServiceSessionsDoNotHoldTheHeavyLease(t *testing.T) {
 	if err != nil || heavy == nil {
 		t.Fatalf("heavy work was deferred by a live service: session=%+v error=%v", heavy, err)
 	}
+
 	if !guard.InheritedSession(root, service.Token) {
 		t.Fatal("a service child could not inherit its own session")
 	}
 	if !guard.InheritedSession(root, heavy.Token) {
 		t.Fatal("a heavy child could not inherit its own session")
 	}
+
 	second, err := guard.AcquireSession(root, "", "service", time.Second, pause)
 	if err != nil || second == nil {
 		t.Fatalf("a concurrent service was deferred: session=%+v error=%v", second, err)
@@ -226,11 +287,13 @@ func TestServiceSessionsDoNotHoldTheHeavyLease(t *testing.T) {
 	if second.Token == service.Token {
 		t.Fatal("concurrent services shared one session token")
 	}
+
 	for _, owned := range []*guard.Session{service, second, heavy} {
 		if releaseError := guard.ReleaseSession(root, owned); releaseError != nil {
 			t.Fatal(releaseError)
 		}
 	}
+
 	if guard.InheritedSession(root, service.Token) {
 		t.Fatal("a released service session stayed inheritable")
 	}
@@ -243,10 +306,12 @@ func TestHeavyLeaseDeferralDescribesItsHolder(t *testing.T) {
 	if err != nil || holder == nil {
 		t.Fatalf("acquire failed: session=%+v error=%v", holder, err)
 	}
+
 	deferred, err := guard.AcquireSession(root, "", "ephemeral", 200*time.Millisecond, pause)
 	if err != nil || deferred != nil {
 		t.Fatalf("second heavy owner was not deferred: %+v %v", deferred, err)
 	}
+
 	description := guard.DescribeHeavyLease(root)
 	if !strings.Contains(description, "heavy-work lease") ||
 		!strings.Contains(description, strconv.Itoa(os.Getpid())) ||
@@ -256,6 +321,7 @@ func TestHeavyLeaseDeferralDescribesItsHolder(t *testing.T) {
 	if err := guard.ReleaseSession(root, holder); err != nil {
 		t.Fatal(err)
 	}
+
 	if empty := guard.DescribeHeavyLease(root); !strings.Contains(empty, "no live") {
 		t.Fatalf("released lease was still described as held: %q", empty)
 	}

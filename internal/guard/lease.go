@@ -39,7 +39,9 @@ const (
 
 // SerializesHeavyWork reports whether class competes for the single heavy-work lease.
 // Long-lived services stay outside that lease so they never starve guarded gates.
-func SerializesHeavyWork(class string) bool { return class != ClassService }
+func SerializesHeavyWork(class string) bool {
+	return class != ClassService
+}
 
 // PortLease identifies ownership of one bounded service port.
 type PortLease struct {
@@ -51,7 +53,9 @@ func livePID(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
+
 	err := syscall.Kill(pid, 0)
+
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
@@ -60,10 +64,12 @@ func readLeaseOwner(path string) (*leaseOwner, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var owner leaseOwner
 	if err = json.Unmarshal(data, &owner); err != nil {
 		return nil, err
 	}
+
 	return &owner, nil
 }
 
@@ -72,6 +78,7 @@ func writeLeaseOwner(path string, owner leaseOwner) error {
 	if err != nil {
 		return err
 	}
+
 	return os.WriteFile(filepath.Join(path, "owner.json"), append(data, '\n'), 0o600)
 }
 
@@ -80,6 +87,7 @@ func token() (string, error) {
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
+
 	return hex.EncodeToString(bytes), nil
 }
 
@@ -97,14 +105,17 @@ func readSessionRecord(root, sessionToken string) (*leaseOwner, error) {
 	if !valid {
 		return nil, errors.New("invalid resource session token")
 	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
+
 	var owner leaseOwner
 	if err = json.Unmarshal(data, &owner); err != nil {
 		return nil, err
 	}
+
 	return &owner, nil
 }
 
@@ -113,9 +124,11 @@ func writeSessionRecord(root string, owner leaseOwner) (string, error) {
 	if !valid {
 		return "", errors.New("invalid resource session token")
 	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", err
 	}
+
 	data, err := json.Marshal(owner)
 	if err != nil {
 		return "", err
@@ -123,6 +136,7 @@ func writeSessionRecord(root string, owner leaseOwner) (string, error) {
 	if err = os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
 		return "", err
 	}
+
 	return path, nil
 }
 
@@ -133,6 +147,7 @@ func pruneSessionRecords(root string) {
 	if err != nil {
 		return
 	}
+
 	for _, entry := range entries {
 		recordToken := strings.TrimSuffix(entry.Name(), ".json")
 		owner, readError := readSessionRecord(root, recordToken)
@@ -147,11 +162,14 @@ func InheritedSession(root, candidate string) bool {
 	if candidate == "" {
 		return false
 	}
+
 	if owner, err := readSessionRecord(root, candidate); err == nil &&
 		owner.SchemaVersion == 1 && owner.Token == candidate && livePID(owner.PID) {
 		return true
 	}
+
 	owner, err := readLeaseOwner(filepath.Join(root, "heavy.lock"))
+
 	return err == nil && owner.SchemaVersion == 1 && owner.Token == candidate && livePID(owner.PID)
 }
 
@@ -161,10 +179,12 @@ func DescribeHeavyLease(root string) string {
 	if err != nil || !livePID(owner.PID) {
 		return "the heavy-work lease reports no live owner"
 	}
+
 	class := owner.Class
 	if class == "" {
 		class = "unknown"
 	}
+
 	return fmt.Sprintf("the heavy-work lease is held by pid %d (class %s)", owner.PID, class)
 }
 
@@ -172,17 +192,25 @@ func DescribeHeavyLease(root string) string {
 // Heavy classes serialize on one lease; services record an inheritable session only.
 func AcquireSession(root, inheritedToken, class string, wait time.Duration, pause func(time.Duration)) (*Session, error) {
 	if InheritedSession(root, inheritedToken) {
-		return &Session{Inherited: true, Token: inheritedToken}, nil
+		return &Session{
+			Inherited: true,
+			Token:     inheritedToken,
+		}, nil
 	}
+
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
+
 	pruneSessionRecords(root)
+
 	if !SerializesHeavyWork(class) {
 		return registerSession(root, "", class)
 	}
+
 	lockPath := filepath.Join(root, "heavy.lock")
 	deadline := time.Now().Add(wait)
+
 	for !time.Now().After(deadline) {
 		if err := os.Mkdir(lockPath, 0o700); err == nil {
 			session, registerError := registerSession(root, lockPath, class)
@@ -190,10 +218,12 @@ func AcquireSession(root, inheritedToken, class string, wait time.Duration, paus
 				_ = os.RemoveAll(lockPath)
 				return nil, registerError
 			}
+
 			return session, nil
 		} else if !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
+
 		owner, ownerError := readLeaseOwner(lockPath)
 		if ownerError == nil && !livePID(owner.PID) {
 			if err := os.RemoveAll(lockPath); err != nil {
@@ -201,8 +231,10 @@ func AcquireSession(root, inheritedToken, class string, wait time.Duration, paus
 			}
 			continue
 		}
+
 		pause(time.Second)
 	}
+
 	return nil, nil
 }
 
@@ -212,17 +244,29 @@ func registerSession(root, lockPath, class string) (*Session, error) {
 	if tokenError != nil {
 		return nil, tokenError
 	}
-	owner := leaseOwner{SchemaVersion: 1, PID: os.Getpid(), Token: value, Class: class}
+
+	owner := leaseOwner{
+		SchemaVersion: 1,
+		PID:           os.Getpid(),
+		Token:         value,
+		Class:         class,
+	}
 	if lockPath != "" {
 		if writeError := writeLeaseOwner(lockPath, owner); writeError != nil {
 			return nil, writeError
 		}
 	}
+
 	recordPath, recordError := writeSessionRecord(root, owner)
 	if recordError != nil {
 		return nil, recordError
 	}
-	return &Session{Path: lockPath, Token: value, RecordPath: recordPath}, nil
+
+	return &Session{
+		Path:       lockPath,
+		Token:      value,
+		RecordPath: recordPath,
+	}, nil
 }
 
 // ReleaseSession removes only the session record and heavy-work lease owned by session.
@@ -230,6 +274,7 @@ func ReleaseSession(root string, session *Session) error {
 	if session == nil || session.Inherited {
 		return nil
 	}
+
 	if session.RecordPath != "" {
 		expectedRecord, valid := sessionRecordPath(root, session.Token)
 		if !valid || session.RecordPath != expectedRecord {
@@ -239,13 +284,16 @@ func ReleaseSession(root string, session *Session) error {
 			return err
 		}
 	}
+
 	if session.Path == "" {
 		return nil
 	}
+
 	expected := filepath.Join(root, "heavy.lock")
 	if session.Path != expected {
 		return errors.New("refusing to release an invalid resource session")
 	}
+
 	owner, err := readLeaseOwner(expected)
 	if err != nil {
 		return err
@@ -253,6 +301,7 @@ func ReleaseSession(root string, session *Session) error {
 	if owner.PID != os.Getpid() || owner.Token != session.Token {
 		return errors.New("refusing to release a resource session owned by another process")
 	}
+
 	return os.RemoveAll(expected)
 }
 
@@ -263,23 +312,39 @@ func AcquirePortLease(root string, port int, ownerName string, minimum, maximum 
 	if port < minimum || port > maximum {
 		return nil, fmt.Errorf("port must be between %d and %d", minimum, maximum)
 	}
+
 	if !portOwnerPattern.MatchString(ownerName) {
 		return nil, errors.New("port lease owner is invalid")
 	}
+
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
+
 	path := filepath.Join(root, fmt.Sprintf("%d.lock", port))
+
 	for range 2 {
 		if err := os.Mkdir(path, 0o700); err == nil {
-			if writeError := writeLeaseOwner(path, leaseOwner{SchemaVersion: 1, PID: os.Getpid(), Port: port, Owner: ownerName}); writeError != nil {
+			owner := leaseOwner{
+				SchemaVersion: 1,
+				PID:           os.Getpid(),
+				Port:          port,
+				Owner:         ownerName,
+			}
+			if writeError := writeLeaseOwner(path, owner); writeError != nil {
 				_ = os.RemoveAll(path)
 				return nil, writeError
 			}
-			return &PortLease{Path: path, Port: port, Owner: ownerName}, nil
+
+			return &PortLease{
+				Path:  path,
+				Port:  port,
+				Owner: ownerName,
+			}, nil
 		} else if !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
+
 		marker, markerError := readLeaseOwner(path)
 		if markerError != nil || marker.SchemaVersion != 1 || marker.Port != port || livePID(marker.PID) {
 			return nil, fmt.Errorf("port %d is already leased", port)
@@ -288,6 +353,7 @@ func AcquirePortLease(root string, port int, ownerName string, minimum, maximum 
 			return nil, err
 		}
 	}
+
 	return nil, fmt.Errorf("port %d could not be leased", port)
 }
 
@@ -296,10 +362,12 @@ func ReleasePortLease(root string, lease *PortLease) error {
 	if lease == nil {
 		return nil
 	}
+
 	expected := filepath.Join(root, fmt.Sprintf("%d.lock", lease.Port))
 	if lease.Path != expected {
 		return errors.New("refusing to release an invalid port lease")
 	}
+
 	owner, err := readLeaseOwner(expected)
 	if err != nil {
 		return err
@@ -307,5 +375,6 @@ func ReleasePortLease(root string, lease *PortLease) error {
 	if owner.PID != os.Getpid() || owner.Port != lease.Port || owner.Owner != lease.Owner {
 		return errors.New("refusing to release a port lease owned by another process")
 	}
+
 	return os.RemoveAll(expected)
 }

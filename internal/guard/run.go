@@ -52,6 +52,7 @@ func environmentValue(environment []string, name string) string {
 			return entry[len(prefix):]
 		}
 	}
+
 	return ""
 }
 
@@ -63,6 +64,7 @@ func withEnvironment(environment []string, name, value string) []string {
 			result = append(result, entry)
 		}
 	}
+
 	return append(result, prefix+value)
 }
 
@@ -70,6 +72,7 @@ func withEnvironmentIfMissing(environment []string, name, value string) []string
 	if environmentValue(environment, name) != "" {
 		return environment
 	}
+
 	return withEnvironment(environment, name, value)
 }
 
@@ -77,6 +80,7 @@ func resolvedEnvironment(environment []string, resolution Resolution, forceConcu
 	if resolution.ResolvedProfile == "" || resolution.Concurrency <= 0 {
 		return environment
 	}
+
 	concurrency := strconv.Itoa(resolution.Concurrency)
 	environment = withEnvironment(environment, "RESOURCE_GUARD_PROFILE", resolution.ResolvedProfile)
 	environment = withEnvironment(environment, "RESOURCE_GUARD_CONCURRENCY", concurrency)
@@ -87,6 +91,7 @@ func resolvedEnvironment(environment []string, resolution Resolution, forceConcu
 			environment = withEnvironmentIfMissing(environment, name, concurrency)
 		}
 	}
+
 	return environment
 }
 
@@ -94,6 +99,7 @@ func waitStatusCode(err error) int {
 	if err == nil {
 		return 0
 	}
+
 	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 		if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 			if status.Signaled() {
@@ -102,6 +108,7 @@ func waitStatusCode(err error) int {
 			return status.ExitStatus()
 		}
 	}
+
 	return 1
 }
 
@@ -109,6 +116,7 @@ func signalGroup(process *os.Process, signal syscall.Signal) {
 	if process == nil {
 		return
 	}
+
 	if err := syscall.Kill(-process.Pid, signal); err != nil {
 		_ = process.Signal(signal)
 	}
@@ -133,12 +141,15 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	if config.TaskClass != ClassEphemeral && config.TaskClass != ClassService && config.TaskClass != ClassTransactional {
 		return 1, errors.New("class must be ephemeral, service, or transactional")
 	}
+
 	if config.Policy.SampleInterval == 0 {
 		config.Policy = DevelopmentPolicy
 	}
+
 	if config.Collector == nil {
 		return 1, errors.New("host collector is required")
 	}
+
 	if config.Now == nil {
 		config.Now = time.Now
 	}
@@ -151,24 +162,40 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	if config.Environment == nil {
 		config.Environment = os.Environ()
 	}
+
 	config.Environment = resolvedEnvironment(config.Environment, config.Resolution, false)
+
 	if config.DiskPath == "" {
 		config.DiskPath = config.WorkingDirectory
 	}
 	if config.DiskPath == "" {
 		config.DiskPath = "."
 	}
+
 	if err := CleanupEvidence(config.EvidenceRoot, config.Now()); err != nil {
 		return 1, err
 	}
-	session, err := AcquireSession(config.EvidenceRoot, environmentValue(config.Environment, "RESOURCE_GUARD_SESSION"), config.TaskClass, config.Policy.LeaseWait, config.Sleep)
+
+	session, err := AcquireSession(
+		config.EvidenceRoot,
+		environmentValue(config.Environment, "RESOURCE_GUARD_SESSION"),
+		config.TaskClass,
+		config.Policy.LeaseWait,
+		config.Sleep,
+	)
 	if err != nil {
 		return 1, err
 	}
 	if session == nil {
-		_, _ = fmt.Fprintf(config.Stderr, "Resource guard deferred task: %s; it must exit before this work is admitted.\n", DescribeHeavyLease(config.EvidenceRoot))
+		_, _ = fmt.Fprintf(
+			config.Stderr,
+			"Resource guard deferred task: %s; it must exit before this work is admitted.\n",
+			DescribeHeavyLease(config.EvidenceRoot),
+		)
+
 		return CapacityDeferredExitCode, nil
 	}
+
 	defer func() {
 		if releaseError := ReleaseSession(config.EvidenceRoot, session); returnError == nil && releaseError != nil {
 			returnError = releaseError
@@ -182,10 +209,12 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 		if root == "" {
 			root = filepath.Join(os.TempDir(), "resource-guard-port-leases")
 		}
+
 		portLease, err = AcquirePortLease(root, config.LeasePort, config.LeaseOwner, config.LeaseMinimum, config.LeaseMaximum)
 		if err != nil {
 			return 1, err
 		}
+
 		defer func() {
 			if releaseError := ReleasePortLease(root, portLease); returnError == nil && releaseError != nil {
 				returnError = releaseError
@@ -193,6 +222,7 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 			}
 		}()
 	}
+
 	if session.Inherited {
 		return directChild(config, config.Environment), nil
 	}
@@ -201,6 +231,7 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	if err != nil {
 		return 1, err
 	}
+
 	writer.SetContext(config.Resolution, config.ConfigHash)
 	outcome := "capacity-deferred"
 	finalized := false
@@ -210,8 +241,10 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 		}
 		finalized = true
 		_, finalizeError := writer.Finalize(config.TaskClass, outcome, 0)
+
 		return finalizeError
 	}
+
 	defer func() {
 		if finalizeError := finalize(); returnError == nil && finalizeError != nil {
 			returnError = finalizeError
@@ -223,41 +256,54 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	var previous CPUState
 	samples := []Sample{}
 	admitted, degraded := false, false
+
 	for {
 		reading, collectError := config.Collector.Collect(previous, config.DiskPath)
 		if collectError != nil {
 			return 1, collectError
 		}
+
 		previous = reading.CPUState
 		samples = append(samples, reading.Sample)
 		if appendError := writer.Append(reading.Sample); appendError != nil {
 			return 1, appendError
 		}
+
 		assessment := ResourceAssessment(samples, config.Policy)
 		if assessment.StorageBlocked {
 			outcome = "storage-blocked"
 			_, _ = fmt.Fprintf(config.Stderr, "Resource guard blocked task: %s; storage inspection or cleanup is required.\n", assessment.Reason)
+
 			return StorageBlockedExitCode, nil
 		}
+
 		if AdmissionReady(samples, config.Policy) {
 			admitted = true
 			break
 		}
-		if config.TaskClass == ClassEphemeral && config.Resolution.ResolvedProfile == "balanced" && WarningAdmissionReady(samples, config.Policy) {
+
+		if config.TaskClass == ClassEphemeral &&
+			config.Resolution.ResolvedProfile == "balanced" &&
+			WarningAdmissionReady(samples, config.Policy) {
 			admitted, degraded = true, true
 			config.Resolution.Concurrency = 1
 			config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true)
 			writer.SetContext(config.Resolution, config.ConfigHash)
 			_, _ = fmt.Fprintln(config.Stderr, "Resource guard admitting ephemeral child under stable macOS warning pressure with concurrency 1.")
+
 			break
 		}
+
 		if !config.Now().Before(deadline) {
 			break
 		}
+
 		config.Sleep(config.Policy.SampleInterval)
 	}
+
 	if !admitted {
 		_, _ = fmt.Fprintln(config.Stderr, "Resource guard deferred task: safe admission was not reached.")
+
 		return CapacityDeferredExitCode, nil
 	}
 
@@ -266,6 +312,7 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	if lookupError != nil {
 		return 1, lookupError
 	}
+
 	guardPath := executableGuardPath()
 	environment = withEnvironment(environment, "RESOURCE_GUARD_BIN", guardPath)
 	command := exec.Command(executable, config.Arguments...)
@@ -273,6 +320,7 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	command.Env = environment
 	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
 	if startError := command.Start(); startError != nil {
 		return 1, startError
 	}
@@ -285,21 +333,26 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	if config.Interrupt != nil {
 		operatorSignal = config.Interrupt
 	}
+
 	exited := make(chan error, 1)
 	go func() { exited <- command.Wait() }()
+
 	ticker := time.NewTicker(config.Policy.SampleInterval)
 	defer ticker.Stop()
 	var warningSince *time.Time
 	shed, shedCode := false, CapacityDeferredExitCode
 	var forceTimer *time.Timer
 	var childExited atomic.Bool
+
 	for {
 		select {
 		case waitError := <-exited:
 			childExited.Store(true)
+
 			if forceTimer != nil {
 				forceTimer.Stop()
 			}
+
 			if !shed {
 				if waitError == nil {
 					outcome = "passed"
@@ -307,13 +360,17 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 					outcome = "task-failed"
 				}
 			}
+
 			if cleanupError := CleanupEvidence(config.EvidenceRoot, config.Now()); cleanupError != nil {
 				return 1, cleanupError
 			}
+
 			if shed {
 				return shedCode, nil
 			}
+
 			return waitStatusCode(waitError), nil
+
 		case <-operatorSignal:
 			operatorSignal = nil
 			signalGroup(command.Process, syscall.SIGTERM)
@@ -324,22 +381,26 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 					}
 				})
 			}
+
 		case <-ticker.C:
 			reading, collectError := config.Collector.Collect(previous, config.DiskPath)
 			if collectError != nil {
 				signalGroup(command.Process, syscall.SIGTERM)
 				return 1, collectError
 			}
+
 			previous = reading.CPUState
 			samples = append(samples, reading.Sample)
 			limit := int(config.Policy.TrendWindow/config.Policy.SampleInterval) + 2
 			if len(samples) > limit {
 				samples = samples[len(samples)-limit:]
 			}
+
 			if appendError := writer.Append(reading.Sample); appendError != nil {
 				signalGroup(command.Process, syscall.SIGTERM)
 				return 1, appendError
 			}
+
 			assessment := ResourceAssessment(samples, config.Policy)
 			stableDegradedWarning := degraded && WarningAdmissionReady(samples, config.Policy)
 			if assessment.State == "normal" || stableDegradedWarning {
@@ -348,13 +409,16 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 				value := config.Now()
 				warningSince = &value
 			}
+
 			if config.TaskClass == "transactional" || shed {
 				continue
 			}
+
 			grace := config.Policy.EphemeralWarningGrace
 			if config.TaskClass == "service" {
 				grace = config.Policy.ServiceWarningGrace
 			}
+
 			if assessment.State == "critical" || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) {
 				shed = true
 				if assessment.StorageBlocked {
@@ -362,6 +426,7 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 				} else {
 					outcome = "pressure-shed"
 				}
+
 				_, _ = fmt.Fprintf(config.Stderr, "Resource guard shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
 				signalGroup(command.Process, syscall.SIGTERM)
 				forceTimer = time.AfterFunc(config.Policy.TerminationGrace, func() {
@@ -379,5 +444,6 @@ func executableGuardPath() string {
 	if err != nil {
 		return ""
 	}
+
 	return path
 }

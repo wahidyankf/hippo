@@ -96,16 +96,33 @@ type Policy struct {
 
 // DevelopmentPolicy is the repository's canonical guarded-development policy.
 var DevelopmentPolicy = Policy{
-	AdmissionMemoryBytes: 9 * GiB, WarningAdmissionMemoryBytes: 8 * GiB, CriticalMemoryBytes: 4 * GiB,
-	DiskWarningBytes: 30 * GiB, DiskCriticalBytes: 20 * GiB,
-	TrendWindow:         15 * time.Second,
-	SwapOutWarningBytes: 128 * MiB, SwapOutCriticalBytes: 512 * MiB,
-	CompressorWarningPayloadBytes: 12 * GiB, CompressorWarningGrowthBytes: 1 * GiB,
-	CompressorCriticalPayloadBytes: 16 * GiB, CompressorCriticalGrowthBytes: 2 * GiB,
-	ReservedCPUUnits: 2, MaxCPUUtilizationPercent: 85, ConsecutiveCPUSamples: 3,
-	AdmissionWindow: 16 * time.Second, EphemeralWarningGrace: 10 * time.Second,
-	ServiceWarningGrace: 30 * time.Second, TerminationGrace: 10 * time.Second,
-	LeaseWait: 5 * time.Minute, SampleInterval: time.Second,
+	AdmissionMemoryBytes:        9 * GiB,
+	WarningAdmissionMemoryBytes: 8 * GiB,
+	CriticalMemoryBytes:         4 * GiB,
+
+	DiskWarningBytes:  30 * GiB,
+	DiskCriticalBytes: 20 * GiB,
+
+	TrendWindow:          15 * time.Second,
+	SwapOutWarningBytes:  128 * MiB,
+	SwapOutCriticalBytes: 512 * MiB,
+
+	CompressorWarningPayloadBytes:  12 * GiB,
+	CompressorWarningGrowthBytes:   1 * GiB,
+	CompressorCriticalPayloadBytes: 16 * GiB,
+	CompressorCriticalGrowthBytes:  2 * GiB,
+
+	ReservedCPUUnits:         2,
+	MaxCPUUtilizationPercent: 85,
+	ConsecutiveCPUSamples:    3,
+
+	AdmissionWindow:       16 * time.Second,
+	EphemeralWarningGrace: 10 * time.Second,
+	ServiceWarningGrace:   30 * time.Second,
+	TerminationGrace:      10 * time.Second,
+
+	LeaseWait:      5 * time.Minute,
+	SampleInterval: time.Second,
 }
 
 // Assessment classifies current and trend-based resource evidence.
@@ -144,31 +161,44 @@ func MemoryState(sample Sample, policy Policy) string {
 	if !EssentialReadingsValid(sample) {
 		return stateCritical
 	}
+
 	available := availableMemory(sample)
 	criticalPressure := sample.MemoryPressureLevel != nil && *sample.MemoryPressureLevel == 4
-	compressorFailed := sample.CompressorAvailable != nil && !*sample.CompressorAvailable && (sample.Platform == "" || hasCapability(sample, "compressor"))
-	psiCritical := sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 25 || sample.MemoryPSIFullAvg10 != nil && *sample.MemoryPSIFullAvg10 >= 5
+	compressorFailed := sample.CompressorAvailable != nil &&
+		!*sample.CompressorAvailable &&
+		(sample.Platform == "" || hasCapability(sample, "compressor"))
+	psiCritical := sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 25 ||
+		sample.MemoryPSIFullAvg10 != nil && *sample.MemoryPSIFullAvg10 >= 5
+
 	if criticalPressure || compressorFailed || psiCritical || *available < policy.CriticalMemoryBytes {
 		return stateCritical
 	}
+
 	warningPressure := sample.MemoryPressureLevel != nil && *sample.MemoryPressureLevel == 2
 	psiWarning := sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 10
+
 	if warningPressure || psiWarning || *available < policy.AdmissionMemoryBytes {
 		return stateWarning
 	}
+
 	return stateNormal
 }
 
 // CPUAdmissionReady reports whether utilization preserves reserved execution units.
 func CPUAdmissionReady(sample Sample, policy Policy) bool {
-	if sample.CPUUtilizationPercent == nil || math.IsNaN(*sample.CPUUtilizationPercent) || math.IsInf(*sample.CPUUtilizationPercent, 0) || sample.AvailableParallelism <= 0 {
+	if sample.CPUUtilizationPercent == nil ||
+		math.IsNaN(*sample.CPUUtilizationPercent) ||
+		math.IsInf(*sample.CPUUtilizationPercent, 0) ||
+		sample.AvailableParallelism <= 0 {
 		return false
 	}
+
 	ceiling := policy.MaxCPUUtilizationPercent
 	if ceiling <= 0 {
 		reserved := min(policy.ReservedCPUUnits, sample.AvailableParallelism)
 		ceiling = 100 * (1 - float64(reserved)/float64(sample.AvailableParallelism))
 	}
+
 	return *sample.CPUUtilizationPercent <= ceiling
 }
 
@@ -179,19 +209,24 @@ func scaledWindowDelta(samples []Sample, value func(Sample) *int64, multiplier i
 	if err != nil || currentValue == nil {
 		return 0
 	}
+
 	for _, candidate := range samples[:len(samples)-1] {
 		candidateTime, parseError := time.Parse(time.RFC3339Nano, candidate.MeasuredAt)
 		candidateValue := value(candidate)
 		deltaTime := currentTime.Sub(candidateTime)
+
 		if parseError != nil || candidateValue == nil || deltaTime <= 0 || deltaTime > policy.TrendWindow {
 			continue
 		}
+
 		delta := *currentValue - *candidateValue
 		if delta <= 0 {
 			return 0
 		}
+
 		return float64(delta*multiplier) * float64(policy.TrendWindow) / float64(deltaTime)
 	}
+
 	return 0
 }
 
@@ -200,23 +235,29 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 	if len(samples) == 0 {
 		return Assessment{Reason: "missing-sample", State: stateCritical}
 	}
+
 	current := samples[len(samples)-1]
 	pageSize := int64(0)
 	if current.PageSizeBytes != nil {
 		pageSize = *current.PageSizeBytes
 	}
+
 	result := Assessment{
 		CompressorGrowthWindowBytes: scaledWindowDelta(samples, func(s Sample) *int64 { return s.CompressorPayloadBytes }, 1, policy),
 		SwapOutWindowBytes:          scaledWindowDelta(samples, func(s Sample) *int64 { return s.SwapOuts }, pageSize, policy),
 		Reason:                      stateNormal, State: stateNormal, SwapState: current.SwapState,
 	}
+
 	if current.DiskFreeBytes == nil {
 		result.Reason, result.State, result.StorageBlocked = "disk-unavailable", stateCritical, true
+
 		return result
 	}
+
 	result.StorageBlocked = *current.DiskFreeBytes < policy.DiskWarningBytes
 	type candidate struct{ reason, state string }
 	candidates := []candidate{}
+
 	if len(samples) > 1 {
 		previous := samples[len(samples)-2]
 		oomIncreased := current.OOMEvents != nil && previous.OOMEvents != nil && *current.OOMEvents > *previous.OOMEvents
@@ -225,18 +266,22 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 			candidates = append(candidates, candidate{"memory-oom", stateCritical})
 		}
 	}
+
 	if *current.DiskFreeBytes < policy.DiskCriticalBytes {
 		candidates = append(candidates, candidate{"disk-critical", stateCritical})
 	} else if result.StorageBlocked {
 		candidates = append(candidates, candidate{"disk-warning", stateWarning})
 	}
+
 	if state := MemoryState(current, policy); state != stateNormal {
 		reason := "memory-" + state
-		if current.MemoryPSISomeAvg10 != nil && *current.MemoryPSISomeAvg10 >= 10 || current.MemoryPSIFullAvg10 != nil && *current.MemoryPSIFullAvg10 >= 5 {
+		if current.MemoryPSISomeAvg10 != nil && *current.MemoryPSISomeAvg10 >= 10 ||
+			current.MemoryPSIFullAvg10 != nil && *current.MemoryPSIFullAvg10 >= 5 {
 			reason = "memory-psi"
 		}
 		candidates = append(candidates, candidate{reason, state})
 	}
+
 	if current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutCriticalBytes) {
 		result.SwapState = "stressed"
 		candidates = append(candidates, candidate{"swap-critical", stateCritical})
@@ -244,16 +289,24 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 		result.SwapState = "stressed"
 		candidates = append(candidates, candidate{"swap-warning", stateWarning})
 	}
-	if current.CompressorPayloadBytes != nil && *current.CompressorPayloadBytes >= policy.CompressorCriticalPayloadBytes && result.CompressorGrowthWindowBytes >= float64(policy.CompressorCriticalGrowthBytes) {
+
+	if current.CompressorPayloadBytes != nil &&
+		*current.CompressorPayloadBytes >= policy.CompressorCriticalPayloadBytes &&
+		result.CompressorGrowthWindowBytes >= float64(policy.CompressorCriticalGrowthBytes) {
 		candidates = append(candidates, candidate{"compressor-critical", stateCritical})
-	} else if current.CompressorPayloadBytes != nil && *current.CompressorPayloadBytes >= policy.CompressorWarningPayloadBytes && result.CompressorGrowthWindowBytes >= float64(policy.CompressorWarningGrowthBytes) {
+	} else if current.CompressorPayloadBytes != nil &&
+		*current.CompressorPayloadBytes >= policy.CompressorWarningPayloadBytes &&
+		result.CompressorGrowthWindowBytes >= float64(policy.CompressorWarningGrowthBytes) {
 		candidates = append(candidates, candidate{"compressor-warning", stateWarning})
 	}
+
 	severity := map[string]int{stateNormal: 0, stateWarning: 1, stateCritical: 2}
 	sort.SliceStable(candidates, func(i, j int) bool { return severity[candidates[i].state] > severity[candidates[j].state] })
+
 	if len(candidates) > 0 {
 		result.Reason, result.State = candidates[0].reason, candidates[0].state
 	}
+
 	return result
 }
 
@@ -262,11 +315,13 @@ func AdmissionReady(samples []Sample, policy Policy) bool {
 	if ResourceAssessment(samples, policy).State != stateNormal || len(samples) < policy.ConsecutiveCPUSamples {
 		return false
 	}
+
 	for _, sample := range samples[len(samples)-policy.ConsecutiveCPUSamples:] {
 		if !CPUAdmissionReady(sample, policy) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -274,8 +329,10 @@ func warningWindowReady(samples []Sample, policy Policy) bool {
 	if len(samples) < policy.ConsecutiveCPUSamples || policy.TrendWindow <= 0 || policy.WarningAdmissionMemoryBytes <= 0 {
 		return false
 	}
+
 	firstTime, firstError := time.Parse(time.RFC3339Nano, samples[0].MeasuredAt)
 	lastTime, lastError := time.Parse(time.RFC3339Nano, samples[len(samples)-1].MeasuredAt)
+
 	return firstError == nil && lastError == nil && lastTime.Sub(firstTime) >= policy.TrendWindow
 }
 
@@ -284,16 +341,19 @@ func WarningAdmissionReady(samples []Sample, policy Policy) bool { //nolint:cycl
 	if !warningWindowReady(samples, policy) {
 		return false
 	}
+
 	current := samples[len(samples)-1]
 	if current.Platform != platformDarwin || current.MemoryPressureLevel == nil || *current.MemoryPressureLevel != 2 {
 		return false
 	}
+
 	assessment := ResourceAssessment(samples, policy)
 	if assessment.State == stateCritical || assessment.StorageBlocked ||
 		assessment.SwapOutWindowBytes >= float64(policy.SwapOutWarningBytes) ||
 		assessment.CompressorGrowthWindowBytes >= float64(policy.CompressorWarningGrowthBytes) {
 		return false
 	}
+
 	for index, sample := range samples {
 		available := availableMemory(sample)
 		if sample.Platform != platformDarwin || !EssentialReadingsValid(sample) || available == nil || *available < policy.WarningAdmissionMemoryBytes ||
@@ -302,6 +362,7 @@ func WarningAdmissionReady(samples []Sample, policy Policy) bool { //nolint:cycl
 			sample.DiskFreeBytes == nil || *sample.DiskFreeBytes < policy.DiskWarningBytes {
 			return false
 		}
+
 		if index > 0 {
 			previous := samples[index-1]
 			oomIncreased := sample.OOMEvents != nil && previous.OOMEvents != nil && *sample.OOMEvents > *previous.OOMEvents
@@ -311,11 +372,13 @@ func WarningAdmissionReady(samples []Sample, policy Policy) bool { //nolint:cycl
 			}
 		}
 	}
+
 	for _, sample := range samples[len(samples)-policy.ConsecutiveCPUSamples:] {
 		if !CPUAdmissionReady(sample, policy) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -327,11 +390,14 @@ func Percentile(values []float64, proportion float64) *float64 {
 			finite = append(finite, value)
 		}
 	}
+
 	if len(finite) == 0 {
 		return nil
 	}
+
 	sort.Float64s(finite)
 	index := max(0, int(math.Ceil(float64(len(finite))*proportion))-1)
+
 	return &finite[index]
 }
 
@@ -363,9 +429,11 @@ type ReleaseSummary struct {
 // ReleaseHeadroomAvailable validates aggregate capacity for release overlap.
 func ReleaseHeadroomAvailable(summary ReleaseSummary) bool {
 	swapPressure := (summary.SwapInsDelta > 0 || summary.SwapOutsDelta > 0) && summary.AvailableNonCompressedEstimateMinBytes < 4*GiB
+
 	if summary.AvailableParallelism <= 0 {
 		return false
 	}
+
 	ceiling := 100 * (1 - 2/float64(summary.AvailableParallelism))
 	compressorHealthy := summary.Platform != platformDarwin && summary.Platform != "" || summary.CompressorAvailableAll
 	routedHealthy := summary.SchemaVersion < 4 ||
@@ -374,12 +442,25 @@ func ReleaseHeadroomAvailable(summary ReleaseSummary) bool {
 			summary.RoutedJourneyLatencyP95Ms <= ReleaseRoutedLatencyP95BudgetMs &&
 			summary.RoutedJourneyLatencyMaxMs > 0 &&
 			summary.RoutedJourneyLatencyMaxMs <= ReleaseRoutedLatencyMaxBudgetMs
-	return summary.SampleCount > 0 && summary.AvailableNonCompressedEstimateMinBytes >= 2*GiB && summary.MemoryPressureLevelMax == 1 && compressorHealthy && !swapPressure && summary.CPUUtilizationP95Percent <= ceiling && summary.HealthFailures == 0 && routedHealthy
+
+	return summary.SampleCount > 0 &&
+		summary.AvailableNonCompressedEstimateMinBytes >= 2*GiB &&
+		summary.MemoryPressureLevelMax == 1 &&
+		compressorHealthy &&
+		!swapPressure &&
+		summary.CPUUtilizationP95Percent <= ceiling &&
+		summary.HealthFailures == 0 &&
+		routedHealthy
 }
 
 // ReleaseMemoryAvailable reports whether one sample preserves release memory headroom.
 func ReleaseMemoryAvailable(sample Sample) bool {
 	available := availableMemory(sample)
 	compressorHealthy := sample.Platform != platformDarwin || sample.CompressorAvailable != nil && *sample.CompressorAvailable
-	return available != nil && *available >= 9*GiB && sample.MemoryPressureLevel != nil && *sample.MemoryPressureLevel == 1 && compressorHealthy
+
+	return available != nil &&
+		*available >= 9*GiB &&
+		sample.MemoryPressureLevel != nil &&
+		*sample.MemoryPressureLevel == 1 &&
+		compressorHealthy
 }

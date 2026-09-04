@@ -42,13 +42,19 @@ type (
 var DevelopmentPolicy = core.DevelopmentPolicy
 
 // BuiltinCatalog returns the capacity-relative default profiles.
-func BuiltinCatalog() Catalog { return core.BuiltinCatalog() }
+func BuiltinCatalog() Catalog {
+	return core.BuiltinCatalog()
+}
 
 // EssentialReadingsValid reports whether a sample contains required safe-admission evidence.
-func EssentialReadingsValid(sample Sample) bool { return core.EssentialReadingsValid(sample) }
+func EssentialReadingsValid(sample Sample) bool {
+	return core.EssentialReadingsValid(sample)
+}
 
 // MemoryState classifies memory evidence as normal, warning, or critical.
-func MemoryState(sample Sample, policy Policy) string { return core.MemoryState(sample, policy) }
+func MemoryState(sample Sample, policy Policy) string {
+	return core.MemoryState(sample, policy)
+}
 
 // CPUAdmissionReady reports whether current utilization preserves reserved execution units.
 func CPUAdmissionReady(sample Sample, policy Policy) bool {
@@ -81,4 +87,6 @@ func ReleaseHeadroomAvailable(summary ReleaseSummary) bool {
 }
 
 // ReleaseMemoryAvailable reports whether one sample preserves release memory headroom.
-func ReleaseMemoryAvailable(sample Sample) bool { return core.ReleaseMemoryAvailable(sample) }
+func ReleaseMemoryAvailable(sample Sample) bool {
+	return core.ReleaseMemoryAvailable(sample)
+}

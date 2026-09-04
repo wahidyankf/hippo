@@ -10,7 +10,7 @@ import (
 var _ contract.Driver = (*Driver)(nil)
 
 // Initialize binds the shared contract to the resource-guard driver.
-func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
+func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) { //nolint:funlen // The ordered binding table mirrors the canonical definition registry one-to-one.
 	scenarioContext.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		driver.reset()
 		return ctx, nil
@@ -30,6 +30,7 @@ func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
 		func() error { return driver.requireReason("swap-warning") },
 		driver.compressorGrowth,
 		func() error { return driver.requireReason("compressor-warning") },
+
 		driver.liveLease,
 		driver.waitLease,
 		driver.requireDeferred,
@@ -40,6 +41,7 @@ func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
 		driver.twoServiceSessions,
 		driver.validateInheritedSessions,
 		driver.requireInheritedSessionsValid,
+
 		driver.inherited,
 		driver.successfulChild,
 		driver.requirePreserved,
@@ -55,6 +57,7 @@ func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
 		driver.degradedGrowthChild,
 		driver.observeDegradedWarning,
 		driver.requireDegradedShed,
+
 		driver.compiledBinary,
 		driver.jsonVersion,
 		driver.requireVersion,
@@ -75,6 +78,7 @@ func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
 		driver.assessSummary,
 		driver.requireRejected,
 		driver.slowRoutedSummary,
+
 		driver.nxBuildConfiguration,
 		driver.inspectBuildCaching,
 		driver.requireBuildCacheDisabled,
@@ -84,23 +88,27 @@ func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
 		driver.historicalGenerations,
 		driver.runCurrentBootstrap,
 		driver.requireRetention,
+
 		driver.goLintConfiguration,
 		driver.inspectLintEnforcement,
 		driver.requireExhaustiveLint,
 		driver.requirePackageDocumentation,
 		driver.requireModuleScopedLint,
+
 		driver.gherkinAdapterContract,
 		driver.inspectBehaviourCoverage,
 		driver.requireStrictAdapters,
 		driver.requireApprovedExemptions,
 		driver.requireSerialCompliance,
 		driver.requireE2EPlacement,
+
 		driver.contributorGateContract,
 		driver.inspectContributorEnforcement,
 		driver.requireConventionalCommits,
 		driver.requireStagedFormatting,
 		driver.requirePushQuickGate,
 		driver.requireCoreCoverage,
+
 		driver.smallRunner,
 		driver.requireConstrained,
 		driver.tinyMachine,
@@ -108,6 +116,7 @@ func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
 		driver.exhaustedDisk,
 		driver.strictTransaction,
 		driver.requireReplan,
+
 		driver.linuxCgroupCapacity,
 		driver.collectLinuxEvidence,
 		driver.requireFourGiB,
@@ -115,15 +124,18 @@ func (driver *Driver) Initialize(scenarioContext *godog.ScenarioContext) {
 		driver.requireSwapUnavailable,
 		driver.linuxPSIWarning,
 		driver.requirePSIWarning,
+
 		driver.invalidExplicitConfig,
 		driver.statusWithConfig,
 		driver.requireConfigExit,
+
 		driver.artifactPolicy,
 		driver.inspectArtifactPolicy,
 		driver.requirePrivateArtifacts,
 		driver.requireExampleTracked,
 		driver.requireApplicationLayout,
 	}
+
 	for index, definition := range contract.Definitions {
 		scenarioContext.Step(definition.Pattern, functions[index])
 	}

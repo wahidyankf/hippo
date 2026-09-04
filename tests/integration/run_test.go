@@ -18,13 +18,30 @@ type integrationCollector struct {
 func (collector *integrationCollector) Collect(previous guard.CPUState, _ string) (guard.Reading, error) {
 	index := min(collector.index, len(collector.samples)-1)
 	collector.index++
-	return guard.Reading{CPUState: previous, Sample: collector.samples[index]}, nil
+
+	return guard.Reading{
+		CPUState: previous,
+		Sample:   collector.samples[index],
+	}, nil
 }
 
-func integrationSample(at time.Time) guard.Sample {
+func integrationSample(measuredAt time.Time) guard.Sample {
 	available, payload, disk, page, swaps := 12*guard.GiB, 7*guard.GiB, 40*guard.GiB, int64(16_384), int64(0)
 	level, compressor, cpu := 1, true, 10.0
-	return guard.Sample{SchemaVersion: 2, MeasuredAt: at.UTC().Format(time.RFC3339Nano), AvailableNonCompressedEstimateBytes: &available, MemoryPressureLevel: &level, CompressorAvailable: &compressor, CompressorPayloadBytes: &payload, AvailableParallelism: 12, CPUUtilizationPercent: &cpu, DiskFreeBytes: &disk, PageSizeBytes: &page, SwapOuts: &swaps}
+
+	return guard.Sample{
+		SchemaVersion:                       2,
+		MeasuredAt:                          measuredAt.UTC().Format(time.RFC3339Nano),
+		AvailableNonCompressedEstimateBytes: &available,
+		MemoryPressureLevel:                 &level,
+		CompressorAvailable:                 &compressor,
+		CompressorPayloadBytes:              &payload,
+		AvailableParallelism:                12,
+		CPUUtilizationPercent:               &cpu,
+		DiskFreeBytes:                       &disk,
+		PageSizeBytes:                       &page,
+		SwapOuts:                            &swaps,
+	}
 }
 
 func fastPolicy() guard.Policy {
@@ -33,13 +50,32 @@ func fastPolicy() guard.Policy {
 	policy.AdmissionWindow = time.Second
 	policy.TerminationGrace = time.Millisecond
 	policy.LeaseWait = time.Second
+
 	return policy
 }
 
 func TestGuardPreservesChildExitAndWritesEvidence(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{integrationSample(base), integrationSample(base.Add(time.Millisecond)), integrationSample(base.Add(2 * time.Millisecond))}}
-	code, err := guard.Run(guard.RunConfig{Command: "/bin/sh", Arguments: []string{"-c", "exit 17"}, TaskClass: "ephemeral", EvidenceRoot: t.TempDir(), DiskPath: ".", Collector: collector, Policy: fastPolicy(), Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{}, Environment: os.Environ()})
+	collector := &integrationCollector{samples: []guard.Sample{
+		integrationSample(base),
+		integrationSample(base.Add(time.Millisecond)),
+		integrationSample(base.Add(2 * time.Millisecond)),
+	}}
+
+	code, err := guard.Run(guard.RunConfig{
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", "exit 17"},
+		TaskClass:    "ephemeral",
+		Environment:  os.Environ(),
+		EvidenceRoot: t.TempDir(),
+		DiskPath:     ".",
+		Collector:    collector,
+		Policy:       fastPolicy(),
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       &bytes.Buffer{},
+	})
+
 	if err != nil || code != 17 {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
@@ -49,7 +85,21 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 	sample := integrationSample(time.Now())
 	disk := 29 * guard.GiB
 	sample.DiskFreeBytes = &disk
-	code, err := guard.Run(guard.RunConfig{Command: "/bin/sh", Arguments: []string{"-c", "exit 99"}, TaskClass: "ephemeral", EvidenceRoot: t.TempDir(), DiskPath: ".", Collector: &integrationCollector{samples: []guard.Sample{sample}}, Policy: fastPolicy(), Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{}, Environment: os.Environ()})
+
+	code, err := guard.Run(guard.RunConfig{
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", "exit 99"},
+		TaskClass:    "ephemeral",
+		Environment:  os.Environ(),
+		EvidenceRoot: t.TempDir(),
+		DiskPath:     ".",
+		Collector:    &integrationCollector{samples: []guard.Sample{sample}},
+		Policy:       fastPolicy(),
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       &bytes.Buffer{},
+	})
+
 	if err != nil || code != guard.StorageBlockedExitCode {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
@@ -61,8 +111,28 @@ func TestInheritedGuardRunsDirectlyAndKeepsPortLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = guard.ReleaseSession(root, session) }()
-	code, err := guard.Run(guard.RunConfig{Command: "/bin/sh", Arguments: []string{"-c", "exit 0"}, TaskClass: "ephemeral", EvidenceRoot: root, DiskPath: ".", Collector: &integrationCollector{samples: []guard.Sample{integrationSample(time.Now())}}, Policy: fastPolicy(), Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{}, Environment: []string{"RESOURCE_GUARD_SESSION=" + session.Token}, LeasePort: 45_123, LeaseOwner: "integration", LeaseMinimum: 45_000, LeaseMaximum: 46_000, PortLeaseRoot: portRoot})
+
+	code, err := guard.Run(guard.RunConfig{
+		Command:       "/bin/sh",
+		Arguments:     []string{"-c", "exit 0"},
+		TaskClass:     "ephemeral",
+		Environment:   []string{"RESOURCE_GUARD_SESSION=" + session.Token},
+		EvidenceRoot:  root,
+		DiskPath:      ".",
+		LeasePort:     45_123,
+		LeaseOwner:    "integration",
+		LeaseMinimum:  45_000,
+		LeaseMaximum:  46_000,
+		PortLeaseRoot: portRoot,
+		Collector:     &integrationCollector{samples: []guard.Sample{integrationSample(time.Now())}},
+		Policy:        fastPolicy(),
+		Sleep:         func(time.Duration) {},
+		Now:           time.Now,
+		Stderr:        &bytes.Buffer{},
+	})
+
 	if err != nil || code != 0 {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
@@ -75,7 +145,21 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 	level := 4
 	critical.MemoryPressureLevel = &level
 	collector := &integrationCollector{samples: []guard.Sample{healthy, healthy, healthy, critical}}
-	code, err := guard.Run(guard.RunConfig{Command: "/bin/sh", Arguments: []string{"-c", "sleep 5"}, TaskClass: "ephemeral", EvidenceRoot: t.TempDir(), DiskPath: ".", Collector: collector, Policy: fastPolicy(), Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{}, Environment: os.Environ()})
+
+	code, err := guard.Run(guard.RunConfig{
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", "sleep 5"},
+		TaskClass:    "ephemeral",
+		Environment:  os.Environ(),
+		EvidenceRoot: t.TempDir(),
+		DiskPath:     ".",
+		Collector:    collector,
+		Policy:       fastPolicy(),
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       &bytes.Buffer{},
+	})
+
 	if err != nil || code != guard.CapacityDeferredExitCode {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
@@ -83,11 +167,35 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 
 func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{integrationSample(base), integrationSample(base.Add(time.Millisecond)), integrationSample(base.Add(2 * time.Millisecond))}}
-	resolution := guard.Resolution{RequestedProfile: "balanced", ResolvedProfile: "minimal", FallbackChain: []string{"balanced", "constrained", "minimal"}, Concurrency: 1}
+	collector := &integrationCollector{samples: []guard.Sample{
+		integrationSample(base),
+		integrationSample(base.Add(time.Millisecond)),
+		integrationSample(base.Add(2 * time.Millisecond)),
+	}}
+	resolution := guard.Resolution{
+		RequestedProfile: "balanced",
+		ResolvedProfile:  "minimal",
+		FallbackChain:    []string{"balanced", "constrained", "minimal"},
+		Concurrency:      1,
+	}
 	command := `[ "$RESOURCE_GUARD_PROFILE" = minimal ] && [ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 7 ] && [ "$GOMAXPROCS" = 6 ] && [ "$DOTNET_PROCESSOR_COUNT" = 5 ]`
 	environment := []string{"PATH=" + os.Getenv("PATH"), "NX_PARALLEL=7", "GOMAXPROCS=6", "DOTNET_PROCESSOR_COUNT=5"}
-	code, err := guard.Run(guard.RunConfig{Command: "/bin/sh", Arguments: []string{"-c", command}, TaskClass: "ephemeral", EvidenceRoot: t.TempDir(), DiskPath: ".", Collector: collector, Policy: fastPolicy(), Resolution: resolution, Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{}, Environment: environment})
+
+	code, err := guard.Run(guard.RunConfig{
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", command},
+		TaskClass:    "ephemeral",
+		Environment:  environment,
+		EvidenceRoot: t.TempDir(),
+		DiskPath:     ".",
+		Collector:    collector,
+		Policy:       fastPolicy(),
+		Resolution:   resolution,
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       &bytes.Buffer{},
+	})
+
 	if err != nil || code != 0 {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
@@ -95,9 +203,27 @@ func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 
 func TestGuardExportsChildSessionAndBinary(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{integrationSample(base), integrationSample(base.Add(time.Millisecond)), integrationSample(base.Add(2 * time.Millisecond))}}
+	collector := &integrationCollector{samples: []guard.Sample{
+		integrationSample(base),
+		integrationSample(base.Add(time.Millisecond)),
+		integrationSample(base.Add(2 * time.Millisecond)),
+	}}
 	command := `[ -n "$RESOURCE_GUARD_SESSION" ] && [ -x "$RESOURCE_GUARD_BIN" ]`
-	code, err := guard.Run(guard.RunConfig{Command: "/bin/sh", Arguments: []string{"-c", command}, TaskClass: "ephemeral", EvidenceRoot: t.TempDir(), DiskPath: ".", Collector: collector, Policy: fastPolicy(), Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{}, Environment: []string{"PATH=" + os.Getenv("PATH")}})
+
+	code, err := guard.Run(guard.RunConfig{
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", command},
+		TaskClass:    "ephemeral",
+		Environment:  []string{"PATH=" + os.Getenv("PATH")},
+		EvidenceRoot: t.TempDir(),
+		DiskPath:     ".",
+		Collector:    collector,
+		Policy:       fastPolicy(),
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       &bytes.Buffer{},
+	})
+
 	if err != nil || code != 0 {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
@@ -105,24 +231,39 @@ func TestGuardExportsChildSessionAndBinary(t *testing.T) {
 
 func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{integrationSample(base), integrationSample(base.Add(time.Millisecond)), integrationSample(base.Add(2 * time.Millisecond))}}
+	collector := &integrationCollector{samples: []guard.Sample{
+		integrationSample(base),
+		integrationSample(base.Add(time.Millisecond)),
+		integrationSample(base.Add(2 * time.Millisecond)),
+	}}
 	policy := fastPolicy()
 	policy.TerminationGrace = 200 * time.Millisecond
 	marker := filepath.Join(t.TempDir(), "terminations")
 	interrupt := make(chan struct{})
 	time.AfterFunc(300*time.Millisecond, func() { close(interrupt) })
+
 	started := time.Now()
 	_, err := guard.Run(guard.RunConfig{
-		Command:   "/bin/sh",
-		Arguments: []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
-		TaskClass: "ephemeral", EvidenceRoot: t.TempDir(), DiskPath: ".", Collector: collector,
-		Policy: policy, Sleep: func(time.Duration) {}, Now: time.Now, Stderr: &bytes.Buffer{},
-		Environment: append(os.Environ(), "GUARD_TERM_MARKER="+marker), Interrupt: interrupt,
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
+		TaskClass:    "ephemeral",
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker),
+		EvidenceRoot: t.TempDir(),
+		Interrupt:    interrupt,
+		DiskPath:     ".",
+		Collector:    collector,
+		Policy:       policy,
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       &bytes.Buffer{},
 	})
+
 	elapsed := time.Since(started)
+
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	delivered, readError := os.ReadFile(marker)
 	if readError != nil {
 		t.Fatalf("child recorded no termination signal: %v", readError)
@@ -130,6 +271,7 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	if len(delivered) != 1 {
 		t.Fatalf("guard delivered %d termination signals, want exactly 1", len(delivered))
 	}
+
 	if elapsed > 1500*time.Millisecond {
 		t.Fatalf("a child ignoring SIGTERM was not force-stopped: guard returned after %s", elapsed)
 	}
