@@ -156,4 +156,4 @@ Admission failures return before child creation. An admitted child inherits the 
 
 ## Behaviour Traceability
 
-Executable behavior is specified in [`behaviours/`](behaviours/README.md). Unit, local integration, and compiled-binary E2E adapters execute that recursive corpus with an exact reviewed exemption inventory. C4 views describe structure and responsibility; Gherkin remains authoritative for observable behavior.
+Executable behavior is specified in [`behaviours/`](behaviours/README.md). The unit adapter executes the complete recursive corpus without exemptions. Local integration and compiled-binary E2E adapters remain strict; every boundary exemption is exact and records both the blocked boundary and its reason. C4 views describe structure and responsibility; Gherkin remains authoritative for observable behavior.

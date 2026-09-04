@@ -98,7 +98,56 @@ func TestUnapprovedExemptionIsRejected(t *testing.T) {
 		Name: "unapproved",
 		Tags: []string{"@integration-exempt"},
 	}})
+	requireErrorContaining(t, errorsFound, "integration exemption mismatch")
+}
+
+func TestUnitExemptionTagIsRejected(t *testing.T) {
+	adapter, err := contract.AdapterByName(contract.Unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	errorsFound := contract.ValidateExemptions(adapter, []contract.Scenario{{
+		Name: "unit must run this scenario",
+		Tags: []string{"@unit-exempt"},
+	}})
 	requireErrorContaining(t, errorsFound, "unknown exemption tag")
+}
+
+func TestUnitExemptionInventoryIsRejected(t *testing.T) {
+	adapter, err := contract.AdapterByName(contract.Unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := contract.ApprovedExemptions[contract.Unit]
+	contract.ApprovedExemptions[contract.Unit] = []contract.Exemption{{
+		Scenario: "unit must run this scenario",
+		Boundary: "test fixture",
+		Reason:   "a unit exemption must never be accepted",
+	}}
+	t.Cleanup(func() { contract.ApprovedExemptions[contract.Unit] = original })
+
+	errorsFound := contract.ValidateExemptions(adapter, []contract.Scenario{{Name: "unit must run this scenario"}})
+	requireErrorContaining(t, errorsFound, "unit adapter does not permit exemptions")
+}
+
+func TestExemptionRequiresBoundaryAndReason(t *testing.T) {
+	adapter, err := contract.AdapterByName(contract.Integration)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := contract.ApprovedExemptions[contract.Integration]
+	contract.ApprovedExemptions[contract.Integration] = []contract.Exemption{{Scenario: "incomplete rationale"}}
+	t.Cleanup(func() { contract.ApprovedExemptions[contract.Integration] = original })
+
+	errorsFound := contract.ValidateExemptions(adapter, []contract.Scenario{{
+		Name: "incomplete rationale",
+		Tags: []string{"@integration-exempt"},
+	}})
+	requireErrorContaining(t, errorsFound, "has no boundary")
+	requireErrorContaining(t, errorsFound, "has no reason")
 }
 
 func verifyAdapter(t *testing.T, adapter contract.Adapter) {

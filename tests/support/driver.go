@@ -51,44 +51,45 @@ func (collector *sequenceCollector) Collect(previous guard.CPUState, _ string) (
 
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
-	mode                string
-	samples             []guard.Sample
-	assessment          guard.Assessment
-	admitted, accepted  bool
-	exitCode            int
-	output, errorOutput string
-	binary, summaryPath string
-	temporaryPaths      []string
-	lifecycleOK         bool
-	cacheRoot           string
-	historicalCaches    []string
-	lintConfiguration   string
-	lintCommand         string
-	strictAdapters      bool
-	approvedExemptions  bool
-	serialCompliance    bool
-	e2ePlacement        bool
-	conventionalCommits bool
-	stagedFormatting    bool
-	pushQuickGate       bool
-	coreCoverage        bool
-	resolution          guard.Resolution
-	requestedProfile    string
-	taskClass           string
-	effectiveMemory     int64
-	linuxMemInfo        string
-	linuxCgroupLimit    int64
-	configPath          string
-	privateArtifacts    bool
-	exampleTracked      bool
-	applicationLayout   bool
-	leaseRoot           string
-	leaseHolder         int
-	heavySession        *guard.Session
-	serviceSessions     []*guard.Session
-	inheritedSessions   bool
-	forceStopElapsed    time.Duration
-	terminationSignals  int
+	mode                    string
+	samples                 []guard.Sample
+	assessment              guard.Assessment
+	admitted, accepted      bool
+	exitCode                int
+	output, errorOutput     string
+	binary, summaryPath     string
+	temporaryPaths          []string
+	lifecycleOK             bool
+	cacheRoot               string
+	historicalCaches        []string
+	lintConfiguration       string
+	lintCommand             string
+	strictAdapters          bool
+	unitExemptionsForbidden bool
+	approvedExemptions      bool
+	serialCompliance        bool
+	e2ePlacement            bool
+	conventionalCommits     bool
+	stagedFormatting        bool
+	pushQuickGate           bool
+	coreCoverage            bool
+	resolution              guard.Resolution
+	requestedProfile        string
+	taskClass               string
+	effectiveMemory         int64
+	linuxMemInfo            string
+	linuxCgroupLimit        int64
+	configPath              string
+	privateArtifacts        bool
+	exampleTracked          bool
+	applicationLayout       bool
+	leaseRoot               string
+	leaseHolder             int
+	heavySession            *guard.Session
+	serviceSessions         []*guard.Session
+	inheritedSessions       bool
+	forceStopElapsed        time.Duration
+	terminationSignals      int
 }
 
 // NewDriver returns isolated scenario state for one behavior adapter.
@@ -1026,6 +1027,19 @@ func (driver *Driver) releasePathsWithoutEndpoints() error {
 }
 
 func (driver *Driver) requestReleaseMonitoring() {
+	arguments := []string{
+		"release", "monitor",
+		"--output", filepath.Join(driver.leaseRoot, "samples.jsonl"),
+		"--summary", filepath.Join(driver.leaseRoot, "summary.json"),
+		"--deployment-root", driver.leaseRoot,
+		"--duration-ms", "1",
+	}
+	if driver.mode == contract.E2E {
+		driver.runBinary(arguments...)
+
+		return
+	}
+
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base)}}
 	code, err := (cli.Application{
@@ -1033,13 +1047,7 @@ func (driver *Driver) requestReleaseMonitoring() {
 		Stderr:      &bytes.Buffer{},
 		Environment: []string{},
 		Collector:   collector,
-	}).Run([]string{
-		"release", "monitor",
-		"--output", filepath.Join(driver.leaseRoot, "samples.jsonl"),
-		"--summary", filepath.Join(driver.leaseRoot, "summary.json"),
-		"--deployment-root", driver.leaseRoot,
-		"--duration-ms", "1",
-	})
+	}).Run(arguments)
 
 	driver.exitCode = code
 	if err != nil {
@@ -1365,11 +1373,19 @@ func (driver *Driver) inspectBehaviourCoverage() error {
 		driver.strictAdapters = driver.strictAdapters && contract.SuiteOptions(adapter).Strict
 	}
 
+	unitAdapter, err := contract.AdapterByName(contract.Unit)
+	if err != nil {
+		return err
+	}
+
+	driver.unitExemptionsForbidden = unitAdapter.ExemptionTag == "" && len(contract.ApprovedExemptions[contract.Unit]) == 0
 	driver.approvedExemptions = true
 
 	for _, exemptions := range contract.ApprovedExemptions {
 		for _, exemption := range exemptions {
-			driver.approvedExemptions = driver.approvedExemptions && strings.TrimSpace(exemption.Reason) != ""
+			driver.approvedExemptions = driver.approvedExemptions &&
+				strings.TrimSpace(exemption.Boundary) != "" &&
+				strings.TrimSpace(exemption.Reason) != ""
 		}
 	}
 
@@ -1406,9 +1422,17 @@ func (driver *Driver) requirePairedBindings() error {
 	return errors.Join(contract.ValidateHandlers(driver.Bindings())...)
 }
 
+func (driver *Driver) requireNoUnitExemptions() error {
+	if !driver.unitExemptionsForbidden {
+		return errors.New("unit behavior adapter permits exemptions")
+	}
+
+	return nil
+}
+
 func (driver *Driver) requireApprovedExemptions() error {
 	if !driver.approvedExemptions {
-		return errors.New("behavior exemptions do not have an approved adapter inventory")
+		return errors.New("behavior exemptions do not name a concrete boundary and reason")
 	}
 	return nil
 }
@@ -1643,6 +1667,12 @@ func (driver *Driver) invalidExplicitConfig() {
 }
 
 func (driver *Driver) statusWithConfig() {
+	if driver.mode == contract.E2E {
+		driver.runBinary("status", jsonFlag, "--config", driver.configPath)
+
+		return
+	}
+
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	code, err := (cli.Application{

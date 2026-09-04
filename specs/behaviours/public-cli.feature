@@ -31,7 +31,6 @@ Feature: Public resource guard CLI
     When an unknown command is requested
     Then Cobra reports the command and exits with code 1
 
-  @e2e-exempt
   Scenario: Invalid explicit configuration is actionable
     Given an explicit resource guard config with an unknown field
     When JSON status is requested with that config
@@ -47,7 +46,6 @@ Feature: Public resource guard CLI
     When release summary assessment is requested
     Then the release evidence is accepted
 
-  @e2e-exempt
   Scenario: Release monitoring requires generic health inputs
     Given release monitor output paths without endpoint inputs
     When release monitoring is requested

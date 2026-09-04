@@ -1,6 +1,6 @@
 # Resource guard behaviours
 
-These scenarios are shared by unit, local integration, and safe compiled-binary E2E adapters. Scenarios tagged `@e2e-exempt` require synthetic pressure, process mutation, or repository lifecycle access that is unsafe or incapable at the public host boundary. Repository configuration and artifact lifecycle scenarios also use `@unit-exempt` because they require real files or subprocesses; they remain mandatory in the integration adapter. The resource-guard test contract owns an exact approved exemption inventory with a reason for every exempt scenario, so a new, removed, renamed, or unknown exemption fails behavior compliance.
+These scenarios are shared by unit, local integration, and safe compiled-binary E2E adapters. The unit adapter executes every scenario and does not support an exemption tag or inventory. Integration and E2E exemptions are available only for a concrete boundary that cannot execute the scenario safely or faithfully. Every exemption must match the contract's exact approved inventory and name both its boundary and reason, so a new, removed, renamed, incomplete, or unknown exemption fails behavior compliance.
 
 ## Directory Map
 

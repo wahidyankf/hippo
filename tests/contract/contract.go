@@ -26,7 +26,10 @@ const (
 	// E2E identifies the compiled public-binary adapter.
 	E2E = "e2e"
 	// syntheticHostPressureReason documents scenarios that require deterministic host samples.
-	syntheticHostPressureReason = "requires synthetic host pressure samples"
+	syntheticHostPressureReason = "requires synthetic samples that cannot be injected through the compiled binary"
+	hostEvidenceBoundary        = "host evidence"
+	leaseOwnershipBoundary      = "lease ownership"
+	processControlBoundary      = "process control"
 )
 
 // StepBinding keeps one canonical Godog expression adjacent to its handler.
@@ -41,61 +44,51 @@ type Adapter struct {
 	ExemptionTag string
 }
 
-// Exemption documents why one scenario cannot run through an adapter.
+// Exemption documents the boundary and reason that prevent one scenario from
+// running through an adapter.
 type Exemption struct {
 	Scenario string
+	Boundary string
 	Reason   string
 }
 
 // liveLeaseExemption explains scenarios that cannot mutate real lease ownership.
-const liveLeaseExemption = "would mutate live lease ownership"
+const liveLeaseExemption = "would replace or contend with live process ownership outside the isolated binary fixture"
 
 // ApprovedExemptions is the reviewed, exact adapter exemption inventory.
 var ApprovedExemptions = map[string][]Exemption{
-	Unit: {
-		{"Release builds stay outside repository history", "requires repository Git ignore configuration"},
-		{"End-to-end binaries are temporary", "requires subprocess and filesystem lifecycle access"},
-		{"Bootstrap cache retention is bounded", "requires the real bootstrap and filesystem cache"},
-		{"Lint gate wiring is exhaustive and module scoped", "requires repository lint configuration"},
-		{"Behavior adapter wiring is complete", "requires repository test configuration"},
-		{"Contributor gate wiring is complete", "requires repository hook and CI configuration"},
-		{"Machine-local configuration and binaries stay private", "requires the repository Git index and ignore rules"},
-	},
+	Unit:        {},
 	Integration: {},
 	E2E: {
-		{"Healthy consecutive samples admit work", syntheticHostPressureReason},
-		{"Stable macOS warning admits degraded work", syntheticHostPressureReason},
-		{"Growing pressure defers degraded work", "requires synthetic compressor counters"},
-		{"Strict work never uses degraded admission", syntheticHostPressureReason},
-		{"Balanced work falls back on a small runner", "requires synthetic host capacity"},
-		{"Minimal work still runs on a tiny machine", "requires synthetic host capacity"},
-		{"Exhausted storage requires cleanup", "requires synthetic disk evidence"},
-		{"Swap-out growth is normalized to the policy window", "requires synthetic swap counters"},
-		{"Compressor growth requires both payload and growth", "requires synthetic compressor counters"},
-		{"A strict transaction does not silently downgrade", "requires synthetic task capacity"},
-		{"Linux cgroup memory limits host capacity", "requires synthetic proc and cgroup files"},
-		{"Linux without swap remains usable", "requires synthetic swap capabilities"},
-		{"Linux PSI detects active memory contention", "requires synthetic PSI evidence"},
-		{"A live heavy lease defers a second owner", liveLeaseExemption},
-		{"A long-lived service never holds the heavy-work lease", liveLeaseExemption},
-		{"Concurrent services keep their own inheritable sessions", liveLeaseExemption},
-		{"An inherited session runs without reacquiring the lease", "requires synthetic inherited session state"},
-		{"A failed child keeps its own exit code", "requires deterministic admission and child process control"},
-		{"An interrupted guard signals once and then force-stops the child", "requires synthetic interrupt delivery and process signaling"},
-		{"Critical pressure sheds eligible work", "requires synthetic critical pressure and process signaling"},
-		{"Worsening warning sheds degraded work", "requires synthetic warning pressure and process signaling"},
-		{"Release admission preserves the requested capacity envelope", "requires synthetic release host samples"},
-		{"Release overlap rejects failed health evidence", "requires synthetic failed health evidence"},
-		{"Release overlap rejects an unresponsive routed journey", "requires synthetic routed-latency evidence"},
-		{"Release monitoring requires generic health inputs", "requires controlled release-monitor environment"},
-		{"Release builds stay outside repository history", "requires repository Git ignore configuration"},
-		{"End-to-end binaries are temporary", "inspects the test harness rather than the public binary"},
-		{"Bootstrap cache retention is bounded", "mutates a synthetic bootstrap cache"},
-		{"Lint gate wiring is exhaustive and module scoped", "requires repository lint configuration"},
-		{"Behavior adapter wiring is complete", "requires repository test configuration"},
-		{"Contributor gate wiring is complete", "requires repository hook and CI configuration"},
-		{"Invalid explicit configuration is actionable", "requires an intentionally invalid local configuration"},
-		{"Machine-local configuration and binaries stay private", "inspects repository Git policy rather than the public binary"},
+		{Scenario: "Healthy consecutive samples admit work", Boundary: hostEvidenceBoundary, Reason: syntheticHostPressureReason},
+		{Scenario: "Stable macOS warning admits degraded work", Boundary: hostEvidenceBoundary, Reason: syntheticHostPressureReason},
+		{Scenario: "Growing pressure defers degraded work", Boundary: hostEvidenceBoundary, Reason: "requires synthetic compressor counters that cannot be injected through the compiled binary"},
+		{Scenario: "Strict work never uses degraded admission", Boundary: hostEvidenceBoundary, Reason: syntheticHostPressureReason},
+		{Scenario: "Balanced work falls back on a small runner", Boundary: hostEvidenceBoundary, Reason: "requires synthetic host capacity that cannot be injected through the compiled binary"},
+		{Scenario: "Minimal work still runs on a tiny machine", Boundary: hostEvidenceBoundary, Reason: "requires synthetic host capacity that cannot be injected through the compiled binary"},
+		{Scenario: "Exhausted storage requires cleanup", Boundary: hostEvidenceBoundary, Reason: "requires synthetic disk evidence that cannot be injected through the compiled binary"},
+		{Scenario: "Swap-out growth is normalized to the policy window", Boundary: hostEvidenceBoundary, Reason: "requires synthetic swap counters that cannot be injected through the compiled binary"},
+		{Scenario: "Compressor growth requires both payload and growth", Boundary: hostEvidenceBoundary, Reason: "requires synthetic compressor counters that cannot be injected through the compiled binary"},
+		{Scenario: "A strict transaction does not silently downgrade", Boundary: "task capacity", Reason: "requires a synthetic capacity mismatch that cannot be injected through the compiled binary"},
+		{Scenario: "Linux cgroup memory limits host capacity", Boundary: hostEvidenceBoundary, Reason: "requires synthetic proc and cgroup files instead of the public host filesystem"},
+		{Scenario: "Linux without swap remains usable", Boundary: hostEvidenceBoundary, Reason: "requires synthetic swap capabilities instead of the public host state"},
+		{Scenario: "Linux PSI detects active memory contention", Boundary: hostEvidenceBoundary, Reason: "requires synthetic PSI evidence instead of the public host state"},
+		{Scenario: "A live heavy lease defers a second owner", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
+		{Scenario: "A long-lived service never holds the heavy-work lease", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
+		{Scenario: "Concurrent services keep their own inheritable sessions", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
+		{Scenario: "An inherited session runs without reacquiring the lease", Boundary: "session inheritance", Reason: "requires synthetic inherited session state unavailable to an isolated binary fixture"},
+		{Scenario: "A failed child keeps its own exit code", Boundary: processControlBoundary, Reason: "requires deterministic admission and child process control unavailable to the public-host fixture"},
+		{Scenario: "An interrupted guard signals once and then force-stops the child", Boundary: processControlBoundary, Reason: "requires deterministic interrupt timing and process signaling unavailable to the public-host fixture"},
+		{Scenario: "Critical pressure sheds eligible work", Boundary: processControlBoundary, Reason: "requires synthetic critical pressure while controlling the child process lifecycle"},
+		{Scenario: "Worsening warning sheds degraded work", Boundary: processControlBoundary, Reason: "requires synthetic warning growth while controlling the child process lifecycle"},
+		{Scenario: "Release admission preserves the requested capacity envelope", Boundary: hostEvidenceBoundary, Reason: "requires synthetic release capacity that cannot be injected through the compiled binary"},
+		{Scenario: "Release builds stay outside repository history", Boundary: "repository state", Reason: "Git ignore policy is outside the compiled binary boundary"},
+		{Scenario: "End-to-end binaries are temporary", Boundary: "test harness", Reason: "binary cleanup is owned by the harness outside the compiled binary boundary"},
+		{Scenario: "Bootstrap cache retention is bounded", Boundary: "bootstrap wrapper", Reason: "cache retention is owned by the wrapper outside the compiled binary boundary"},
+		{Scenario: "Lint gate wiring is exhaustive and module scoped", Boundary: "repository configuration", Reason: "lint configuration is outside the compiled binary boundary"},
+		{Scenario: "Behavior adapter wiring is complete", Boundary: "test harness", Reason: "adapter registration is outside the compiled binary boundary"},
+		{Scenario: "Contributor gate wiring is complete", Boundary: "repository configuration", Reason: "hooks and CI configuration are outside the compiled binary boundary"},
+		{Scenario: "Machine-local configuration and binaries stay private", Boundary: "repository state", Reason: "Git index and ignore policy are outside the compiled binary boundary"},
 	},
 }
 
@@ -116,8 +109,8 @@ type Driver interface {
 // Adapters returns the complete behavior adapter inventory in execution order.
 func Adapters() []Adapter {
 	return []Adapter{
-		{Name: Unit, ExemptionTag: "@unit-exempt"},
-		{Name: Integration},
+		{Name: Unit},
+		{Name: Integration, ExemptionTag: "@integration-exempt"},
 		{Name: E2E, ExemptionTag: "@e2e-exempt"},
 	}
 }
@@ -256,20 +249,39 @@ func ValidateBindings(bindings []StepBinding, steps []string) []error {
 	return errorsFound
 }
 
-// ValidateExemptions requires exact reviewed tags and nonempty reasons.
+// ValidateExemptions requires exact reviewed tags with a concrete boundary and
+// reason. Adapters without an exemption tag must execute the complete corpus.
 func ValidateExemptions(adapter Adapter, scenarios []Scenario) []error {
 	errorsFound := []error{}
-	approved := map[string]string{}
+	approved := map[string]Exemption{}
+	exemptions := ApprovedExemptions[adapter.Name]
 
-	for _, exemption := range ApprovedExemptions[adapter.Name] {
+	if adapter.ExemptionTag == "" && len(exemptions) > 0 {
+		errorsFound = append(errorsFound, fmt.Errorf("%s adapter does not permit exemptions", adapter.Name))
+	}
+
+	for _, exemption := range exemptions {
+		if _, duplicate := approved[exemption.Scenario]; duplicate {
+			errorsFound = append(errorsFound, fmt.Errorf("%s exemption %q is duplicated", adapter.Name, exemption.Scenario))
+		}
+		if strings.TrimSpace(exemption.Boundary) == "" {
+			errorsFound = append(errorsFound, fmt.Errorf("%s exemption %q has no boundary", adapter.Name, exemption.Scenario))
+		}
 		if strings.TrimSpace(exemption.Reason) == "" {
 			errorsFound = append(errorsFound, fmt.Errorf("%s exemption %q has no reason", adapter.Name, exemption.Scenario))
 		}
-		approved[exemption.Scenario] = exemption.Reason
+
+		approved[exemption.Scenario] = exemption
 	}
 
 	seen := map[string]bool{}
-	knownTags := map[string]bool{"@unit-exempt": true, "@e2e-exempt": true}
+	knownTags := map[string]bool{}
+
+	for _, configuredAdapter := range Adapters() {
+		if configuredAdapter.ExemptionTag != "" {
+			knownTags[configuredAdapter.ExemptionTag] = true
+		}
+	}
 
 	for _, scenario := range scenarios {
 		tagged := false
