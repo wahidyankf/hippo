@@ -33,6 +33,30 @@ Feature: Guarded process execution
     Then the guard exits with code 17
 
   @e2e-exempt
+  Scenario: Canonical concurrency remains ecosystem neutral
+    Given an admitted command without consumer concurrency mappings
+    When the guarded child inspects its environment
+    Then only canonical resource guard concurrency variables are added
+
+  @e2e-exempt
+  Scenario: Consumers select their concurrency environment mappings
+    Given an admitted command with explicit consumer concurrency mappings
+    When the guarded child inspects its environment
+    Then missing mappings receive resolved concurrency and caller values remain unchanged
+
+  @e2e-exempt
+  Scenario: Invalid concurrency mappings fail before child execution
+    Given invalid and reserved consumer concurrency mappings
+    When each mapped guarded command is requested
+    Then every command is rejected before its child starts
+
+  @e2e-exempt
+  Scenario: Guarded child streams remain composable
+    Given an admitted guarded child with piped input and separate output streams
+    When the guarded child copies all three standard streams
+    Then stdin reaches the child and stdout and stderr remain separate
+
+  @e2e-exempt
   Scenario: An interrupted guard signals once and then force-stops the child
     Given an admitted child that ignores termination
     When the guard is interrupted

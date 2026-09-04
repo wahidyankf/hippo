@@ -51,7 +51,41 @@ Feature: Public resource guard CLI
     When release summary assessment is requested
     Then the release evidence is accepted
 
+  Scenario: Release summary assessment accepts standard input
+    Given a healthy release summary on standard input
+    When release summary assessment is requested from standard input
+    Then the release evidence is accepted on standard output
+
+  @e2e-exempt
+  Scenario: Development monitor emits machine-readable transitions
+    Given repeated and changing resource states
+    When JSON development monitoring is requested
+    Then one valid JSON record is emitted for each state transition
+
   Scenario: Release monitoring requires generic health inputs
     Given release monitor output paths without endpoint inputs
     When release monitoring is requested
     Then the command rejects a missing generic health URL
+
+  @e2e-exempt
+  Scenario: Release raw evidence streams to standard output
+    Given a bounded release monitor with raw standard output
+    When release monitoring completes
+    Then raw JSON lines use standard output and the summary remains a file
+
+  @e2e-exempt
+  Scenario: Release summary streams to standard output
+    Given a bounded release monitor with summary standard output
+    When release monitoring completes
+    Then the final summary uses standard output and raw evidence remains a file
+
+  Scenario: Release output formats cannot share standard output
+    Given release raw evidence and summary both target standard output
+    When release monitoring is requested
+    Then the command rejects mixed standard output before collecting evidence
+
+  @e2e-exempt
+  Scenario: Release streaming propagates downstream failure
+    Given a release raw stream whose downstream writer fails
+    When release monitoring writes its first sample
+    Then monitoring fails without closing the caller-owned stream

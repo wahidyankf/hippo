@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,12 +28,25 @@ import (
 
 const (
 	taskClassEphemeral = "ephemeral"
+	taskClassFlag      = "--class"
+	diskPathFlag       = "--disk-path"
 	profileBalanced    = "balanced"
 	jsonFlag           = "--json"
 	statusCommandName  = "status"
 	monitorCommandName = "monitor"
+	runCommandName     = "run"
 	versionCommandName = "version"
 	releaseCommandName = "release"
+	releaseAssessName  = "assess"
+	outputFlag         = "--output"
+	summaryFlag        = "--summary"
+	deploymentRootFlag = "--deployment-root"
+	healthURLFlag      = "--health-url"
+	routedOriginFlag   = "--routed-origin"
+	testHealthURL      = "http://127.0.0.1/health"
+	testRoutedOrigin   = "https://service.example"
+	callerWorkersName  = "CALLER_WORKERS"
+	toolWorkersName    = "TOOL_WORKERS"
 	unexpectedArgument = "unexpected"
 	shellPath          = "/bin/sh"
 )
@@ -41,6 +55,8 @@ type sequenceCollector struct {
 	samples     []policy.Sample
 	index       int
 	failureFrom int
+	cancel      context.CancelFunc
+	cancelAfter int
 }
 
 func (collector *sequenceCollector) Collect(ctx context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
@@ -56,6 +72,9 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 
 	index := min(collector.index, len(collector.samples)-1)
 	collector.index++
+	if collector.cancel != nil && collector.index >= collector.cancelAfter {
+		collector.cancel()
+	}
 
 	return policy.Reading{
 		CPUState: previous,
@@ -114,6 +133,32 @@ type Driver struct {
 	excessEvidenceError     error
 	inactiveEvidencePaths   []string
 	operandCommandsRejected bool
+	childInput              string
+	childEnvironment        []string
+	concurrencyEnvironment  []string
+	childResolution         policy.Resolution
+	releaseMonitorRun       func() error
+	releaseMonitorError     error
+	releaseRawPath          string
+	releaseSummaryPath      string
+	releaseArguments        []string
+	releaseCollector        *sequenceCollector
+	streamCloseCalls        int
+	invalidMappingsRejected bool
+}
+
+type failingStream struct {
+	closeCalls *int
+}
+
+func (stream *failingStream) Write([]byte) (int, error) {
+	return 0, errors.New("injected downstream write failure")
+}
+
+func (stream *failingStream) Close() error {
+	(*stream.closeCalls)++
+
+	return nil
 }
 
 // NewDriver returns isolated scenario state for one behavior adapter.
@@ -403,6 +448,169 @@ func (driver *Driver) runGuardedShell(script string, environment []string) error
 	driver.errorOutput = stderr.String()
 
 	return err
+}
+
+func (driver *Driver) admittedWithoutConcurrencyMappings() error {
+	base := time.Unix(0, 0)
+	driver.childEnvironment = []string{"PATH=" + os.Getenv("PATH")}
+	driver.childResolution = policy.Resolution{
+		RequestedProfile: profileBalanced,
+		ResolvedProfile:  profileBalanced,
+		FallbackChain:    []string{profileBalanced},
+		Concurrency:      4,
+	}
+
+	return driver.prepareGuardedExecution([]policy.Sample{
+		healthySample(base),
+		healthySample(base.Add(time.Second)),
+		healthySample(base.Add(2 * time.Second)),
+	})
+}
+
+func (driver *Driver) admittedWithConcurrencyMappings() error {
+	if err := driver.admittedWithoutConcurrencyMappings(); err != nil {
+		return err
+	}
+
+	driver.childEnvironment = append(driver.childEnvironment, callerWorkersName+"=3")
+	driver.concurrencyEnvironment = []string{toolWorkersName, callerWorkersName, toolWorkersName}
+
+	return nil
+}
+
+func (driver *Driver) inspectGuardedEnvironment() error {
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	arguments := make([]string, 0, 9+(2*len(driver.concurrencyEnvironment)))
+	arguments = append(arguments, runCommandName, taskClassFlag, taskClassEphemeral, diskPathFlag, ".")
+	for _, name := range driver.concurrencyEnvironment {
+		arguments = append(arguments, "--concurrency-env", name)
+	}
+	arguments = append(
+		arguments,
+		"--",
+		shellPath,
+		"-c",
+		`printf '%s:%s:%s:%s:%s:%s\n' "$RESOURCE_GUARD_PROFILE" "$RESOURCE_GUARD_CONCURRENCY" "${TOOL_WORKERS-unset}" "${CALLER_WORKERS-unset}" "${NX_PARALLEL-unset}" "${GOMAXPROCS-unset}"`,
+	)
+	environment := append([]string{}, driver.childEnvironment...)
+	environment = append(environment, "RESOURCE_GUARD_ROOT="+driver.leaseRoot)
+	code, err := (cli.Application{
+		Stdout:      stdout,
+		Stderr:      stderr,
+		Environment: environment,
+		Collector:   &sequenceCollector{samples: driver.samples},
+		Sleep:       func(time.Duration) {},
+	}).Run(context.Background(), arguments)
+
+	driver.exitCode = code
+	driver.output = stdout.String()
+	driver.errorOutput = stderr.String()
+
+	return err
+}
+
+func (driver *Driver) requireCanonicalConcurrencyOnly() error {
+	if driver.exitCode != 0 || driver.output != "balanced:7:unset:unset:unset:unset\n" {
+		return fmt.Errorf("exit=%d stdout=%q stderr=%q", driver.exitCode, driver.output, driver.errorOutput)
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireMappedConcurrency() error {
+	if driver.exitCode != 0 || driver.output != "balanced:7:7:3:unset:unset\n" {
+		return fmt.Errorf("exit=%d stdout=%q stderr=%q", driver.exitCode, driver.output, driver.errorOutput)
+	}
+
+	return nil
+}
+
+func (driver *Driver) invalidConcurrencyMappings() error {
+	return driver.admittedWithoutConcurrencyMappings()
+}
+
+func (driver *Driver) requestInvalidConcurrencyMappings() {
+	marker := filepath.Join(driver.leaseRoot, "child-started")
+	driver.invalidMappingsRejected = true
+
+	for _, name := range []string{"9INVALID", "RESOURCE_GUARD_SESSION"} {
+		code, err := guard.Run(context.Background(), guard.RunConfig{
+			Command:                shellPath,
+			Arguments:              []string{"-c", `printf started > "$CHILD_MARKER"`},
+			TaskClass:              taskClassEphemeral,
+			Environment:            environmentWith(map[string]string{"CHILD_MARKER": marker}),
+			ConcurrencyEnvironment: []string{name},
+			EvidenceRoot:           driver.leaseRoot,
+			DiskPath:               ".",
+			Collector:              &sequenceCollector{samples: driver.samples},
+			Policy:                 fastBehaviourPolicy(),
+			Resolution:             driver.childResolution,
+			Sleep:                  func(time.Duration) {},
+			Now:                    time.Now,
+			Stderr:                 &bytes.Buffer{},
+		})
+		if code != 1 || err == nil {
+			driver.invalidMappingsRejected = false
+			driver.errorOutput = fmt.Sprintf("name=%q exit=%d error=%v", name, code, err)
+
+			return
+		}
+	}
+
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		driver.invalidMappingsRejected = false
+		driver.errorOutput = "invalid mapping started its child"
+	}
+}
+
+func (driver *Driver) requireInvalidMappingsRejected() error {
+	if !driver.invalidMappingsRejected {
+		return errors.New(driver.errorOutput)
+	}
+
+	return nil
+}
+
+func (driver *Driver) admittedGuardedStreams() error {
+	if err := driver.admittedWithoutConcurrencyMappings(); err != nil {
+		return err
+	}
+
+	driver.childInput = "hello-pipeline\n"
+
+	return nil
+}
+
+func (driver *Driver) copyGuardedStreams() error {
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	environment := append([]string{}, driver.childEnvironment...)
+	environment = append(environment, "RESOURCE_GUARD_ROOT="+driver.leaseRoot)
+	code, err := (cli.Application{
+		Stdin:       strings.NewReader(driver.childInput),
+		Stdout:      stdout,
+		Stderr:      stderr,
+		Environment: environment,
+		Collector:   &sequenceCollector{samples: driver.samples},
+		Sleep:       func(time.Duration) {},
+	}).Run(context.Background(), []string{
+		runCommandName, taskClassFlag, taskClassEphemeral, diskPathFlag, ".",
+		"--", shellPath, "-c",
+		`IFS= read -r value; printf 'stdout:%s\n' "$value"; printf 'stderr:%s\n' "$value" >&2`,
+	})
+
+	driver.exitCode = code
+	driver.output = stdout.String()
+	driver.errorOutput = stderr.String()
+
+	return err
+}
+
+func (driver *Driver) requireComposableStreams() error {
+	if driver.exitCode != 0 || driver.output != "stdout:hello-pipeline\n" || driver.errorOutput != "stderr:hello-pipeline\n" {
+		return fmt.Errorf("exit=%d stdout=%q stderr=%q", driver.exitCode, driver.output, driver.errorOutput)
+	}
+
+	return nil
 }
 
 func (driver *Driver) liveLease() error {
@@ -1003,14 +1211,15 @@ func (driver *Driver) observeDegradedWarning() error {
 	stderr := &bytes.Buffer{}
 
 	code, runError := guard.Run(context.Background(), guard.RunConfig{
-		Command:      shellPath,
-		Arguments:    []string{"-c", `[ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 1 ] && [ "$GOMAXPROCS" = 1 ] && [ "$DOTNET_PROCESSOR_COUNT" = 1 ]; sleep 5`},
-		TaskClass:    taskClassEphemeral,
-		Environment:  os.Environ(),
-		EvidenceRoot: driver.leaseRoot,
-		DiskPath:     ".",
-		Collector:    &sequenceCollector{samples: samples},
-		Policy:       resourcePolicy,
+		Command:                shellPath,
+		Arguments:              []string{"-c", `[ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 1 ]; sleep 5`},
+		TaskClass:              taskClassEphemeral,
+		Environment:            environmentWith(map[string]string{"TOOL_WORKERS": "7", "CALLER_WORKERS": "3"}),
+		ConcurrencyEnvironment: []string{"TOOL_WORKERS", "CALLER_WORKERS"},
+		EvidenceRoot:           driver.leaseRoot,
+		DiskPath:               ".",
+		Collector:              &sequenceCollector{samples: samples},
+		Policy:                 resourcePolicy,
 		Resolution: policy.Resolution{
 			RequestedProfile: profileBalanced,
 			ResolvedProfile:  profileBalanced,
@@ -1053,16 +1262,24 @@ func (driver *Driver) compiledBinary() error {
 }
 
 func (driver *Driver) runBinary(arguments ...string) {
+	driver.runBinaryWithInput("", arguments...)
+}
+
+func (driver *Driver) runBinaryWithInput(input string, arguments ...string) {
 	command := exec.Command(driver.binary, arguments...)
-	value, err := command.Output()
-	driver.output = string(value)
+	command.Stdin = strings.NewReader(input)
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	command.Stdout = stdout
+	command.Stderr = stderr
+	err := command.Run()
+	driver.output = stdout.String()
+	driver.errorOutput = stderr.String()
 
 	if err != nil {
 		driver.exitCode = 1
 		exitError := &exec.ExitError{}
 		if errors.As(err, &exitError) {
 			driver.exitCode = exitError.ExitCode()
-			driver.errorOutput = string(exitError.Stderr)
 		}
 	}
 }
@@ -1192,7 +1409,7 @@ func (driver *Driver) releaseHelp() error {
 }
 
 func (driver *Driver) requireReleaseHelp() error {
-	commands := []string{"assess", "check", monitorCommandName}
+	commands := []string{releaseAssessName, "check", monitorCommandName}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("release help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}
@@ -1234,7 +1451,7 @@ func (driver *Driver) requireCobraDiagnostic() error {
 
 func (driver *Driver) invalidRun() error {
 	if driver.mode == contract.E2E {
-		driver.runBinary("run", "--class", taskClassEphemeral)
+		driver.runBinary(runCommandName, taskClassFlag, taskClassEphemeral)
 
 		return nil
 	}
@@ -1243,7 +1460,7 @@ func (driver *Driver) invalidRun() error {
 		Stdout:    &bytes.Buffer{},
 		Stderr:    &bytes.Buffer{},
 		Collector: &sequenceCollector{},
-	}).Run(context.Background(), []string{"run", "--class", taskClassEphemeral})
+	}).Run(context.Background(), []string{runCommandName, taskClassFlag, taskClassEphemeral})
 	if err != nil {
 		driver.errorOutput = err.Error()
 		driver.exitCode = 1
@@ -1355,6 +1572,116 @@ func (driver *Driver) requireAccepted() error {
 	return nil
 }
 
+func (driver *Driver) healthySummaryInput() error {
+	value, err := json.Marshal(healthySummary())
+	if err != nil {
+		return err
+	}
+
+	driver.childInput = string(value)
+
+	return nil
+}
+
+func (driver *Driver) assessSummaryInput() error {
+	arguments := []string{releaseCommandName, releaseAssessName, summaryFlag, "-"}
+	if driver.mode == contract.E2E {
+		driver.runBinaryWithInput(driver.childInput, arguments...)
+	} else {
+		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+		code, err := (cli.Application{
+			Stdin:  strings.NewReader(driver.childInput),
+			Stdout: stdout,
+			Stderr: stderr,
+		}).Run(context.Background(), arguments)
+		driver.exitCode = code
+		driver.output = stdout.String()
+		driver.errorOutput = stderr.String()
+		if err != nil {
+			return err
+		}
+	}
+
+	driver.accepted = driver.exitCode == 0
+
+	return nil
+}
+
+func (driver *Driver) requireAcceptedOutput() error {
+	if !driver.accepted || driver.errorOutput != "" {
+		return fmt.Errorf("exit=%d stdout=%q stderr=%q", driver.exitCode, driver.output, driver.errorOutput)
+	}
+
+	var payload struct {
+		Accepted      bool `json:"accepted"`
+		SchemaVersion int  `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
+		return err
+	}
+	if !payload.Accepted || payload.SchemaVersion != 5 {
+		return fmt.Errorf("unexpected assessment output: %+v", payload)
+	}
+
+	return nil
+}
+
+func (driver *Driver) repeatedChangingStates() {
+	base := time.Unix(0, 0)
+	healthy := healthySample(base)
+	repeated := healthySample(base.Add(time.Second))
+	warning := healthySample(base.Add(2 * time.Second))
+	level := 2
+	warning.MemoryPressureLevel = &level
+	driver.samples = []policy.Sample{healthy, repeated, warning}
+}
+
+func (driver *Driver) monitorJSON() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	collector := &sequenceCollector{samples: driver.samples, cancel: cancel, cancelAfter: len(driver.samples)}
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+
+	code, err := (cli.Application{
+		Stdout:    stdout,
+		Stderr:    stderr,
+		Collector: collector,
+	}).Run(ctx, []string{monitorCommandName, jsonFlag, "--interval", "1ms", "--disk-path", "."})
+	driver.exitCode = code
+	driver.output = stdout.String()
+	driver.errorOutput = stderr.String()
+
+	return err
+}
+
+func (driver *Driver) requireJSONTransitions() error {
+	lines := strings.Split(strings.TrimSpace(driver.output), "\n")
+	if driver.exitCode != 0 || len(lines) != 2 {
+		return fmt.Errorf("exit=%d lines=%d stdout=%q stderr=%q", driver.exitCode, len(lines), driver.output, driver.errorOutput)
+	}
+
+	states := []policy.State{}
+	for _, line := range lines {
+		var payload struct {
+			SchemaVersion int          `json:"schemaVersion"`
+			MeasuredAt    string       `json:"measuredAt"`
+			State         policy.State `json:"state"`
+			Profile       string       `json:"profile"`
+		}
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			return err
+		}
+		if payload.SchemaVersion != 1 || payload.MeasuredAt == "" || payload.Profile == "" {
+			return fmt.Errorf("incomplete transition: %+v", payload)
+		}
+		states = append(states, payload.State)
+	}
+	if states[0] != policy.StateNormal || states[1] != policy.StateWarning {
+		return fmt.Errorf("unexpected states: %v", states)
+	}
+
+	return nil
+}
+
 func (driver *Driver) releasePathsWithoutEndpoints() error {
 	directory, err := os.MkdirTemp("", "resource-guard-release-inputs-")
 	if err != nil {
@@ -1367,13 +1694,244 @@ func (driver *Driver) releasePathsWithoutEndpoints() error {
 	return nil
 }
 
+func runReleaseMonitorCLI(arguments []string, standardOutput io.Writer) (int, string, error) {
+	standardError := &bytes.Buffer{}
+	application := cli.Application{
+		Stdout:      standardOutput,
+		Stderr:      standardError,
+		Environment: []string{},
+		Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(time.Unix(0, 0))}},
+		MonitorRelease: func(ctx context.Context, config releaseguard.MonitorConfig) error {
+			monitorContext, cancel := context.WithCancel(ctx)
+			config.Collector = &sequenceCollector{
+				samples:     []policy.Sample{healthySample(time.Unix(0, 0))},
+				cancel:      cancel,
+				cancelAfter: 1,
+			}
+			config.Interval = time.Millisecond
+			config.ServiceRSS = func(context.Context) int64 { return 4096 }
+			config.Health = func(context.Context) (int, float64) { return 200, 2.5 }
+			config.RoutedHealth = func(context.Context) (int, float64) { return 200, 75 }
+			config.LoadAverage = func(context.Context) float64 { return 1.5 }
+
+			return releaseguard.RunMonitor(monitorContext, config)
+		},
+	}
+
+	code, err := application.Run(context.Background(), arguments)
+
+	return code, standardError.String(), err
+}
+
+func (driver *Driver) boundedReleaseRawOutput() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.releaseSummaryPath = filepath.Join(root, "summary.json")
+	stdout := &bytes.Buffer{}
+	driver.releaseMonitorRun = func() error {
+		arguments := []string{
+			releaseCommandName, monitorCommandName,
+			outputFlag, "-",
+			summaryFlag, driver.releaseSummaryPath,
+			deploymentRootFlag, root,
+			healthURLFlag, testHealthURL,
+			routedOriginFlag, testRoutedOrigin,
+		}
+		code, standardError, runError := runReleaseMonitorCLI(arguments, stdout)
+		driver.exitCode = code
+		driver.output = stdout.String()
+		driver.errorOutput = standardError
+
+		return runError
+	}
+
+	return nil
+}
+
+func (driver *Driver) boundedReleaseSummaryOutput() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.releaseRawPath = filepath.Join(root, "samples.jsonl")
+	stdout := &bytes.Buffer{}
+	driver.releaseMonitorRun = func() error {
+		arguments := []string{
+			releaseCommandName, monitorCommandName,
+			outputFlag, driver.releaseRawPath,
+			summaryFlag, "-",
+			deploymentRootFlag, root,
+			healthURLFlag, testHealthURL,
+			routedOriginFlag, testRoutedOrigin,
+		}
+		code, standardError, runError := runReleaseMonitorCLI(arguments, stdout)
+		driver.exitCode = code
+		driver.output = stdout.String()
+		driver.errorOutput = standardError
+
+		return runError
+	}
+
+	return nil
+}
+
+func (driver *Driver) completeReleaseMonitor() {
+	if driver.releaseMonitorRun == nil {
+		driver.releaseMonitorError = errors.New("release monitor was not prepared")
+
+		return
+	}
+
+	driver.releaseMonitorError = driver.releaseMonitorRun()
+}
+
+func decodeJSONLines(value string) ([]map[string]any, error) {
+	lines := strings.Split(strings.TrimSpace(value), "\n")
+	result := make([]map[string]any, 0, len(lines))
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			return nil, err
+		}
+		result = append(result, payload)
+	}
+
+	return result, nil
+}
+
+func (driver *Driver) requireRawStandardOutput() error {
+	if driver.releaseMonitorError != nil {
+		return driver.releaseMonitorError
+	}
+
+	records, err := decodeJSONLines(driver.output)
+	if err != nil {
+		return fmt.Errorf("decode raw output: %w", err)
+	}
+	if len(records) != 1 {
+		return fmt.Errorf("raw output records=%d output=%q", len(records), driver.output)
+	}
+	if _, err := releaseguard.AssessFile(driver.releaseSummaryPath); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireSummaryStandardOutput() error {
+	if driver.releaseMonitorError != nil {
+		return driver.releaseMonitorError
+	}
+
+	var summary policy.ReleaseSummary
+	if err := json.Unmarshal([]byte(driver.output), &summary); err != nil {
+		return err
+	}
+	if summary.SchemaVersion != 5 || summary.SampleCount != 1 {
+		return fmt.Errorf("unexpected summary: %+v", summary)
+	}
+
+	data, err := os.ReadFile(driver.releaseRawPath)
+	if err != nil {
+		return err
+	}
+	records, err := decodeJSONLines(string(data))
+	if err != nil {
+		return fmt.Errorf("decode raw file: %w", err)
+	}
+	if len(records) != 1 {
+		return fmt.Errorf("raw file records=%d", len(records))
+	}
+
+	return nil
+}
+
+func (driver *Driver) mixedReleaseStandardOutput() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.releaseCollector = &sequenceCollector{samples: []policy.Sample{healthySample(time.Unix(0, 0))}}
+	driver.releaseArguments = []string{
+		releaseCommandName, monitorCommandName,
+		outputFlag, "-",
+		summaryFlag, "-",
+		deploymentRootFlag, root,
+		healthURLFlag, testHealthURL,
+		routedOriginFlag, testRoutedOrigin,
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireMixedOutputRejected() error {
+	if driver.exitCode != 1 || !strings.Contains(driver.errorOutput, "cannot both use standard output") {
+		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
+	}
+	if driver.releaseCollector != nil && driver.releaseCollector.index != 0 {
+		return fmt.Errorf("collected %d samples before rejecting output", driver.releaseCollector.index)
+	}
+
+	return nil
+}
+
+func (driver *Driver) failingReleaseRawOutput() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	stream := &failingStream{closeCalls: &driver.streamCloseCalls}
+	driver.releaseMonitorRun = func() error {
+		arguments := []string{
+			releaseCommandName, monitorCommandName,
+			outputFlag, "-",
+			summaryFlag, filepath.Join(root, "summary.json"),
+			deploymentRootFlag, root,
+			healthURLFlag, testHealthURL,
+			routedOriginFlag, testRoutedOrigin,
+		}
+		code, standardError, runError := runReleaseMonitorCLI(arguments, stream)
+		driver.exitCode = code
+		driver.errorOutput = standardError
+
+		return runError
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireStreamFailure() error {
+	if driver.releaseMonitorError == nil || !strings.Contains(driver.releaseMonitorError.Error(), "downstream write failure") {
+		return fmt.Errorf("unexpected monitor error: %w", driver.releaseMonitorError)
+	}
+	if driver.streamCloseCalls != 0 {
+		return fmt.Errorf("caller-owned stream closed %d times", driver.streamCloseCalls)
+	}
+
+	return nil
+}
+
 func (driver *Driver) requestReleaseMonitoring() {
-	arguments := []string{
-		"release", "monitor",
-		"--output", filepath.Join(driver.leaseRoot, "samples.jsonl"),
-		"--summary", filepath.Join(driver.leaseRoot, "summary.json"),
-		"--deployment-root", driver.leaseRoot,
-		"--duration-ms", "1",
+	arguments := driver.releaseArguments
+	if len(arguments) == 0 {
+		arguments = []string{
+			"release", "monitor",
+			outputFlag, filepath.Join(driver.leaseRoot, "samples.jsonl"),
+			summaryFlag, filepath.Join(driver.leaseRoot, "summary.json"),
+			deploymentRootFlag, driver.leaseRoot,
+			"--duration-ms", "1",
+		}
 	}
 	if driver.mode == contract.E2E {
 		driver.runBinary(arguments...)
@@ -1382,7 +1940,10 @@ func (driver *Driver) requestReleaseMonitoring() {
 	}
 
 	base := time.Unix(0, 0)
-	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base)}}
+	collector := driver.releaseCollector
+	if collector == nil {
+		collector = &sequenceCollector{samples: []policy.Sample{healthySample(base)}}
+	}
 	code, err := (cli.Application{
 		Stdout:      &bytes.Buffer{},
 		Stderr:      &bytes.Buffer{},

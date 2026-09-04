@@ -26,7 +26,7 @@ The diagrams use ASCII so they remain readable in terminals and plain-text tooli
                            +------------------+ +------------------+ +------------------+
 ```
 
-An operator, repository script, Git hook, or CI task invokes Resource Guard before compute-bearing local work. Resource Guard reads normalized host evidence, resolves a safe capacity profile, coordinates eligible work through a shared per-user lease, and supervises only the child process group it starts. Release monitoring may probe explicit local and routed health endpoints supplied by the caller. Resource Guard is repository-independent and does not know consumer project layouts, commands, or infrastructure defaults.
+An operator, repository script, Git hook, or CI task invokes Resource Guard before compute-bearing local work. Resource Guard reads normalized host evidence, resolves a safe capacity profile, coordinates eligible work through a shared per-user lease, and supervises only the child process group it starts. Callers may select environment variables that receive resolved concurrency and may connect standard streams without teaching Resource Guard about a build ecosystem. Release monitoring may probe explicit local and routed health endpoints supplied by the caller. Resource Guard is repository-independent and does not know consumer project layouts, commands, or infrastructure defaults.
 
 ## Container View
 
@@ -73,8 +73,8 @@ Container boundary: Go CLI process
 
 [Command tree] --loads-------> [Config loader] --resolves--> [Policy engine]
 [Command tree] --collects----> [Host collector] --samples---> [Policy engine]
-[Command tree] --runs--------> [Execution guard] <--assesses-- [Policy engine]
-[Command tree] --releases----> [Release guard] <---assesses-- [Policy engine]
+[Command tree] --maps streams-> [Execution guard] <--assesses-- [Policy engine]
+[Command tree] --selects sink-> [Release guard] <---assesses-- [Policy engine]
 
 [Execution guard] --writes--+
                              +--> [Evidence store]
@@ -82,12 +82,12 @@ Container boundary: Go CLI process
 ```
 
 - **Process entry** maps the operating-system argument vector to the application's exit code.
-- **Command tree** owns Cobra commands, flags, validation, output selection, and dependency injection.
+- **Command tree** owns Cobra commands, flags, validation, stdin/stdout selection, and dependency injection.
 - **Config loader and profiles** resolve configuration precedence, validate strict overrides, and preserve compiled safety floors.
 - **Host collector** normalizes macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence into portable samples.
 - **Policy engine and profiles** classify evidence, choose an adaptive development profile, and preserve strict transaction and release envelopes.
-- **Execution guard** owns shared sessions, port leases, child-process lifecycle, pressure monitoring, shedding, and bounded evidence retention.
-- **Release guard** owns consecutive release admission, health sampling, summary schemas, and final overlap assessment.
+- **Execution guard** owns shared sessions, port leases, child-process lifecycle and streams, generic concurrency mapping, pressure monitoring, shedding, and bounded evidence retention.
+- **Release guard** owns consecutive release admission, health sampling, file or caller-owned stream sinks, summary schemas, and final overlap assessment.
 - **Evidence store** owns live-writer admission, raw chunk rotation, fixed-memory quantiles, expiry, and inactive-file retention.
 
 The `internal/policy` package owns the shared typed samples, collectors, task classes, decisions, thresholds, and profile resolution. Execution, platform collection, and release monitoring depend directly on that package instead of a forwarding facade or consumer-specific application types. Long-running operations receive caller-owned contexts; only the process entry translates operating-system signals into cancellation.
@@ -118,7 +118,7 @@ Caller     CLI/config     Host/policy     Lease store     Child group
   |<------------|              |               |               |
 ```
 
-Admission failures return before child creation. An admitted child inherits the resolved profile and concurrency environment. Cancellation, collector failure, evidence failure, or resource pressure terminates and reaps the owned child group before evidence finalization and lease release. Resource Guard preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity or lease pressure (`75`), and configuration or strict-profile replanning (`78`).
+Admission failures return before child creation. An admitted child inherits the resolved profile, canonical concurrency, caller-selected concurrency mappings, and the caller's standard streams. Resource Guard has no built-in knowledge of ecosystem-specific environment variables. Cancellation, collector failure, evidence failure, or resource pressure terminates and reaps the owned child group before evidence finalization and lease release. Resource Guard preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity or lease pressure (`75`), and configuration or strict-profile replanning (`78`).
 
 ## Architectural Constraints
 
@@ -127,11 +127,12 @@ Admission failures return before child creation. An admitted child inherits the 
 - Machine-local configuration may tighten policy but cannot weaken compiled safety floors.
 - Heavy work coordinates through a shared per-user lease. Long-lived services retain independent inheritable sessions and do not monopolize the heavy-work lease.
 - Resource Guard signals only the process group it creates. It never sheds unrelated user, repository, proxy, or production processes.
+- Child stdin, stdout, and stderr remain caller-owned and distinct from guard diagnostics. Consumers opt into tool concurrency mappings by valid environment name; no build system is compiled into the core.
 - One shared state root admits at most 20 live evidence streams across all consuming repositories. Each live stream keeps five rotating 400 KiB raw chunks, for about 2 MiB per session and about 40 MiB at the maximum live count.
 - Completed raw chunks and summaries share a 50 MiB inactive cap. Raw chunks expire after seven days, summaries after thirty days, and active streams are protected from cleanup by process-owned markers.
 - Lifetime summaries use fixed-memory aggregates and remain complete even after older raw chunks rotate away. Evidence excludes command arguments, repository origins, paths, credentials, and user payloads.
 - Local configuration, runtime state, build caches, coverage, release artifacts, and scratch output remain untracked.
-- Release monitoring requires explicit health inputs, emits generic bounded evidence, and keeps compatibility with supported retained summary schemas.
+- Release monitoring requires explicit health inputs, emits generic bounded file evidence or caller-owned stdout streams, rejects mixed raw and summary schemas on one stream, and keeps compatibility with supported retained summary schemas.
 - Tagged release assets are immutable, built through the owned release script for the supported OS and architecture matrix, and published with SHA-256 checksums.
 
 ## Behaviour Traceability

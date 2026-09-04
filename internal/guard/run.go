@@ -21,6 +21,7 @@ const (
 	StorageBlockedExitCode = 73
 	// CapacityDeferredExitCode indicates transient pressure that should be retried.
 	CapacityDeferredExitCode = 75
+	outcomeTaskFailed        = "task-failed"
 )
 
 // RunConfig describes one guarded child process and its resource policy.
@@ -34,6 +35,7 @@ type RunConfig struct {
 	DiskPath                              string
 	LeasePort, LeaseMinimum, LeaseMaximum int
 	LeaseOwner                            string
+	ConcurrencyEnvironment                []string
 	PortLeaseRoot                         string
 	Collector                             policy.Collector
 	Policy                                policy.Policy
@@ -42,6 +44,8 @@ type RunConfig struct {
 	ConfigHash                            string
 	Now                                   func() time.Time
 	Sleep                                 func(time.Duration)
+	ChildStdin                            io.Reader
+	ChildStdout, ChildStderr              io.Writer
 	Stderr                                io.Writer
 }
 
@@ -76,7 +80,55 @@ func withEnvironmentIfMissing(environment []string, name, value string) []string
 	return withEnvironment(environment, name, value)
 }
 
-func resolvedEnvironment(environment []string, resolution policy.Resolution, forceConcurrency bool) []string {
+func isASCIILetter(character byte) bool {
+	return character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z'
+}
+
+func validEnvironmentName(name string) bool {
+	if name == "" || name[0] != '_' && !isASCIILetter(name[0]) {
+		return false
+	}
+
+	for index := 1; index < len(name); index++ {
+		character := name[index]
+		if character != '_' && !isASCIILetter(character) && (character < '0' || character > '9') {
+			return false
+		}
+	}
+
+	return true
+}
+
+func reservedConcurrencyEnvironment(name string) bool {
+	switch name {
+	case "RESOURCE_GUARD_BIN", "RESOURCE_GUARD_CONCURRENCY", "RESOURCE_GUARD_PROFILE", "RESOURCE_GUARD_SESSION":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeConcurrencyEnvironment(names []string) ([]string, error) {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(names))
+
+	for _, name := range names {
+		if !validEnvironmentName(name) {
+			return nil, fmt.Errorf("concurrency environment name %q is not a POSIX identifier", name)
+		}
+		if reservedConcurrencyEnvironment(name) {
+			return nil, fmt.Errorf("concurrency environment name %q is reserved", name)
+		}
+		if !seen[name] {
+			result = append(result, name)
+			seen[name] = true
+		}
+	}
+
+	return result, nil
+}
+
+func resolvedEnvironment(environment []string, resolution policy.Resolution, forceConcurrency bool, names []string) []string {
 	if resolution.ResolvedProfile == "" || resolution.Concurrency <= 0 {
 		return environment
 	}
@@ -84,7 +136,7 @@ func resolvedEnvironment(environment []string, resolution policy.Resolution, for
 	concurrency := strconv.Itoa(resolution.Concurrency)
 	environment = withEnvironment(environment, "RESOURCE_GUARD_PROFILE", resolution.ResolvedProfile)
 	environment = withEnvironment(environment, "RESOURCE_GUARD_CONCURRENCY", concurrency)
-	for _, name := range []string{"NX_PARALLEL", "GOMAXPROCS", "DOTNET_PROCESSOR_COUNT"} {
+	for _, name := range names {
 		if forceConcurrency {
 			environment = withEnvironment(environment, name, concurrency)
 		} else {
@@ -134,7 +186,7 @@ func directChild(ctx context.Context, config RunConfig, environment []string) in
 	command := exec.CommandContext(ctx, config.Command, config.Arguments...)
 	command.Dir = config.WorkingDirectory
 	command.Env = environment
-	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	command.Stdin, command.Stdout, command.Stderr = config.ChildStdin, config.ChildStdout, config.ChildStderr
 	return waitStatusCode(command.Run())
 }
 
@@ -210,11 +262,25 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	if config.Stderr == nil {
 		config.Stderr = os.Stderr
 	}
+	if config.ChildStdin == nil {
+		config.ChildStdin = os.Stdin
+	}
+	if config.ChildStdout == nil {
+		config.ChildStdout = os.Stdout
+	}
+	if config.ChildStderr == nil {
+		config.ChildStderr = os.Stderr
+	}
 	if config.Environment == nil {
 		config.Environment = os.Environ()
 	}
 
-	config.Environment = resolvedEnvironment(config.Environment, config.Resolution, false)
+	concurrencyEnvironment, concurrencyError := normalizeConcurrencyEnvironment(config.ConcurrencyEnvironment)
+	if concurrencyError != nil {
+		return 1, concurrencyError
+	}
+	config.ConcurrencyEnvironment = concurrencyEnvironment
+	config.Environment = resolvedEnvironment(config.Environment, config.Resolution, false, config.ConcurrencyEnvironment)
 
 	if config.DiskPath == "" {
 		config.DiskPath = config.WorkingDirectory
@@ -347,7 +413,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			policy.WarningAdmissionReady(samples, config.Policy) {
 			admitted, degraded = true, true
 			config.Resolution.Concurrency = 1
-			config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true)
+			config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true, config.ConcurrencyEnvironment)
 			writer.SetContext(config.Resolution, config.ConfigHash)
 			_, _ = fmt.Fprintln(config.Stderr, "Resource guard admitting ephemeral child under stable macOS warning pressure with concurrency 1.")
 
@@ -380,7 +446,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	command := exec.Command(executable, config.Arguments...)
 	command.Dir = config.WorkingDirectory
 	command.Env = environment
-	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	command.Stdin, command.Stdout, command.Stderr = config.ChildStdin, config.ChildStdout, config.ChildStderr
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if startError := command.Start(); startError != nil {
@@ -400,14 +466,14 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			if waitError == nil {
 				outcome = "passed"
 			} else {
-				outcome = "task-failed"
+				outcome = outcomeTaskFailed
 			}
 
 			return waitStatusCode(waitError), nil
 
 		case <-ctx.Done():
 			waitError, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
-			outcome = "task-failed"
+			outcome = outcomeTaskFailed
 			if stopError != nil {
 				return 1, stopError
 			}
@@ -417,6 +483,16 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		case <-ticker.C:
 			reading, collectError := config.Collector.Collect(ctx, previous, config.DiskPath)
 			if collectError != nil {
+				if ctx.Err() != nil {
+					waitError, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+					outcome = outcomeTaskFailed
+					if stopError != nil {
+						return 1, stopError
+					}
+
+					return waitStatusCode(waitError), nil
+				}
+
 				outcome = "supervision-failed"
 				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
 

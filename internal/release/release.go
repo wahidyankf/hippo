@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/url"
 	"os"
@@ -93,7 +94,18 @@ func waitForContext(ctx context.Context, duration time.Duration, pause func(time
 
 // AssessFile validates one completed release summary.
 func AssessFile(path string) (policy.ReleaseSummary, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return policy.ReleaseSummary{}, err
+	}
+	defer func() { _ = file.Close() }()
+
+	return Assess(file)
+}
+
+// Assess validates one completed release summary from a stream.
+func Assess(reader io.Reader) (policy.ReleaseSummary, error) {
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return policy.ReleaseSummary{}, err
 	}
@@ -116,6 +128,7 @@ func AssessFile(path string) (policy.ReleaseSummary, error) {
 // MonitorConfig describes one bounded release-monitoring session.
 type MonitorConfig struct {
 	OutputPath, SummaryPath, DeploymentRoot string
+	RawOutput, SummaryOutput                io.Writer
 	HealthURL, RoutedOrigin                 string
 	ServicePorts                            []int
 	Collector                               policy.Collector
@@ -262,8 +275,16 @@ func oneMinuteLoad(ctx context.Context) float64 {
 }
 
 func normalizeMonitorConfig(config MonitorConfig) (MonitorConfig, error) {
-	if config.OutputPath == "" || config.SummaryPath == "" || config.DeploymentRoot == "" {
+	hasRawOutput := config.OutputPath != "" || config.RawOutput != nil
+	hasSummaryOutput := config.SummaryPath != "" || config.SummaryOutput != nil
+	if !hasRawOutput || !hasSummaryOutput || config.DeploymentRoot == "" {
 		return MonitorConfig{}, errors.New("output, summary, and deployment root are required")
+	}
+
+	hasDuplicateRawOutput := config.OutputPath != "" && config.RawOutput != nil
+	hasDuplicateSummaryOutput := config.SummaryPath != "" && config.SummaryOutput != nil
+	if hasDuplicateRawOutput || hasDuplicateSummaryOutput {
+		return MonitorConfig{}, errors.New("output and summary each require exactly one destination")
 	}
 	if config.Collector == nil {
 		return MonitorConfig{}, errors.New("host collector is required")
@@ -303,35 +324,59 @@ func normalizeMonitorConfig(config MonitorConfig) (MonitorConfig, error) {
 	return config, nil
 }
 
-// RunMonitor records release overlap samples until its context is cancelled.
-func RunMonitor(ctx context.Context, config MonitorConfig) error {
-	if err := ctx.Err(); err != nil {
+type monitorOutput struct {
+	file   *evidence.Writer
+	stream io.Writer
+}
+
+func (output *monitorOutput) AppendJSON(value any) error {
+	if output.file != nil {
+		return output.file.AppendJSON(value)
+	}
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
 		return err
 	}
 
-	var err error
-	config, err = normalizeMonitorConfig(config)
-	if err != nil {
-		return err
+	encoded = append(encoded, '\n')
+	written, err := output.stream.Write(encoded)
+	if err == nil && written != len(encoded) {
+		return io.ErrShortWrite
+	}
+
+	return err
+}
+
+func (output *monitorOutput) Close() error {
+	if output.file != nil {
+		return output.file.Close()
+	}
+
+	return nil
+}
+
+func openSampleOutput(config MonitorConfig) (*monitorOutput, string, error) {
+	if config.RawOutput != nil {
+		return &monitorOutput{stream: config.RawOutput}, "", nil
 	}
 
 	root := filepath.Dir(config.OutputPath)
 	if err := evidence.Cleanup(root, config.Now(), config.OutputPath, config.SummaryPath); err != nil {
-		return err
+		return nil, "", err
 	}
 
 	output, err := evidence.NewWriter(config.OutputPath, config.EvidenceLimits)
-	if err != nil {
-		return err
-	}
-	closed := false
-	defer func() {
-		if !closed {
-			_ = output.Close()
-		}
-	}()
 
-	accumulator := newReleaseAccumulator()
+	return &monitorOutput{file: output}, root, err
+}
+
+func captureReleaseSamples(
+	ctx context.Context,
+	config MonitorConfig,
+	output *monitorOutput,
+	accumulator *releaseAccumulator,
+) error {
 	var previous policy.CPUState
 
 	sample := func() error {
@@ -365,26 +410,55 @@ func RunMonitor(ctx context.Context, config MonitorConfig) error {
 	if err := sample(); err != nil {
 		return err
 	}
+
 	ticker := time.NewTicker(config.Interval)
 	defer ticker.Stop()
 
-loop:
 	for {
 		select {
 		case <-ticker.C:
 			if ctx.Err() != nil {
-				break loop
+				return nil
 			}
 			if err := sample(); err != nil {
 				if ctx.Err() != nil {
-					break loop
+					return nil
 				}
 
 				return err
 			}
 		case <-ctx.Done():
-			break loop
+			return nil
 		}
+	}
+}
+
+// RunMonitor records release overlap samples until its context is cancelled.
+func RunMonitor(ctx context.Context, config MonitorConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	var err error
+	config, err = normalizeMonitorConfig(config)
+	if err != nil {
+		return err
+	}
+
+	output, root, err := openSampleOutput(config)
+	if err != nil {
+		return err
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = output.Close()
+		}
+	}()
+
+	accumulator := newReleaseAccumulator()
+	if err := captureReleaseSamples(ctx, config, output, accumulator); err != nil {
+		return err
 	}
 
 	if err := output.Close(); err != nil {
@@ -392,11 +466,15 @@ loop:
 	}
 	closed = true
 
-	if err := writeSummary(config.SummaryPath, accumulator.result()); err != nil {
+	if err := writeSummary(config.SummaryPath, config.SummaryOutput, accumulator.result()); err != nil {
 		return err
 	}
 
-	return evidence.Cleanup(root, config.Now())
+	if root != "" {
+		return evidence.Cleanup(root, config.Now())
+	}
+
+	return nil
 }
 
 type releaseAccumulator struct {
@@ -504,9 +582,23 @@ func (accumulator *releaseAccumulator) result() policy.ReleaseSummary {
 	return summary
 }
 
-func writeSummary(path string, summary policy.ReleaseSummary) error {
+func writeSummary(path string, destination io.Writer, summary policy.ReleaseSummary) error {
 	if summary.SampleCount == 0 {
 		return errors.New("release monitor has no samples")
+	}
+
+	if destination != nil {
+		encoded, err := json.Marshal(summary)
+		if err != nil {
+			return err
+		}
+
+		written, err := destination.Write(append(encoded, '\n'))
+		if err == nil && written != len(encoded)+1 {
+			return io.ErrShortWrite
+		}
+
+		return err
 	}
 
 	encoded, err := json.MarshalIndent(summary, "", "  ")

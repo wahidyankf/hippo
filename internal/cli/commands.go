@@ -27,21 +27,23 @@ type statusOptions struct {
 type monitorOptions struct {
 	configOptions
 
-	diskPath string
-	interval time.Duration
+	jsonOutput bool
+	diskPath   string
+	interval   time.Duration
 }
 
 type runOptions struct {
 	configOptions
 
-	command      []string
-	class        string
-	workingDir   string
-	diskPath     string
-	leasePort    int
-	leaseOwner   string
-	leaseMinimum int
-	leaseMaximum int
+	command                []string
+	class                  string
+	workingDir             string
+	diskPath               string
+	leasePort              int
+	leaseOwner             string
+	leaseMinimum           int
+	leaseMaximum           int
+	concurrencyEnvironment []string
 }
 
 type releaseCheckOptions struct {
@@ -141,6 +143,7 @@ func (application Application) monitorCommand(execution *commandExecution) *cobr
 	}
 	command.Flags().StringVar(&options.diskPath, "disk-path", ".", "path whose free space is measured")
 	command.Flags().DurationVar(&options.interval, "interval", time.Second, "sample interval")
+	command.Flags().BoolVar(&options.jsonOutput, "json", false, "emit one JSON object per transition")
 	addConfigFlags(command, &options.configOptions)
 
 	return command
@@ -179,6 +182,12 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 	command.Flags().StringVar(&options.leaseOwner, "lease-owner", "", "service port owner")
 	command.Flags().IntVar(&options.leaseMinimum, "lease-min", 0, "minimum allowed leased port")
 	command.Flags().IntVar(&options.leaseMaximum, "lease-max", 0, "maximum allowed leased port")
+	command.Flags().StringArrayVar(
+		&options.concurrencyEnvironment,
+		"concurrency-env",
+		nil,
+		"child environment variable that receives resolved concurrency; repeatable",
+	)
 	addConfigFlags(command, &options.configOptions)
 
 	return command

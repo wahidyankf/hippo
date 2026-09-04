@@ -185,22 +185,23 @@ func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 		FallbackChain:    []string{"balanced", "constrained", "minimal"},
 		Concurrency:      1,
 	}
-	command := `[ "$RESOURCE_GUARD_PROFILE" = minimal ] && [ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 7 ] && [ "$GOMAXPROCS" = 6 ] && [ "$DOTNET_PROCESSOR_COUNT" = 5 ]`
-	environment := []string{"PATH=" + os.Getenv("PATH"), "NX_PARALLEL=7", "GOMAXPROCS=6", "DOTNET_PROCESSOR_COUNT=5"}
+	command := `[ "$RESOURCE_GUARD_PROFILE" = minimal ] && [ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 5 ]`
+	environment := []string{"PATH=" + os.Getenv("PATH"), "CALLER_WORKERS=5"}
 
 	code, err := guard.Run(context.Background(), guard.RunConfig{
-		Command:      "/bin/sh",
-		Arguments:    []string{"-c", command},
-		TaskClass:    "ephemeral",
-		Environment:  environment,
-		EvidenceRoot: t.TempDir(),
-		DiskPath:     ".",
-		Collector:    collector,
-		Policy:       fastPolicy(),
-		Resolution:   resolution,
-		Sleep:        func(time.Duration) {},
-		Now:          time.Now,
-		Stderr:       &bytes.Buffer{},
+		Command:                "/bin/sh",
+		Arguments:              []string{"-c", command},
+		TaskClass:              "ephemeral",
+		Environment:            environment,
+		ConcurrencyEnvironment: []string{"TOOL_WORKERS", "CALLER_WORKERS"},
+		EvidenceRoot:           t.TempDir(),
+		DiskPath:               ".",
+		Collector:              collector,
+		Policy:                 fastPolicy(),
+		Resolution:             resolution,
+		Sleep:                  func(time.Duration) {},
+		Now:                    time.Now,
+		Stderr:                 &bytes.Buffer{},
 	})
 
 	if err != nil || code != 0 {

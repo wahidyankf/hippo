@@ -50,7 +50,13 @@ func (application Application) releaseAssess(_ context.Context, options releaseA
 		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
 
-	summary, err := releaseguard.AssessFile(options.summaryPath)
+	var summary policy.ReleaseSummary
+	var err error
+	if options.summaryPath == "-" {
+		summary, err = releaseguard.Assess(application.Stdin)
+	} else {
+		summary, err = releaseguard.AssessFile(options.summaryPath)
+	}
 	accepted := err == nil
 
 	encoded, marshalError := json.Marshal(map[string]any{"accepted": accepted, "schemaVersion": summary.SchemaVersion})
@@ -90,6 +96,9 @@ func (application Application) releaseMonitor(ctx context.Context, options relea
 	if err := validateServicePorts(options.servicePorts); err != nil {
 		return 1, err
 	}
+	if options.outputPath == "-" && options.summaryPath == "-" {
+		return 1, errors.New("raw evidence and summary cannot both use standard output")
+	}
 
 	if _, configError := application.loadConfig(options.configPath); configError != nil {
 		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
@@ -102,7 +111,7 @@ func (application Application) releaseMonitor(ctx context.Context, options relea
 	}
 	defer cancel()
 
-	err := releaseguard.RunMonitor(monitorContext, releaseguard.MonitorConfig{
+	monitorConfig := releaseguard.MonitorConfig{
 		OutputPath:     options.outputPath,
 		SummaryPath:    options.summaryPath,
 		DeploymentRoot: options.deploymentRoot,
@@ -110,7 +119,17 @@ func (application Application) releaseMonitor(ctx context.Context, options relea
 		RoutedOrigin:   options.routedOrigin,
 		ServicePorts:   options.servicePorts,
 		Collector:      application.Collector,
-	})
+	}
+	if options.outputPath == "-" {
+		monitorConfig.OutputPath = ""
+		monitorConfig.RawOutput = application.Stdout
+	}
+	if options.summaryPath == "-" {
+		monitorConfig.SummaryPath = ""
+		monitorConfig.SummaryOutput = application.Stdout
+	}
+
+	err := application.MonitorRelease(monitorContext, monitorConfig)
 	if err != nil {
 		return 1, err
 	}

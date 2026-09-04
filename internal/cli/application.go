@@ -9,6 +9,7 @@ import (
 	resourceconfig "github.com/wahidyankf/resource-guard/internal/config"
 	"github.com/wahidyankf/resource-guard/internal/host"
 	"github.com/wahidyankf/resource-guard/internal/policy"
+	releaseguard "github.com/wahidyankf/resource-guard/internal/release"
 )
 
 const unavailableValue = "unavailable"
@@ -21,9 +22,11 @@ var Commit = "unknown"
 
 // Application supplies the command's injectable host and I/O dependencies.
 type Application struct {
+	Stdin          io.Reader
 	Stdout, Stderr io.Writer
 	Environment    []string
 	Collector      policy.Collector
+	MonitorRelease func(context.Context, releaseguard.MonitorConfig) error
 	Sleep          func(time.Duration)
 	Now            func() time.Time
 	Version        string
@@ -50,6 +53,9 @@ func environmentMap(environment []string) map[string]string {
 }
 
 func (application Application) defaults() Application {
+	if application.Stdin == nil {
+		application.Stdin = os.Stdin
+	}
 	if application.Stdout == nil {
 		application.Stdout = os.Stdout
 	}
@@ -63,6 +69,9 @@ func (application Application) defaults() Application {
 
 	if application.Collector == nil {
 		application.Collector = host.SystemCollector{}
+	}
+	if application.MonitorRelease == nil {
+		application.MonitorRelease = releaseguard.RunMonitor
 	}
 
 	if application.Now == nil {

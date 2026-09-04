@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -148,6 +149,44 @@ func waitForContext(ctx context.Context, duration time.Duration, pause func(time
 	}
 }
 
+func writeMonitorTransition(
+	destination io.Writer,
+	jsonOutput bool,
+	sample policy.Sample,
+	assessment policy.Assessment,
+	resolution policy.Resolution,
+) error {
+	if !jsonOutput {
+		_, err := fmt.Fprintf(
+			destination,
+			"%s state=%s reason=%s profile=%s swap=%s\n",
+			sample.MeasuredAt,
+			assessment.State,
+			assessment.Reason,
+			resolution.ResolvedProfile,
+			sample.SwapState,
+		)
+
+		return err
+	}
+
+	encoded, err := json.Marshal(struct {
+		SchemaVersion int          `json:"schemaVersion"`
+		MeasuredAt    string       `json:"measuredAt"`
+		State         policy.State `json:"state"`
+		Reason        string       `json:"reason"`
+		Profile       string       `json:"profile"`
+		SwapState     string       `json:"swapState"`
+	}{1, sample.MeasuredAt, assessment.State, assessment.Reason, resolution.ResolvedProfile, sample.SwapState})
+	if err != nil {
+		return fmt.Errorf("encode monitor transition JSON: %w", err)
+	}
+
+	_, err = fmt.Fprintln(destination, string(encoded))
+
+	return err
+}
+
 func (application Application) monitor(ctx context.Context, options monitorOptions) (int, error) {
 	if options.interval <= 0 {
 		return 1, errors.New("interval must be positive")
@@ -184,17 +223,8 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 		state := string(assessment.State) + ":" + assessment.Reason + ":" + resolution.ResolvedProfile
 
 		if state != prior {
-			_, writeError := fmt.Fprintf(
-				application.Stdout,
-				"%s state=%s reason=%s profile=%s swap=%s\n",
-				reading.Sample.MeasuredAt,
-				assessment.State,
-				assessment.Reason,
-				resolution.ResolvedProfile,
-				reading.Sample.SwapState,
-			)
-			if writeError != nil {
-				return writeError
+			if err := writeMonitorTransition(application.Stdout, options.jsonOutput, reading.Sample, assessment, resolution); err != nil {
+				return err
 			}
 
 			prior = state
@@ -273,23 +303,27 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	}
 
 	return guard.Run(ctx, guard.RunConfig{
-		Command:          options.command[0],
-		Arguments:        options.command[1:],
-		TaskClass:        taskClass,
-		WorkingDirectory: options.workingDir,
-		Environment:      application.Environment,
-		EvidenceRoot:     root,
-		DiskPath:         options.diskPath,
-		LeasePort:        options.leasePort,
-		LeaseOwner:       options.leaseOwner,
-		LeaseMinimum:     options.leaseMinimum,
-		LeaseMaximum:     options.leaseMaximum,
-		Collector:        application.Collector,
-		Policy:           resolution.Policy,
-		Resolution:       resolution,
-		ConfigHash:       configuration.Hash,
-		Sleep:            application.Sleep,
-		Now:              application.Now,
-		Stderr:           application.Stderr,
+		Command:                options.command[0],
+		Arguments:              options.command[1:],
+		TaskClass:              taskClass,
+		WorkingDirectory:       options.workingDir,
+		Environment:            application.Environment,
+		EvidenceRoot:           root,
+		DiskPath:               options.diskPath,
+		LeasePort:              options.leasePort,
+		LeaseOwner:             options.leaseOwner,
+		LeaseMinimum:           options.leaseMinimum,
+		LeaseMaximum:           options.leaseMaximum,
+		ConcurrencyEnvironment: options.concurrencyEnvironment,
+		Collector:              application.Collector,
+		Policy:                 resolution.Policy,
+		Resolution:             resolution,
+		ConfigHash:             configuration.Hash,
+		Sleep:                  application.Sleep,
+		Now:                    application.Now,
+		ChildStdin:             application.Stdin,
+		ChildStdout:            application.Stdout,
+		ChildStderr:            application.Stderr,
+		Stderr:                 application.Stderr,
 	})
 }
