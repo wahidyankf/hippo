@@ -1,0 +1,22 @@
+# OS and editor state
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.env
+.env.*
+
+# Local development and agent artifacts
+/local-tmp/
+/generated-output/
+*.log
+
+# Resource Guard build and runtime inputs
+/.cache/
+/dist/
+/coverage/
+/resource-guard.local.json
+*.test
+coverage.out
+*.prof
+*.pprof
