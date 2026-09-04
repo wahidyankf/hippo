@@ -39,7 +39,7 @@ func TestScenarioWithoutActionAndOutcomeIsRejected(t *testing.T) {
 
 func TestUndefinedBindingIsRejected(t *testing.T) {
 	errorsFound := contract.ValidateBindings(
-		[]contract.StepDefinition{{Pattern: `^known$`}},
+		[]contract.StepBinding{testBinding(`^known$`)},
 		[]string{"known", "unknown"},
 	)
 	requireErrorContaining(t, errorsFound, "undefined behavior step")
@@ -47,7 +47,7 @@ func TestUndefinedBindingIsRejected(t *testing.T) {
 
 func TestAmbiguousBindingIsRejected(t *testing.T) {
 	errorsFound := contract.ValidateBindings(
-		[]contract.StepDefinition{{Pattern: `^duplicate$`}, {Pattern: `^duplicate$`}},
+		[]contract.StepBinding{testBinding(`^duplicate$`), testBinding(`^duplicate$`)},
 		[]string{"duplicate"},
 	)
 	requireErrorContaining(t, errorsFound, "ambiguous behavior step")
@@ -55,10 +55,37 @@ func TestAmbiguousBindingIsRejected(t *testing.T) {
 
 func TestUnusedBindingIsRejected(t *testing.T) {
 	errorsFound := contract.ValidateBindings(
-		[]contract.StepDefinition{{Pattern: `^used$`}, {Pattern: `^unused$`}},
+		[]contract.StepBinding{testBinding(`^used$`), testBinding(`^unused$`)},
 		[]string{"used"},
 	)
 	requireErrorContaining(t, errorsFound, "unused behavior binding")
+}
+
+func TestInvalidBindingExpressionIsRejected(t *testing.T) {
+	errorsFound := contract.ValidateBindings(
+		[]contract.StepBinding{testBinding(`(`)},
+		[]string{"anything"},
+	)
+	requireErrorContaining(t, errorsFound, "invalid binding")
+}
+
+func TestMissingBindingHandlerIsRejected(t *testing.T) {
+	errorsFound := contract.ValidateHandlers([]contract.StepBinding{{Pattern: `^missing$`}})
+	requireErrorContaining(t, errorsFound, "requires a nonnil function handler")
+}
+
+func TestNonFunctionBindingHandlerIsRejected(t *testing.T) {
+	errorsFound := contract.ValidateHandlers([]contract.StepBinding{{Pattern: `^invalid$`, Handler: "not a function"}})
+	requireErrorContaining(t, errorsFound, "requires a nonnil function handler")
+}
+
+func TestBindingOrderDoesNotAffectValidation(t *testing.T) {
+	bindings := []contract.StepBinding{testBinding(`^second$`), testBinding(`^first$`)}
+	errorsFound := contract.ValidateBindings(bindings, []string{"first", "second"})
+
+	if len(errorsFound) != 0 {
+		t.Fatalf("reordered paired bindings were rejected: %v", errorsFound)
+	}
 }
 
 func TestUnapprovedExemptionIsRejected(t *testing.T) {
@@ -76,13 +103,19 @@ func TestUnapprovedExemptionIsRejected(t *testing.T) {
 
 func verifyAdapter(t *testing.T, adapter contract.Adapter) {
 	t.Helper()
+	driver := support.NewDriver(adapter)
+	defer driver.Close()
 
 	if !contract.SuiteOptions(adapter).Strict {
 		t.Fatalf("%s adapter is not strict", adapter.Name)
 	}
-	if err := contract.Verify(adapter); err != nil {
+	if err := contract.Verify(adapter, driver.Bindings()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func testBinding(pattern string) contract.StepBinding {
+	return contract.StepBinding{Pattern: pattern, Handler: func() {}}
 }
 
 func requireErrorContaining(t *testing.T, errorsFound []error, expected string) {

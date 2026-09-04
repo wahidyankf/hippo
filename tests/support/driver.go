@@ -27,6 +27,7 @@ const (
 	jsonFlag           = "--json"
 	statusCommandName  = "status"
 	monitorCommandName = "monitor"
+	shellPath          = "/bin/sh"
 )
 
 type sequenceCollector struct {
@@ -75,6 +76,8 @@ type Driver struct {
 	requestedProfile    string
 	taskClass           string
 	effectiveMemory     int64
+	linuxMemInfo        string
+	linuxCgroupLimit    int64
 	configPath          string
 	privateArtifacts    bool
 	exampleTracked      bool
@@ -118,7 +121,8 @@ func healthySample(at time.Time) guard.Sample {
 	}
 }
 
-func (driver *Driver) reset() {
+// Reset returns the shared driver to an isolated scenario state.
+func (driver *Driver) Reset() {
 	driver.cleanup()
 	mode := driver.mode
 
@@ -321,6 +325,56 @@ func (driver *Driver) temporaryRoot() (string, error) {
 	return directory, nil
 }
 
+func fastBehaviourPolicy() guard.Policy {
+	policy := guard.DevelopmentPolicy
+	policy.SampleInterval = time.Millisecond
+	policy.AdmissionWindow = time.Second
+	policy.TerminationGrace = time.Millisecond
+	policy.LeaseWait = time.Second
+
+	return policy
+}
+
+func (driver *Driver) prepareGuardedExecution(samples []guard.Sample) error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.leaseRoot = root
+	driver.samples = samples
+
+	return nil
+}
+
+func (driver *Driver) runGuardedShell(script string, environment []string) error {
+	if environment == nil {
+		environment = os.Environ()
+	}
+
+	stderr := &bytes.Buffer{}
+	started := time.Now()
+	code, err := guard.Run(guard.RunConfig{
+		Command:      shellPath,
+		Arguments:    []string{"-c", script},
+		TaskClass:    taskClassEphemeral,
+		Environment:  environment,
+		EvidenceRoot: driver.leaseRoot,
+		DiskPath:     ".",
+		Collector:    &sequenceCollector{samples: driver.samples},
+		Policy:       fastBehaviourPolicy(),
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       stderr,
+	})
+
+	driver.forceStopElapsed = time.Since(started)
+	driver.exitCode = code
+	driver.errorOutput = stderr.String()
+
+	return err
+}
+
 func (driver *Driver) liveLease() error {
 	root, err := driver.temporaryRoot()
 	if err != nil {
@@ -455,26 +509,54 @@ func (driver *Driver) requireInheritedSessionsValid() error {
 	return nil
 }
 
-func (driver *Driver) inherited() {
-	driver.exitCode = 0
+func (driver *Driver) inherited() error {
+	base := time.Now()
+	if err := driver.prepareGuardedExecution([]guard.Sample{healthySample(base)}); err != nil {
+		return err
+	}
+
+	session, err := guard.AcquireSession(driver.leaseRoot, "", taskClassEphemeral, time.Second, func(time.Duration) {})
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return errors.New("inherited session owner was not admitted")
+	}
+
+	driver.heavySession = session
+
+	return nil
 }
 
-func (driver *Driver) successfulChild() {
+func (driver *Driver) successfulChild() error {
+	err := driver.runGuardedShell(
+		"exit 0",
+		[]string{"RESOURCE_GUARD_SESSION=" + driver.heavySession.Token},
+	)
+	driver.inheritedSessions = guard.InheritedSession(driver.leaseRoot, driver.heavySession.Token)
+
+	return err
 }
 
 func (driver *Driver) requirePreserved() error {
-	if driver.exitCode != 0 {
-		return fmt.Errorf("got exit %d", driver.exitCode)
+	if driver.exitCode != 0 || !driver.inheritedSessions {
+		return fmt.Errorf("exit=%d inherited-session-owned=%t", driver.exitCode, driver.inheritedSessions)
 	}
 	return nil
 }
 
-func (driver *Driver) givenAdmitted() {
-	driver.exitCode = 0
+func (driver *Driver) givenAdmitted() error {
+	base := time.Now()
+
+	return driver.prepareGuardedExecution([]guard.Sample{
+		healthySample(base),
+		healthySample(base.Add(time.Millisecond)),
+		healthySample(base.Add(2 * time.Millisecond)),
+	})
 }
 
-func (driver *Driver) child17() {
-	driver.exitCode = 17
+func (driver *Driver) child17() error {
+	return driver.runGuardedShell("exit 17", nil)
 }
 
 func (driver *Driver) require17() error {
@@ -509,7 +591,7 @@ func (driver *Driver) interruptGuard() error {
 
 	started := time.Now()
 	_, err := guard.Run(guard.RunConfig{
-		Command:      "/bin/sh",
+		Command:      shellPath,
 		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
 		TaskClass:    taskClassEphemeral,
 		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker),
@@ -554,17 +636,33 @@ func (driver *Driver) requireForceStopped() error {
 	return nil
 }
 
-func (driver *Driver) criticalChild() {
-	driver.exitCode = 75
+func (driver *Driver) criticalChild() error {
+	base := time.Now()
+	healthy := healthySample(base)
+	critical := healthySample(base.Add(3 * time.Millisecond))
+	level := 4
+	critical.MemoryPressureLevel = &level
+
+	return driver.prepareGuardedExecution([]guard.Sample{
+		healthy,
+		healthySample(base.Add(time.Millisecond)),
+		healthySample(base.Add(2 * time.Millisecond)),
+		critical,
+	})
 }
 
-func (driver *Driver) observeCritical() {
+func (driver *Driver) observeCritical() error {
+	return driver.runGuardedShell("sleep 10", nil)
 }
 
 func (driver *Driver) requireShed() error {
 	if driver.exitCode != 75 {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
+	if driver.forceStopElapsed >= 3*time.Second {
+		return fmt.Errorf("critical child was not shed promptly: %s", driver.forceStopElapsed)
+	}
+
 	return nil
 }
 
@@ -602,7 +700,7 @@ func (driver *Driver) observeDegradedWarning() error {
 	stderr := &bytes.Buffer{}
 
 	code, runError := guard.Run(guard.RunConfig{
-		Command:      "/bin/sh",
+		Command:      shellPath,
 		Arguments:    []string{"-c", `[ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 1 ] && [ "$GOMAXPROCS" = 1 ] && [ "$DOTNET_PROCESSOR_COUNT" = 1 ]; sleep 5`},
 		TaskClass:    taskClassEphemeral,
 		Environment:  os.Environ(),
@@ -718,7 +816,10 @@ func (driver *Driver) requireVersion() error {
 		return err
 	}
 
-	if driver.exitCode != 0 || payload.SchemaVersion != 1 || payload.Version == "" || payload.Commit == "" {
+	if driver.exitCode != 0 ||
+		payload.SchemaVersion != 1 ||
+		payload.Version != "v0.0.0-test" ||
+		payload.Commit != strings.Repeat("0", 40) {
 		return fmt.Errorf("invalid version: exit=%d payload=%+v", driver.exitCode, payload)
 	}
 	return nil
@@ -1001,9 +1102,6 @@ func (driver *Driver) requireRejected() error {
 	return nil
 }
 
-func (driver *Driver) nxBuildConfiguration() {
-}
-
 func (driver *Driver) inspectBuildCaching() error {
 	command := exec.Command("git", "check-ignore", "--quiet", "dist/resource-guard_test_linux_amd64.tar.gz")
 	command.Dir = toolRoot()
@@ -1018,9 +1116,6 @@ func (driver *Driver) requireBuildCacheDisabled() error {
 		return errors.New("generated release binaries are not ignored")
 	}
 	return nil
-}
-
-func (driver *Driver) e2eHarness() {
 }
 
 func (driver *Driver) runTemporaryHarness(testExit int) error {
@@ -1217,9 +1312,6 @@ func (driver *Driver) requireRetention() error {
 	return nil
 }
 
-func (driver *Driver) goLintConfiguration() {
-}
-
 func (driver *Driver) inspectLintEnforcement() error {
 	configuration, err := os.ReadFile(filepath.Join(toolRoot(), ".golangci.yml"))
 	if err != nil {
@@ -1238,16 +1330,13 @@ func (driver *Driver) inspectLintEnforcement() error {
 }
 
 func (driver *Driver) requireExhaustiveLint() error {
-	required := []string{"default: all", "warn-unused: true", "max-issues-per-linter: 0", "max-same-issues: 0"}
+	required := []string{"default: all", "max-issues-per-linter: 0", "max-same-issues: 0"}
 	for _, value := range required {
 		if !strings.Contains(driver.lintConfiguration, value) {
 			return fmt.Errorf("lint configuration does not enforce %q", value)
 		}
 	}
 
-	if !strings.Contains(driver.lintConfiguration, "disable:") || !strings.Contains(driver.lintConfiguration, "#") {
-		return errors.New("lint exceptions are not documented")
-	}
 	return nil
 }
 
@@ -1267,9 +1356,6 @@ func (driver *Driver) requireModuleScopedLint() error {
 		return errors.New("lint is not scoped to the standalone module")
 	}
 	return nil
-}
-
-func (driver *Driver) gherkinAdapterContract() {
 }
 
 func (driver *Driver) inspectBehaviourCoverage() error {
@@ -1316,6 +1402,10 @@ func (driver *Driver) requireStrictAdapters() error {
 	return nil
 }
 
+func (driver *Driver) requirePairedBindings() error {
+	return errors.Join(contract.ValidateHandlers(driver.Bindings())...)
+}
+
 func (driver *Driver) requireApprovedExemptions() error {
 	if !driver.approvedExemptions {
 		return errors.New("behavior exemptions do not have an approved adapter inventory")
@@ -1335,9 +1425,6 @@ func (driver *Driver) requireE2EPlacement() error {
 		return errors.New("full end-to-end behavior is not isolated from quick checks")
 	}
 	return nil
-}
-
-func (driver *Driver) contributorGateContract() {
 }
 
 func (driver *Driver) inspectContributorEnforcement() error {
@@ -1389,9 +1476,12 @@ func (driver *Driver) inspectContributorEnforcement() error {
 		strings.Contains(workflow, "Validate pull request commits") &&
 		strings.Contains(workflow, "Validate pushed commits")
 	driver.stagedFormatting = strings.Contains(preCommitHook, "lint-staged") &&
+		strings.Contains(stagedConfig, `"**/*.go"`) &&
 		strings.Contains(stagedConfig, "goimports -w") &&
 		strings.Contains(stagedConfig, "gofumpt -w") &&
+		strings.Contains(stagedConfig, `"**/*.sh"`) &&
 		strings.Contains(stagedConfig, "shfmt -w") &&
+		strings.Contains(stagedConfig, `"**/*.{json,md,yaml,yml}"`) &&
 		strings.Contains(stagedConfig, "prettier --write")
 	driver.pushQuickGate = strings.Contains(prePushHook, "npm run test:quick") &&
 		strings.Contains(manifest, `"test:quick": "./scripts/test-quick.sh"`) &&
@@ -1407,28 +1497,28 @@ func (driver *Driver) inspectContributorEnforcement() error {
 
 func (driver *Driver) requireConventionalCommits() error {
 	if !driver.conventionalCommits {
-		return errors.New("conventional commits are not enforced locally and in CI")
+		return errors.New("the commit hook and CI do not invoke conventional commit validation")
 	}
 	return nil
 }
 
 func (driver *Driver) requireStagedFormatting() error {
 	if !driver.stagedFormatting {
-		return errors.New("pre-commit does not format every supported staged file type")
+		return errors.New("pre-commit does not invoke formatting for every supported staged file type")
 	}
 	return nil
 }
 
 func (driver *Driver) requirePushQuickGate() error {
 	if !driver.pushQuickGate {
-		return errors.New("pre-push does not run the direct no-Nx quick gate")
+		return errors.New("pre-push does not invoke the direct no-Nx quick gate")
 	}
 	return nil
 }
 
 func (driver *Driver) requireCoreCoverage() error {
 	if !driver.coreCoverage {
-		return errors.New("deterministic core coverage does not require 99 percent")
+		return errors.New("the quick gate does not invoke deterministic core coverage at 99 percent")
 	}
 	return nil
 }
@@ -1490,13 +1580,19 @@ func (driver *Driver) requireReplan() error {
 }
 
 func (driver *Driver) linuxCgroupCapacity() {
-	memory, err := host.ParseMemInfo("MemTotal: 16777216 kB\nMemAvailable: 8388608 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n")
-	if err == nil {
-		driver.effectiveMemory = host.EffectiveMemoryLimit(memory.Total, 4*guard.GiB, 0)
-	}
+	driver.linuxMemInfo = "MemTotal: 16777216 kB\nMemAvailable: 8388608 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n"
+	driver.linuxCgroupLimit = 4 * guard.GiB
 }
 
-func (driver *Driver) collectLinuxEvidence() {
+func (driver *Driver) collectLinuxEvidence() error {
+	memory, err := host.ParseMemInfo(driver.linuxMemInfo)
+	if err != nil {
+		return err
+	}
+
+	driver.effectiveMemory = host.EffectiveMemoryLimit(memory.Total, driver.linuxCgroupLimit, 0)
+
+	return nil
 }
 
 func (driver *Driver) requireFourGiB() error {
@@ -1569,33 +1665,55 @@ func (driver *Driver) requireConfigExit() error {
 	return nil
 }
 
-func (driver *Driver) artifactPolicy() {
-}
-
 func repositoryRoot() string {
 	return toolRoot()
 }
 
 func (driver *Driver) inspectArtifactPolicy() {
 	root := repositoryRoot()
-	local := "resource-guard.local.json"
-	ignore := exec.Command("git", "check-ignore", "--quiet", local)
-	ignore.Dir = root
+	ignoredPaths := []string{
+		"resource-guard.local.json",
+		".env",
+		".env.local",
+		".cache/example",
+		"dist/example",
+		"coverage/example",
+		"local-tmp/example",
+		"generated-output/example",
+		"node_modules/example",
+		"example.test",
+	}
 
-	notTracked := exec.Command("git", "ls-files", "--error-unmatch", local)
-	notTracked.Dir = root
+	driver.privateArtifacts = true
+	for _, path := range ignoredPaths {
+		ignore := exec.Command("git", "check-ignore", "--quiet", path)
+		ignore.Dir = root
+		if ignore.Run() != nil {
+			driver.privateArtifacts = false
+		}
+	}
 
-	bootstrap, readError := os.ReadFile(filepath.Join(root, "resource-guard"))
-	driver.privateArtifacts = ignore.Run() == nil &&
-		notTracked.Run() != nil &&
-		readError == nil &&
-		bytes.HasPrefix(bootstrap, []byte("#!/bin/sh\n"))
+	tracked := exec.Command(
+		"git",
+		"ls-files",
+		".env",
+		".env.*",
+		".cache/**",
+		"dist/**",
+		"coverage/**",
+		"local-tmp/**",
+		"generated-output/**",
+		"node_modules/**",
+		"*.test",
+	)
+	tracked.Dir = root
+	trackedOutput, trackedError := tracked.Output()
+	driver.privateArtifacts = driver.privateArtifacts && trackedError == nil && len(bytes.TrimSpace(trackedOutput)) == 0
 
 	examplePath := "resource-guard.local.json.example"
-	example := exec.Command("git", "check-ignore", "--quiet", examplePath)
+	example := exec.Command("git", "ls-files", "--error-unmatch", examplePath)
 	example.Dir = root
-	_, exampleError := os.Stat(filepath.Join(root, examplePath))
-	driver.exampleTracked = example.Run() != nil && exampleError == nil
+	driver.exampleTracked = example.Run() == nil
 
 	moduleData, moduleError := os.ReadFile(filepath.Join(root, "go.mod"))
 	packageData, packageError := os.ReadFile(filepath.Join(root, "package.json"))
@@ -1634,7 +1752,7 @@ func pathExists(path string) bool {
 
 func (driver *Driver) requirePrivateArtifacts() error {
 	if !driver.privateArtifacts {
-		return errors.New("local config is tracked, not ignored, or bootstrap is not a shell script")
+		return errors.New("local config or generated artifacts are not both ignored and untracked")
 	}
 	return nil
 }

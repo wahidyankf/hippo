@@ -3,13 +3,11 @@ Feature: Resource guard build artifacts
 
   @unit-exempt @e2e-exempt
   Scenario: Release builds stay outside repository history
-    Given the standalone release build policy
     When build artifact tracking is inspected
     Then generated release binaries are ignored
 
   @unit-exempt @e2e-exempt
   Scenario: End-to-end binaries are temporary
-    Given the resource guard end-to-end harness
     When its compiled binary lifecycle is inspected
     Then the end-to-end binary is removed after the run
 
@@ -21,8 +19,7 @@ Feature: Resource guard build artifacts
 
   @unit-exempt @e2e-exempt
   Scenario: Machine-local configuration and binaries stay private
-    Given the resource guard artifact policy
     When tracked and ignored paths are inspected
-    Then local config and compiled binaries are rejected from Git
+    Then local config and generated artifacts are ignored and untracked
     And the local config example remains tracked
     And the standalone layout has no Nx metadata

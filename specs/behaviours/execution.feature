@@ -20,11 +20,13 @@ Feature: Guarded process execution
     When each service child validates its inherited session
     Then both inherited sessions remain valid
 
+  @e2e-exempt
   Scenario: An inherited session runs without reacquiring the lease
     Given a valid inherited resource session
     When a guarded child exits successfully
-    Then the child exit code is preserved
+    Then the child exits successfully and the inherited session remains owned
 
+  @e2e-exempt
   Scenario: A failed child keeps its own exit code
     Given an admitted guarded command
     When the guarded child exits with code 17
@@ -40,7 +42,7 @@ Feature: Guarded process execution
   Scenario: Critical pressure sheds eligible work
     Given an admitted ephemeral child encounters critical pressure
     When the guard observes the critical sample
-    Then only the guarded child group is terminated with exit 75
+    Then the guard terminates its child and exits with code 75
 
   @e2e-exempt
   Scenario: Worsening warning sheds degraded work

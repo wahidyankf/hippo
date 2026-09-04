@@ -1,10 +1,12 @@
 package contract
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,128 +29,10 @@ const (
 	syntheticHostPressureReason = "requires synthetic host pressure samples"
 )
 
-// StepDefinition declares one canonical Godog expression.
-type StepDefinition struct {
+// StepBinding keeps one canonical Godog expression adjacent to its handler.
+type StepBinding struct {
 	Pattern string
-}
-
-// Definitions is the complete shared binding registry.
-var Definitions = []StepDefinition{
-	{`^three healthy host samples$`},
-	{`^development admission is assessed$`},
-	{`^the work is admitted$`},
-	{`^a full stable Darwin warning window with safe headroom$`},
-	{`^ephemeral work is admitted with concurrency one$`},
-	{`^Darwin warning samples with excessive compressor growth$`},
-	{`^degraded work is deferred$`},
-	{`^stable Darwin warning samples for a transactional task$`},
-	{`^admission is storage blocked with exit 73$`},
-	{`^swap-outs grow by 128 MiB over 15 seconds$`},
-	{`^development pressure is assessed$`},
-	{`^the state is warning because of swap pressure$`},
-	{`^compressor payload is 12 GiB and grows 1 GiB over 15 seconds$`},
-	{`^the state is warning because of compressor pressure$`},
-	{`^another live process owns the heavy lease$`},
-	{`^a second owner waits for the lease$`},
-	{`^the second owner is deferred with exit 75$`},
-	{`^the deferral names the process holding the lease$`},
-	{`^a live service session owns its resource lease$`},
-	{`^heavy work requests the lease$`},
-	{`^the heavy owner acquires the lease immediately$`},
-	{`^two live service sessions on separate ports$`},
-	{`^each service child validates its inherited session$`},
-	{`^both inherited sessions remain valid$`},
-	{`^a valid inherited resource session$`},
-	{`^a guarded child exits successfully$`},
-	{`^the child exit code is preserved$`},
-	{`^an admitted guarded command$`},
-	{`^the guarded child exits with code 17$`},
-	{`^the guard exits with code 17$`},
-	{`^an admitted child that ignores termination$`},
-	{`^the guard is interrupted$`},
-	{`^the child is signalled once and force-stopped within the grace$`},
-	{`^an admitted ephemeral child encounters critical pressure$`},
-	{`^the guard observes the critical sample$`},
-	{`^only the guarded child group is terminated with exit 75$`},
-	{`^an admitted degraded ephemeral child encounters growing compressor pressure$`},
-	{`^the guard observes warning through the grace$`},
-	{`^the degraded child starts and is terminated with exit 75$`},
-	{`^the compiled resource guard binary$`},
-	{`^JSON version is requested$`},
-	{`^version schema identifies the release and commit$`},
-	{`^JSON status is requested for an existing path$`},
-	{`^status returns schema version 3 with profile and capability evidence$`},
-	{`^root command help is requested$`},
-	{`^help lists the public command tree and exits successfully$`},
-	{`^release command help is requested$`},
-	{`^help lists the release command tree and exits successfully$`},
-	{`^Zsh completion is requested$`},
-	{`^a Zsh completion script is emitted$`},
-	{`^an unknown command is requested$`},
-	{`^Cobra reports the command and exits with code 1$`},
-	{`^run is requested without a command separator$`},
-	{`^the command fails with a useful validation error$`},
-	{`^a healthy release summary file$`},
-	{`^release summary assessment is requested$`},
-	{`^the release evidence is accepted$`},
-	{`^release monitor output paths without endpoint inputs$`},
-	{`^release monitoring is requested$`},
-	{`^the command rejects a missing generic health URL$`},
-	{`^a release host below its requested balanced capacity$`},
-	{`^release admission is assessed$`},
-	{`^the release requires replanning instead of automatic fallback$`},
-	{`^a release summary with one health failure$`},
-	{`^release overlap evidence is assessed$`},
-	{`^the release evidence is rejected$`},
-	{`^a release summary outside the routed responsiveness budget$`},
-	{`^the standalone release build policy$`},
-	{`^build artifact tracking is inspected$`},
-	{`^generated release binaries are ignored$`},
-	{`^the resource guard end-to-end harness$`},
-	{`^its compiled binary lifecycle is inspected$`},
-	{`^the end-to-end binary is removed after the run$`},
-	{`^four historical bootstrap generations$`},
-	{`^the current bootstrap generation runs$`},
-	{`^only the current and two recent generations remain$`},
-	{`^the resource guard Go lint configuration$`},
-	{`^lint enforcement is inspected$`},
-	{`^every available linter is enabled with documented exceptions$`},
-	{`^package documentation is enforced$`},
-	{`^lint remains scoped to the resource guard module$`},
-	{`^the resource guard Gherkin adapter contract$`},
-	{`^behavior coverage enforcement is inspected$`},
-	{`^unit integration and end-to-end suites use strict step resolution$`},
-	{`^every behavior exemption has an approved adapter reason$`},
-	{`^behavior compliance runs serially for every adapter$`},
-	{`^full end-to-end behavior remains outside quick checks$`},
-	{`^the resource guard contributor gate contract$`},
-	{`^contributor enforcement is inspected$`},
-	{`^conventional commits are enforced locally and in CI$`},
-	{`^staged source and documentation files are formatted before commit$`},
-	{`^pushes run the quick gate without Nx$`},
-	{`^deterministic core coverage requires 99 percent$`},
-	{`^a healthy 5 GiB runner without swap$`},
-	{`^the constrained profile is selected$`},
-	{`^a healthy 1 GiB machine without swap$`},
-	{`^the minimal profile is selected with concurrency one$`},
-	{`^a host sample below the 256 MiB disk floor$`},
-	{`^a strict transactional task that does not fit its requested profile$`},
-	{`^admission requires replanning with exit 78$`},
-	{`^Linux reports 16 GiB host memory and a 4 GiB cgroup limit$`},
-	{`^the Linux evidence is collected$`},
-	{`^effective memory is 4 GiB$`},
-	{`^Linux reports no usable swap$`},
-	{`^swap is unavailable without causing critical pressure$`},
-	{`^Linux memory PSI some average is 10 percent$`},
-	{`^the state is warning because of memory PSI$`},
-	{`^an explicit resource guard config with an unknown field$`},
-	{`^JSON status is requested with that config$`},
-	{`^configuration fails with exit 78$`},
-	{`^the resource guard artifact policy$`},
-	{`^tracked and ignored paths are inspected$`},
-	{`^local config and compiled binaries are rejected from Git$`},
-	{`^the local config example remains tracked$`},
-	{`^the standalone layout has no Nx metadata$`},
+	Handler any
 }
 
 // Adapter describes one behavior layer and its exemption tag.
@@ -172,9 +56,9 @@ var ApprovedExemptions = map[string][]Exemption{
 		{"Release builds stay outside repository history", "requires repository Git ignore configuration"},
 		{"End-to-end binaries are temporary", "requires subprocess and filesystem lifecycle access"},
 		{"Bootstrap cache retention is bounded", "requires the real bootstrap and filesystem cache"},
-		{"Strict lint is exhaustive and module scoped", "requires repository lint configuration"},
-		{"Every behavior adapter has enforced compliance", "requires repository test configuration"},
-		{"Contributor changes pass local and remote gates", "requires repository hook and CI configuration"},
+		{"Lint gate wiring is exhaustive and module scoped", "requires repository lint configuration"},
+		{"Behavior adapter wiring is complete", "requires repository test configuration"},
+		{"Contributor gate wiring is complete", "requires repository hook and CI configuration"},
 		{"Machine-local configuration and binaries stay private", "requires the repository Git index and ignore rules"},
 	},
 	Integration: {},
@@ -195,6 +79,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{"A live heavy lease defers a second owner", liveLeaseExemption},
 		{"A long-lived service never holds the heavy-work lease", liveLeaseExemption},
 		{"Concurrent services keep their own inheritable sessions", liveLeaseExemption},
+		{"An inherited session runs without reacquiring the lease", "requires synthetic inherited session state"},
+		{"A failed child keeps its own exit code", "requires deterministic admission and child process control"},
 		{"An interrupted guard signals once and then force-stops the child", "requires synthetic interrupt delivery and process signaling"},
 		{"Critical pressure sheds eligible work", "requires synthetic critical pressure and process signaling"},
 		{"Worsening warning sheds degraded work", "requires synthetic warning pressure and process signaling"},
@@ -205,9 +91,9 @@ var ApprovedExemptions = map[string][]Exemption{
 		{"Release builds stay outside repository history", "requires repository Git ignore configuration"},
 		{"End-to-end binaries are temporary", "inspects the test harness rather than the public binary"},
 		{"Bootstrap cache retention is bounded", "mutates a synthetic bootstrap cache"},
-		{"Strict lint is exhaustive and module scoped", "requires repository lint configuration"},
-		{"Every behavior adapter has enforced compliance", "requires repository test configuration"},
-		{"Contributor changes pass local and remote gates", "requires repository hook and CI configuration"},
+		{"Lint gate wiring is exhaustive and module scoped", "requires repository lint configuration"},
+		{"Behavior adapter wiring is complete", "requires repository test configuration"},
+		{"Contributor gate wiring is complete", "requires repository hook and CI configuration"},
 		{"Invalid explicit configuration is actionable", "requires an intentionally invalid local configuration"},
 		{"Machine-local configuration and binaries stay private", "inspects repository Git policy rather than the public binary"},
 	},
@@ -222,7 +108,8 @@ type Scenario struct {
 
 // Driver is the shared contract implemented by every behavior adapter.
 type Driver interface {
-	Initialize(scenarioContext *godog.ScenarioContext)
+	Bindings() []StepBinding
+	Reset()
 	Close()
 }
 
@@ -266,12 +153,28 @@ func Run(t *testing.T, adapter Adapter, driver Driver) {
 	t.Helper()
 	defer driver.Close()
 
+	bindings := driver.Bindings()
+	if err := Verify(adapter, bindings); err != nil {
+		t.Fatal(err)
+	}
+
 	options := SuiteOptions(adapter)
 	options.TestingT = t
+	initialize := func(scenarioContext *godog.ScenarioContext) {
+		scenarioContext.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+			driver.Reset()
+
+			return ctx, nil
+		})
+
+		for _, binding := range bindings {
+			scenarioContext.Step(binding.Pattern, binding.Handler)
+		}
+	}
 
 	status := godog.TestSuite{
 		Name:                "resource-guard-" + adapter.Name,
-		ScenarioInitializer: driver.Initialize,
+		ScenarioInitializer: initialize,
 		Options:             options,
 	}.Run()
 
@@ -295,21 +198,35 @@ func ValidateScenarioStructure(name string, keywordTypes []string) error {
 	return nil
 }
 
-// ValidateBindings rejects invalid expressions, undefined or ambiguous steps, and unused bindings.
-func ValidateBindings(definitions []StepDefinition, steps []string) []error {
-	compiled := make([]*regexp.Regexp, len(definitions))
+// ValidateHandlers rejects missing and non-function step handlers.
+func ValidateHandlers(bindings []StepBinding) []error {
 	errorsFound := []error{}
 
-	for index, definition := range definitions {
-		expression, err := regexp.Compile(definition.Pattern)
+	for _, binding := range bindings {
+		handler := reflect.ValueOf(binding.Handler)
+		if !handler.IsValid() || handler.Kind() != reflect.Func || handler.IsNil() {
+			errorsFound = append(errorsFound, fmt.Errorf("binding %q requires a nonnil function handler", binding.Pattern))
+		}
+	}
+
+	return errorsFound
+}
+
+// ValidateBindings rejects invalid expressions, invalid handlers, undefined or ambiguous steps, and unused bindings.
+func ValidateBindings(bindings []StepBinding, steps []string) []error {
+	compiled := make([]*regexp.Regexp, len(bindings))
+	errorsFound := ValidateHandlers(bindings)
+
+	for index, binding := range bindings {
+		expression, err := regexp.Compile(binding.Pattern)
 		if err != nil {
-			errorsFound = append(errorsFound, fmt.Errorf("invalid binding %q: %w", definition.Pattern, err))
+			errorsFound = append(errorsFound, fmt.Errorf("invalid binding %q: %w", binding.Pattern, err))
 			continue
 		}
 		compiled[index] = expression
 	}
 
-	used := make([]bool, len(definitions))
+	used := make([]bool, len(bindings))
 
 	for _, step := range steps {
 		matches := []int{}
@@ -332,7 +249,7 @@ func ValidateBindings(definitions []StepDefinition, steps []string) []error {
 
 	for index, wasUsed := range used {
 		if !wasUsed && compiled[index] != nil {
-			errorsFound = append(errorsFound, fmt.Errorf("unused behavior binding %q", definitions[index].Pattern))
+			errorsFound = append(errorsFound, fmt.Errorf("unused behavior binding %q", bindings[index].Pattern))
 		}
 	}
 
@@ -505,7 +422,7 @@ func combineErrors(errorsFound []error) error {
 }
 
 // Verify validates the recursive corpus, bindings, structure, and one adapter policy.
-func Verify(adapter Adapter) error {
+func Verify(adapter Adapter, bindings []StepBinding) error {
 	corpusOptions := &godog.Options{Paths: []string{FeaturePath}, Strict: true}
 	features, err := (godog.TestSuite{Options: corpusOptions}).RetrieveFeatures()
 	if err != nil {
@@ -529,7 +446,7 @@ func Verify(adapter Adapter) error {
 	if inspection.astScenarios == 0 || len(inspection.scenarios) == 0 {
 		inspection.structuralError = append(inspection.structuralError, errors.New("behavior corpus has no scenarios"))
 	}
-	inspection.structuralError = append(inspection.structuralError, ValidateBindings(Definitions, inspection.steps)...)
+	inspection.structuralError = append(inspection.structuralError, ValidateBindings(bindings, inspection.steps)...)
 	inspection.structuralError = append(inspection.structuralError, ValidateExemptions(adapter, inspection.scenarios)...)
 	if runnableScenarios(adapter, inspection.scenarios) == 0 {
 		inspection.structuralError = append(inspection.structuralError, fmt.Errorf("%s adapter runs no scenarios", adapter.Name))

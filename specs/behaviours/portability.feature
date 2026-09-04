@@ -3,7 +3,7 @@ Feature: Portable host evidence
 
   @e2e-exempt
   Scenario: Linux cgroup memory limits host capacity
-    Given Linux reports 16 GiB host memory and a 4 GiB cgroup limit
+    Given Linux host and cgroup memory evidence
     When the Linux evidence is collected
     Then effective memory is 4 GiB
 
