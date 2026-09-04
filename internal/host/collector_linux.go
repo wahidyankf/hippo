@@ -22,6 +22,28 @@ func readOptional(read FileReader, path string) []byte {
 	return value
 }
 
+func linuxMemoryPressure(read FileReader, cgroup string) (*float64, *float64, int) {
+	psiData := readOptional(read, filepath.Join(cgroup, "memory.pressure"))
+	if len(psiData) == 0 {
+		psiData = readOptional(read, "/proc/pressure/memory")
+	}
+
+	pressureLevel := 1
+	psi, err := ParsePSI(string(psiData))
+	if err != nil {
+		return nil, nil, pressureLevel
+	}
+
+	some, full := &psi.SomeAvg10, &psi.FullAvg10
+	if psi.SomeAvg10 >= 25 || psi.FullAvg10 >= 5 {
+		pressureLevel = 4
+	} else if psi.SomeAvg10 >= 10 {
+		pressureLevel = 2
+	}
+
+	return some, full, pressureLevel
+}
+
 // Collect gathers one Linux reading from procfs, cgroup v2, PSI, and statfs.
 func (collector SystemCollector) Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
 	if err := ctx.Err(); err != nil {
@@ -81,22 +103,7 @@ func (collector SystemCollector) Collect(ctx context.Context, previous CPUState,
 	}
 	parallelism = max(1, parallelism)
 
-	psiData := readOptional(read, filepath.Join(cgroup, "memory.pressure"))
-	if len(psiData) == 0 {
-		psiData = readOptional(read, "/proc/pressure/memory")
-	}
-
-	var some, full *float64
-	pressureLevel := 1
-
-	if psi, psiError := ParsePSI(string(psiData)); psiError == nil {
-		some, full = &psi.SomeAvg10, &psi.FullAvg10
-		if psi.SomeAvg10 >= 25 || psi.FullAvg10 >= 5 {
-			pressureLevel = 4
-		} else if psi.SomeAvg10 >= 10 {
-			pressureLevel = 2
-		}
-	}
+	some, full, pressureLevel := linuxMemoryPressure(read, cgroup)
 
 	events := ParseMemoryEvents(string(readOptional(read, filepath.Join(cgroup, "memory.events"))))
 	oom, oomKill := events["oom"], events["oom_kill"]
