@@ -1,4 +1,4 @@
-# Keep resource-guard developer tooling explicit and local to this Go module.
+# Keep hippo developer tooling explicit and local to this Go module.
 version: "2"
 
 formatters:
@@ -59,7 +59,7 @@ linters:
           allow:
             - $gostd
             - github.com/spf13/cobra
-            - github.com/wahidyankf/resource-guard
+            - github.com/wahidyankf/hippo
             - golang.org/x/sys
         test-support:
           files:
@@ -69,7 +69,7 @@ linters:
             - $gostd
             - github.com/cucumber/godog
             - github.com/cucumber/messages/go/v34
-            - github.com/wahidyankf/resource-guard
+            - github.com/wahidyankf/hippo
     goconst:
       # Scenario data should state its inputs instead of hiding them behind production constants.
       ignore-tests: true

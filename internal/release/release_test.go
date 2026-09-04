@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	releaseguard "github.com/wahidyankf/resource-guard/internal/release"
+	releaseguard "github.com/wahidyankf/hippo/internal/release"
 )
 
 func TestRoutedProbeFollowsOnlyBoundedRedirects(t *testing.T) {

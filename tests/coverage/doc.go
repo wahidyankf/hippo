@@ -1,2 +1,2 @@
-// Package main provides the resource-guard coverage threshold helper.
+// Package main provides the hippo coverage threshold helper.
 package main

@@ -13,11 +13,11 @@
 /node_modules/
 /.husky/_/
 
-# Resource Guard build and runtime inputs
+# HIPPO build and runtime inputs
 /.cache/
 /dist/
 /coverage/
-/resource-guard.local.json
+/hippo.local.json
 *.test
 coverage.out
 *.prof

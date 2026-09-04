@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/evidence"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func policySample(at time.Time) policy.Sample {

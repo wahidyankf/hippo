@@ -1,4 +1,4 @@
-# Resource guard behaviours
+# HIPPO behaviours
 
 These scenarios are shared by unit, local integration, and safe compiled-binary E2E adapters. The unit adapter executes every scenario and does not support an exemption tag or inventory. Integration and E2E exemptions are available only for a concrete boundary that cannot execute the scenario safely or faithfully. Every exemption must match the contract's exact approved inventory and name both its boundary and reason, so a new, removed, renamed, incomplete, or unknown exemption fails behavior compliance.
 

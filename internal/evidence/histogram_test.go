@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/wahidyankf/resource-guard/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/evidence"
 )
 
 func TestHistogramRejectsInvalidInputs(t *testing.T) {

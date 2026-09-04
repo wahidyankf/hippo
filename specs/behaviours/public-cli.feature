@@ -1,48 +1,53 @@
-Feature: Public resource guard CLI
-  Any repository can inspect and invoke the standalone guard before its build system starts.
+Feature: Public HIPPO CLI
+  Any repository can inspect and invoke the standalone HIPPO before its build system starts.
 
   Scenario: Version identifies the exact build
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When JSON version is requested
     Then version schema identifies the release and commit
 
   Scenario: JSON status exposes the stable evidence schema
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When JSON status is requested for an existing path
     Then status returns schema version 3 with profile and capability evidence
 
   Scenario: Command discovery uses Cobra help
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When root command help is requested
     Then help lists the public command tree and exits successfully
 
+  Scenario: Help identifies the HIPPO acronym
+    Given the compiled HIPPO binary
+    When root command help is requested
+    Then help expands HIPPO as Host Infrastructure Pressure and Process Orchestrator
+
   Scenario: Release discovery uses grouped help
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When release command help is requested
     Then help lists the release command tree and exits successfully
 
   Scenario: Shell completion is generated on demand
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When Zsh completion is requested
     Then a Zsh completion script is emitted
 
   Scenario: Unknown commands use Cobra diagnostics
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When an unknown command is requested
     Then Cobra reports the command and exits with code 1
 
   Scenario: Invalid explicit configuration is actionable
-    Given an explicit resource guard config with an unknown field
+    Given an explicit HIPPO config with an unknown field
     When JSON status is requested with that config
     Then configuration fails with exit 78
 
   Scenario: Run validates its command boundary
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When run is requested without a command separator
     Then the command fails with a useful validation error
 
   Scenario: Commands without operands reject positional arguments
-    Given the compiled resource guard binary
+    Given the compiled HIPPO binary
     When operand-free commands are requested with positional arguments
     Then every command rejects the unexpected argument
 

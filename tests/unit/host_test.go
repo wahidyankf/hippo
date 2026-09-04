@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/wahidyankf/resource-guard/internal/host"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func TestMacOSMetricParsers(t *testing.T) {
@@ -74,7 +74,7 @@ func TestCPUParsersAndEvidenceRoot(t *testing.T) {
 		t.Fatalf("unexpected empty process CPU %v", value)
 	}
 
-	if root := host.DefaultEvidenceRoot(map[string]string{"RESOURCE_GUARD_ROOT": "/generic/root"}); root != "/generic/root" {
+	if root := host.DefaultEvidenceRoot(map[string]string{"HIPPO_ROOT": "/generic/root"}); root != "/generic/root" {
 		t.Fatalf("unexpected root %q", root)
 	}
 }

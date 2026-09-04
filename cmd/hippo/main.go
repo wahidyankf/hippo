@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/wahidyankf/resource-guard/internal/cli"
+	"github.com/wahidyankf/hippo/internal/cli"
 )
 
 func run() int {

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	resourceconfig "github.com/wahidyankf/resource-guard/internal/config"
-	"github.com/wahidyankf/resource-guard/internal/guard"
-	"github.com/wahidyankf/resource-guard/internal/host"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	resourceconfig "github.com/wahidyankf/hippo/internal/config"
+	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func adaptiveSample(memory, available, diskFree, diskTotal int64, swapState string) policy.Sample {
@@ -105,7 +105,7 @@ func TestAdaptiveProfileSelectionAndThresholds(t *testing.T) { //nolint:cyclop /
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "resource-guard.local.json")
+	path := filepath.Join(t.TempDir(), "hippo.local.json")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -168,16 +168,16 @@ func TestStrictLocalConfiguration(t *testing.T) {
 		}
 	}
 
-	if path, explicit := resourceconfig.Path("cli.json", map[string]string{"RESOURCE_GUARD_CONFIG": "env.json"}); path != "cli.json" || !explicit {
+	if path, explicit := resourceconfig.Path("cli.json", map[string]string{"HIPPO_CONFIG": "env.json"}); path != "cli.json" || !explicit {
 		t.Fatalf("CLI precedence failed: %q %v", path, explicit)
 	}
-	if path, explicit := resourceconfig.Path("", map[string]string{"RESOURCE_GUARD_CONFIG": "env.json"}); path != "env.json" || !explicit {
+	if path, explicit := resourceconfig.Path("", map[string]string{"HIPPO_CONFIG": "env.json"}); path != "env.json" || !explicit {
 		t.Fatalf("environment precedence failed: %q %v", path, explicit)
 	}
-	if path, explicit := resourceconfig.Path("", map[string]string{"RESOURCE_GUARD_DEFAULT_CONFIG": "default.json"}); path != "default.json" || explicit {
+	if path, explicit := resourceconfig.Path("", map[string]string{"HIPPO_DEFAULT_CONFIG": "default.json"}); path != "default.json" || explicit {
 		t.Fatalf("default path failed: %q %v", path, explicit)
 	}
-	if path, explicit := resourceconfig.Path("", map[string]string{}); path != "resource-guard.local.json" || explicit {
+	if path, explicit := resourceconfig.Path("", map[string]string{}); path != "hippo.local.json" || explicit {
 		t.Fatalf("repository-local path failed: %q %v", path, explicit)
 	}
 }

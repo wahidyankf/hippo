@@ -1,6 +1,9 @@
-# Resource Guard Architecture
+# HIPPO Architecture
 
-This document is the canonical as-built C4 model for Resource Guard. It describes the public system boundary, runtime containers, internal responsibilities, and material constraints without prescribing any consuming repository's architecture.
+This document is the canonical as-built C4 model for HIPPO — Host Infrastructure Pressure &
+Process Orchestrator. It describes the public system boundary, runtime containers, internal
+responsibilities, and material constraints without prescribing any consuming repository's
+architecture.
 
 The diagrams use ASCII so they remain readable in terminals and plain-text tooling. Every relationship and constraint also appears in searchable prose.
 
@@ -9,7 +12,7 @@ The diagrams use ASCII so they remain readable in terminals and plain-text tooli
 ```text
 +----------------------+       invokes        +----------------------+
 | Person               | -------------------> | Software system      |
-| Operator/contributor |                      | Resource Guard       |
+| Operator/contributor |                      | HIPPO                |
 +----------------------+                      |                      |
                                               | Admits, supervises,  |
 +----------------------+       invokes        | and sheds local work |
@@ -26,12 +29,12 @@ The diagrams use ASCII so they remain readable in terminals and plain-text tooli
                            +------------------+ +------------------+ +------------------+
 ```
 
-An operator, repository script, Git hook, or CI task invokes Resource Guard before compute-bearing local work. Resource Guard reads normalized host evidence, resolves a safe capacity profile, coordinates eligible work through a shared per-user lease, and supervises only the child process group it starts. Callers may select environment variables that receive resolved concurrency and may connect standard streams without teaching Resource Guard about a build ecosystem. Release monitoring may probe explicit local and routed health endpoints supplied by the caller. Resource Guard is repository-independent and does not know consumer project layouts, commands, or infrastructure defaults.
+An operator, repository script, Git hook, or CI task invokes HIPPO before compute-bearing local work. HIPPO reads normalized host evidence, resolves a safe capacity profile, coordinates eligible work through a shared per-user lease, and supervises only the child process group it starts. Callers may select environment variables that receive resolved concurrency and may connect standard streams without teaching HIPPO about a build ecosystem. Release monitoring may probe explicit local and routed health endpoints supplied by the caller. HIPPO is repository-independent and does not know consumer project layouts, commands, or infrastructure defaults.
 
 ## Container View
 
 ```text
-                                      Resource Guard system
+                                      HIPPO system
   +--------------------------------------------------------------------------------+
   |                                                                                |
   |  +------------------+    builds/executes    +-------------------------------+  |
@@ -62,7 +65,7 @@ An operator, repository script, Git hook, or CI task invokes Resource Guard befo
 
 The POSIX shell bootstrap hashes the Go sources and module metadata, serializes compilation, retains a bounded platform cache, and then replaces itself with the compiled executable. Tagged-release consumers may invoke a verified binary directly and bypass this source-build container.
 
-The Go CLI is the only long-running Resource Guard execution container. It reads an optional machine-local JSON configuration, collects host and process evidence through operating-system interfaces, and stores bounded lease and evidence records in a shared per-user state root. Resource Guard instances launched by different repositories coordinate through that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
+The Go CLI is the only long-running HIPPO execution container. It reads an optional machine-local JSON configuration, collects host and process evidence through operating-system interfaces, and stores bounded lease and evidence records in a shared per-user state root. HIPPO instances launched by different repositories coordinate through that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
 
 ## Component View
 
@@ -118,7 +121,7 @@ Caller     CLI/config     Host/policy     Lease store     Child group
   |<------------|              |               |               |
 ```
 
-Admission failures return before child creation. An admitted child inherits the resolved profile, canonical concurrency, caller-selected concurrency mappings, and the caller's standard streams. Resource Guard has no built-in knowledge of ecosystem-specific environment variables. Cancellation, collector failure, evidence failure, or resource pressure terminates and reaps the owned child group before evidence finalization and lease release. Resource Guard preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity or lease pressure (`75`), and configuration or strict-profile replanning (`78`).
+Admission failures return before child creation. An admitted child inherits the resolved profile, canonical concurrency, caller-selected concurrency mappings, and the caller's standard streams. HIPPO has no built-in knowledge of ecosystem-specific environment variables. Cancellation, collector failure, evidence failure, or resource pressure terminates and reaps the owned child group before evidence finalization and lease release. HIPPO preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity or lease pressure (`75`), and configuration or strict-profile replanning (`78`).
 
 ## Architectural Constraints
 
@@ -126,7 +129,7 @@ Admission failures return before child creation. An admitted child inherits the 
 - Supported runtime collectors normalize macOS and Linux evidence, including effective cgroup limits where available, without assuming one machine shape.
 - Machine-local configuration may tighten policy but cannot weaken compiled safety floors.
 - Heavy work coordinates through a shared per-user lease. Long-lived services retain independent inheritable sessions and do not monopolize the heavy-work lease.
-- Resource Guard signals only the process group it creates. It never sheds unrelated user, repository, proxy, or production processes.
+- HIPPO signals only the process group it creates. It never sheds unrelated user, repository, proxy, or production processes.
 - Child stdin, stdout, and stderr remain caller-owned and distinct from guard diagnostics. Consumers opt into tool concurrency mappings by valid environment name; no build system is compiled into the core.
 - One shared state root admits at most 20 live evidence streams across all consuming repositories. Each live stream keeps five rotating 400 KiB raw chunks, for about 2 MiB per session and about 40 MiB at the maximum live count.
 - Completed raw chunks and summaries share a 50 MiB inactive cap. Raw chunks expire after seven days, summaries after thirty days, and active streams are protected from cleanup by process-owned markers.

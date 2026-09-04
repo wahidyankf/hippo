@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/host"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func TestLinuxCollectorUsesCgroupCapacityAndAllowsNoSwap(t *testing.T) {

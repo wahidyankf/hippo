@@ -1,4 +1,4 @@
-Feature: Resource guard quality gates
+Feature: HIPPO quality gates
   Repository Go diagnostics stay strict and reproducible through the standalone module boundary.
 
   @e2e-exempt

@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func readOptional(read FileReader, path string) []byte {

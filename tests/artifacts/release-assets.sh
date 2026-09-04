@@ -12,7 +12,7 @@ version=$2
 # A release is complete only when all supported platform archives and one
 # four-entry checksum inventory are present and internally consistent.
 for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
-	test -f "$directory/resource-guard_${version}_${target}.tar.gz"
+	test -f "$directory/hippo_${version}_${target}.tar.gz"
 done
 test -f "$directory/checksums.txt"
 test "$(wc -l <"$directory/checksums.txt" | tr -d ' ')" -eq 4

@@ -1,8 +1,8 @@
 {
-  "name": "resource-guard-contributor-tools",
+  "name": "hippo-contributor-tools",
   "version": "0.0.0",
   "private": true,
-  "description": "Contributor-only quality tooling for resource-guard.",
+  "description": "Contributor-only quality tooling for hippo.",
   "engines": {
     "node": ">=24"
   },

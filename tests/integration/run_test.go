@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 type integrationCollector struct {
@@ -125,7 +125,7 @@ func TestInheritedGuardRunsDirectlyAndKeepsPortLease(t *testing.T) {
 		Command:       "/bin/sh",
 		Arguments:     []string{"-c", "exit 0"},
 		TaskClass:     "ephemeral",
-		Environment:   []string{"RESOURCE_GUARD_SESSION=" + session.Token},
+		Environment:   []string{"HIPPO_SESSION=" + session.Token},
 		EvidenceRoot:  root,
 		DiskPath:      ".",
 		LeasePort:     45_123,
@@ -185,7 +185,7 @@ func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 		FallbackChain:    []string{"balanced", "constrained", "minimal"},
 		Concurrency:      1,
 	}
-	command := `[ "$RESOURCE_GUARD_PROFILE" = minimal ] && [ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 5 ]`
+	command := `[ "$HIPPO_PROFILE" = minimal ] && [ "$HIPPO_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 5 ]`
 	environment := []string{"PATH=" + os.Getenv("PATH"), "CALLER_WORKERS=5"}
 
 	code, err := guard.Run(context.Background(), guard.RunConfig{
@@ -216,7 +216,7 @@ func TestGuardExportsChildSessionAndBinary(t *testing.T) {
 		integrationSample(base.Add(time.Millisecond)),
 		integrationSample(base.Add(2 * time.Millisecond)),
 	}}
-	command := `[ -n "$RESOURCE_GUARD_SESSION" ] && [ -x "$RESOURCE_GUARD_BIN" ]`
+	command := `[ -n "$HIPPO_SESSION" ] && [ -x "$HIPPO_BIN" ]`
 
 	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",

@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 const schemaVersion = 1
@@ -315,13 +315,13 @@ func Path(cliPath string, environment map[string]string) (string, bool) {
 		return cliPath, true
 	}
 
-	if path := environment["RESOURCE_GUARD_CONFIG"]; path != "" {
+	if path := environment["HIPPO_CONFIG"]; path != "" {
 		return path, true
 	}
 
-	if path := environment["RESOURCE_GUARD_DEFAULT_CONFIG"]; path != "" {
+	if path := environment["HIPPO_DEFAULT_CONFIG"]; path != "" {
 		return path, false
 	}
 
-	return "resource-guard.local.json", false
+	return "hippo.local.json", false
 }

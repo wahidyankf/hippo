@@ -1,6 +1,14 @@
-# Resource Guard
+# HIPPO
 
-Resource Guard is a standalone Go CLI that admits, supervises, and sheds local development work from host resource evidence. It supports macOS and Linux, coordinates heavy work across repositories through a shared per-user lease, and only signals the child process group it created.
+**HIPPO** — **H**ost **I**nfrastructure **P**ressure & **P**rocess **O**rchestrator — is a standalone Go CLI that admits, supervises, and sheds local development work from host resource evidence. It supports macOS and Linux, coordinates heavy work across repositories through a shared per-user lease, and only signals the child process group it created.
+
+## v0.3.0 identity cutover
+
+Version `v0.3.0` is a hard rename from Resource Guard to HIPPO. The repository, Go module,
+executable, release archives, environment protocol, local configuration, cache, and state namespace
+all use `hippo` or `HIPPO_*`; the former names are not aliases. Commands, flags, exit codes, JSON
+schemas, and supported evidence readers remain unchanged. Existing pre-v0.3.0 releases stay immutable,
+and HIPPO does not delete their local cache, configuration, or evidence.
 
 ## Install
 
@@ -9,54 +17,54 @@ Download a tagged archive for `darwin` or `linux` on `amd64` or `arm64`, then ve
 Source users can run the tracked bootstrap, which builds and retains a bounded local cache:
 
 ```sh
-./resource-guard version --json
-./resource-guard status --json --disk-path .
-./resource-guard run --class ephemeral --disk-path . -- <command>
+./hippo version --json
+./hippo status --json --disk-path .
+./hippo run --class ephemeral --disk-path . -- <command>
 ```
 
 ## Command-line interface
 
-Run `./resource-guard --help` to discover the `version`, `status`, `monitor`, `run`, and `release` commands. Release checks, summary assessment, and overlap monitoring are grouped under `release`. Guarded child commands must follow an explicit `--` boundary so their arguments are never interpreted as resource-guard flags.
+Run `./hippo --help` to discover the `version`, `status`, `monitor`, `run`, and `release` commands. Release checks, summary assessment, and overlap monitoring are grouped under `release`. Guarded child commands must follow an explicit `--` boundary so their arguments are never interpreted as hippo flags.
 
-Resource Guard always exports `RESOURCE_GUARD_PROFILE` and `RESOURCE_GUARD_CONCURRENCY` to an admitted child. A consumer can map the resolved concurrency into any tool-specific positive-integer variable without coupling Resource Guard to that tool:
+HIPPO always exports `HIPPO_PROFILE` and `HIPPO_CONCURRENCY` to an admitted child. A consumer can map the resolved concurrency into any tool-specific positive-integer variable without coupling HIPPO to that tool:
 
 ```sh
-./resource-guard run \
+./hippo run \
   --concurrency-env BUILD_WORKERS \
   --concurrency-env TEST_JOBS \
   -- make test
 ```
 
-`--concurrency-env` is repeatable. Missing mapped variables receive resolved concurrency, existing caller values remain unchanged during ordinary admission, and degraded admission forces every selected mapping to `1`. Names must be POSIX environment identifiers and cannot be Resource Guard's protocol variables.
+`--concurrency-env` is repeatable. Missing mapped variables receive resolved concurrency, existing caller values remain unchanged during ordinary admission, and degraded admission forces every selected mapping to `1`. Names must be POSIX environment identifiers and cannot be HIPPO's protocol variables.
 
 Cobra-powered completion scripts are generated on demand for Bash, Fish, PowerShell, and Zsh:
 
 ```sh
-./resource-guard completion zsh
+./hippo completion zsh
 ```
 
 ## What a running guard looks like
 
-Resource Guard is not a full-screen TUI. A healthy `run` is deliberately quiet: the child keeps its normal stdin, stdout, and stderr, so existing scripts and CI logs still look familiar.
+HIPPO is not a full-screen TUI. A healthy `run` is deliberately quiet: the child keeps its normal stdin, stdout, and stderr, so existing scripts and CI logs still look familiar.
 
 ```console
-$ ./resource-guard status --disk-path .
+$ ./hippo status --disk-path .
 state=normal reason=normal profile=balanced concurrency=7 swap=idle availableGiB=12.00 diskFreeGiB=40.00 cpu=18.4%
 
-$ ./resource-guard run --class ephemeral --disk-path . -- sh -c 'echo build-started; echo build-finished'
+$ ./hippo run --class ephemeral --disk-path . -- sh -c 'echo build-started; echo build-finished'
 build-started
 build-finished
 $ echo $?
 0
 
-$ printf 'hello\n' | ./resource-guard run -- sh -c 'read value; printf "%s-world\n" "$value"' | tr a-z A-Z
+$ printf 'hello\n' | ./hippo run -- sh -c 'read value; printf "%s-world\n" "$value"' | tr a-z A-Z
 HELLO-WORLD
 ```
 
 Admission can wait silently while the configured sample window fills. The guard writes a message to stderr only when an operator needs to know about a degraded admission, deferral, storage block, or pressure shed. `monitor` prints the initial state and then only state/profile transitions:
 
 ```console
-$ ./resource-guard monitor --interval 1s --disk-path .
+$ ./hippo monitor --interval 1s --disk-path .
 2026-01-02T03:04:05Z state=normal reason=normal profile=balanced swap=idle
 2026-01-02T03:05:10Z state=warning reason=memory-psi profile=constrained swap=idle
 ^C
@@ -69,7 +77,7 @@ Cancellation is propagated through the caller-owned context. For an admitted com
 For a long-running pane, the same plain-text transcript can be captured without machine-specific tooling in the repository:
 
 ```sh
-tmux capture-pane -p -t resource-guard:0.0 -S -200
+tmux capture-pane -p -t hippo:0.0 -S -200
 ```
 
 ## Resource policy
@@ -80,11 +88,11 @@ Exit `73` requires storage cleanup. Exit `75` is retryable capacity pressure or 
 
 ## Configuration and state
 
-Copy [`resource-guard.local.json.example`](resource-guard.local.json.example) to ignored `resource-guard.local.json`. `--config` overrides `RESOURCE_GUARD_CONFIG`, which overrides the bootstrap default. Local configuration can make policy stricter but cannot weaken compiled floors.
+Copy [`hippo.local.json.example`](hippo.local.json.example) to ignored `hippo.local.json`. `--config` overrides `HIPPO_CONFIG`, which overrides the bootstrap default. Local configuration can make policy stricter but cannot weaken compiled floors.
 
-`RESOURCE_GUARD_ROOT` overrides the shared evidence and lease root. Defaults are `~/Library/Application Support/resource-guard` on macOS and `${XDG_STATE_HOME:-$HOME/.local/state}/resource-guard` on Linux. All repositories using the same root coordinate through the same leases and evidence budget. At most 20 evidence streams may be live at once; each stream retains five rotating 400 KiB raw chunks (about 2 MiB total) while its summary covers the complete session. Inactive evidence is capped at 50 MiB, raw samples expire after seven days, and summaries expire after thirty days. Evidence never records command arguments, origins, paths, credentials, or user data.
+`HIPPO_ROOT` overrides the shared evidence and lease root. Defaults are `~/Library/Application Support/hippo` on macOS and `${XDG_STATE_HOME:-$HOME/.local/state}/hippo` on Linux. All repositories using the same root coordinate through the same leases and evidence budget. At most 20 evidence streams may be live at once; each stream retains five rotating 400 KiB raw chunks (about 2 MiB total) while its summary covers the complete session. Inactive evidence is capped at 50 MiB, raw samples expire after seven days, and summaries expire after thirty days. Evidence never records command arguments, origins, paths, credentials, or user data.
 
-Runtime integration uses `RESOURCE_GUARD_ROOT`, `RESOURCE_GUARD_SESSION`, `RESOURCE_GUARD_BIN`, `RESOURCE_GUARD_PROFILE`, `RESOURCE_GUARD_CONCURRENCY`, `RESOURCE_GUARD_BUILD_CACHE`, `RESOURCE_GUARD_HEALTH_URL`, and `RESOURCE_GUARD_ROUTED_ORIGIN`.
+Runtime integration uses `HIPPO_ROOT`, `HIPPO_SESSION`, `HIPPO_BIN`, `HIPPO_PROFILE`, `HIPPO_CONCURRENCY`, `HIPPO_BUILD_CACHE`, `HIPPO_HEALTH_URL`, and `HIPPO_ROUTED_ORIGIN`.
 
 ## JSON and evidence formats
 
@@ -191,7 +199,7 @@ The active marker and lock are lifecycle internals, not supported evidence-reade
 Strict release monitoring requires explicit local health and routed endpoints:
 
 ```sh
-./resource-guard release monitor \
+./hippo release monitor \
   --output samples.jsonl \
   --summary summary.json \
   --deployment-root /path/to/deployment \
@@ -206,22 +214,22 @@ Either release destination may use the Unix `-` convention, but not both in one 
 
 ```sh
 # Stream raw JSONL; retain the final summary as a file.
-./resource-guard release monitor \
+./hippo release monitor \
   --output - --summary summary.json \
   --deployment-root /path/to/deployment \
   --health-url http://127.0.0.1:8080/health/ready \
   --routed-origin https://service.example | jq -c .
 
 # Retain rotating raw evidence; stream the final summary for assessment.
-./resource-guard release monitor \
+./hippo release monitor \
   --output samples.jsonl --summary - \
   --deployment-root /path/to/deployment \
   --health-url http://127.0.0.1:8080/health/ready \
   --routed-origin https://service.example |
-  ./resource-guard release assess --summary -
+  ./hippo release assess --summary -
 ```
 
-File output remains exclusive, private, rotating, and retention-managed. Standard output is caller-owned: Resource Guard neither closes nor retains it, applies normal pipe backpressure, and returns a failure if the downstream writer fails. Diagnostics remain on stderr. Raw JSONL and the final summary cannot both target stdout because their schemas must never be mixed.
+File output remains exclusive, private, rotating, and retention-managed. Standard output is caller-owned: HIPPO neither closes nor retains it, applies normal pipe backpressure, and returns a failure if the downstream writer fails. Diagnostics remain on stderr. Raw JSONL and the final summary cannot both target stdout because their schemas must never be mixed.
 
 New summaries use schema 5 with generic health fields. Assessment remains compatible with retained schema 2–4 summaries.
 
@@ -247,4 +255,4 @@ Release artifacts are built with `./scripts/build-release.sh <version> <commit> 
 
 ## License
 
-Resource Guard is available under the [MIT License](LICENSE).
+HIPPO is available under the [MIT License](LICENSE).

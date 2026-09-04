@@ -8,9 +8,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
-	"github.com/wahidyankf/resource-guard/internal/policy"
-	releaseguard "github.com/wahidyankf/resource-guard/internal/release"
+	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/policy"
+	releaseguard "github.com/wahidyankf/hippo/internal/release"
 )
 
 func (application Application) releaseCheck(ctx context.Context, options releaseCheckOptions) (int, error) {

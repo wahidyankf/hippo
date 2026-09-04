@@ -72,9 +72,9 @@ type releaseMonitorOptions struct {
 
 func (application Application) rootCommand(execution *commandExecution) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "resource-guard",
+		Use:   "hippo",
 		Short: "Protect local development work from resource pressure",
-		Long:  "Resource Guard admits, supervises, and sheds local development work from host resource evidence.",
+		Long:  "HIPPO — Host Infrastructure Pressure & Process Orchestrator — admits, supervises, and sheds local development work from host resource evidence.",
 	}
 
 	command.AddCommand(
@@ -246,8 +246,8 @@ func (application Application) releaseAssessCommand(execution *commandExecution)
 func (application Application) releaseMonitorCommand(execution *commandExecution) *cobra.Command {
 	environment := environmentMap(application.Environment)
 	options := releaseMonitorOptions{
-		healthURL:    environment["RESOURCE_GUARD_HEALTH_URL"],
-		routedOrigin: environment["RESOURCE_GUARD_ROUTED_ORIGIN"],
+		healthURL:    environment["HIPPO_HEALTH_URL"],
+		routedOrigin: environment["HIPPO_ROUTED_ORIGIN"],
 	}
 	command := &cobra.Command{
 		Use:   "monitor",

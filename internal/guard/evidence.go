@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/evidence"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 // EvidenceWriter appends bounded private samples and produces one lifetime summary.

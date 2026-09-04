@@ -36,7 +36,7 @@ Feature: Guarded process execution
   Scenario: Canonical concurrency remains ecosystem neutral
     Given an admitted command without consumer concurrency mappings
     When the guarded child inspects its environment
-    Then only canonical resource guard concurrency variables are added
+    Then only canonical HIPPO concurrency variables are added
 
   @e2e-exempt
   Scenario: Consumers select their concurrency environment mappings

@@ -1,4 +1,4 @@
-Feature: Resource guard build artifacts
+Feature: HIPPO build artifacts
   Compiled development artifacts stay bounded and outside repository history.
 
   @e2e-exempt

@@ -1,4 +1,4 @@
-module github.com/wahidyankf/resource-guard
+module github.com/wahidyankf/hippo
 
 go 1.26.1
 

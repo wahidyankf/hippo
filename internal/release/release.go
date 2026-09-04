@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/evidence"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 const maximumProbeLatencyMs = 3000.0

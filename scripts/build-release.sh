@@ -33,7 +33,7 @@ esac
 
 mkdir -p "$output_dir"
 output_dir=$(CDPATH= cd -- "$output_dir" && pwd)
-work=$(mktemp -d "${TMPDIR:-/tmp}/resource-guard-release.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/hippo-release.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 
 # Build the complete supported matrix from one commit with CGO disabled, which
@@ -41,16 +41,16 @@ trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
 	goos=${target%_*}
 	goarch=${target#*_}
-	binary="$work/resource-guard"
-	archive="resource-guard_${version}_${goos}_${goarch}.tar.gz"
+	binary="$work/hippo"
+	archive="hippo_${version}_${goos}_${goarch}.tar.gz"
 	(
 		cd "$root"
 		CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -p=1 -trimpath \
-			-ldflags "-s -w -X github.com/wahidyankf/resource-guard/internal/cli.Version=$version -X github.com/wahidyankf/resource-guard/internal/cli.Commit=$commit" \
-			-o "$binary" ./cmd/resource-guard
+			-ldflags "-s -w -X github.com/wahidyankf/hippo/internal/cli.Version=$version -X github.com/wahidyankf/hippo/internal/cli.Commit=$commit" \
+			-o "$binary" ./cmd/hippo
 	)
 	chmod 755 "$binary"
-	tar -C "$work" -czf "$output_dir/$archive" resource-guard
+	tar -C "$work" -czf "$output_dir/$archive" hippo
 done
 
 # Publish one checksum inventory covering exactly the archives above. The
@@ -58,8 +58,8 @@ done
 (
 	cd "$output_dir"
 	if command -v sha256sum >/dev/null 2>&1; then
-		sha256sum resource-guard_*.tar.gz >checksums.txt
+		sha256sum hippo_*.tar.gz >checksums.txt
 	else
-		shasum -a 256 resource-guard_*.tar.gz >checksums.txt
+		shasum -a 256 hippo_*.tar.gz >checksums.txt
 	fi
 )

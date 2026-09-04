@@ -3,8 +3,8 @@ package e2e_test
 import (
 	"testing"
 
-	"github.com/wahidyankf/resource-guard/tests/contract"
-	"github.com/wahidyankf/resource-guard/tests/support"
+	"github.com/wahidyankf/hippo/tests/contract"
+	"github.com/wahidyankf/hippo/tests/support"
 )
 
 func TestE2EBehaviours(t *testing.T) {

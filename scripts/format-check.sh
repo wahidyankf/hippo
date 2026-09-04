@@ -8,6 +8,6 @@ cd "$root"
 # worktree. Shell entrypoints are listed explicitly so generated Husky shims are
 # never treated as repository-owned source.
 go tool golangci-lint fmt --diff
-go tool shfmt -d resource-guard scripts tests \
+go tool shfmt -d hippo scripts tests \
 	.husky/commit-msg .husky/pre-commit .husky/pre-push
 npm exec -- prettier --check --ignore-unknown .

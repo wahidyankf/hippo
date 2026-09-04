@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/policy"
 	"golang.org/x/sys/unix"
 )
 

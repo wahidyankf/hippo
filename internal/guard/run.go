@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/evidence"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 const (
@@ -101,7 +101,7 @@ func validEnvironmentName(name string) bool {
 
 func reservedConcurrencyEnvironment(name string) bool {
 	switch name {
-	case "RESOURCE_GUARD_BIN", "RESOURCE_GUARD_CONCURRENCY", "RESOURCE_GUARD_PROFILE", "RESOURCE_GUARD_SESSION":
+	case "HIPPO_BIN", "HIPPO_CONCURRENCY", "HIPPO_PROFILE", "HIPPO_SESSION":
 		return true
 	default:
 		return false
@@ -134,8 +134,8 @@ func resolvedEnvironment(environment []string, resolution policy.Resolution, for
 	}
 
 	concurrency := strconv.Itoa(resolution.Concurrency)
-	environment = withEnvironment(environment, "RESOURCE_GUARD_PROFILE", resolution.ResolvedProfile)
-	environment = withEnvironment(environment, "RESOURCE_GUARD_CONCURRENCY", concurrency)
+	environment = withEnvironment(environment, "HIPPO_PROFILE", resolution.ResolvedProfile)
+	environment = withEnvironment(environment, "HIPPO_CONCURRENCY", concurrency)
 	for _, name := range names {
 		if forceConcurrency {
 			environment = withEnvironment(environment, name, concurrency)
@@ -296,7 +296,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	session, err := AcquireSession(
 		ctx,
 		config.EvidenceRoot,
-		environmentValue(config.Environment, "RESOURCE_GUARD_SESSION"),
+		environmentValue(config.Environment, "HIPPO_SESSION"),
 		config.TaskClass,
 		config.Policy.LeaseWait,
 	)
@@ -306,7 +306,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	if session == nil {
 		_, _ = fmt.Fprintf(
 			config.Stderr,
-			"Resource guard deferred task: %s; it must exit before this work is admitted.\n",
+			"HIPPO deferred task: %s; it must exit before this work is admitted.\n",
 			DescribeHeavyLease(config.EvidenceRoot),
 		)
 
@@ -324,7 +324,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	if config.LeasePort != 0 {
 		root := config.PortLeaseRoot
 		if root == "" {
-			root = filepath.Join(os.TempDir(), "resource-guard-port-leases")
+			root = filepath.Join(os.TempDir(), "hippo-port-leases")
 		}
 
 		portLease, err = AcquirePortLease(root, config.LeasePort, config.LeaseOwner, config.LeaseMinimum, config.LeaseMaximum)
@@ -398,7 +398,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		assessment := policy.ResourceAssessment(samples, config.Policy)
 		if assessment.StorageBlocked {
 			outcome = "storage-blocked"
-			_, _ = fmt.Fprintf(config.Stderr, "Resource guard blocked task: %s; storage inspection or cleanup is required.\n", assessment.Reason)
+			_, _ = fmt.Fprintf(config.Stderr, "HIPPO blocked task: %s; storage inspection or cleanup is required.\n", assessment.Reason)
 
 			return StorageBlockedExitCode, nil
 		}
@@ -415,7 +415,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			config.Resolution.Concurrency = 1
 			config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true, config.ConcurrencyEnvironment)
 			writer.SetContext(config.Resolution, config.ConfigHash)
-			_, _ = fmt.Fprintln(config.Stderr, "Resource guard admitting ephemeral child under stable macOS warning pressure with concurrency 1.")
+			_, _ = fmt.Fprintln(config.Stderr, "HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1.")
 
 			break
 		}
@@ -430,19 +430,19 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 
 	if !admitted {
-		_, _ = fmt.Fprintln(config.Stderr, "Resource guard deferred task: safe admission was not reached.")
+		_, _ = fmt.Fprintln(config.Stderr, "HIPPO deferred task: safe admission was not reached.")
 
 		return CapacityDeferredExitCode, nil
 	}
 
-	environment := withEnvironment(config.Environment, "RESOURCE_GUARD_SESSION", session.Token)
+	environment := withEnvironment(config.Environment, "HIPPO_SESSION", session.Token)
 	executable, lookupError := exec.LookPath(config.Command)
 	if lookupError != nil {
 		return 1, lookupError
 	}
 
 	guardPath := executableGuardPath()
-	environment = withEnvironment(environment, "RESOURCE_GUARD_BIN", guardPath)
+	environment = withEnvironment(environment, "HIPPO_BIN", guardPath)
 	command := exec.Command(executable, config.Arguments...)
 	command.Dir = config.WorkingDirectory
 	command.Env = environment
@@ -539,7 +539,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					outcome = "pressure-shed"
 				}
 
-				_, _ = fmt.Fprintf(config.Stderr, "Resource guard shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
+				_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
 				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
 
 				return shedCode, stopError

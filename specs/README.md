@@ -1,6 +1,6 @@
-# Resource Guard Specifications
+# HIPPO Specifications
 
-This tree contains the canonical, implementation-independent description of Resource Guard's current architecture and executable behavior.
+This tree contains the canonical, implementation-independent description of HIPPO's current architecture and executable behavior.
 
 ## Directory Map
 

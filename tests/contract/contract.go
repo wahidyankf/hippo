@@ -179,7 +179,7 @@ func Run(t *testing.T, adapter Adapter, driver Driver) {
 	}
 
 	status := godog.TestSuite{
-		Name:                "resource-guard-" + adapter.Name,
+		Name:                "hippo-" + adapter.Name,
 		ScenarioInitializer: initialize,
 		Options:             options,
 	}.Run()

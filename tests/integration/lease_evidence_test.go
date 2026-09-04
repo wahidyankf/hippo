@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/evidence"
-	"github.com/wahidyankf/resource-guard/internal/guard"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func marshalJSON(t *testing.T, value any) []byte {

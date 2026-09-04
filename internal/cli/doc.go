@@ -1,2 +1,2 @@
-// Package cli implements resource-guard command parsing and output.
+// Package cli implements hippo command parsing and output.
 package cli

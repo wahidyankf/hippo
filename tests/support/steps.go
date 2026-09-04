@@ -3,7 +3,7 @@ package support
 import (
 	"slices"
 
-	"github.com/wahidyankf/resource-guard/tests/contract"
+	"github.com/wahidyankf/hippo/tests/contract"
 )
 
 var _ contract.Driver = (*Driver)(nil)
@@ -74,7 +74,7 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^an admitted command without consumer concurrency mappings$`, driver.admittedWithoutConcurrencyMappings),
 		step(`^an admitted command with explicit consumer concurrency mappings$`, driver.admittedWithConcurrencyMappings),
 		step(`^the guarded child inspects its environment$`, driver.inspectGuardedEnvironment),
-		step(`^only canonical resource guard concurrency variables are added$`, driver.requireCanonicalConcurrencyOnly),
+		step(`^only canonical HIPPO concurrency variables are added$`, driver.requireCanonicalConcurrencyOnly),
 		step(`^missing mappings receive resolved concurrency and caller values remain unchanged$`, driver.requireMappedConcurrency),
 		step(`^invalid and reserved consumer concurrency mappings$`, driver.invalidConcurrencyMappings),
 		step(`^each mapped guarded command is requested$`, driver.requestInvalidConcurrencyMappings),
@@ -114,13 +114,14 @@ func (driver *Driver) evidenceBindings() []contract.StepBinding {
 
 func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 	return []contract.StepBinding{
-		step(`^the compiled resource guard binary$`, driver.compiledBinary),
+		step(`^the compiled HIPPO binary$`, driver.compiledBinary),
 		step(`^JSON version is requested$`, driver.jsonVersion),
 		step(`^version schema identifies the release and commit$`, driver.requireVersion),
 		step(`^JSON status is requested for an existing path$`, driver.jsonStatus),
 		step(`^status returns schema version 3 with profile and capability evidence$`, driver.requireStatus),
 		step(`^root command help is requested$`, driver.rootHelp),
 		step(`^help lists the public command tree and exits successfully$`, driver.requireHelp),
+		step(`^help expands HIPPO as Host Infrastructure Pressure and Process Orchestrator$`, driver.requireHIPPOExpansion),
 		step(`^release command help is requested$`, driver.releaseHelp),
 		step(`^help lists the release command tree and exits successfully$`, driver.requireReleaseHelp),
 		step(`^Zsh completion is requested$`, driver.zshCompletion),
@@ -153,7 +154,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^release monitoring writes its first sample$`, driver.completeReleaseMonitor),
 		step(`^monitoring fails without closing the caller-owned stream$`, driver.requireStreamFailure),
 		step(`^the command rejects a missing generic health URL$`, driver.requireMissingHealthURL),
-		step(`^an explicit resource guard config with an unknown field$`, driver.invalidExplicitConfig),
+		step(`^an explicit HIPPO config with an unknown field$`, driver.invalidExplicitConfig),
 		step(`^JSON status is requested with that config$`, driver.statusWithConfig),
 		step(`^configuration fails with exit 78$`, driver.requireConfigExit),
 	}

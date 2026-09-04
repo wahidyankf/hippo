@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
-	resourceconfig "github.com/wahidyankf/resource-guard/internal/config"
-	"github.com/wahidyankf/resource-guard/internal/host"
-	"github.com/wahidyankf/resource-guard/internal/policy"
-	releaseguard "github.com/wahidyankf/resource-guard/internal/release"
+	resourceconfig "github.com/wahidyankf/hippo/internal/config"
+	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/policy"
+	releaseguard "github.com/wahidyankf/hippo/internal/release"
 )
 
 const unavailableValue = "unavailable"
@@ -102,7 +102,7 @@ func executeHandler(execution *commandExecution, handler func() (int, error)) er
 	return err
 }
 
-// Run executes one resource-guard command and returns its process exit code.
+// Run executes one hippo command and returns its process exit code.
 func (application Application) Run(ctx context.Context, arguments []string) (int, error) {
 	application = application.defaults()
 	execution := &commandExecution{}

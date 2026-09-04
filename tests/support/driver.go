@@ -17,13 +17,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/cli"
-	"github.com/wahidyankf/resource-guard/internal/evidence"
-	"github.com/wahidyankf/resource-guard/internal/guard"
-	"github.com/wahidyankf/resource-guard/internal/host"
-	"github.com/wahidyankf/resource-guard/internal/policy"
-	releaseguard "github.com/wahidyankf/resource-guard/internal/release"
-	"github.com/wahidyankf/resource-guard/tests/contract"
+	"github.com/wahidyankf/hippo/internal/cli"
+	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/policy"
+	releaseguard "github.com/wahidyankf/hippo/internal/release"
+	"github.com/wahidyankf/hippo/tests/contract"
 )
 
 const (
@@ -199,7 +199,7 @@ func (driver *Driver) Reset() {
 	*driver = Driver{mode: mode}
 
 	if mode == contract.E2E {
-		driver.binary = os.Getenv("RESOURCE_GUARD_BIN")
+		driver.binary = os.Getenv("HIPPO_BIN")
 	}
 }
 
@@ -390,7 +390,7 @@ func (driver *Driver) requireReason(reason string) error {
 }
 
 func (driver *Driver) temporaryRoot() (string, error) {
-	directory, err := os.MkdirTemp("", "resource-guard-lease-")
+	directory, err := os.MkdirTemp("", "hippo-lease-")
 	if err != nil {
 		return "", err
 	}
@@ -490,10 +490,10 @@ func (driver *Driver) inspectGuardedEnvironment() error {
 		"--",
 		shellPath,
 		"-c",
-		`printf '%s:%s:%s:%s:%s:%s\n' "$RESOURCE_GUARD_PROFILE" "$RESOURCE_GUARD_CONCURRENCY" "${TOOL_WORKERS-unset}" "${CALLER_WORKERS-unset}" "${NX_PARALLEL-unset}" "${GOMAXPROCS-unset}"`,
+		`printf '%s:%s:%s:%s:%s:%s\n' "$HIPPO_PROFILE" "$HIPPO_CONCURRENCY" "${TOOL_WORKERS-unset}" "${CALLER_WORKERS-unset}" "${NX_PARALLEL-unset}" "${GOMAXPROCS-unset}"`,
 	)
 	environment := append([]string{}, driver.childEnvironment...)
-	environment = append(environment, "RESOURCE_GUARD_ROOT="+driver.leaseRoot)
+	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
 	code, err := (cli.Application{
 		Stdout:      stdout,
 		Stderr:      stderr,
@@ -533,7 +533,7 @@ func (driver *Driver) requestInvalidConcurrencyMappings() {
 	marker := filepath.Join(driver.leaseRoot, "child-started")
 	driver.invalidMappingsRejected = true
 
-	for _, name := range []string{"9INVALID", "RESOURCE_GUARD_SESSION"} {
+	for _, name := range []string{"9INVALID", "HIPPO_SESSION"} {
 		code, err := guard.Run(context.Background(), guard.RunConfig{
 			Command:                shellPath,
 			Arguments:              []string{"-c", `printf started > "$CHILD_MARKER"`},
@@ -584,7 +584,7 @@ func (driver *Driver) admittedGuardedStreams() error {
 func (driver *Driver) copyGuardedStreams() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	environment := append([]string{}, driver.childEnvironment...)
-	environment = append(environment, "RESOURCE_GUARD_ROOT="+driver.leaseRoot)
+	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
 	code, err := (cli.Application{
 		Stdin:       strings.NewReader(driver.childInput),
 		Stdout:      stdout,
@@ -769,7 +769,7 @@ func (driver *Driver) inherited() error {
 func (driver *Driver) successfulChild() error {
 	err := driver.runGuardedShell(
 		"exit 0",
-		[]string{"RESOURCE_GUARD_SESSION=" + driver.heavySession.Token},
+		[]string{"HIPPO_SESSION=" + driver.heavySession.Token},
 	)
 	driver.inheritedSessions = guard.InheritedSession(driver.leaseRoot, driver.heavySession.Token)
 
@@ -1212,7 +1212,7 @@ func (driver *Driver) observeDegradedWarning() error {
 
 	code, runError := guard.Run(context.Background(), guard.RunConfig{
 		Command:                shellPath,
-		Arguments:              []string{"-c", `[ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 1 ]; sleep 5`},
+		Arguments:              []string{"-c", `[ "$HIPPO_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 1 ]; sleep 5`},
 		TaskClass:              taskClassEphemeral,
 		Environment:            environmentWith(map[string]string{"TOOL_WORKERS": "7", "CALLER_WORKERS": "3"}),
 		ConcurrencyEnvironment: []string{"TOOL_WORKERS", "CALLER_WORKERS"},
@@ -1253,9 +1253,9 @@ func (driver *Driver) compiledBinary() error {
 		return nil
 	}
 
-	driver.binary = os.Getenv("RESOURCE_GUARD_BIN")
+	driver.binary = os.Getenv("HIPPO_BIN")
 	if driver.binary == "" {
-		return errors.New("RESOURCE_GUARD_BIN is required")
+		return errors.New("HIPPO_BIN is required")
 	}
 
 	return nil
@@ -1404,6 +1404,15 @@ func (driver *Driver) requireHelp() error {
 	return nil
 }
 
+func (driver *Driver) requireHIPPOExpansion() error {
+	const expansion = "HIPPO — Host Infrastructure Pressure & Process Orchestrator"
+	if driver.exitCode != 0 || !strings.Contains(driver.output, expansion) {
+		return fmt.Errorf("help does not identify HIPPO: exit=%d output=%q", driver.exitCode, driver.output)
+	}
+
+	return nil
+}
+
 func (driver *Driver) releaseHelp() error {
 	return driver.runCLI(releaseCommandName, "--help")
 }
@@ -1428,7 +1437,7 @@ func (driver *Driver) zshCompletion() error {
 }
 
 func (driver *Driver) requireZshCompletion() error {
-	if driver.exitCode != 0 || !strings.Contains(driver.output, "#compdef resource-guard") {
+	if driver.exitCode != 0 || !strings.Contains(driver.output, "#compdef hippo") {
 		return fmt.Errorf("exit=%d output=%q error=%q", driver.exitCode, driver.output, driver.errorOutput)
 	}
 
@@ -1442,7 +1451,7 @@ func (driver *Driver) unknownCommand() {
 func (driver *Driver) requireCobraDiagnostic() error {
 	if driver.exitCode != 1 ||
 		!strings.Contains(driver.errorOutput, "unknown command \"not-a-command\"") ||
-		!strings.Contains(driver.errorOutput, "resource-guard --help") {
+		!strings.Contains(driver.errorOutput, "hippo --help") {
 		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
 	}
 
@@ -1534,7 +1543,7 @@ func healthySummary() policy.ReleaseSummary {
 }
 
 func (driver *Driver) summary(healthFailures int) error {
-	directory, err := os.MkdirTemp("", "resource-guard-bdd-")
+	directory, err := os.MkdirTemp("", "hippo-bdd-")
 	if err != nil {
 		return err
 	}
@@ -1683,7 +1692,7 @@ func (driver *Driver) requireJSONTransitions() error {
 }
 
 func (driver *Driver) releasePathsWithoutEndpoints() error {
-	directory, err := os.MkdirTemp("", "resource-guard-release-inputs-")
+	directory, err := os.MkdirTemp("", "hippo-release-inputs-")
 	if err != nil {
 		return err
 	}
@@ -1985,7 +1994,7 @@ func (driver *Driver) failedSummary() error {
 }
 
 func (driver *Driver) slowRoutedSummary() error {
-	directory, err := os.MkdirTemp("", "resource-guard-bdd-")
+	directory, err := os.MkdirTemp("", "hippo-bdd-")
 	if err != nil {
 		return err
 	}
@@ -2013,7 +2022,7 @@ func (driver *Driver) requireRejected() error {
 }
 
 func (driver *Driver) inspectBuildCaching() error {
-	command := exec.Command("git", "check-ignore", "--quiet", "dist/resource-guard_test_linux_amd64.tar.gz")
+	command := exec.Command("git", "check-ignore", "--quiet", "dist/hippo_test_linux_amd64.tar.gz")
 	command.Dir = toolRoot()
 
 	driver.lifecycleOK = command.Run() == nil
@@ -2029,12 +2038,12 @@ func (driver *Driver) requireBuildCacheDisabled() error {
 }
 
 func (driver *Driver) runTemporaryHarness(testExit int) error {
-	temporaryParent, err := os.MkdirTemp("", "resource-guard-e2e-parent-")
+	temporaryParent, err := os.MkdirTemp("", "hippo-e2e-parent-")
 	if err != nil {
 		return err
 	}
 
-	fakeDirectory, err := os.MkdirTemp("", "resource-guard-fake-go-")
+	fakeDirectory, err := os.MkdirTemp("", "hippo-fake-go-")
 	if err != nil {
 		_ = os.RemoveAll(temporaryParent)
 		return err
@@ -2061,7 +2070,7 @@ case "$1" in
     chmod 700 "$output"
     ;;
   test)
-    [ -x "${RESOURCE_GUARD_BIN:-}" ]
+    [ -x "${HIPPO_BIN:-}" ]
     exit "${FAKE_GO_TEST_EXIT:-0}"
     ;;
   *) exit 64 ;;
@@ -2073,9 +2082,9 @@ esac
 
 	command := exec.Command(filepath.Join(toolRoot(), "tests", "e2e", "run.sh"))
 	command.Env = environmentWith(map[string]string{
-		"FAKE_GO_TEST_EXIT":              strconv.Itoa(testExit),
-		"RESOURCE_GUARD_E2E_TEMP_PARENT": temporaryParent,
-		"RESOURCE_GUARD_GO_BINARY":       fakeGo,
+		"FAKE_GO_TEST_EXIT":     strconv.Itoa(testExit),
+		"HIPPO_E2E_TEMP_PARENT": temporaryParent,
+		"HIPPO_GO_BINARY":       fakeGo,
 	})
 
 	output, runError := command.CombinedOutput()
@@ -2122,7 +2131,7 @@ func (driver *Driver) requireE2ECleanup() error {
 }
 
 func (driver *Driver) historicalGenerations() error {
-	cacheRoot, err := os.MkdirTemp("", "resource-guard-cache-")
+	cacheRoot, err := os.MkdirTemp("", "hippo-cache-")
 	if err != nil {
 		return err
 	}
@@ -2142,7 +2151,7 @@ func (driver *Driver) historicalGenerations() error {
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(directory, "resource-guard"), []byte("historical"), 0o700); err != nil {
+		if err := os.WriteFile(filepath.Join(directory, "hippo"), []byte("historical"), 0o700); err != nil {
 			return err
 		}
 
@@ -2178,8 +2187,8 @@ func (driver *Driver) runCurrentBootstrap() error {
 		return err
 	}
 
-	command := exec.Command(filepath.Join(toolRoot(), "resource-guard"), "release", "assess", "--summary", summaryPath)
-	command.Env = environmentWith(map[string]string{"RESOURCE_GUARD_BUILD_CACHE": driver.cacheRoot})
+	command := exec.Command(filepath.Join(toolRoot(), "hippo"), "release", "assess", "--summary", summaryPath)
+	command.Env = environmentWith(map[string]string{"HIPPO_BUILD_CACHE": driver.cacheRoot})
 
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -2304,9 +2313,9 @@ func (driver *Driver) inspectBehaviourCoverage() error {
 	fullText, quickText := string(fullData), string(quickData)
 	effectiveText := quickText + fullText
 
-	unit := strings.Index(effectiveText, "RESOURCE_GUARD_BDD_ADAPTER=unit")
-	integration := strings.Index(effectiveText, "RESOURCE_GUARD_BDD_ADAPTER=integration")
-	e2e := strings.Index(effectiveText, "RESOURCE_GUARD_BDD_ADAPTER=e2e")
+	unit := strings.Index(effectiveText, "HIPPO_BDD_ADAPTER=unit")
+	integration := strings.Index(effectiveText, "HIPPO_BDD_ADAPTER=integration")
+	e2e := strings.Index(effectiveText, "HIPPO_BDD_ADAPTER=e2e")
 	driver.serialCompliance = unit >= 0 && unit < integration && integration < e2e
 	driver.e2ePlacement = strings.Contains(fullText, "./tests/e2e/run.sh") && !strings.Contains(quickText, "./tests/e2e/run.sh")
 
@@ -2553,7 +2562,7 @@ func (driver *Driver) requirePSIWarning() error {
 }
 
 func (driver *Driver) invalidExplicitConfig() {
-	directory, err := os.MkdirTemp("", "resource-guard-config-")
+	directory, err := os.MkdirTemp("", "hippo-config-")
 	if err != nil {
 		driver.errorOutput = err.Error()
 
@@ -2604,7 +2613,7 @@ func repositoryRoot() string {
 func (driver *Driver) inspectArtifactPolicy() {
 	root := repositoryRoot()
 	ignoredPaths := []string{
-		"resource-guard.local.json",
+		"hippo.local.json",
 		".env",
 		".env.local",
 		".cache/example",
@@ -2642,7 +2651,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 	trackedOutput, trackedError := tracked.Output()
 	driver.privateArtifacts = driver.privateArtifacts && trackedError == nil && len(bytes.TrimSpace(trackedOutput)) == 0
 
-	examplePath := "resource-guard.local.json.example"
+	examplePath := "hippo.local.json.example"
 	example := exec.Command("git", "ls-files", "--error-unmatch", examplePath)
 	example.Dir = root
 	driver.exampleTracked = example.Run() == nil
@@ -2668,7 +2677,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 	}
 
 	driver.applicationLayout = moduleError == nil &&
-		bytes.Contains(moduleData, []byte("module github.com/wahidyankf/resource-guard")) &&
+		bytes.Contains(moduleData, []byte("module github.com/wahidyankf/hippo")) &&
 		packageError == nil && manifestError == nil && privateOK && private &&
 		!hasWorkspaces && !hasNxDependency &&
 		!pathExists(filepath.Join(root, "project.json")) &&
@@ -2698,7 +2707,7 @@ func (driver *Driver) requireExampleTracked() error {
 
 func (driver *Driver) requireApplicationLayout() error {
 	if !driver.applicationLayout {
-		return errors.New("resource guard is not a standalone Go module with co-owned specifications")
+		return errors.New("HIPPO is not a standalone Go module with co-owned specifications")
 	}
 	return nil
 }

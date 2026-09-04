@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
-	"github.com/wahidyankf/resource-guard/internal/host"
-	"github.com/wahidyankf/resource-guard/internal/policy"
+	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func (application Application) version(options versionOptions) (int, error) {
@@ -293,7 +293,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	if resolution.ExitCode != 0 {
 		_, _ = fmt.Fprintf(
 			application.Stderr,
-			"Resource guard decision=%s requested=%s resolved=%s.\n",
+			"HIPPO decision=%s requested=%s resolved=%s.\n",
 			resolution.Decision,
 			resolution.RequestedProfile,
 			resolution.ResolvedProfile,

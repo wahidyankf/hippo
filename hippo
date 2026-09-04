@@ -2,7 +2,7 @@
 set -eu
 
 tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-cache_root=${RESOURCE_GUARD_BUILD_CACHE:-"$tool_dir/.cache"}
+cache_root=${HIPPO_BUILD_CACHE:-"$tool_dir/.cache"}
 goos=$(go env GOOS)
 goarch=$(go env GOARCH)
 
@@ -29,7 +29,7 @@ source_hash=$(
 )
 source_hash=$(printf '%s' "$source_hash" | hash_stream | awk '{print $1}')
 binary_dir="$cache_root/$goos-$goarch/$source_hash"
-binary="$binary_dir/resource-guard"
+binary="$binary_dir/hippo"
 lock="$binary_dir.lock"
 platform_cache="$cache_root/$goos-$goarch"
 retention_lock="$platform_cache/.retention.lock"
@@ -125,7 +125,7 @@ if [ ! -x "$binary" ]; then
 		fi
 		attempts=$((attempts + 1))
 		if [ "$attempts" -ge 300 ]; then
-			echo "resource-guard bootstrap timed out waiting for its build lock" >&2
+			echo "hippo bootstrap timed out waiting for its build lock" >&2
 			exit 75
 		fi
 		sleep 1
@@ -139,7 +139,7 @@ if [ ! -x "$binary" ]; then
 		# executable so another process never observes a partial binary.
 		(
 			cd "$tool_dir"
-			GOMAXPROCS=2 go build -p=1 -trimpath -o "$temporary" ./cmd/resource-guard
+			GOMAXPROCS=2 go build -p=1 -trimpath -o "$temporary" ./cmd/hippo
 		)
 		chmod 700 "$temporary"
 		mv "$temporary" "$binary"
@@ -152,6 +152,6 @@ fi
 prune_cache
 # A consumer may override configuration explicitly; otherwise the optional
 # repository-local file is discovered without making it authoritative.
-RESOURCE_GUARD_DEFAULT_CONFIG=${RESOURCE_GUARD_DEFAULT_CONFIG:-"$tool_dir/resource-guard.local.json"}
-export RESOURCE_GUARD_DEFAULT_CONFIG
+HIPPO_DEFAULT_CONFIG=${HIPPO_DEFAULT_CONFIG:-"$tool_dir/hippo.local.json"}
+export HIPPO_DEFAULT_CONFIG
 exec "$binary" "$@"

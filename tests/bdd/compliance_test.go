@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wahidyankf/resource-guard/tests/contract"
-	"github.com/wahidyankf/resource-guard/tests/support"
+	"github.com/wahidyankf/hippo/tests/contract"
+	"github.com/wahidyankf/hippo/tests/support"
 )
 
 var _ contract.Driver = (*support.Driver)(nil)
 
 func TestFeatureCompliance(t *testing.T) {
-	requested := os.Getenv("RESOURCE_GUARD_BDD_ADAPTER")
+	requested := os.Getenv("HIPPO_BDD_ADAPTER")
 
 	if requested != "" {
 		adapter, err := contract.AdapterByName(requested)
