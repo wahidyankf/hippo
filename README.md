@@ -14,6 +14,16 @@ Source users can run the tracked bootstrap, which builds and retains a bounded l
 ./resource-guard run --class ephemeral --disk-path . -- <command>
 ```
 
+## Command-line interface
+
+Run `./resource-guard --help` to discover the `version`, `status`, `monitor`, `run`, and `release` commands. Release checks, summary assessment, and overlap monitoring are grouped under `release`. Guarded child commands must follow an explicit `--` boundary so their arguments are never interpreted as resource-guard flags.
+
+Cobra-powered completion scripts are generated on demand for Bash, Fish, PowerShell, and Zsh:
+
+```sh
+./resource-guard completion zsh
+```
+
 ## Resource policy
 
 Ordinary work resolves `balanced` → `constrained` → `minimal` from effective memory, available memory, disk, CPU, and swap capability. Balanced ephemeral work on Darwin may admit after a full stable warning window when 25% of effective memory, clamped to 4–8 GiB, remains available and CPU, disk, OOM, swap-out, and compressor-growth checks remain safe. This degraded path forces known tool concurrency variables to one. Services, fallback profiles, Linux PSI, transactions, and releases cannot use it.

@@ -25,6 +25,8 @@ const (
 	taskClassEphemeral = "ephemeral"
 	profileBalanced    = "balanced"
 	jsonFlag           = "--json"
+	statusCommandName  = "status"
+	monitorCommandName = "monitor"
 )
 
 type sequenceCollector struct {
@@ -679,7 +681,7 @@ func (driver *Driver) jsonStatus() error {
 		Stderr:    &stderr,
 		Collector: collector,
 		Sleep:     func(time.Duration) {},
-	}).Run([]string{"status", jsonFlag, "--disk-path", "."})
+	}).Run([]string{statusCommandName, jsonFlag, "--disk-path", "."})
 
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
@@ -739,6 +741,90 @@ func (driver *Driver) requireStatus() error {
 		len(payload.Capabilities) == 0 {
 		return fmt.Errorf("invalid status: exit=%d payload=%+v", driver.exitCode, payload)
 	}
+	return nil
+}
+
+func (driver *Driver) runCLI(arguments ...string) error {
+	if driver.mode == contract.E2E {
+		driver.runBinary(arguments...)
+
+		return nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode, err := (cli.Application{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}).Run(arguments)
+
+	driver.exitCode = exitCode
+	driver.output = stdout.String()
+	driver.errorOutput = stderr.String()
+
+	return err
+}
+
+func (driver *Driver) rootHelp() error {
+	return driver.runCLI("--help")
+}
+
+func (driver *Driver) requireHelp() error {
+	commands := []string{"completion", monitorCommandName, "release", "run", statusCommandName, "version"}
+	if driver.exitCode != 0 {
+		return fmt.Errorf("help exited %d: %s", driver.exitCode, driver.errorOutput)
+	}
+
+	for _, command := range commands {
+		if !strings.Contains(driver.output, command) {
+			return fmt.Errorf("help does not list %q: %s", command, driver.output)
+		}
+	}
+
+	return nil
+}
+
+func (driver *Driver) releaseHelp() error {
+	return driver.runCLI("release", "--help")
+}
+
+func (driver *Driver) requireReleaseHelp() error {
+	commands := []string{"assess", "check", monitorCommandName}
+	if driver.exitCode != 0 {
+		return fmt.Errorf("release help exited %d: %s", driver.exitCode, driver.errorOutput)
+	}
+
+	for _, command := range commands {
+		if !strings.Contains(driver.output, command) {
+			return fmt.Errorf("release help does not list %q: %s", command, driver.output)
+		}
+	}
+
+	return nil
+}
+
+func (driver *Driver) zshCompletion() error {
+	return driver.runCLI("completion", "zsh")
+}
+
+func (driver *Driver) requireZshCompletion() error {
+	if driver.exitCode != 0 || !strings.Contains(driver.output, "#compdef resource-guard") {
+		return fmt.Errorf("exit=%d output=%q error=%q", driver.exitCode, driver.output, driver.errorOutput)
+	}
+
+	return nil
+}
+
+func (driver *Driver) unknownCommand() {
+	_ = driver.runCLI("not-a-command")
+}
+
+func (driver *Driver) requireCobraDiagnostic() error {
+	if driver.exitCode != 1 ||
+		!strings.Contains(driver.errorOutput, "unknown command \"not-a-command\"") ||
+		!strings.Contains(driver.errorOutput, "resource-guard --help") {
+		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
+	}
+
 	return nil
 }
 

@@ -58,6 +58,7 @@ linters:
             - "!**/tests/**/*.go"
           allow:
             - $gostd
+            - github.com/spf13/cobra
             - github.com/wahidyankf/resource-guard
             - golang.org/x/sys
         test-support:

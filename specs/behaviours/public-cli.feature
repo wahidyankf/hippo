@@ -11,6 +11,26 @@ Feature: Public resource guard CLI
     When JSON status is requested for an existing path
     Then status returns schema version 3 with profile and capability evidence
 
+  Scenario: Command discovery uses Cobra help
+    Given the compiled resource guard binary
+    When root command help is requested
+    Then help lists the public command tree and exits successfully
+
+  Scenario: Release discovery uses grouped help
+    Given the compiled resource guard binary
+    When release command help is requested
+    Then help lists the release command tree and exits successfully
+
+  Scenario: Shell completion is generated on demand
+    Given the compiled resource guard binary
+    When Zsh completion is requested
+    Then a Zsh completion script is emitted
+
+  Scenario: Unknown commands use Cobra diagnostics
+    Given the compiled resource guard binary
+    When an unknown command is requested
+    Then Cobra reports the command and exits with code 1
+
   @e2e-exempt
   Scenario: Invalid explicit configuration is actionable
     Given an explicit resource guard config with an unknown field

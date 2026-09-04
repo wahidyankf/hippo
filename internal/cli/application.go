@@ -1,0 +1,124 @@
+package cli
+
+import (
+	"io"
+	"os"
+	"time"
+
+	resourceconfig "github.com/wahidyankf/resource-guard/internal/config"
+	"github.com/wahidyankf/resource-guard/internal/guard"
+	"github.com/wahidyankf/resource-guard/internal/host"
+)
+
+const unavailableValue = "unavailable"
+
+// Version is replaced by release builds through ldflags.
+var Version = "dev"
+
+// Commit is replaced by release builds through ldflags.
+var Commit = "unknown"
+
+// Application supplies the command's injectable host and I/O dependencies.
+type Application struct {
+	Stdout, Stderr io.Writer
+	Environment    []string
+	Collector      guard.Collector
+	Sleep          func(time.Duration)
+	Now            func() time.Time
+	Version        string
+	Commit         string
+}
+
+type commandExecution struct {
+	exitCode int
+}
+
+func environmentMap(environment []string) map[string]string {
+	result := map[string]string{}
+
+	for _, entry := range environment {
+		for index := range entry {
+			if entry[index] == '=' {
+				result[entry[:index]] = entry[index+1:]
+				break
+			}
+		}
+	}
+
+	return result
+}
+
+func (application Application) defaults() Application {
+	if application.Stdout == nil {
+		application.Stdout = os.Stdout
+	}
+	if application.Stderr == nil {
+		application.Stderr = os.Stderr
+	}
+
+	if application.Environment == nil {
+		application.Environment = os.Environ()
+	}
+
+	if application.Collector == nil {
+		application.Collector = host.SystemCollector{}
+	}
+
+	if application.Sleep == nil {
+		application.Sleep = time.Sleep
+	}
+	if application.Now == nil {
+		application.Now = time.Now
+	}
+
+	if application.Version == "" {
+		application.Version = Version
+	}
+	if application.Commit == "" {
+		application.Commit = Commit
+	}
+
+	return application
+}
+
+func (application Application) loadConfig(path string) (resourceconfig.Result, error) {
+	environment := environmentMap(application.Environment)
+	resolvedPath, explicit := resourceconfig.Path(path, environment)
+
+	return resourceconfig.Load(resolvedPath, explicit)
+}
+
+func executeHandler(execution *commandExecution, handler func() (int, error)) error {
+	exitCode, err := handler()
+	execution.exitCode = exitCode
+
+	return err
+}
+
+// Run executes one resource-guard command and returns its process exit code.
+func (application Application) Run(arguments []string) (int, error) {
+	application = application.defaults()
+	execution := &commandExecution{}
+	command := application.rootCommand(execution)
+
+	// A non-nil empty slice prevents Cobra from falling back to the test
+	// process's os.Args when an injected application runs without arguments.
+	command.SetArgs(append([]string{}, arguments...))
+	command.SetOut(application.Stdout)
+	command.SetErr(application.Stderr)
+
+	err := command.Execute()
+	if err != nil && execution.exitCode == 0 {
+		execution.exitCode = 1
+	}
+
+	return execution.exitCode, err
+}
+
+// Execute runs the production application. Cobra owns diagnostics so each
+// command error is rendered exactly once before this function returns its code.
+func Execute(arguments []string) int {
+	exitCode, _ := (Application{}).Run(arguments)
+
+	return exitCode
+}
