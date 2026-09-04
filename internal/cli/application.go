@@ -1,13 +1,14 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"os"
 	"time"
 
 	resourceconfig "github.com/wahidyankf/resource-guard/internal/config"
-	"github.com/wahidyankf/resource-guard/internal/guard"
 	"github.com/wahidyankf/resource-guard/internal/host"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 const unavailableValue = "unavailable"
@@ -22,7 +23,7 @@ var Commit = "unknown"
 type Application struct {
 	Stdout, Stderr io.Writer
 	Environment    []string
-	Collector      guard.Collector
+	Collector      policy.Collector
 	Sleep          func(time.Duration)
 	Now            func() time.Time
 	Version        string
@@ -64,9 +65,6 @@ func (application Application) defaults() Application {
 		application.Collector = host.SystemCollector{}
 	}
 
-	if application.Sleep == nil {
-		application.Sleep = time.Sleep
-	}
 	if application.Now == nil {
 		application.Now = time.Now
 	}
@@ -96,10 +94,12 @@ func executeHandler(execution *commandExecution, handler func() (int, error)) er
 }
 
 // Run executes one resource-guard command and returns its process exit code.
-func (application Application) Run(arguments []string) (int, error) {
+func (application Application) Run(ctx context.Context, arguments []string) (int, error) {
 	application = application.defaults()
 	execution := &commandExecution{}
-	command := application.rootCommand(execution)
+	// Cobra propagates ExecuteContext to every RunE callback through
+	// command.Context; contextcheck cannot follow that framework boundary.
+	command := application.rootCommand(execution) //nolint:contextcheck // Cobra carries ExecuteContext through command.Context.
 
 	// A non-nil empty slice prevents Cobra from falling back to the test
 	// process's os.Args when an injected application runs without arguments.
@@ -107,7 +107,7 @@ func (application Application) Run(arguments []string) (int, error) {
 	command.SetOut(application.Stdout)
 	command.SetErr(application.Stderr)
 
-	err := command.Execute()
+	err := command.ExecuteContext(ctx)
 	if err != nil && execution.exitCode == 0 {
 		execution.exitCode = 1
 	}
@@ -117,8 +117,8 @@ func (application Application) Run(arguments []string) (int, error) {
 
 // Execute runs the production application. Cobra owns diagnostics so each
 // command error is rendered exactly once before this function returns its code.
-func Execute(arguments []string) int {
-	exitCode, _ := (Application{}).Run(arguments)
+func Execute(ctx context.Context, arguments []string) int {
+	exitCode, _ := (Application{}).Run(ctx, arguments)
 
 	return exitCode
 }

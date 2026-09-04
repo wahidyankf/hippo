@@ -8,144 +8,139 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"time"
+
+	"github.com/wahidyankf/resource-guard/internal/evidence"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
-const maximumEvidenceBytes int64 = 50 * 1024 * 1024
-
-// CleanupEvidence removes expired or excess evidence while preserving active paths.
-func CleanupEvidence(root string, now time.Time, preserve ...string) error {
-	if root == "" {
-		return errors.New("evidence root is empty")
-	}
-
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return err
-	}
-	if err := os.Chmod(root, 0o700); err != nil {
-		return err
-	}
-
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return err
-	}
-
-	preserved := map[string]bool{}
-	for _, path := range preserve {
-		preserved[path] = true
-	}
-
-	type retainedFile struct {
-		path     string
-		size     int64
-		modified time.Time
-	}
-
-	retained := []retainedFile{}
-
-	for _, entry := range entries {
-		if !entry.Type().IsRegular() {
-			continue
-		}
-
-		path := filepath.Join(root, entry.Name())
-		info, infoError := entry.Info()
-		if infoError != nil {
-			return infoError
-		}
-
-		retention := 7 * 24 * time.Hour
-		if filepath.Ext(entry.Name()) == ".json" &&
-			len(entry.Name()) >= len(".summary.json") &&
-			entry.Name()[len(entry.Name())-len(".summary.json"):] == ".summary.json" {
-			retention = 30 * 24 * time.Hour
-		}
-
-		if now.Sub(info.ModTime()) > retention && !preserved[path] {
-			if removeError := os.Remove(path); removeError != nil {
-				return removeError
-			}
-			continue
-		}
-
-		retained = append(retained, retainedFile{path, info.Size(), info.ModTime()})
-	}
-
-	sort.Slice(retained, func(i, j int) bool { return retained[i].modified.Before(retained[j].modified) })
-
-	var total int64
-	for _, entry := range retained {
-		total += entry.size
-	}
-
-	for _, entry := range retained {
-		if total <= maximumEvidenceBytes {
-			break
-		}
-		if preserved[entry.path] {
-			continue
-		}
-
-		if removeError := os.Remove(entry.path); removeError != nil {
-			return removeError
-		}
-		total -= entry.size
-	}
-
-	return nil
-}
-
-// EvidenceWriter appends private samples and produces one bounded summary.
+// EvidenceWriter appends bounded private samples and produces one lifetime summary.
 type EvidenceWriter struct {
-	outputPath, summaryPath string
-	output                  *os.File
-	samples                 []Sample
-	resolution              Resolution
-	configHash              string
+	output      *evidence.Writer
+	summaryPath string
+	summary     EvidenceSummary
+	first       *policy.Sample
+	last        *policy.Sample
+	cpu         *evidence.Histogram
+	resolution  policy.Resolution
+	configHash  string
 }
 
-// NewEvidenceWriter creates an exclusive evidence stream below root.
-func NewEvidenceWriter(root, identifier string) (*EvidenceWriter, error) {
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, err
-	}
-	if err := os.Chmod(root, 0o700); err != nil {
-		return nil, err
-	}
-
-	outputPath := filepath.Join(root, identifier+".jsonl")
-	output, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+// NewEvidenceWriter creates an exclusive rotating evidence stream below root.
+func NewEvidenceWriter(root, identifier string, limits evidence.Limits) (*EvidenceWriter, error) {
+	output, err := evidence.NewWriter(filepath.Join(root, identifier+".jsonl"), limits)
 	if err != nil {
 		return nil, err
 	}
 
 	return &EvidenceWriter{
-		outputPath:  outputPath,
-		summaryPath: filepath.Join(root, identifier+".summary.json"),
 		output:      output,
+		summaryPath: filepath.Join(root, identifier+".summary.json"),
+		summary: EvidenceSummary{
+			SchemaVersion:          3,
+			CompressorAvailableAll: true,
+		},
+		cpu: evidence.NewHistogram(100, 0.01),
 	}, nil
 }
 
 // SetContext attaches resolved, non-sensitive policy metadata to the summary.
-func (writer *EvidenceWriter) SetContext(resolution Resolution, configHash string) {
+func (writer *EvidenceWriter) SetContext(resolution policy.Resolution, configHash string) {
 	writer.resolution = resolution
 	writer.configHash = configHash
 }
 
-// Append records one sample in the evidence stream.
-func (writer *EvidenceWriter) Append(sample Sample) error {
-	encoded, err := json.Marshal(sample)
-	if err != nil {
+func copyInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+
+	result := *value
+
+	return &result
+}
+
+func copyInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+
+	result := *value
+
+	return &result
+}
+
+func minimum(current, candidate *int64) *int64 {
+	if candidate == nil {
+		return current
+	}
+	if current == nil || *candidate < *current {
+		return copyInt64(candidate)
+	}
+
+	return current
+}
+
+func maximumInt64(current, candidate *int64) *int64 {
+	if candidate == nil {
+		return current
+	}
+	if current == nil || *candidate > *current {
+		return copyInt64(candidate)
+	}
+
+	return current
+}
+
+func maximumInt(current, candidate *int) *int {
+	if candidate == nil {
+		return current
+	}
+	if current == nil || *candidate > *current {
+		return copyInt(candidate)
+	}
+
+	return current
+}
+
+// Append records one sample and updates fixed-memory lifetime aggregates.
+func (writer *EvidenceWriter) Append(sample policy.Sample) error {
+	if writer == nil || writer.output == nil {
+		return errors.New("evidence writer is closed")
+	}
+	if err := writer.output.AppendJSON(sample); err != nil {
 		return err
 	}
 
-	if _, err = writer.output.Write(append(encoded, '\n')); err != nil {
-		return err
+	if writer.first == nil {
+		first := sample
+		writer.first = &first
+		writer.summary.AvailableParallelism = sample.AvailableParallelism
+		writer.summary.Platform = sample.Platform
+		writer.summary.Capabilities = append([]string(nil), sample.Capabilities...)
 	}
 
-	writer.samples = append(writer.samples, sample)
+	last := sample
+	writer.last = &last
+	writer.summary.SampleCount++
+
+	available := sample.AvailableMemoryBytes
+	if available == nil {
+		available = sample.AvailableNonCompressedEstimateBytes
+	}
+
+	writer.summary.AvailableNonCompressedEstimateMinBytes = minimum(writer.summary.AvailableNonCompressedEstimateMinBytes, available)
+	writer.summary.MemoryPressureLevelMax = maximumInt(writer.summary.MemoryPressureLevelMax, sample.MemoryPressureLevel)
+	writer.summary.CompressorPayloadPeakBytes = maximumInt64(writer.summary.CompressorPayloadPeakBytes, sample.CompressorPayloadBytes)
+	writer.summary.DiskFreeMinBytes = minimum(writer.summary.DiskFreeMinBytes, sample.DiskFreeBytes)
+	writer.summary.SwapFreeMinBytes = minimum(writer.summary.SwapFreeMinBytes, sample.SwapFreeBytes)
+
+	if sample.CompressorAvailable == nil || !*sample.CompressorAvailable {
+		writer.summary.CompressorAvailableAll = false
+	}
+	if sample.CPUUtilizationPercent != nil {
+		writer.cpu.Add(*sample.CPUUtilizationPercent)
+	}
 
 	return nil
 }
@@ -176,113 +171,43 @@ type EvidenceSummary struct {
 	ConfigHash                             string   `json:"configHash,omitempty"`
 }
 
-func minInt64(values []*int64) *int64 {
-	var result *int64
-	for _, value := range values {
-		if value != nil && (result == nil || *value < *result) {
-			candidate := *value
-			result = &candidate
-		}
-	}
-	return result
-}
-
-func maxInt64(values []*int64) *int64 {
-	var result *int64
-	for _, value := range values {
-		if value != nil && (result == nil || *value > *result) {
-			candidate := *value
-			result = &candidate
-		}
-	}
-	return result
-}
-
-func maxInt(values []*int) *int {
-	var result *int
-	for _, value := range values {
-		if value != nil && (result == nil || *value > *result) {
-			candidate := *value
-			result = &candidate
-		}
-	}
-	return result
-}
-
 func delta(first, last *int64) int64 {
 	if first == nil || last == nil || *last <= *first {
 		return 0
 	}
+
 	return *last - *first
 }
 
 // Finalize closes the sample stream and writes its aggregate summary once.
-func (writer *EvidenceWriter) Finalize(taskClass, outcome string, healthFailures int) (EvidenceSummary, error) {
-	if writer.output == nil {
+func (writer *EvidenceWriter) Finalize(taskClass policy.TaskClass, outcome string, healthFailures int) (EvidenceSummary, error) {
+	if writer == nil || writer.output == nil {
 		return EvidenceSummary{}, errors.New("evidence writer is closed")
 	}
 
 	if err := writer.output.Close(); err != nil {
 		return EvidenceSummary{}, err
 	}
-
 	writer.output = nil
-	summary := EvidenceSummary{
-		SchemaVersion:          3,
-		SampleCount:            len(writer.samples),
-		TaskClass:              taskClass,
-		Outcome:                outcome,
-		HealthFailures:         healthFailures,
-		CompressorAvailableAll: true,
-		RequestedProfile:       writer.resolution.RequestedProfile,
-		ResolvedProfile:        writer.resolution.ResolvedProfile,
-		FallbackChain:          writer.resolution.FallbackChain,
-		Concurrency:            writer.resolution.Concurrency,
-		ConfigHash:             writer.configHash,
+
+	writer.summary.TaskClass = string(taskClass)
+	writer.summary.Outcome = outcome
+	writer.summary.HealthFailures = healthFailures
+	writer.summary.RequestedProfile = writer.resolution.RequestedProfile
+	writer.summary.ResolvedProfile = writer.resolution.ResolvedProfile
+	writer.summary.FallbackChain = append([]string(nil), writer.resolution.FallbackChain...)
+	writer.summary.Concurrency = writer.resolution.Concurrency
+	writer.summary.ConfigHash = writer.configHash
+
+	if writer.first != nil && writer.last != nil {
+		writer.summary.SwapInsDelta = delta(writer.first.SwapIns, writer.last.SwapIns)
+		writer.summary.SwapOutsDelta = delta(writer.first.SwapOuts, writer.last.SwapOuts)
+	}
+	if value, ok := writer.cpu.Quantile(0.95); ok {
+		writer.summary.CPUUtilizationP95Percent = value
 	}
 
-	available, levels, payloads, disks, swapFree := []*int64{}, []*int{}, []*int64{}, []*int64{}, []*int64{}
-	cpu := []float64{}
-
-	for _, sample := range writer.samples {
-		availableValue := sample.AvailableMemoryBytes
-		if availableValue == nil {
-			availableValue = sample.AvailableNonCompressedEstimateBytes
-		}
-
-		available = append(available, availableValue)
-		levels = append(levels, sample.MemoryPressureLevel)
-		payloads = append(payloads, sample.CompressorPayloadBytes)
-		disks = append(disks, sample.DiskFreeBytes)
-		swapFree = append(swapFree, sample.SwapFreeBytes)
-
-		if sample.CompressorAvailable == nil || !*sample.CompressorAvailable {
-			summary.CompressorAvailableAll = false
-		}
-
-		if sample.CPUUtilizationPercent != nil {
-			cpu = append(cpu, *sample.CPUUtilizationPercent)
-		}
-	}
-
-	if len(writer.samples) > 0 {
-		summary.AvailableParallelism = writer.samples[0].AvailableParallelism
-		summary.Platform = writer.samples[0].Platform
-		summary.Capabilities = append([]string(nil), writer.samples[0].Capabilities...)
-		summary.SwapInsDelta = delta(writer.samples[0].SwapIns, writer.samples[len(writer.samples)-1].SwapIns)
-		summary.SwapOutsDelta = delta(writer.samples[0].SwapOuts, writer.samples[len(writer.samples)-1].SwapOuts)
-	}
-
-	summary.AvailableNonCompressedEstimateMinBytes = minInt64(available)
-	summary.MemoryPressureLevelMax = maxInt(levels)
-	summary.CompressorPayloadPeakBytes = maxInt64(payloads)
-	summary.DiskFreeMinBytes = minInt64(disks)
-	summary.SwapFreeMinBytes = minInt64(swapFree)
-	if value := Percentile(cpu, .95); value != nil {
-		summary.CPUUtilizationP95Percent = *value
-	}
-
-	encoded, err := json.MarshalIndent(summary, "", "  ")
+	encoded, err := json.MarshalIndent(writer.summary, "", "  ")
 	if err != nil {
 		return EvidenceSummary{}, err
 	}
@@ -297,17 +222,11 @@ func (writer *EvidenceWriter) Finalize(taskClass, outcome string, healthFailures
 	flushError := buffer.Flush()
 	closeError := file.Close()
 
-	if writeError != nil {
-		return EvidenceSummary{}, writeError
-	}
-	if flushError != nil {
-		return EvidenceSummary{}, flushError
-	}
-	if closeError != nil {
-		return EvidenceSummary{}, closeError
+	if err := errors.Join(writeError, flushError, closeError); err != nil {
+		return EvidenceSummary{}, err
 	}
 
-	return summary, nil
+	return writer.summary, nil
 }
 
 var unsafeIdentifier = regexp.MustCompile(`[^a-zA-Z0-9._-]`)

@@ -3,6 +3,7 @@
 package host
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -12,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 	"golang.org/x/sys/unix"
 )
 
-func command(name string, arguments ...string) ([]byte, error) {
-	return exec.Command(name, arguments...).Output()
+func command(ctx context.Context, name string, arguments ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, arguments...).Output()
 }
 
 func parseSysctlInt(output []byte, err error) *int64 {
@@ -61,7 +62,7 @@ func int64FromUint64(value uint64) (int64, bool) {
 	return int64(value), true
 }
 
-func applyDarwinSwap(sample *guard.Sample, output []byte, err error) {
+func applyDarwinSwap(sample *policy.Sample, output []byte, err error) {
 	if err != nil {
 		return
 	}
@@ -84,7 +85,11 @@ func applyDarwinSwap(sample *guard.Sample, output []byte, err error) {
 }
 
 // Collect gathers one macOS reading while treating compressor and swap as capabilities.
-func (collector SystemCollector) Collect(previous CPUState, diskPath string) (Reading, error) {
+func (collector SystemCollector) Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
+	if err := ctx.Err(); err != nil {
+		return Reading{}, err
+	}
+
 	run := collector.Run
 	if run == nil {
 		run = command
@@ -107,13 +112,13 @@ func (collector SystemCollector) Collect(previous CPUState, diskPath string) (Re
 
 	parallelism := runtime.NumCPU()
 
-	cpuOutput, cpuError := run("ps", "-A", "-o", "%cpu=")
-	pressureOutput, pressureError := run("memory_pressure", "-Q")
-	vmOutput, vmError := run("vm_stat")
-	swapOutput, swapError := run("sysctl", "-n", "vm.swapusage")
-	pressureLevelOutput, pressureLevelError := run("sysctl", "-n", "kern.memorystatus_vm_pressure_level")
-	compressorAvailableOutput, compressorAvailableError := run("sysctl", "-n", "vm.compressor_available")
-	compressorPayloadOutput, compressorPayloadError := run("sysctl", "-n", "vm.compressor_bytes_used")
+	cpuOutput, cpuError := run(ctx, "ps", "-A", "-o", "%cpu=")
+	pressureOutput, pressureError := run(ctx, "memory_pressure", "-Q")
+	vmOutput, vmError := run(ctx, "vm_stat")
+	swapOutput, swapError := run(ctx, "sysctl", "-n", "vm.swapusage")
+	pressureLevelOutput, pressureLevelError := run(ctx, "sysctl", "-n", "kern.memorystatus_vm_pressure_level")
+	compressorAvailableOutput, compressorAvailableError := run(ctx, "sysctl", "-n", "vm.compressor_available")
+	compressorPayloadOutput, compressorPayloadError := run(ctx, "sysctl", "-n", "vm.compressor_bytes_used")
 
 	pressureLevel := parseSysctlInt(pressureLevelOutput, pressureLevelError)
 	compressorAvailable := parseSysctlInt(compressorAvailableOutput, compressorAvailableError)
@@ -132,7 +137,7 @@ func (collector SystemCollector) Collect(previous CPUState, diskPath string) (Re
 		return Reading{}, errors.New("available memory estimate is unavailable")
 	}
 
-	sample := guard.Sample{
+	sample := policy.Sample{
 		SchemaVersion:                       3,
 		MeasuredAt:                          now().UTC().Format(time.RFC3339Nano),
 		Platform:                            "darwin",

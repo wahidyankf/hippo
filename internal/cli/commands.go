@@ -114,9 +114,9 @@ func (application Application) statusCommand(execution *commandExecution) *cobra
 		Use:   "status",
 		Short: "Inspect current resource evidence",
 		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(command *cobra.Command, _ []string) error {
 			return executeHandler(execution, func() (int, error) {
-				return application.status(options)
+				return application.status(command.Context(), options)
 			})
 		},
 	}
@@ -132,9 +132,10 @@ func (application Application) monitorCommand(execution *commandExecution) *cobr
 	command := &cobra.Command{
 		Use:   "monitor",
 		Short: "Monitor resource-state transitions",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
 			return executeHandler(execution, func() (int, error) {
-				return application.monitor(options)
+				return application.monitor(command.Context(), options)
 			})
 		},
 	}
@@ -163,11 +164,11 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 		Use:   "run -- <command> [arguments...]",
 		Short: "Run a command under resource supervision",
 		Args:  requireGuardedCommand,
-		RunE: func(_ *cobra.Command, arguments []string) error {
+		RunE: func(command *cobra.Command, arguments []string) error {
 			options.command = append([]string{}, arguments...)
 
 			return executeHandler(execution, func() (int, error) {
-				return application.run(options)
+				return application.run(command.Context(), options)
 			})
 		},
 	}
@@ -202,9 +203,10 @@ func (application Application) releaseCheckCommand(execution *commandExecution) 
 	command := &cobra.Command{
 		Use:   "check",
 		Short: "Check release admission and stability",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
 			return executeHandler(execution, func() (int, error) {
-				return application.releaseCheck(options)
+				return application.releaseCheck(command.Context(), options)
 			})
 		},
 	}
@@ -219,9 +221,10 @@ func (application Application) releaseAssessCommand(execution *commandExecution)
 	command := &cobra.Command{
 		Use:   "assess",
 		Short: "Assess a release evidence summary",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
 			return executeHandler(execution, func() (int, error) {
-				return application.releaseAssess(options)
+				return application.releaseAssess(command.Context(), options)
 			})
 		},
 	}
@@ -240,9 +243,10 @@ func (application Application) releaseMonitorCommand(execution *commandExecution
 	command := &cobra.Command{
 		Use:   "monitor",
 		Short: "Capture release overlap evidence",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
 			return executeHandler(execution, func() (int, error) {
-				return application.releaseMonitor(options)
+				return application.releaseMonitor(command.Context(), options)
 			})
 		},
 	}

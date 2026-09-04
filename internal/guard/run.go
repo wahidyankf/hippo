@@ -7,12 +7,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/wahidyankf/resource-guard/internal/evidence"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 const (
@@ -24,21 +25,20 @@ const (
 
 // RunConfig describes one guarded child process and its resource policy.
 type RunConfig struct {
-	Command          string
-	Arguments        []string
-	TaskClass        string
-	WorkingDirectory string
-	Environment      []string
-	EvidenceRoot     string
-	// Interrupt replaces operator signal delivery when set, for deterministic tests.
-	Interrupt                             <-chan struct{}
+	Command                               string
+	Arguments                             []string
+	TaskClass                             policy.TaskClass
+	WorkingDirectory                      string
+	Environment                           []string
+	EvidenceRoot                          string
 	DiskPath                              string
 	LeasePort, LeaseMinimum, LeaseMaximum int
 	LeaseOwner                            string
 	PortLeaseRoot                         string
-	Collector                             Collector
-	Policy                                Policy
-	Resolution                            Resolution
+	Collector                             policy.Collector
+	Policy                                policy.Policy
+	Resolution                            policy.Resolution
+	EvidenceLimits                        evidence.Limits
 	ConfigHash                            string
 	Now                                   func() time.Time
 	Sleep                                 func(time.Duration)
@@ -76,7 +76,7 @@ func withEnvironmentIfMissing(environment []string, name, value string) []string
 	return withEnvironment(environment, name, value)
 }
 
-func resolvedEnvironment(environment []string, resolution Resolution, forceConcurrency bool) []string {
+func resolvedEnvironment(environment []string, resolution policy.Resolution, forceConcurrency bool) []string {
 	if resolution.ResolvedProfile == "" || resolution.Concurrency <= 0 {
 		return environment
 	}
@@ -112,38 +112,92 @@ func waitStatusCode(err error) int {
 	return 1
 }
 
-func signalGroup(process *os.Process, signal syscall.Signal) {
+func signalGroup(process *os.Process, signal syscall.Signal) error {
 	if process == nil {
-		return
+		return nil
 	}
 
-	if err := syscall.Kill(-process.Pid, signal); err != nil {
-		_ = process.Signal(signal)
+	groupError := syscall.Kill(-process.Pid, signal)
+	if groupError == nil || errors.Is(groupError, syscall.ESRCH) {
+		return nil
 	}
+
+	processError := process.Signal(signal)
+	if errors.Is(processError, os.ErrProcessDone) {
+		return nil
+	}
+
+	return errors.Join(groupError, processError)
 }
 
-func directChild(config RunConfig, environment []string) int {
-	command := exec.Command(config.Command, config.Arguments...)
+func directChild(ctx context.Context, config RunConfig, environment []string) int {
+	command := exec.CommandContext(ctx, config.Command, config.Arguments...)
 	command.Dir = config.WorkingDirectory
 	command.Env = environment
 	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return waitStatusCode(command.Run())
 }
 
+func terminateAndWait(command *exec.Cmd, exited <-chan error, grace time.Duration) (error, error) {
+	select {
+	case waitError := <-exited:
+		return waitError, nil
+	default:
+	}
+
+	signalError := signalGroup(command.Process, syscall.SIGTERM)
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+
+	select {
+	case waitError := <-exited:
+		return waitError, signalError
+	case <-timer.C:
+		killError := signalGroup(command.Process, syscall.SIGKILL)
+		waitError := <-exited
+
+		return waitError, errors.Join(signalError, killError)
+	}
+}
+
+func waitForContext(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
+	if pause != nil {
+		pause(duration)
+
+		return ctx.Err()
+	}
+
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 // Run admits, supervises, and records one child process without touching unrelated processes.
-func Run(config RunConfig) (exitCode int, returnError error) {
+func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error) {
+	if err := ctx.Err(); err != nil {
+		return 1, err
+	}
 	if config.Command == "" {
 		return 1, errors.New("guarded command is empty")
 	}
 	if config.TaskClass == "" {
-		config.TaskClass = ClassEphemeral
+		config.TaskClass = policy.TaskEphemeral
 	}
-	if config.TaskClass != ClassEphemeral && config.TaskClass != ClassService && config.TaskClass != ClassTransactional {
+	if config.TaskClass != policy.TaskEphemeral && config.TaskClass != policy.TaskService && config.TaskClass != policy.TaskTransactional {
 		return 1, errors.New("class must be ephemeral, service, or transactional")
 	}
 
 	if config.Policy.SampleInterval == 0 {
-		config.Policy = DevelopmentPolicy
+		config.Policy = policy.DefaultPolicy()
+	}
+	if config.Policy.SampleInterval <= 0 || config.Policy.TerminationGrace < 0 || config.Policy.AdmissionWindow < 0 || config.Policy.LeaseWait < 0 {
+		return 1, errors.New("resource policy durations are invalid")
 	}
 
 	if config.Collector == nil {
@@ -152,9 +206,6 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 
 	if config.Now == nil {
 		config.Now = time.Now
-	}
-	if config.Sleep == nil {
-		config.Sleep = time.Sleep
 	}
 	if config.Stderr == nil {
 		config.Stderr = os.Stderr
@@ -172,16 +223,16 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 		config.DiskPath = "."
 	}
 
-	if err := CleanupEvidence(config.EvidenceRoot, config.Now()); err != nil {
+	if err := evidence.Cleanup(config.EvidenceRoot, config.Now()); err != nil {
 		return 1, err
 	}
 
 	session, err := AcquireSession(
+		ctx,
 		config.EvidenceRoot,
 		environmentValue(config.Environment, "RESOURCE_GUARD_SESSION"),
 		config.TaskClass,
 		config.Policy.LeaseWait,
-		config.Sleep,
 	)
 	if err != nil {
 		return 1, err
@@ -224,10 +275,14 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	}
 
 	if session.Inherited {
-		return directChild(config, config.Environment), nil
+		return directChild(ctx, config, config.Environment), nil
 	}
 
-	writer, err := NewEvidenceWriter(config.EvidenceRoot, EvidenceIdentifier("development-"+config.TaskClass, config.Now(), os.Getpid()))
+	writer, err := NewEvidenceWriter(
+		config.EvidenceRoot,
+		EvidenceIdentifier("development-"+string(config.TaskClass), config.Now(), os.Getpid()),
+		config.EvidenceLimits,
+	)
 	if err != nil {
 		return 1, err
 	}
@@ -241,8 +296,9 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 		}
 		finalized = true
 		_, finalizeError := writer.Finalize(config.TaskClass, outcome, 0)
+		cleanupError := evidence.Cleanup(config.EvidenceRoot, config.Now())
 
-		return finalizeError
+		return errors.Join(finalizeError, cleanupError)
 	}
 
 	defer func() {
@@ -253,12 +309,16 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 	}()
 
 	deadline := config.Now().Add(config.Policy.AdmissionWindow)
-	var previous CPUState
-	samples := []Sample{}
+	var previous policy.CPUState
+	samples := []policy.Sample{}
 	admitted, degraded := false, false
 
 	for {
-		reading, collectError := config.Collector.Collect(previous, config.DiskPath)
+		if err := ctx.Err(); err != nil {
+			return 1, err
+		}
+
+		reading, collectError := config.Collector.Collect(ctx, previous, config.DiskPath)
 		if collectError != nil {
 			return 1, collectError
 		}
@@ -269,7 +329,7 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 			return 1, appendError
 		}
 
-		assessment := ResourceAssessment(samples, config.Policy)
+		assessment := policy.ResourceAssessment(samples, config.Policy)
 		if assessment.StorageBlocked {
 			outcome = "storage-blocked"
 			_, _ = fmt.Fprintf(config.Stderr, "Resource guard blocked task: %s; storage inspection or cleanup is required.\n", assessment.Reason)
@@ -277,14 +337,14 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 			return StorageBlockedExitCode, nil
 		}
 
-		if AdmissionReady(samples, config.Policy) {
+		if policy.AdmissionReady(samples, config.Policy) {
 			admitted = true
 			break
 		}
 
-		if config.TaskClass == ClassEphemeral &&
+		if config.TaskClass == policy.TaskEphemeral &&
 			config.Resolution.ResolvedProfile == "balanced" &&
-			WarningAdmissionReady(samples, config.Policy) {
+			policy.WarningAdmissionReady(samples, config.Policy) {
 			admitted, degraded = true, true
 			config.Resolution.Concurrency = 1
 			config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true)
@@ -298,7 +358,9 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 			break
 		}
 
-		config.Sleep(config.Policy.SampleInterval)
+		if err := waitForContext(ctx, config.Policy.SampleInterval, config.Sleep); err != nil {
+			return 1, err
+		}
 	}
 
 	if !admitted {
@@ -325,68 +387,40 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 		return 1, startError
 	}
 
-	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stopSignals()
-	// A cancelled context keeps its channel closed, so this case must be disabled
-	// after the first delivery or the loop would resignal the child continuously.
-	operatorSignal := signalContext.Done()
-	if config.Interrupt != nil {
-		operatorSignal = config.Interrupt
-	}
-
 	exited := make(chan error, 1)
 	go func() { exited <- command.Wait() }()
 
 	ticker := time.NewTicker(config.Policy.SampleInterval)
 	defer ticker.Stop()
 	var warningSince *time.Time
-	shed, shedCode := false, CapacityDeferredExitCode
-	var forceTimer *time.Timer
-	var childExited atomic.Bool
 
 	for {
 		select {
 		case waitError := <-exited:
-			childExited.Store(true)
-
-			if forceTimer != nil {
-				forceTimer.Stop()
-			}
-
-			if !shed {
-				if waitError == nil {
-					outcome = "passed"
-				} else {
-					outcome = "task-failed"
-				}
-			}
-
-			if cleanupError := CleanupEvidence(config.EvidenceRoot, config.Now()); cleanupError != nil {
-				return 1, cleanupError
-			}
-
-			if shed {
-				return shedCode, nil
+			if waitError == nil {
+				outcome = "passed"
+			} else {
+				outcome = "task-failed"
 			}
 
 			return waitStatusCode(waitError), nil
 
-		case <-operatorSignal:
-			operatorSignal = nil
-			signalGroup(command.Process, syscall.SIGTERM)
-			if forceTimer == nil {
-				forceTimer = time.AfterFunc(config.Policy.TerminationGrace, func() {
-					if !childExited.Load() {
-						signalGroup(command.Process, syscall.SIGKILL)
-					}
-				})
+		case <-ctx.Done():
+			waitError, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+			outcome = "task-failed"
+			if stopError != nil {
+				return 1, stopError
 			}
 
+			return waitStatusCode(waitError), nil
+
 		case <-ticker.C:
-			reading, collectError := config.Collector.Collect(previous, config.DiskPath)
+			reading, collectError := config.Collector.Collect(ctx, previous, config.DiskPath)
 			if collectError != nil {
-				signalGroup(command.Process, syscall.SIGTERM)
-				return 1, collectError
+				outcome = "supervision-failed"
+				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+
+				return 1, errors.Join(collectError, stopError)
 			}
 
 			previous = reading.CPUState
@@ -397,30 +431,32 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 			}
 
 			if appendError := writer.Append(reading.Sample); appendError != nil {
-				signalGroup(command.Process, syscall.SIGTERM)
-				return 1, appendError
+				outcome = "supervision-failed"
+				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+
+				return 1, errors.Join(appendError, stopError)
 			}
 
-			assessment := ResourceAssessment(samples, config.Policy)
-			stableDegradedWarning := degraded && WarningAdmissionReady(samples, config.Policy)
-			if assessment.State == "normal" || stableDegradedWarning {
+			assessment := policy.ResourceAssessment(samples, config.Policy)
+			stableDegradedWarning := degraded && policy.WarningAdmissionReady(samples, config.Policy)
+			if assessment.State == policy.StateNormal || stableDegradedWarning {
 				warningSince = nil
-			} else if assessment.State == "warning" && warningSince == nil {
+			} else if assessment.State == policy.StateWarning && warningSince == nil {
 				value := config.Now()
 				warningSince = &value
 			}
 
-			if config.TaskClass == "transactional" || shed {
+			if config.TaskClass == policy.TaskTransactional {
 				continue
 			}
 
 			grace := config.Policy.EphemeralWarningGrace
-			if config.TaskClass == "service" {
+			if config.TaskClass == policy.TaskService {
 				grace = config.Policy.ServiceWarningGrace
 			}
 
-			if assessment.State == "critical" || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) {
-				shed = true
+			if assessment.State == policy.StateCritical || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) {
+				shedCode := CapacityDeferredExitCode
 				if assessment.StorageBlocked {
 					shedCode, outcome = StorageBlockedExitCode, "storage-shed"
 				} else {
@@ -428,12 +464,9 @@ func Run(config RunConfig) (exitCode int, returnError error) {
 				}
 
 				_, _ = fmt.Fprintf(config.Stderr, "Resource guard shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
-				signalGroup(command.Process, syscall.SIGTERM)
-				forceTimer = time.AfterFunc(config.Policy.TerminationGrace, func() {
-					if !childExited.Load() {
-						signalGroup(command.Process, syscall.SIGKILL)
-					}
-				})
+				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+
+				return shedCode, stopError
 			}
 		}
 	}

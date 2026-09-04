@@ -1,17 +1,16 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/wahidyankf/resource-guard/internal/guard"
 	"github.com/wahidyankf/resource-guard/internal/host"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 func (application Application) version(options versionOptions) (int, error) {
@@ -39,53 +38,55 @@ func (application Application) version(options versionOptions) (int, error) {
 	return 0, err
 }
 
-func withAssessmentDecision(resolution guard.Resolution, assessment guard.Assessment) guard.Resolution {
+func withAssessmentDecision(resolution policy.Resolution, assessment policy.Assessment) policy.Resolution {
 	if resolution.ExitCode != 0 {
 		return resolution
 	}
 
 	if assessment.StorageBlocked {
-		resolution.Decision, resolution.ExitCode = "cleanup", guard.StorageBlockedExitCode
-	} else if assessment.State != "normal" {
-		resolution.Decision, resolution.ExitCode, resolution.Retryable = "wait", guard.CapacityDeferredExitCode, true
+		resolution.Decision, resolution.ExitCode = policy.DecisionCleanup, guard.StorageBlockedExitCode
+	} else if assessment.State != policy.StateNormal {
+		resolution.Decision, resolution.ExitCode, resolution.Retryable = policy.DecisionWait, guard.CapacityDeferredExitCode, true
 	}
 
 	return resolution
 }
 
-func (application Application) status(options statusOptions) (int, error) {
+func (application Application) status(ctx context.Context, options statusOptions) (int, error) {
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return guard.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
 
-	first, err := application.Collector.Collect(nil, options.diskPath)
+	first, err := application.Collector.Collect(ctx, nil, options.diskPath)
 	if err != nil {
 		return 1, err
 	}
 
-	application.Sleep(time.Second)
+	if err := waitForContext(ctx, time.Second, application.Sleep); err != nil {
+		return 1, err
+	}
 
-	second, err := application.Collector.Collect(first.CPUState, options.diskPath)
+	second, err := application.Collector.Collect(ctx, first.CPUState, options.diskPath)
 	if err != nil {
 		return 1, err
 	}
 
-	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, "ephemeral", second.Sample)
+	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskEphemeral, second.Sample)
 	if resolveError != nil {
-		return guard.ReplanRequiredExitCode, resolveError
+		return policy.ReplanRequiredExitCode, resolveError
 	}
 
-	assessment := guard.ResourceAssessment([]guard.Sample{first.Sample, second.Sample}, resolution.Policy)
+	assessment := policy.ResourceAssessment([]policy.Sample{first.Sample, second.Sample}, resolution.Policy)
 	resolution = withAssessmentDecision(resolution, assessment)
 
 	if options.jsonOutput {
 		payload := struct {
-			guard.Sample
+			policy.Sample
 
-			Resource   guard.Assessment `json:"resource"`
-			Profile    guard.Resolution `json:"profile"`
-			ConfigHash string           `json:"configHash,omitempty"`
+			Resource   policy.Assessment `json:"resource"`
+			Profile    policy.Resolution `json:"profile"`
+			ConfigHash string            `json:"configHash,omitempty"`
 		}{second.Sample, assessment, resolution, configuration.Hash}
 		encoded, marshalError := json.Marshal(payload)
 		if marshalError != nil {
@@ -104,10 +105,10 @@ func (application Application) status(options statusOptions) (int, error) {
 	}
 
 	if availableBytes != nil {
-		available = fmt.Sprintf("%.2f", float64(*availableBytes)/float64(guard.GiB))
+		available = fmt.Sprintf("%.2f", float64(*availableBytes)/float64(policy.GiB))
 	}
 	if second.Sample.DiskFreeBytes != nil {
-		disk = fmt.Sprintf("%.2f", float64(*second.Sample.DiskFreeBytes)/float64(guard.GiB))
+		disk = fmt.Sprintf("%.2f", float64(*second.Sample.DiskFreeBytes)/float64(policy.GiB))
 	}
 	if second.Sample.CPUUtilizationPercent != nil {
 		cpu = fmt.Sprintf("%.1f%%", *second.Sample.CPUUtilizationPercent)
@@ -129,23 +130,41 @@ func (application Application) status(options statusOptions) (int, error) {
 	return 0, err
 }
 
-func (application Application) monitor(options monitorOptions) (int, error) {
+func waitForContext(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
+	if pause != nil {
+		pause(duration)
+
+		return ctx.Err()
+	}
+
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (application Application) monitor(ctx context.Context, options monitorOptions) (int, error) {
 	if options.interval <= 0 {
 		return 1, errors.New("interval must be positive")
 	}
 
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return guard.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
 
-	var previous guard.CPUState
+	var previous policy.CPUState
 
-	samples := []guard.Sample{}
+	samples := []policy.Sample{}
 	prior := ""
 
 	observe := func() error {
-		reading, err := application.Collector.Collect(previous, options.diskPath)
+		reading, err := application.Collector.Collect(ctx, previous, options.diskPath)
 		if err != nil {
 			return err
 		}
@@ -156,13 +175,13 @@ func (application Application) monitor(options monitorOptions) (int, error) {
 			samples = samples[len(samples)-17:]
 		}
 
-		resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, "ephemeral", reading.Sample)
+		resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskEphemeral, reading.Sample)
 		if resolveError != nil {
 			return resolveError
 		}
 
-		assessment := guard.ResourceAssessment(samples, resolution.Policy)
-		state := assessment.State + ":" + assessment.Reason + ":" + resolution.ResolvedProfile
+		assessment := policy.ResourceAssessment(samples, resolution.Policy)
+		state := string(assessment.State) + ":" + assessment.Reason + ":" + resolution.ResolvedProfile
 
 		if state != prior {
 			_, writeError := fmt.Fprintf(
@@ -188,16 +207,12 @@ func (application Application) monitor(options monitorOptions) (int, error) {
 		return 1, err
 	}
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(signals)
-
 	ticker := time.NewTicker(options.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-signals:
+		case <-ctx.Done():
 			return 0, nil
 		case <-ticker.C:
 			if err := observe(); err != nil {
@@ -207,7 +222,7 @@ func (application Application) monitor(options monitorOptions) (int, error) {
 	}
 }
 
-func (application Application) run(options runOptions) (int, error) {
+func (application Application) run(ctx context.Context, options runOptions) (int, error) {
 	if options.workingDir != "" {
 		absolute, err := filepath.Abs(options.workingDir)
 		if err != nil {
@@ -224,7 +239,7 @@ func (application Application) run(options runOptions) (int, error) {
 
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return guard.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
 
 	probeDiskPath := options.diskPath
@@ -235,14 +250,15 @@ func (application Application) run(options runOptions) (int, error) {
 		probeDiskPath = "."
 	}
 
-	probe, collectError := application.Collector.Collect(nil, probeDiskPath)
+	probe, collectError := application.Collector.Collect(ctx, nil, probeDiskPath)
 	if collectError != nil {
 		return 1, collectError
 	}
 
-	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, options.class, probe.Sample)
+	taskClass := policy.TaskClass(options.class)
+	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, taskClass, probe.Sample)
 	if resolveError != nil {
-		return guard.ReplanRequiredExitCode, resolveError
+		return policy.ReplanRequiredExitCode, resolveError
 	}
 	if resolution.ExitCode != 0 {
 		_, _ = fmt.Fprintf(
@@ -256,10 +272,10 @@ func (application Application) run(options runOptions) (int, error) {
 		return resolution.ExitCode, nil
 	}
 
-	return guard.Run(guard.RunConfig{
+	return guard.Run(ctx, guard.RunConfig{
 		Command:          options.command[0],
 		Arguments:        options.command[1:],
-		TaskClass:        options.class,
+		TaskClass:        taskClass,
 		WorkingDirectory: options.workingDir,
 		Environment:      application.Environment,
 		EvidenceRoot:     root,

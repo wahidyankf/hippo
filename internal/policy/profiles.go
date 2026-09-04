@@ -17,6 +17,34 @@ const (
 	swapUnavailable        = "unavailable"
 )
 
+// TaskClass identifies the guarded workload category used for admission.
+type TaskClass string
+
+const (
+	// TaskEphemeral identifies restartable bounded development work.
+	TaskEphemeral TaskClass = "ephemeral"
+	// TaskService identifies long-lived development services.
+	TaskService TaskClass = "service"
+	// TaskTransactional identifies non-restartable development work.
+	TaskTransactional TaskClass = "transactional"
+	// TaskRelease identifies strict release work.
+	TaskRelease TaskClass = "release"
+)
+
+// Decision is the action selected by profile resolution.
+type Decision string
+
+const (
+	// DecisionRun admits work using the resolved profile.
+	DecisionRun Decision = "run"
+	// DecisionWait defers work until transient pressure clears.
+	DecisionWait Decision = "wait"
+	// DecisionCleanup requires storage cleanup before retrying.
+	DecisionCleanup Decision = "cleanup"
+	// DecisionReplan requires a different requested capacity envelope.
+	DecisionReplan Decision = "replan"
+)
+
 // Profile defines one adaptive admission envelope.
 type Profile struct {
 	Name                        string  `json:"name"`
@@ -50,7 +78,7 @@ type Resolution struct {
 	Concurrency      int      `json:"concurrency"`
 	MemoryReserve    int64    `json:"memoryReserveBytes"`
 	DiskReserve      int64    `json:"diskReserveBytes"`
-	Decision         string   `json:"decision"`
+	Decision         Decision `json:"decision"`
 	ExitCode         int      `json:"exitCode"`
 	Retryable        bool     `json:"retryable"`
 	Policy           Policy   `json:"-"`
@@ -144,7 +172,7 @@ func profilePolicy(profile Profile, sample Sample) (Policy, int64, int64, int) {
 		concurrency = min(concurrency, profile.MaxConcurrency)
 	}
 
-	policy := DevelopmentPolicy
+	policy := DefaultPolicy()
 	policy.AdmissionMemoryBytes = memoryReserve
 	policy.WarningAdmissionMemoryBytes = clampPercent(memoryCapacity, 25, 4*GiB, 8*GiB)
 	policy.CriticalMemoryBytes = max(64*MiB, memoryReserve/2)
@@ -177,7 +205,7 @@ func profileFits(sample Sample, policy Policy) bool {
 }
 
 // Resolve chooses a concrete profile for one sample and task class.
-func (catalog Catalog) Resolve(requested, taskClass string, sample Sample) (Resolution, error) {
+func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sample) (Resolution, error) {
 	if requested == "" {
 		requested = catalog.DefaultProfile
 	}
@@ -185,7 +213,7 @@ func (catalog Catalog) Resolve(requested, taskClass string, sample Sample) (Reso
 		requested = profileBalanced
 	}
 
-	strictClass := taskClass == "transactional" || taskClass == "release"
+	strictClass := taskClass == TaskTransactional || taskClass == TaskRelease
 	seen := map[string]bool{}
 	chain := []string{}
 	current := requested
@@ -211,12 +239,12 @@ func (catalog Catalog) Resolve(requested, taskClass string, sample Sample) (Reso
 			Concurrency:      concurrency,
 			MemoryReserve:    memoryReserve,
 			DiskReserve:      diskReserve,
-			Decision:         "run",
+			Decision:         DecisionRun,
 			Policy:           policy,
 		}
 
 		if sample.DiskFreeBytes == nil || *sample.DiskFreeBytes < HardDiskFloorBytes {
-			resolution.Decision, resolution.ExitCode = "cleanup", 73
+			resolution.Decision, resolution.ExitCode = DecisionCleanup, 73
 
 			return resolution, nil
 		}
@@ -232,7 +260,7 @@ func (catalog Catalog) Resolve(requested, taskClass string, sample Sample) (Reso
 		}
 
 		if resolution.Strict {
-			resolution.Decision, resolution.ExitCode = "replan", ReplanRequiredExitCode
+			resolution.Decision, resolution.ExitCode = DecisionReplan, ReplanRequiredExitCode
 
 			return resolution, nil
 		}

@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"math"
 	"slices"
 	"sort"
@@ -12,9 +13,6 @@ const (
 	GiB = int64(1024 * 1024 * 1024)
 	// MiB is one binary mebibyte.
 	MiB                  = int64(1024 * 1024)
-	stateNormal          = "normal"
-	stateWarning         = "warning"
-	stateCritical        = "critical"
 	swapUnavailableState = "unavailable"
 	platformDarwin       = "darwin"
 	// ReleaseRoutedLatencyP95BudgetMs is the hard routed-user-surface p95 ceiling during release overlap.
@@ -22,6 +20,18 @@ const (
 	// ReleaseRoutedLatencyMaxBudgetMs is the hard single routed-user-surface sample ceiling during release overlap.
 	ReleaseRoutedLatencyMaxBudgetMs = 2_000.0
 )
+
+// State is a resource-pressure classification emitted in evidence JSON.
+type State string
+
+// StateNormal indicates safe resource headroom.
+const StateNormal State = "normal"
+
+// StateWarning indicates pressure that may recover within a grace period.
+const StateWarning State = "warning"
+
+// StateCritical indicates pressure that requires immediate refusal or shedding.
+const StateCritical State = "critical"
 
 // Sample is one timestamped host resource observation.
 type Sample struct {
@@ -66,7 +76,7 @@ type Reading struct {
 
 // Collector produces host readings for admission and monitoring.
 type Collector interface {
-	Collect(previous CPUState, diskPath string) (Reading, error)
+	Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error)
 }
 
 // Policy defines thresholds, timing, and resource reservations.
@@ -94,35 +104,37 @@ type Policy struct {
 	SampleInterval                 time.Duration
 }
 
-// DevelopmentPolicy is the repository's canonical guarded-development policy.
-var DevelopmentPolicy = Policy{
-	AdmissionMemoryBytes:        9 * GiB,
-	WarningAdmissionMemoryBytes: 8 * GiB,
-	CriticalMemoryBytes:         4 * GiB,
+// DefaultPolicy returns an independent guarded-development policy value.
+func DefaultPolicy() Policy {
+	return Policy{
+		AdmissionMemoryBytes:        9 * GiB,
+		WarningAdmissionMemoryBytes: 8 * GiB,
+		CriticalMemoryBytes:         4 * GiB,
 
-	DiskWarningBytes:  30 * GiB,
-	DiskCriticalBytes: 20 * GiB,
+		DiskWarningBytes:  30 * GiB,
+		DiskCriticalBytes: 20 * GiB,
 
-	TrendWindow:          15 * time.Second,
-	SwapOutWarningBytes:  128 * MiB,
-	SwapOutCriticalBytes: 512 * MiB,
+		TrendWindow:          15 * time.Second,
+		SwapOutWarningBytes:  128 * MiB,
+		SwapOutCriticalBytes: 512 * MiB,
 
-	CompressorWarningPayloadBytes:  12 * GiB,
-	CompressorWarningGrowthBytes:   1 * GiB,
-	CompressorCriticalPayloadBytes: 16 * GiB,
-	CompressorCriticalGrowthBytes:  2 * GiB,
+		CompressorWarningPayloadBytes:  12 * GiB,
+		CompressorWarningGrowthBytes:   1 * GiB,
+		CompressorCriticalPayloadBytes: 16 * GiB,
+		CompressorCriticalGrowthBytes:  2 * GiB,
 
-	ReservedCPUUnits:         2,
-	MaxCPUUtilizationPercent: 85,
-	ConsecutiveCPUSamples:    3,
+		ReservedCPUUnits:         2,
+		MaxCPUUtilizationPercent: 85,
+		ConsecutiveCPUSamples:    3,
 
-	AdmissionWindow:       16 * time.Second,
-	EphemeralWarningGrace: 10 * time.Second,
-	ServiceWarningGrace:   30 * time.Second,
-	TerminationGrace:      10 * time.Second,
+		AdmissionWindow:       16 * time.Second,
+		EphemeralWarningGrace: 10 * time.Second,
+		ServiceWarningGrace:   30 * time.Second,
+		TerminationGrace:      10 * time.Second,
 
-	LeaseWait:      5 * time.Minute,
-	SampleInterval: time.Second,
+		LeaseWait:      5 * time.Minute,
+		SampleInterval: time.Second,
+	}
 }
 
 // Assessment classifies current and trend-based resource evidence.
@@ -130,7 +142,7 @@ type Assessment struct {
 	CompressorGrowthWindowBytes float64 `json:"compressorGrowthWindowBytes"`
 	SwapOutWindowBytes          float64 `json:"swapOutWindowBytes"`
 	Reason                      string  `json:"reason"`
-	State                       string  `json:"state"`
+	State                       State   `json:"state"`
 	StorageBlocked              bool    `json:"storageBlocked"`
 	SwapState                   string  `json:"swapState,omitempty"`
 }
@@ -157,9 +169,9 @@ func hasCapability(sample Sample, expected string) bool {
 }
 
 // MemoryState classifies memory evidence as normal, warning, or critical.
-func MemoryState(sample Sample, policy Policy) string {
+func MemoryState(sample Sample, policy Policy) State {
 	if !EssentialReadingsValid(sample) {
-		return stateCritical
+		return StateCritical
 	}
 
 	available := availableMemory(sample)
@@ -171,17 +183,17 @@ func MemoryState(sample Sample, policy Policy) string {
 		sample.MemoryPSIFullAvg10 != nil && *sample.MemoryPSIFullAvg10 >= 5
 
 	if criticalPressure || compressorFailed || psiCritical || *available < policy.CriticalMemoryBytes {
-		return stateCritical
+		return StateCritical
 	}
 
 	warningPressure := sample.MemoryPressureLevel != nil && *sample.MemoryPressureLevel == 2
 	psiWarning := sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 10
 
 	if warningPressure || psiWarning || *available < policy.AdmissionMemoryBytes {
-		return stateWarning
+		return StateWarning
 	}
 
-	return stateNormal
+	return StateNormal
 }
 
 // CPUAdmissionReady reports whether utilization preserves reserved execution units.
@@ -189,6 +201,8 @@ func CPUAdmissionReady(sample Sample, policy Policy) bool {
 	if sample.CPUUtilizationPercent == nil ||
 		math.IsNaN(*sample.CPUUtilizationPercent) ||
 		math.IsInf(*sample.CPUUtilizationPercent, 0) ||
+		*sample.CPUUtilizationPercent < 0 ||
+		*sample.CPUUtilizationPercent > 100 ||
 		sample.AvailableParallelism <= 0 {
 		return false
 	}
@@ -233,7 +247,7 @@ func scaledWindowDelta(samples []Sample, value func(Sample) *int64, multiplier i
 // ResourceAssessment classifies the newest sample and bounded pressure trends.
 func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:cyclop // Ordered independent resource signals must remain visibly auditable.
 	if len(samples) == 0 {
-		return Assessment{Reason: "missing-sample", State: stateCritical}
+		return Assessment{Reason: "missing-sample", State: StateCritical}
 	}
 
 	current := samples[len(samples)-1]
@@ -245,17 +259,20 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 	result := Assessment{
 		CompressorGrowthWindowBytes: scaledWindowDelta(samples, func(s Sample) *int64 { return s.CompressorPayloadBytes }, 1, policy),
 		SwapOutWindowBytes:          scaledWindowDelta(samples, func(s Sample) *int64 { return s.SwapOuts }, pageSize, policy),
-		Reason:                      stateNormal, State: stateNormal, SwapState: current.SwapState,
+		Reason:                      string(StateNormal), State: StateNormal, SwapState: current.SwapState,
 	}
 
 	if current.DiskFreeBytes == nil {
-		result.Reason, result.State, result.StorageBlocked = "disk-unavailable", stateCritical, true
+		result.Reason, result.State, result.StorageBlocked = "disk-unavailable", StateCritical, true
 
 		return result
 	}
 
 	result.StorageBlocked = *current.DiskFreeBytes < policy.DiskWarningBytes
-	type candidate struct{ reason, state string }
+	type candidate struct {
+		reason string
+		state  State
+	}
 	candidates := []candidate{}
 
 	if len(samples) > 1 {
@@ -263,44 +280,44 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 		oomIncreased := current.OOMEvents != nil && previous.OOMEvents != nil && *current.OOMEvents > *previous.OOMEvents
 		oomKillIncreased := current.OOMKillEvents != nil && previous.OOMKillEvents != nil && *current.OOMKillEvents > *previous.OOMKillEvents
 		if oomIncreased || oomKillIncreased {
-			candidates = append(candidates, candidate{"memory-oom", stateCritical})
+			candidates = append(candidates, candidate{reason: "memory-oom", state: StateCritical})
 		}
 	}
 
 	if *current.DiskFreeBytes < policy.DiskCriticalBytes {
-		candidates = append(candidates, candidate{"disk-critical", stateCritical})
+		candidates = append(candidates, candidate{reason: "disk-critical", state: StateCritical})
 	} else if result.StorageBlocked {
-		candidates = append(candidates, candidate{"disk-warning", stateWarning})
+		candidates = append(candidates, candidate{reason: "disk-warning", state: StateWarning})
 	}
 
-	if state := MemoryState(current, policy); state != stateNormal {
-		reason := "memory-" + state
+	if state := MemoryState(current, policy); state != StateNormal {
+		reason := "memory-" + string(state)
 		if current.MemoryPSISomeAvg10 != nil && *current.MemoryPSISomeAvg10 >= 10 ||
 			current.MemoryPSIFullAvg10 != nil && *current.MemoryPSIFullAvg10 >= 5 {
 			reason = "memory-psi"
 		}
-		candidates = append(candidates, candidate{reason, state})
+		candidates = append(candidates, candidate{reason: reason, state: state})
 	}
 
 	if current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutCriticalBytes) {
 		result.SwapState = "stressed"
-		candidates = append(candidates, candidate{"swap-critical", stateCritical})
+		candidates = append(candidates, candidate{reason: "swap-critical", state: StateCritical})
 	} else if current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutWarningBytes) {
 		result.SwapState = "stressed"
-		candidates = append(candidates, candidate{"swap-warning", stateWarning})
+		candidates = append(candidates, candidate{reason: "swap-warning", state: StateWarning})
 	}
 
 	if current.CompressorPayloadBytes != nil &&
 		*current.CompressorPayloadBytes >= policy.CompressorCriticalPayloadBytes &&
 		result.CompressorGrowthWindowBytes >= float64(policy.CompressorCriticalGrowthBytes) {
-		candidates = append(candidates, candidate{"compressor-critical", stateCritical})
+		candidates = append(candidates, candidate{reason: "compressor-critical", state: StateCritical})
 	} else if current.CompressorPayloadBytes != nil &&
 		*current.CompressorPayloadBytes >= policy.CompressorWarningPayloadBytes &&
 		result.CompressorGrowthWindowBytes >= float64(policy.CompressorWarningGrowthBytes) {
-		candidates = append(candidates, candidate{"compressor-warning", stateWarning})
+		candidates = append(candidates, candidate{reason: "compressor-warning", state: StateWarning})
 	}
 
-	severity := map[string]int{stateNormal: 0, stateWarning: 1, stateCritical: 2}
+	severity := map[State]int{StateNormal: 0, StateWarning: 1, StateCritical: 2}
 	sort.SliceStable(candidates, func(i, j int) bool { return severity[candidates[i].state] > severity[candidates[j].state] })
 
 	if len(candidates) > 0 {
@@ -312,7 +329,7 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 
 // AdmissionReady requires a normal assessment and consecutive safe CPU samples.
 func AdmissionReady(samples []Sample, policy Policy) bool {
-	if ResourceAssessment(samples, policy).State != stateNormal || len(samples) < policy.ConsecutiveCPUSamples {
+	if ResourceAssessment(samples, policy).State != StateNormal || len(samples) < policy.ConsecutiveCPUSamples {
 		return false
 	}
 
@@ -348,7 +365,7 @@ func WarningAdmissionReady(samples []Sample, policy Policy) bool { //nolint:cycl
 	}
 
 	assessment := ResourceAssessment(samples, policy)
-	if assessment.State == stateCritical || assessment.StorageBlocked ||
+	if assessment.State == StateCritical || assessment.StorageBlocked ||
 		assessment.SwapOutWindowBytes >= float64(policy.SwapOutWarningBytes) ||
 		assessment.CompressorGrowthWindowBytes >= float64(policy.CompressorWarningGrowthBytes) {
 		return false
@@ -380,25 +397,6 @@ func WarningAdmissionReady(samples []Sample, policy Policy) bool { //nolint:cycl
 	}
 
 	return true
-}
-
-// Percentile returns the nearest-rank finite percentile, or nil for no finite values.
-func Percentile(values []float64, proportion float64) *float64 {
-	finite := make([]float64, 0, len(values))
-	for _, value := range values {
-		if !math.IsNaN(value) && !math.IsInf(value, 0) {
-			finite = append(finite, value)
-		}
-	}
-
-	if len(finite) == 0 {
-		return nil
-	}
-
-	sort.Float64s(finite)
-	index := max(0, int(math.Ceil(float64(len(finite))*proportion))-1)
-
-	return &finite[index]
 }
 
 // ReleaseSummary contains aggregate release-monitor evidence.

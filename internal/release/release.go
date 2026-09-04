@@ -1,7 +1,7 @@
 package release
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,50 +9,51 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
+	"github.com/wahidyankf/resource-guard/internal/evidence"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
+const maximumProbeLatencyMs = 3000.0
+
 // Check requires consecutive CPU samples plus release memory and disk reserves.
-func Check(collector guard.Collector, diskPath string, pause func(time.Duration)) error {
-	return CheckWithPolicy(collector, diskPath, pause, guard.DevelopmentPolicy)
+func Check(ctx context.Context, collector policy.Collector, diskPath string, pause func(time.Duration)) error {
+	return CheckWithPolicy(ctx, collector, diskPath, pause, policy.DefaultPolicy())
 }
 
 // CheckWithPolicy requires consecutive samples inside one resolved strict profile.
-func CheckWithPolicy(collector guard.Collector, diskPath string, pause func(time.Duration), policy guard.Policy) error {
+func CheckWithPolicy(ctx context.Context, collector policy.Collector, diskPath string, pause func(time.Duration), resourcePolicy policy.Policy) error {
 	if collector == nil {
 		return errors.New("host collector is required")
 	}
 
-	if pause == nil {
-		pause = time.Sleep
-	}
-
-	var previous guard.CPUState
+	var previous policy.CPUState
 	consecutive := 0
 
 	for attempt := range 31 {
-		reading, err := collector.Collect(previous, diskPath)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		reading, err := collector.Collect(ctx, previous, diskPath)
 		if err != nil {
 			return err
 		}
 
 		previous = reading.CPUState
 
-		if guard.MemoryState(reading.Sample, policy) != "normal" {
+		if policy.MemoryState(reading.Sample, resourcePolicy) != policy.StateNormal {
 			return errors.New("memory pressure does not leave safe release headroom")
 		}
-		if reading.Sample.DiskFreeBytes == nil || *reading.Sample.DiskFreeBytes < policy.DiskWarningBytes {
+		if reading.Sample.DiskFreeBytes == nil || *reading.Sample.DiskFreeBytes < resourcePolicy.DiskWarningBytes {
 			return errors.New("release disk reserve is unavailable")
 		}
 
-		if guard.CPUAdmissionReady(reading.Sample, policy) {
+		if policy.CPUAdmissionReady(reading.Sample, resourcePolicy) {
 			consecutive++
 		} else {
 			consecutive = 0
@@ -63,29 +64,49 @@ func CheckWithPolicy(collector guard.Collector, diskPath string, pause func(time
 		}
 
 		if attempt < 30 {
-			pause(500 * time.Millisecond)
+			if err := waitForContext(ctx, 500*time.Millisecond, pause); err != nil {
+				return err
+			}
 		}
 	}
 
 	return errors.New("CPU use does not leave release and safety headroom")
 }
 
-// AssessFile validates one completed release summary.
-func AssessFile(path string) (guard.ReleaseSummary, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return guard.ReleaseSummary{}, err
+func waitForContext(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
+	if pause != nil {
+		pause(duration)
+
+		return ctx.Err()
 	}
 
-	var summary guard.ReleaseSummary
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// AssessFile validates one completed release summary.
+func AssessFile(path string) (policy.ReleaseSummary, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return policy.ReleaseSummary{}, err
+	}
+
+	var summary policy.ReleaseSummary
 	if err = json.Unmarshal(data, &summary); err != nil {
-		return guard.ReleaseSummary{}, err
+		return policy.ReleaseSummary{}, err
 	}
 
 	if summary.SchemaVersion < 2 || summary.SchemaVersion > 5 || summary.SampleCount <= 0 || summary.AvailableParallelism <= 0 {
 		return summary, errors.New("resource evidence summary is invalid")
 	}
-	if !guard.ReleaseHeadroomAvailable(summary) {
+	if !policy.ReleaseHeadroomAvailable(summary) {
 		return summary, errors.New("release overlap exhausted resource or routed responsiveness headroom")
 	}
 
@@ -97,17 +118,18 @@ type MonitorConfig struct {
 	OutputPath, SummaryPath, DeploymentRoot string
 	HealthURL, RoutedOrigin                 string
 	ServicePorts                            []int
-	Duration                                time.Duration
-	Collector                               guard.Collector
+	Collector                               policy.Collector
 	Interval                                time.Duration
-	ServiceRSS                              func() int64
-	Health                                  func() (int, float64)
-	RoutedHealth                            func() (int, float64)
-	LoadAverage                             func() float64
+	EvidenceLimits                          evidence.Limits
+	Now                                     func() time.Time
+	ServiceRSS                              func(context.Context) int64
+	Health                                  func(context.Context) (int, float64)
+	RoutedHealth                            func(context.Context) (int, float64)
+	LoadAverage                             func(context.Context) float64
 }
 
 type releaseSample struct {
-	guard.Sample
+	policy.Sample
 
 	OneMinuteLoad          float64 `json:"oneMinuteLoad"`
 	ServiceRSSBytes        int64   `json:"serviceRssBytes"`
@@ -117,8 +139,8 @@ type releaseSample struct {
 	RoutedJourneyLatencyMs float64 `json:"routedJourneyLatencyMs"`
 }
 
-func output(command string, arguments ...string) string {
-	value, err := exec.Command(command, arguments...).Output()
+func output(ctx context.Context, command string, arguments ...string) string {
+	value, err := exec.CommandContext(ctx, command, arguments...).Output()
 	if err != nil {
 		return ""
 	}
@@ -126,11 +148,11 @@ func output(command string, arguments ...string) string {
 	return strings.TrimSpace(string(value))
 }
 
-func serviceRSSBytes(ports []int) int64 {
+func serviceRSSBytes(ctx context.Context, ports []int) int64 {
 	pids := map[string]bool{}
 
 	for _, port := range ports {
-		for pid := range strings.FieldsSeq(output("lsof", "-nP", fmt.Sprintf("-iTCP:%d", port), "-sTCP:LISTEN", "-t")) {
+		for pid := range strings.FieldsSeq(output(ctx, "lsof", "-nP", fmt.Sprintf("-iTCP:%d", port), "-sTCP:LISTEN", "-t")) {
 			pids[pid] = true
 		}
 	}
@@ -145,7 +167,7 @@ func serviceRSSBytes(ports []int) int64 {
 	}
 
 	var total int64
-	for field := range strings.FieldsSeq(output("ps", "-o", "rss=", "-p", strings.Join(list, ","))) {
+	for field := range strings.FieldsSeq(output(ctx, "ps", "-o", "rss=", "-p", strings.Join(list, ","))) {
 		value, _ := strconv.ParseInt(field, 10, 64)
 		total += value * 1024
 	}
@@ -153,26 +175,26 @@ func serviceRSSBytes(ports []int) int64 {
 	return total
 }
 
-func probeHTTP(target string) (int, float64) {
-	return probeHTTPWithRedirects(target, false)
+func probeHTTP(ctx context.Context, target string) (int, float64) {
+	return probeHTTPWithRedirects(ctx, target, false)
 }
 
-func probeRoutedHTTP(target string) (int, float64) {
-	return probeHTTPWithRedirects(target, true)
+func probeRoutedHTTP(ctx context.Context, target string) (int, float64) {
+	return probeHTTPWithRedirects(ctx, target, true)
 }
 
-func probeHTTPWithRedirects(target string, followRedirects bool) (int, float64) {
+func probeHTTPWithRedirects(ctx context.Context, target string, followRedirects bool) (int, float64) {
 	arguments := HTTPProbeArguments(target, followRedirects)
-	value := output("curl", arguments...)
+	value := output(ctx, "curl", arguments...)
 	fields := strings.Fields(value)
 
 	if len(fields) != 2 {
-		return 0, 3000
+		return 0, maximumProbeLatencyMs
 	}
 	status, _ := strconv.Atoi(fields[0])
 	seconds, err := strconv.ParseFloat(fields[1], 64)
 	if err != nil {
-		return 0, 3000
+		return 0, maximumProbeLatencyMs
 	}
 
 	return status, seconds * 1000
@@ -191,16 +213,16 @@ func HTTPProbeArguments(target string, followRedirects bool) []string {
 	return arguments
 }
 
-func localHealth(target string) (func() (int, float64), error) {
+func localHealth(target string) (func(context.Context) (int, float64), error) {
 	parsed, err := url.Parse(target)
 	if err != nil || parsed.Scheme != "http" && parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
 		return nil, errors.New("HTTP(S) health URL is required for release monitoring")
 	}
 
-	return func() (int, float64) { return probeHTTP(target) }, nil
+	return func(ctx context.Context) (int, float64) { return probeHTTP(ctx, target) }, nil
 }
 
-func routedHealth(origin string) (func() (int, float64), error) {
+func routedHealth(origin string) (func(context.Context) (int, float64), error) {
 	parsed, err := url.Parse(origin)
 	if err != nil ||
 		parsed.Scheme != "https" ||
@@ -214,10 +236,10 @@ func routedHealth(origin string) (func() (int, float64), error) {
 
 	target := strings.TrimSuffix(origin, "/") + "/"
 
-	return func() (int, float64) { return probeRoutedHTTP(target) }, nil
+	return func(ctx context.Context) (int, float64) { return probeRoutedHTTP(ctx, target) }, nil
 }
 
-func oneMinuteLoad() float64 {
+func oneMinuteLoad(ctx context.Context) float64 {
 	if data, err := os.ReadFile("/proc/loadavg"); err == nil {
 		fields := strings.Fields(string(data))
 		if len(fields) > 0 {
@@ -227,7 +249,7 @@ func oneMinuteLoad() float64 {
 		}
 	}
 
-	fields := strings.Fields(strings.Trim(output("sysctl", "-n", "vm.loadavg"), "{} "))
+	fields := strings.Fields(strings.Trim(output(ctx, "sysctl", "-n", "vm.loadavg"), "{} "))
 	if len(fields) == 0 {
 		return 0
 	}
@@ -239,29 +261,31 @@ func oneMinuteLoad() float64 {
 	return value
 }
 
-// RunMonitor records release overlap samples until duration or signal completion.
-func RunMonitor(config MonitorConfig) error { //nolint:gocognit // Validation and bounded monitoring remain one auditable lifecycle.
+func normalizeMonitorConfig(config MonitorConfig) (MonitorConfig, error) {
 	if config.OutputPath == "" || config.SummaryPath == "" || config.DeploymentRoot == "" {
-		return errors.New("output, summary, and deployment root are required")
+		return MonitorConfig{}, errors.New("output, summary, and deployment root are required")
 	}
 	if config.Collector == nil {
-		return errors.New("host collector is required")
+		return MonitorConfig{}, errors.New("host collector is required")
+	}
+	if config.Interval < 0 {
+		return MonitorConfig{}, errors.New("release monitor interval must be nonnegative")
 	}
 
 	if config.ServiceRSS == nil {
-		config.ServiceRSS = func() int64 { return serviceRSSBytes(config.ServicePorts) }
+		config.ServiceRSS = func(ctx context.Context) int64 { return serviceRSSBytes(ctx, config.ServicePorts) }
 	}
 	if config.Health == nil {
-		probe, probeError := localHealth(config.HealthURL)
-		if probeError != nil {
-			return probeError
+		probe, err := localHealth(config.HealthURL)
+		if err != nil {
+			return MonitorConfig{}, err
 		}
 		config.Health = probe
 	}
 	if config.RoutedHealth == nil {
-		probe, probeError := routedHealth(config.RoutedOrigin)
-		if probeError != nil {
-			return probeError
+		probe, err := routedHealth(config.RoutedOrigin)
+		if err != nil {
+			return MonitorConfig{}, err
 		}
 		config.RoutedHealth = probe
 	}
@@ -272,173 +296,217 @@ func RunMonitor(config MonitorConfig) error { //nolint:gocognit // Validation an
 	if config.Interval == 0 {
 		config.Interval = time.Second
 	}
-
-	if err := guard.CleanupEvidence(filepath.Dir(config.OutputPath), time.Now(), config.OutputPath, config.SummaryPath); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(config.OutputPath), 0o700); err != nil {
-		return err
+	if config.Now == nil {
+		config.Now = time.Now
 	}
 
-	file, err := os.OpenFile(config.OutputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	return config, nil
+}
+
+// RunMonitor records release overlap samples until its context is cancelled.
+func RunMonitor(ctx context.Context, config MonitorConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	var err error
+	config, err = normalizeMonitorConfig(config)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = file.Close() }()
-	written := bufio.NewWriter(file)
-	samples := []releaseSample{}
-	var previous guard.CPUState
+
+	root := filepath.Dir(config.OutputPath)
+	if err := evidence.Cleanup(root, config.Now(), config.OutputPath, config.SummaryPath); err != nil {
+		return err
+	}
+
+	output, err := evidence.NewWriter(config.OutputPath, config.EvidenceLimits)
+	if err != nil {
+		return err
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = output.Close()
+		}
+	}()
+
+	accumulator := newReleaseAccumulator()
+	var previous policy.CPUState
 
 	sample := func() error {
-		reading, collectError := config.Collector.Collect(previous, config.DeploymentRoot)
+		reading, collectError := config.Collector.Collect(ctx, previous, config.DeploymentRoot)
 		if collectError != nil {
 			return collectError
 		}
 
 		previous = reading.CPUState
-		status, latency := config.Health()
-		routedStatus, routedLatency := config.RoutedHealth()
+		status, latency := config.Health(ctx)
+		routedStatus, routedLatency := config.RoutedHealth(ctx)
 		value := releaseSample{
 			Sample:                 reading.Sample,
-			OneMinuteLoad:          config.LoadAverage(),
-			ServiceRSSBytes:        config.ServiceRSS(),
+			OneMinuteLoad:          config.LoadAverage(ctx),
+			ServiceRSSBytes:        config.ServiceRSS(ctx),
 			HealthStatus:           status,
 			HealthLatencyMs:        latency,
 			RoutedJourneyStatus:    routedStatus,
 			RoutedJourneyLatencyMs: routedLatency,
 		}
 
-		samples = append(samples, value)
-
-		encoded, marshalError := json.Marshal(value)
-		if marshalError != nil {
-			return marshalError
+		if err := output.AppendJSON(value); err != nil {
+			return err
 		}
 
-		_, writeError := written.Write(append(encoded, '\n'))
-		if writeError != nil {
-			return writeError
-		}
+		accumulator.add(value)
 
-		return written.Flush()
+		return nil
 	}
 
 	if err := sample(); err != nil {
 		return err
 	}
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(signals)
 	ticker := time.NewTicker(config.Interval)
 	defer ticker.Stop()
-
-	var duration <-chan time.Time
-	if config.Duration > 0 {
-		timer := time.NewTimer(config.Duration)
-		defer timer.Stop()
-		duration = timer.C
-	}
 
 loop:
 	for {
 		select {
 		case <-ticker.C:
+			if ctx.Err() != nil {
+				break loop
+			}
 			if err := sample(); err != nil {
+				if ctx.Err() != nil {
+					break loop
+				}
+
 				return err
 			}
-		case <-signals:
-			break loop
-		case <-duration:
+		case <-ctx.Done():
 			break loop
 		}
 	}
 
-	return writeSummary(config.SummaryPath, samples)
+	if err := output.Close(); err != nil {
+		return err
+	}
+	closed = true
+
+	if err := writeSummary(config.SummaryPath, accumulator.result()); err != nil {
+		return err
+	}
+
+	return evidence.Cleanup(root, config.Now())
 }
 
-func recordRoutedEvidence(summary *guard.ReleaseSummary, latencies *[]float64, sample releaseSample) {
-	*latencies = append(*latencies, sample.RoutedJourneyLatencyMs)
-	summary.RoutedJourneyLatencyMaxMs = max(summary.RoutedJourneyLatencyMaxMs, sample.RoutedJourneyLatencyMs)
+type releaseAccumulator struct {
+	summary       policy.ReleaseSummary
+	first         *policy.Sample
+	last          *policy.Sample
+	cpu           *evidence.Histogram
+	healthLatency *evidence.Histogram
+	routedLatency *evidence.Histogram
+}
 
+func newReleaseAccumulator() *releaseAccumulator {
+	return &releaseAccumulator{
+		summary: policy.ReleaseSummary{
+			SchemaVersion:                          5,
+			CompressorAvailableAll:                 true,
+			MemoryPressureLevelMax:                 0,
+			AvailableNonCompressedEstimateMinBytes: math.MaxInt64,
+			DiskFreeMinBytes:                       math.MaxInt64,
+			SwapFreeMinBytes:                       math.MaxInt64,
+		},
+		cpu:           evidence.NewHistogram(100, 0.01),
+		healthLatency: evidence.NewHistogram(maximumProbeLatencyMs, 0.1),
+		routedLatency: evidence.NewHistogram(maximumProbeLatencyMs, 0.1),
+	}
+}
+
+func (accumulator *releaseAccumulator) add(sample releaseSample) {
+	if accumulator.first == nil {
+		first := sample.Sample
+		accumulator.first = &first
+		accumulator.summary.Platform = sample.Platform
+		accumulator.summary.Capabilities = append([]string(nil), sample.Capabilities...)
+		accumulator.summary.AvailableParallelism = sample.AvailableParallelism
+	}
+
+	last := sample.Sample
+	accumulator.last = &last
+	accumulator.summary.SampleCount++
+
+	available := sample.AvailableMemoryBytes
+	if available == nil {
+		available = sample.AvailableNonCompressedEstimateBytes
+	}
+
+	if available != nil {
+		accumulator.summary.AvailableNonCompressedEstimateMinBytes = min(accumulator.summary.AvailableNonCompressedEstimateMinBytes, *available)
+	}
+	if sample.MemoryPressureLevel != nil {
+		accumulator.summary.MemoryPressureLevelMax = max(accumulator.summary.MemoryPressureLevelMax, *sample.MemoryPressureLevel)
+	}
+	if sample.CompressorAvailable == nil || !*sample.CompressorAvailable {
+		accumulator.summary.CompressorAvailableAll = false
+	}
+	if sample.CompressorPayloadBytes != nil {
+		accumulator.summary.CompressorPayloadPeakBytes = max(accumulator.summary.CompressorPayloadPeakBytes, *sample.CompressorPayloadBytes)
+	}
+	if sample.CPUUtilizationPercent != nil {
+		accumulator.cpu.Add(*sample.CPUUtilizationPercent)
+	}
+	if sample.DiskFreeBytes != nil {
+		accumulator.summary.DiskFreeMinBytes = min(accumulator.summary.DiskFreeMinBytes, *sample.DiskFreeBytes)
+	}
+	if sample.SwapFreeBytes != nil {
+		accumulator.summary.SwapFreeMinBytes = min(accumulator.summary.SwapFreeMinBytes, *sample.SwapFreeBytes)
+	}
+
+	accumulator.summary.ServiceRSSPeakBytes = max(accumulator.summary.ServiceRSSPeakBytes, sample.ServiceRSSBytes)
+	accumulator.summary.RoutedJourneyLatencyMaxMs = max(accumulator.summary.RoutedJourneyLatencyMaxMs, sample.RoutedJourneyLatencyMs)
+	accumulator.healthLatency.Add(min(sample.HealthLatencyMs, maximumProbeLatencyMs))
+	accumulator.routedLatency.Add(min(sample.RoutedJourneyLatencyMs, maximumProbeLatencyMs))
+
+	if sample.HealthStatus != 200 {
+		accumulator.summary.HealthFailures++
+	}
 	if sample.RoutedJourneyStatus != 200 {
-		summary.RoutedJourneyFailures++
+		accumulator.summary.RoutedJourneyFailures++
 	}
 }
 
-func writeSummary(path string, samples []releaseSample) error {
-	if len(samples) == 0 {
+func (accumulator *releaseAccumulator) result() policy.ReleaseSummary {
+	summary := accumulator.summary
+	if accumulator.first == nil || accumulator.last == nil {
+		return summary
+	}
+
+	summary.PhysicalMemoryBytes = accumulator.first.PhysicalMemoryBytes
+	if accumulator.first.SwapIns != nil && accumulator.last.SwapIns != nil {
+		summary.SwapInsDelta = max(0, *accumulator.last.SwapIns-*accumulator.first.SwapIns)
+	}
+	if accumulator.first.SwapOuts != nil && accumulator.last.SwapOuts != nil {
+		summary.SwapOutsDelta = max(0, *accumulator.last.SwapOuts-*accumulator.first.SwapOuts)
+	}
+
+	if value, ok := accumulator.cpu.Quantile(0.95); ok {
+		summary.CPUUtilizationP95Percent = value
+	}
+	if value, ok := accumulator.healthLatency.Quantile(0.95); ok {
+		summary.HealthLatencyP95Ms = value
+	}
+	if value, ok := accumulator.routedLatency.Quantile(0.95); ok {
+		summary.RoutedJourneyLatencyP95Ms = value
+	}
+
+	return summary
+}
+
+func writeSummary(path string, summary policy.ReleaseSummary) error {
+	if summary.SampleCount == 0 {
 		return errors.New("release monitor has no samples")
-	}
-
-	summary := guard.ReleaseSummary{
-		SchemaVersion:                          5,
-		Platform:                               samples[0].Platform,
-		Capabilities:                           append([]string(nil), samples[0].Capabilities...),
-		SampleCount:                            len(samples),
-		AvailableParallelism:                   samples[0].AvailableParallelism,
-		CompressorAvailableAll:                 true,
-		MemoryPressureLevelMax:                 0,
-		AvailableNonCompressedEstimateMinBytes: math.MaxInt64,
-		DiskFreeMinBytes:                       math.MaxInt64,
-		SwapFreeMinBytes:                       math.MaxInt64,
-	}
-
-	cpu, latency, routedLatency := []float64{}, []float64{}, []float64{}
-	first, last := samples[0], samples[len(samples)-1]
-
-	for _, sample := range samples {
-		available := sample.AvailableMemoryBytes
-		if available == nil {
-			available = sample.AvailableNonCompressedEstimateBytes
-		}
-
-		if available != nil {
-			summary.AvailableNonCompressedEstimateMinBytes = min(summary.AvailableNonCompressedEstimateMinBytes, *available)
-		}
-		if sample.MemoryPressureLevel != nil {
-			summary.MemoryPressureLevelMax = max(summary.MemoryPressureLevelMax, *sample.MemoryPressureLevel)
-		}
-		if sample.CompressorAvailable == nil || !*sample.CompressorAvailable {
-			summary.CompressorAvailableAll = false
-		}
-		if sample.CompressorPayloadBytes != nil {
-			summary.CompressorPayloadPeakBytes = max(summary.CompressorPayloadPeakBytes, *sample.CompressorPayloadBytes)
-		}
-		if sample.CPUUtilizationPercent != nil {
-			cpu = append(cpu, *sample.CPUUtilizationPercent)
-		}
-		if sample.DiskFreeBytes != nil {
-			summary.DiskFreeMinBytes = min(summary.DiskFreeMinBytes, *sample.DiskFreeBytes)
-		}
-		if sample.SwapFreeBytes != nil {
-			summary.SwapFreeMinBytes = min(summary.SwapFreeMinBytes, *sample.SwapFreeBytes)
-		}
-		summary.ServiceRSSPeakBytes = max(summary.ServiceRSSPeakBytes, sample.ServiceRSSBytes)
-		latency = append(latency, sample.HealthLatencyMs)
-
-		if sample.HealthStatus != 200 {
-			summary.HealthFailures++
-		}
-		recordRoutedEvidence(&summary, &routedLatency, sample)
-	}
-
-	summary.PhysicalMemoryBytes = first.PhysicalMemoryBytes
-
-	if first.SwapIns != nil && last.SwapIns != nil {
-		summary.SwapInsDelta = max(0, *last.SwapIns-*first.SwapIns)
-	}
-	if first.SwapOuts != nil && last.SwapOuts != nil {
-		summary.SwapOutsDelta = max(0, *last.SwapOuts-*first.SwapOuts)
-	}
-
-	if value := guard.Percentile(cpu, .95); value != nil {
-		summary.CPUUtilizationP95Percent = *value
-	}
-	if value := guard.Percentile(latency, .95); value != nil {
-		summary.HealthLatencyP95Ms = *value
-	}
-	if value := guard.Percentile(routedLatency, .95); value != nil {
-		summary.RoutedJourneyLatencyP95Ms = *value
 	}
 
 	encoded, err := json.MarshalIndent(summary, "", "  ")

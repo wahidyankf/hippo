@@ -10,12 +10,13 @@ import (
 	resourceconfig "github.com/wahidyankf/resource-guard/internal/config"
 	"github.com/wahidyankf/resource-guard/internal/guard"
 	"github.com/wahidyankf/resource-guard/internal/host"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
-func adaptiveSample(memory, available, diskFree, diskTotal int64, swapState string) guard.Sample {
+func adaptiveSample(memory, available, diskFree, diskTotal int64, swapState string) policy.Sample {
 	level, cpu := 1, 20.0
 
-	return guard.Sample{
+	return policy.Sample{
 		SchemaVersion:             3,
 		MeasuredAt:                time.Unix(0, 0).UTC().Format(time.RFC3339Nano),
 		Platform:                  "linux",
@@ -33,44 +34,44 @@ func adaptiveSample(memory, available, diskFree, diskTotal int64, swapState stri
 }
 
 func TestAdaptiveProfileSelectionAndThresholds(t *testing.T) { //nolint:cyclop // One table-like test proves every profile transition and terminal decision.
-	catalog := guard.BuiltinCatalog()
-	balanced, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(32*guard.GiB, 20*guard.GiB, 100*guard.GiB, 512*guard.GiB, "active"))
-	if err != nil || balanced.ResolvedProfile != "balanced" || balanced.MemoryReserve != 4*guard.GiB || balanced.Concurrency != 3 {
+	catalog := policy.BuiltinCatalog()
+	balanced, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(32*policy.GiB, 20*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active"))
+	if err != nil || balanced.ResolvedProfile != "balanced" || balanced.MemoryReserve != 4*policy.GiB || balanced.Concurrency != 3 {
 		t.Fatalf("unexpected balanced resolution %+v error=%v", balanced, err)
 	}
 
-	if balanced.Policy.WarningAdmissionMemoryBytes != 8*guard.GiB ||
-		balanced.Policy.SwapOutWarningBytes != 128*guard.MiB ||
-		balanced.Policy.SwapOutCriticalBytes != 512*guard.MiB ||
-		balanced.Policy.CompressorWarningPayloadBytes != 12*guard.GiB ||
-		balanced.Policy.CompressorCriticalPayloadBytes != 16*guard.GiB {
+	if balanced.Policy.WarningAdmissionMemoryBytes != 8*policy.GiB ||
+		balanced.Policy.SwapOutWarningBytes != 128*policy.MiB ||
+		balanced.Policy.SwapOutCriticalBytes != 512*policy.MiB ||
+		balanced.Policy.CompressorWarningPayloadBytes != 12*policy.GiB ||
+		balanced.Policy.CompressorCriticalPayloadBytes != 16*policy.GiB {
 		t.Fatalf("unexpected dynamic signal thresholds %+v", balanced.Policy)
 	}
 
-	constrained, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(5*guard.GiB, 800*guard.MiB, 12*guard.GiB, 14*guard.GiB, "unavailable"))
+	constrained, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(5*policy.GiB, 800*policy.MiB, 12*policy.GiB, 14*policy.GiB, "unavailable"))
 	if err != nil || constrained.ResolvedProfile != "constrained" || constrained.Concurrency != 2 {
 		t.Fatalf("unexpected constrained resolution %+v error=%v", constrained, err)
 	}
 
-	minimal, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(guard.GiB, 200*guard.MiB, guard.GiB, 4*guard.GiB, "unavailable"))
+	minimal, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(policy.GiB, 200*policy.MiB, policy.GiB, 4*policy.GiB, "unavailable"))
 	if err != nil || minimal.ResolvedProfile != "minimal" || minimal.Concurrency != 1 || minimal.ExitCode != 0 {
 		t.Fatalf("unexpected minimal resolution %+v error=%v", minimal, err)
 	}
 
-	strict, err := catalog.Resolve("balanced", "transactional", adaptiveSample(5*guard.GiB, 700*guard.MiB, 12*guard.GiB, 14*guard.GiB, "unavailable"))
-	if err != nil || strict.ExitCode != guard.ReplanRequiredExitCode || strict.Decision != "replan" {
+	strict, err := catalog.Resolve("balanced", "transactional", adaptiveSample(5*policy.GiB, 700*policy.MiB, 12*policy.GiB, 14*policy.GiB, "unavailable"))
+	if err != nil || strict.ExitCode != policy.ReplanRequiredExitCode || strict.Decision != "replan" {
 		t.Fatalf("unexpected strict resolution %+v error=%v", strict, err)
 	}
 
-	cleanup, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(guard.GiB, 800*guard.MiB, 200*guard.MiB, guard.GiB, "unavailable"))
+	cleanup, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(policy.GiB, 800*policy.MiB, 200*policy.MiB, policy.GiB, "unavailable"))
 	if err != nil || cleanup.ExitCode != guard.StorageBlockedExitCode || cleanup.Decision != "cleanup" {
 		t.Fatalf("unexpected cleanup resolution %+v error=%v", cleanup, err)
 	}
-	if _, err := catalog.Resolve("missing", "ephemeral", adaptiveSample(guard.GiB, guard.GiB, guard.GiB, guard.GiB, "idle")); err == nil {
+	if _, err := catalog.Resolve("missing", "ephemeral", adaptiveSample(policy.GiB, policy.GiB, policy.GiB, policy.GiB, "idle")); err == nil {
 		t.Fatal("unknown profile was accepted")
 	}
 
-	legacySample := adaptiveSample(32*guard.GiB, 20*guard.GiB, 100*guard.GiB, 512*guard.GiB, "active")
+	legacySample := adaptiveSample(32*policy.GiB, 20*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active")
 	legacySample.EffectiveMemoryLimitBytes = 0
 	legacySample.DiskTotalBytes = nil
 	defaultless := catalog
@@ -83,7 +84,7 @@ func TestAdaptiveProfileSelectionAndThresholds(t *testing.T) { //nolint:cyclop /
 	terminalProfile := terminal.Profiles["balanced"]
 	terminalProfile.Fallback = ""
 	terminal.Profiles["balanced"] = terminalProfile
-	if _, err := terminal.Resolve("balanced", "ephemeral", adaptiveSample(guard.GiB, 1, guard.GiB, guard.GiB, "idle")); err == nil {
+	if _, err := terminal.Resolve("balanced", "ephemeral", adaptiveSample(policy.GiB, 1, policy.GiB, policy.GiB, "idle")); err == nil {
 		t.Fatal("profile without a usable fallback was accepted")
 	}
 
@@ -93,7 +94,7 @@ func TestAdaptiveProfileSelectionAndThresholds(t *testing.T) { //nolint:cyclop /
 	profile := cycle.Profiles["constrained"]
 	profile.Fallback = "balanced"
 	cycle.Profiles["constrained"] = profile
-	busy := adaptiveSample(guard.GiB, 1, guard.GiB, guard.GiB, "idle")
+	busy := adaptiveSample(policy.GiB, 1, policy.GiB, policy.GiB, "idle")
 	busy.CPUUtilizationPercent = new(100.0)
 
 	if _, err := cycle.Resolve("balanced", "ephemeral", busy); err == nil {
@@ -183,7 +184,7 @@ func TestStrictLocalConfiguration(t *testing.T) {
 
 func TestLinuxParsers(t *testing.T) { //nolint:cyclop,gocognit,gocyclo // Colocated parser cases share canonical Linux fixture vocabulary.
 	memory, err := host.ParseMemInfo("ignored\nMemTotal: 16777216 kB\nMemAvailable: 8388608 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n")
-	if err != nil || memory.Total != 16*guard.GiB || host.EffectiveMemoryLimit(memory.Total, 4*guard.GiB, 6*guard.GiB) != 4*guard.GiB {
+	if err != nil || memory.Total != 16*policy.GiB || host.EffectiveMemoryLimit(memory.Total, 4*policy.GiB, 6*policy.GiB) != 4*policy.GiB {
 		t.Fatalf("unexpected Linux memory %+v error=%v", memory, err)
 	}
 
@@ -256,27 +257,27 @@ func TestLinuxParsers(t *testing.T) { //nolint:cyclop,gocognit,gocyclo // Coloca
 }
 
 func TestNoSwapPSIAndOOMAssessment(t *testing.T) {
-	base := adaptiveSample(4*guard.GiB, 3*guard.GiB, 10*guard.GiB, 20*guard.GiB, "unavailable")
-	resolution, err := guard.BuiltinCatalog().Resolve("balanced", "ephemeral", base)
+	base := adaptiveSample(4*policy.GiB, 3*policy.GiB, 10*policy.GiB, 20*policy.GiB, "unavailable")
+	resolution, err := policy.BuiltinCatalog().Resolve("balanced", "ephemeral", base)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if assessment := guard.ResourceAssessment([]guard.Sample{base}, resolution.Policy); assessment.State != "normal" ||
+	if assessment := policy.ResourceAssessment([]policy.Sample{base}, resolution.Policy); assessment.State != "normal" ||
 		assessment.SwapState != "unavailable" {
 		t.Fatalf("no-swap host rejected: %+v", assessment)
 	}
 	psi := base
 	psi.MemoryPSISomeAvg10 = new(10.0)
 
-	if assessment := guard.ResourceAssessment([]guard.Sample{psi}, resolution.Policy); assessment.State != "warning" ||
+	if assessment := policy.ResourceAssessment([]policy.Sample{psi}, resolution.Policy); assessment.State != "warning" ||
 		assessment.Reason != "memory-psi" {
 		t.Fatalf("PSI warning missed: %+v", assessment)
 	}
 	first, second := base, base
 	first.OOMEvents, second.OOMEvents = new(int64(1)), new(int64(2))
 
-	if assessment := guard.ResourceAssessment([]guard.Sample{first, second}, resolution.Policy); assessment.State != "critical" ||
+	if assessment := policy.ResourceAssessment([]policy.Sample{first, second}, resolution.Policy); assessment.State != "critical" ||
 		assessment.Reason != "memory-oom" {
 		t.Fatalf("OOM delta missed: %+v", assessment)
 	}

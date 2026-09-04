@@ -41,6 +41,11 @@ Feature: Public resource guard CLI
     When run is requested without a command separator
     Then the command fails with a useful validation error
 
+  Scenario: Commands without operands reject positional arguments
+    Given the compiled resource guard binary
+    When operand-free commands are requested with positional arguments
+    Then every command rejects the unexpected argument
+
   Scenario: Release summary assessment accepts healthy evidence
     Given a healthy release summary file
     When release summary assessment is requested

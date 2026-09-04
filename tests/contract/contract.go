@@ -30,6 +30,7 @@ const (
 	hostEvidenceBoundary        = "host evidence"
 	leaseOwnershipBoundary      = "lease ownership"
 	processControlBoundary      = "process control"
+	evidenceFilesystemBoundary  = "evidence filesystem"
 )
 
 // StepBinding keeps one canonical Godog expression adjacent to its handler.
@@ -79,8 +80,12 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "An inherited session runs without reacquiring the lease", Boundary: "session inheritance", Reason: "requires synthetic inherited session state unavailable to an isolated binary fixture"},
 		{Scenario: "A failed child keeps its own exit code", Boundary: processControlBoundary, Reason: "requires deterministic admission and child process control unavailable to the public-host fixture"},
 		{Scenario: "An interrupted guard signals once and then force-stops the child", Boundary: processControlBoundary, Reason: "requires deterministic interrupt timing and process signaling unavailable to the public-host fixture"},
+		{Scenario: "A supervision failure reaps the guarded child before releasing ownership", Boundary: processControlBoundary, Reason: "requires an injected collector failure while controlling and inspecting the child process lifecycle"},
 		{Scenario: "Critical pressure sheds eligible work", Boundary: processControlBoundary, Reason: "requires synthetic critical pressure while controlling the child process lifecycle"},
 		{Scenario: "Worsening warning sheds degraded work", Boundary: processControlBoundary, Reason: "requires synthetic warning growth while controlling the child process lifecycle"},
+		{Scenario: "Active evidence rotates without truncating its lifetime summary", Boundary: evidenceFilesystemBoundary, Reason: "requires test-sized rotation limits and direct inspection of private runtime files"},
+		{Scenario: "A shared root admits at most twenty live evidence streams", Boundary: evidenceFilesystemBoundary, Reason: "requires concurrent private writer ownership and direct inspection of the shared runtime root"},
+		{Scenario: "Inactive evidence is pruned to the shared storage budget", Boundary: evidenceFilesystemBoundary, Reason: "requires synthetic sparse evidence files and direct inspection of private retention state"},
 		{Scenario: "Release admission preserves the requested capacity envelope", Boundary: hostEvidenceBoundary, Reason: "requires synthetic release capacity that cannot be injected through the compiled binary"},
 		{Scenario: "Release builds stay outside repository history", Boundary: "repository state", Reason: "Git ignore policy is outside the compiled binary boundary"},
 		{Scenario: "End-to-end binaries are temporary", Boundary: "test harness", Reason: "binary cleanup is owned by the harness outside the compiled binary boundary"},

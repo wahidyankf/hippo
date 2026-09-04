@@ -4,22 +4,22 @@ import (
 	"math"
 	"testing"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
 	"github.com/wahidyankf/resource-guard/internal/host"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 func TestMacOSMetricParsers(t *testing.T) {
-	if value := host.ParseAvailableEstimate("System-wide memory free percentage: 65%", 32*guard.GiB); value == nil ||
-		*value != 20*guard.GiB+guard.GiB*8/10 {
+	if value := host.ParseAvailableEstimate("System-wide memory free percentage: 65%", 32*policy.GiB); value == nil ||
+		*value != 20*policy.GiB+policy.GiB*8/10 {
 		t.Fatalf("unexpected estimate %v", value)
 	}
 
 	for _, text := range []string{"missing", "System-wide memory free percentage: 101%"} {
-		if host.ParseAvailableEstimate(text, 32*guard.GiB) != nil {
+		if host.ParseAvailableEstimate(text, 32*policy.GiB) != nil {
 			t.Fatalf("accepted %q", text)
 		}
 	}
-	if host.ParseAvailableEstimate("System-wide memory free percentage: 999999999999999999999999999999999999%", 32*guard.GiB) != nil {
+	if host.ParseAvailableEstimate("System-wide memory free percentage: 999999999999999999999999999999999999%", 32*policy.GiB) != nil {
 		t.Fatal("overflowing memory percentage accepted")
 	}
 
@@ -45,7 +45,7 @@ func TestMacOSMetricParsers(t *testing.T) {
 	}
 
 	swap := host.ParseSwapUsage("total = 4096.00M  used = 2562.38M  free = 1533.62M")
-	if swap == nil || swap.Total != 4096*guard.MiB || math.Abs(float64(swap.Used)-2562.38*float64(guard.MiB)) > 1 {
+	if swap == nil || swap.Total != 4096*policy.MiB || math.Abs(float64(swap.Used)-2562.38*float64(policy.MiB)) > 1 {
 		t.Fatalf("unexpected swap %+v", swap)
 	}
 	if host.ParseSwapUsage("missing") != nil || host.ParseSwapUsage("total = badM used = 1M free = 1M") != nil || host.ParseSwapUsage("total = 999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999M used = 1M free = 1M") != nil {
@@ -54,11 +54,11 @@ func TestMacOSMetricParsers(t *testing.T) {
 }
 
 func TestCPUParsersAndEvidenceRoot(t *testing.T) {
-	if value := host.CPUUtilization(guard.CPUState{10, 0, 10, 70, 10}, guard.CPUState{20, 0, 20, 140, 20}); value == nil || *value != 30 {
+	if value := host.CPUUtilization(policy.CPUState{10, 0, 10, 70, 10}, policy.CPUState{20, 0, 20, 140, 20}); value == nil || *value != 30 {
 		t.Fatalf("unexpected CPU %v", value)
 	}
 
-	for _, pair := range [][2]guard.CPUState{{nil, {1, 2, 3, 4}}, {{2, 0, 0, 0}, {1, 0, 0, 0}}, {{1, 1, 1, 1}, {1, 1, 1, 1}}} {
+	for _, pair := range [][2]policy.CPUState{{nil, {1, 2, 3, 4}}, {{2, 0, 0, 0}, {1, 0, 0, 0}}, {{1, 1, 1, 1}, {1, 1, 1, 1}}} {
 		if host.CPUUtilization(pair[0], pair[1]) != nil {
 			t.Fatal("invalid CPU counters accepted")
 		}

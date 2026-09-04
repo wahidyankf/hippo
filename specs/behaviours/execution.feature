@@ -39,6 +39,12 @@ Feature: Guarded process execution
     Then the child is signalled once and force-stopped within the grace
 
   @e2e-exempt
+  Scenario: A supervision failure reaps the guarded child before releasing ownership
+    Given an admitted child that ignores termination during a collector failure
+    When guarded supervision loses host evidence
+    Then the child is reaped before its resource lease is released
+
+  @e2e-exempt
   Scenario: Critical pressure sheds eligible work
     Given an admitted ephemeral child encounters critical pressure
     When the guard observes the critical sample

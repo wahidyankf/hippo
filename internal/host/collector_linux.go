@@ -3,13 +3,14 @@
 package host
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 func readOptional(read FileReader, path string) []byte {
@@ -22,7 +23,11 @@ func readOptional(read FileReader, path string) []byte {
 }
 
 // Collect gathers one Linux reading from procfs, cgroup v2, PSI, and statfs.
-func (collector SystemCollector) Collect(previous CPUState, diskPath string) (Reading, error) {
+func (collector SystemCollector) Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
+	if err := ctx.Err(); err != nil {
+		return Reading{}, err
+	}
+
 	read := collector.ReadFile
 	if read == nil {
 		read = os.ReadFile
@@ -114,7 +119,7 @@ func (collector SystemCollector) Collect(previous CPUState, diskPath string) (Re
 	swapIns, swapOuts := ParseLinuxVMStat(string(readOptional(read, "/proc/vmstat")))
 	swapUsed := max(int64(0), memory.SwapTotal-memory.SwapFree)
 
-	sample := guard.Sample{
+	sample := policy.Sample{
 		SchemaVersion:             3,
 		MeasuredAt:                now().UTC().Format(time.RFC3339Nano),
 		Platform:                  "linux",

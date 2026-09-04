@@ -2,34 +2,41 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/wahidyankf/resource-guard/internal/guard"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 type integrationCollector struct {
-	samples []guard.Sample
-	index   int
+	samples     []policy.Sample
+	index       int
+	cancel      context.CancelFunc
+	cancelAfter int
 }
 
-func (collector *integrationCollector) Collect(previous guard.CPUState, _ string) (guard.Reading, error) {
+func (collector *integrationCollector) Collect(_ context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
 	index := min(collector.index, len(collector.samples)-1)
 	collector.index++
+	if collector.cancel != nil && collector.index >= collector.cancelAfter {
+		collector.cancel()
+	}
 
-	return guard.Reading{
+	return policy.Reading{
 		CPUState: previous,
 		Sample:   collector.samples[index],
 	}, nil
 }
 
-func integrationSample(measuredAt time.Time) guard.Sample {
-	available, payload, disk, page, swaps := 12*guard.GiB, 7*guard.GiB, 40*guard.GiB, int64(16_384), int64(0)
+func integrationSample(measuredAt time.Time) policy.Sample {
+	available, payload, disk, page, swaps := 12*policy.GiB, 7*policy.GiB, 40*policy.GiB, int64(16_384), int64(0)
 	level, compressor, cpu := 1, true, 10.0
 
-	return guard.Sample{
+	return policy.Sample{
 		SchemaVersion:                       2,
 		MeasuredAt:                          measuredAt.UTC().Format(time.RFC3339Nano),
 		AvailableNonCompressedEstimateBytes: &available,
@@ -44,8 +51,8 @@ func integrationSample(measuredAt time.Time) guard.Sample {
 	}
 }
 
-func fastPolicy() guard.Policy {
-	policy := guard.DevelopmentPolicy
+func fastPolicy() policy.Policy {
+	policy := policy.DefaultPolicy()
 	policy.SampleInterval = time.Millisecond
 	policy.AdmissionWindow = time.Second
 	policy.TerminationGrace = time.Millisecond
@@ -56,13 +63,13 @@ func fastPolicy() guard.Policy {
 
 func TestGuardPreservesChildExitAndWritesEvidence(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{
+	collector := &integrationCollector{samples: []policy.Sample{
 		integrationSample(base),
 		integrationSample(base.Add(time.Millisecond)),
 		integrationSample(base.Add(2 * time.Millisecond)),
 	}}
 
-	code, err := guard.Run(guard.RunConfig{
+	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", "exit 17"},
 		TaskClass:    "ephemeral",
@@ -83,17 +90,17 @@ func TestGuardPreservesChildExitAndWritesEvidence(t *testing.T) {
 
 func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 	sample := integrationSample(time.Now())
-	disk := 29 * guard.GiB
+	disk := 29 * policy.GiB
 	sample.DiskFreeBytes = &disk
 
-	code, err := guard.Run(guard.RunConfig{
+	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", "exit 99"},
 		TaskClass:    "ephemeral",
 		Environment:  os.Environ(),
 		EvidenceRoot: t.TempDir(),
 		DiskPath:     ".",
-		Collector:    &integrationCollector{samples: []guard.Sample{sample}},
+		Collector:    &integrationCollector{samples: []policy.Sample{sample}},
 		Policy:       fastPolicy(),
 		Sleep:        func(time.Duration) {},
 		Now:          time.Now,
@@ -107,14 +114,14 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 
 func TestInheritedGuardRunsDirectlyAndKeepsPortLease(t *testing.T) {
 	root, portRoot := t.TempDir(), t.TempDir()
-	session, err := guard.AcquireSession(root, "", "ephemeral", time.Second, func(time.Duration) {})
+	session, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	defer func() { _ = guard.ReleaseSession(root, session) }()
 
-	code, err := guard.Run(guard.RunConfig{
+	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:       "/bin/sh",
 		Arguments:     []string{"-c", "exit 0"},
 		TaskClass:     "ephemeral",
@@ -126,7 +133,7 @@ func TestInheritedGuardRunsDirectlyAndKeepsPortLease(t *testing.T) {
 		LeaseMinimum:  45_000,
 		LeaseMaximum:  46_000,
 		PortLeaseRoot: portRoot,
-		Collector:     &integrationCollector{samples: []guard.Sample{integrationSample(time.Now())}},
+		Collector:     &integrationCollector{samples: []policy.Sample{integrationSample(time.Now())}},
 		Policy:        fastPolicy(),
 		Sleep:         func(time.Duration) {},
 		Now:           time.Now,
@@ -144,9 +151,9 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 	critical := integrationSample(base.Add(3 * time.Millisecond))
 	level := 4
 	critical.MemoryPressureLevel = &level
-	collector := &integrationCollector{samples: []guard.Sample{healthy, healthy, healthy, critical}}
+	collector := &integrationCollector{samples: []policy.Sample{healthy, healthy, healthy, critical}}
 
-	code, err := guard.Run(guard.RunConfig{
+	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", "sleep 5"},
 		TaskClass:    "ephemeral",
@@ -167,12 +174,12 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 
 func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{
+	collector := &integrationCollector{samples: []policy.Sample{
 		integrationSample(base),
 		integrationSample(base.Add(time.Millisecond)),
 		integrationSample(base.Add(2 * time.Millisecond)),
 	}}
-	resolution := guard.Resolution{
+	resolution := policy.Resolution{
 		RequestedProfile: "balanced",
 		ResolvedProfile:  "minimal",
 		FallbackChain:    []string{"balanced", "constrained", "minimal"},
@@ -181,7 +188,7 @@ func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 	command := `[ "$RESOURCE_GUARD_PROFILE" = minimal ] && [ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 7 ] && [ "$GOMAXPROCS" = 6 ] && [ "$DOTNET_PROCESSOR_COUNT" = 5 ]`
 	environment := []string{"PATH=" + os.Getenv("PATH"), "NX_PARALLEL=7", "GOMAXPROCS=6", "DOTNET_PROCESSOR_COUNT=5"}
 
-	code, err := guard.Run(guard.RunConfig{
+	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", command},
 		TaskClass:    "ephemeral",
@@ -203,14 +210,14 @@ func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 
 func TestGuardExportsChildSessionAndBinary(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{
+	collector := &integrationCollector{samples: []policy.Sample{
 		integrationSample(base),
 		integrationSample(base.Add(time.Millisecond)),
 		integrationSample(base.Add(2 * time.Millisecond)),
 	}}
 	command := `[ -n "$RESOURCE_GUARD_SESSION" ] && [ -x "$RESOURCE_GUARD_BIN" ]`
 
-	code, err := guard.Run(guard.RunConfig{
+	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", command},
 		TaskClass:    "ephemeral",
@@ -231,7 +238,7 @@ func TestGuardExportsChildSessionAndBinary(t *testing.T) {
 
 func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	base := time.Now()
-	collector := &integrationCollector{samples: []guard.Sample{
+	collector := &integrationCollector{samples: []policy.Sample{
 		integrationSample(base),
 		integrationSample(base.Add(time.Millisecond)),
 		integrationSample(base.Add(2 * time.Millisecond)),
@@ -239,17 +246,17 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	policy := fastPolicy()
 	policy.TerminationGrace = 200 * time.Millisecond
 	marker := filepath.Join(t.TempDir(), "terminations")
-	interrupt := make(chan struct{})
-	time.AfterFunc(300*time.Millisecond, func() { close(interrupt) })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	time.AfterFunc(300*time.Millisecond, cancel)
 
 	started := time.Now()
-	_, err := guard.Run(guard.RunConfig{
+	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
 		TaskClass:    "ephemeral",
 		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker),
 		EvidenceRoot: t.TempDir(),
-		Interrupt:    interrupt,
 		DiskPath:     ".",
 		Collector:    collector,
 		Policy:       policy,

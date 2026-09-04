@@ -3,12 +3,13 @@
 package unit_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
 	"github.com/wahidyankf/resource-guard/internal/host"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 func TestLinuxCollectorUsesCgroupCapacityAndAllowsNoSwap(t *testing.T) {
@@ -40,21 +41,21 @@ func TestLinuxCollectorUsesCgroupCapacityAndAllowsNoSwap(t *testing.T) {
 		ReadFile: read,
 		Now:      func() time.Time { return time.Unix(0, 0) },
 	}
-	reading, err := collector.Collect(nil, t.TempDir())
+	reading, err := collector.Collect(context.Background(), nil, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if reading.Sample.Platform != "linux" ||
-		reading.Sample.EffectiveMemoryLimitBytes != 4*guard.GiB ||
+		reading.Sample.EffectiveMemoryLimitBytes != 4*policy.GiB ||
 		reading.Sample.AvailableMemoryBytes == nil ||
-		*reading.Sample.AvailableMemoryBytes != 3*guard.GiB ||
+		*reading.Sample.AvailableMemoryBytes != 3*policy.GiB ||
 		reading.Sample.AvailableParallelism != 2 ||
 		reading.Sample.SwapState != "unavailable" {
 		t.Fatalf("unexpected Linux sample %+v", reading.Sample)
 	}
 
 	files["/proc/stat"] = "cpu 20 0 20 140 0\n"
-	second, err := collector.Collect(reading.CPUState, t.TempDir())
+	second, err := collector.Collect(context.Background(), reading.CPUState, t.TempDir())
 
 	if err != nil || second.Sample.CPUUtilizationPercent == nil || *second.Sample.CPUUtilizationPercent != 25 {
 		t.Fatalf("unexpected Linux CPU sample %+v error=%v", second.Sample, err)

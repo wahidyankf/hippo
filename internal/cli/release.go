@@ -1,35 +1,38 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/wahidyankf/resource-guard/internal/guard"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 	releaseguard "github.com/wahidyankf/resource-guard/internal/release"
 )
 
-func (application Application) releaseCheck(options releaseCheckOptions) (int, error) {
+func (application Application) releaseCheck(ctx context.Context, options releaseCheckOptions) (int, error) {
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return guard.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
 
-	probe, collectError := application.Collector.Collect(nil, options.diskPath)
+	probe, collectError := application.Collector.Collect(ctx, nil, options.diskPath)
 	if collectError != nil {
 		return 1, collectError
 	}
 
-	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, "release", probe.Sample)
+	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskRelease, probe.Sample)
 	if resolveError != nil {
-		return guard.ReplanRequiredExitCode, resolveError
+		return policy.ReplanRequiredExitCode, resolveError
 	}
 	if resolution.ExitCode != 0 {
 		return resolution.ExitCode, nil
 	}
 
-	if err := releaseguard.CheckWithPolicy(application.Collector, options.diskPath, application.Sleep, resolution.Policy); err != nil {
+	if err := releaseguard.CheckWithPolicy(ctx, application.Collector, options.diskPath, application.Sleep, resolution.Policy); err != nil {
 		_, _ = fmt.Fprintln(application.Stderr, err)
 
 		return guard.CapacityDeferredExitCode, nil
@@ -38,13 +41,13 @@ func (application Application) releaseCheck(options releaseCheckOptions) (int, e
 	return 0, nil
 }
 
-func (application Application) releaseAssess(options releaseAssessOptions) (int, error) {
+func (application Application) releaseAssess(_ context.Context, options releaseAssessOptions) (int, error) {
 	if options.summaryPath == "" {
 		return 1, errors.New("--summary is required")
 	}
 
 	if _, configError := application.loadConfig(options.configPath); configError != nil {
-		return guard.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
 
 	summary, err := releaseguard.AssessFile(options.summaryPath)
@@ -77,26 +80,35 @@ func validateServicePorts(servicePorts []int) error {
 	return nil
 }
 
-func (application Application) releaseMonitor(options releaseMonitorOptions) (int, error) {
+func (application Application) releaseMonitor(ctx context.Context, options releaseMonitorOptions) (int, error) {
 	if options.durationMs < 0 {
 		return 1, errors.New("duration-ms must be nonnegative")
+	}
+	if options.durationMs > math.MaxInt64/int64(time.Millisecond) {
+		return 1, errors.New("duration-ms exceeds the supported range")
 	}
 	if err := validateServicePorts(options.servicePorts); err != nil {
 		return 1, err
 	}
 
 	if _, configError := application.loadConfig(options.configPath); configError != nil {
-		return guard.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
 
-	err := releaseguard.RunMonitor(releaseguard.MonitorConfig{
+	monitorContext := ctx
+	cancel := func() {}
+	if options.durationMs > 0 {
+		monitorContext, cancel = context.WithTimeout(ctx, time.Duration(options.durationMs)*time.Millisecond)
+	}
+	defer cancel()
+
+	err := releaseguard.RunMonitor(monitorContext, releaseguard.MonitorConfig{
 		OutputPath:     options.outputPath,
 		SummaryPath:    options.summaryPath,
 		DeploymentRoot: options.deploymentRoot,
 		HealthURL:      options.healthURL,
 		RoutedOrigin:   options.routedOrigin,
 		ServicePorts:   options.servicePorts,
-		Duration:       time.Duration(options.durationMs) * time.Millisecond,
 		Collector:      application.Collector,
 	})
 	if err != nil {

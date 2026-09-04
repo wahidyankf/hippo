@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 type leaseOwner struct {
@@ -30,17 +33,10 @@ type Session struct {
 	RecordPath  string
 }
 
-// Task classes understood by the guard.
-const (
-	ClassEphemeral     = "ephemeral"
-	ClassService       = "service"
-	ClassTransactional = "transactional"
-)
-
 // SerializesHeavyWork reports whether class competes for the single heavy-work lease.
 // Long-lived services stay outside that lease so they never starve guarded gates.
-func SerializesHeavyWork(class string) bool {
-	return class != ClassService
+func SerializesHeavyWork(class policy.TaskClass) bool {
+	return class != policy.TaskService
 }
 
 // PortLease identifies ownership of one bounded service port.
@@ -190,7 +186,14 @@ func DescribeHeavyLease(root string) string {
 
 // AcquireSession obtains a guarded session, returning nil after the lease wait expires.
 // Heavy classes serialize on one lease; services record an inheritable session only.
-func AcquireSession(root, inheritedToken, class string, wait time.Duration, pause func(time.Duration)) (*Session, error) {
+func AcquireSession(ctx context.Context, root, inheritedToken string, class policy.TaskClass, wait time.Duration) (*Session, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if wait < 0 {
+		return nil, errors.New("lease wait must be nonnegative")
+	}
+
 	if InheritedSession(root, inheritedToken) {
 		return &Session{
 			Inherited: true,
@@ -209,9 +212,12 @@ func AcquireSession(root, inheritedToken, class string, wait time.Duration, paus
 	}
 
 	lockPath := filepath.Join(root, "heavy.lock")
-	deadline := time.Now().Add(wait)
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 
-	for !time.Now().After(deadline) {
+	for {
 		if err := os.Mkdir(lockPath, 0o700); err == nil {
 			session, registerError := registerSession(root, lockPath, class)
 			if registerError != nil {
@@ -232,14 +238,18 @@ func AcquireSession(root, inheritedToken, class string, wait time.Duration, paus
 			continue
 		}
 
-		pause(time.Second)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline.C:
+			return nil, nil
+		case <-ticker.C:
+		}
 	}
-
-	return nil, nil
 }
 
 // registerSession mints one session, recording it on the heavy lease when lockPath is set.
-func registerSession(root, lockPath, class string) (*Session, error) {
+func registerSession(root, lockPath string, class policy.TaskClass) (*Session, error) {
 	value, tokenError := token()
 	if tokenError != nil {
 		return nil, tokenError
@@ -249,7 +259,7 @@ func registerSession(root, lockPath, class string) (*Session, error) {
 		SchemaVersion: 1,
 		PID:           os.Getpid(),
 		Token:         value,
-		Class:         class,
+		Class:         string(class),
 	}
 	if lockPath != "" {
 		if writeError := writeLeaseOwner(lockPath, owner); writeError != nil {

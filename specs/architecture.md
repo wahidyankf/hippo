@@ -62,48 +62,23 @@ An operator, repository script, Git hook, or CI task invokes Resource Guard befo
 
 The POSIX shell bootstrap hashes the Go sources and module metadata, serializes compilation, retains a bounded platform cache, and then replaces itself with the compiled executable. Tagged-release consumers may invoke a verified binary directly and bypass this source-build container.
 
-The Go CLI is the only long-running Resource Guard execution container. It reads an optional machine-local JSON configuration, collects host and process evidence through operating-system interfaces, and stores bounded lease and evidence records in a shared per-user state root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
+The Go CLI is the only long-running Resource Guard execution container. It reads an optional machine-local JSON configuration, collects host and process evidence through operating-system interfaces, and stores bounded lease and evidence records in a shared per-user state root. Resource Guard instances launched by different repositories coordinate through that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
 
 ## Component View
 
 ```text
-                              Container: Go CLI process
-  +--------------------------------------------------------------------------------+
-  |                                                                                |
-  |  +----------------+      delegates      +------------------+                   |
-  |  | Component      | ------------------> | Component        |                   |
-  |  | Process entry  |                     | Command tree     |                   |
-  |  +----------------+                     +----+------+------+------+             |
-  |                                             |      |      |      |             |
-  |                  +--------------------------+      |      |      |             |
-  |                  | loads                    |      |      |      |             |
-  |                  v                          |      |      |      |             |
-  |       +----------+-------+          collects|      |      |      |             |
-  |       | Component        |                  v      |      |      |             |
-  |       | Config loader    |       +----------+---+  |      |      |             |
-  |       | and profiles     |       | Component    |  |      |      |             |
-  |       +------------------+       | Host         |  |      |      |             |
-  |                                  | collector    |  |      |      |             |
-  |                                  +--------------+  |      |      |             |
-  |                                                    |      |      |             |
-  |                     resolves +---------------------+      |      |             |
-  |                              v                            |      |             |
-  |                   +----------+-------+          supervises|      |             |
-  |                   | Component        |                    v      |             |
-  |                   | Policy engine    |       +------------+---+  |             |
-  |                   | and profiles     |       | Component      |  |             |
-  |                   +------------------+       | Execution      |  |             |
-  |                                              | guard          |  |             |
-  |                                              +----------------+  |             |
-  |                                                                  |             |
-  |                               release operations +---------------+             |
-  |                                                  v                             |
-  |                                       +----------+-------+                      |
-  |                                       | Component        |                      |
-  |                                       | Release guard    |                      |
-  |                                       +------------------+                      |
-  |                                                                                |
-  +--------------------------------------------------------------------------------+
+Container boundary: Go CLI process
+
+[Process entry] --delegates--> [Command tree]
+
+[Command tree] --loads-------> [Config loader] --resolves--> [Policy engine]
+[Command tree] --collects----> [Host collector] --samples---> [Policy engine]
+[Command tree] --runs--------> [Execution guard] <--assesses-- [Policy engine]
+[Command tree] --releases----> [Release guard] <---assesses-- [Policy engine]
+
+[Execution guard] --writes--+
+                             +--> [Evidence store]
+[Release guard] ----writes---+
 ```
 
 - **Process entry** maps the operating-system argument vector to the application's exit code.
@@ -113,8 +88,9 @@ The Go CLI is the only long-running Resource Guard execution container. It reads
 - **Policy engine and profiles** classify evidence, choose an adaptive development profile, and preserve strict transaction and release envelopes.
 - **Execution guard** owns shared sessions, port leases, child-process lifecycle, pressure monitoring, shedding, and bounded evidence retention.
 - **Release guard** owns consecutive release admission, health sampling, summary schemas, and final overlap assessment.
+- **Evidence store** owns live-writer admission, raw chunk rotation, fixed-memory quantiles, expiry, and inactive-file retention.
 
-The `internal/guard` package exposes the shared policy contracts used at process boundaries while their deterministic implementation remains in `internal/policy`. Platform collectors and release monitoring depend on those contracts rather than consumer-specific application types.
+The `internal/policy` package owns the shared typed samples, collectors, task classes, decisions, thresholds, and profile resolution. Execution, platform collection, and release monitoring depend directly on that package instead of a forwarding facade or consumer-specific application types. Long-running operations receive caller-owned contexts; only the process entry translates operating-system signals into cancellation.
 
 ## Guarded Execution Dynamic View
 
@@ -134,13 +110,15 @@ Caller     CLI/config     Host/policy     Lease store     Child group
   |             |------------->|               |               |
   |             | stop only on owned pressure boundary         |
   |             |--------------------------------------------->|
-  |             | release and retain bounded evidence          |
+  |             | wait until the owned child is reaped         |
+  |             |<---------------------------------------------|
+  |             | finalize evidence, then release lease        |
   |             |----------------------------->|               |
   | child code or stable guard exit             |               |
   |<------------|              |               |               |
 ```
 
-Admission failures return before child creation. An admitted child inherits the resolved profile and concurrency environment. Resource Guard preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity or lease pressure (`75`), and configuration or strict-profile replanning (`78`).
+Admission failures return before child creation. An admitted child inherits the resolved profile and concurrency environment. Cancellation, collector failure, evidence failure, or resource pressure terminates and reaps the owned child group before evidence finalization and lease release. Resource Guard preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity or lease pressure (`75`), and configuration or strict-profile replanning (`78`).
 
 ## Architectural Constraints
 
@@ -149,7 +127,9 @@ Admission failures return before child creation. An admitted child inherits the 
 - Machine-local configuration may tighten policy but cannot weaken compiled safety floors.
 - Heavy work coordinates through a shared per-user lease. Long-lived services retain independent inheritable sessions and do not monopolize the heavy-work lease.
 - Resource Guard signals only the process group it creates. It never sheds unrelated user, repository, proxy, or production processes.
-- Evidence is bounded and excludes command arguments, repository origins, paths, credentials, and user payloads.
+- One shared state root admits at most 20 live evidence streams across all consuming repositories. Each live stream keeps five rotating 400 KiB raw chunks, for about 2 MiB per session and about 40 MiB at the maximum live count.
+- Completed raw chunks and summaries share a 50 MiB inactive cap. Raw chunks expire after seven days, summaries after thirty days, and active streams are protected from cleanup by process-owned markers.
+- Lifetime summaries use fixed-memory aggregates and remain complete even after older raw chunks rotate away. Evidence excludes command arguments, repository origins, paths, credentials, and user payloads.
 - Local configuration, runtime state, build caches, coverage, release artifacts, and scratch output remain untracked.
 - Release monitoring requires explicit health inputs, emits generic bounded evidence, and keeps compatibility with supported retained summary schemas.
 - Tagged release assets are immutable, built through the owned release script for the supported OS and architecture matrix, and published with SHA-256 checksums.

@@ -18,6 +18,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 	return slices.Concat(
 		driver.admissionBindings(),
 		driver.executionBindings(),
+		driver.evidenceBindings(),
 		driver.publicCLIBindings(),
 		driver.releaseBindings(),
 		driver.artifactBindings(),
@@ -79,6 +80,24 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^an admitted degraded ephemeral child encounters growing compressor pressure$`, driver.degradedGrowthChild),
 		step(`^the guard observes warning through the grace$`, driver.observeDegradedWarning),
 		step(`^the degraded child starts and is terminated with exit 75$`, driver.requireDegradedShed),
+		step(`^an admitted child that ignores termination during a collector failure$`, driver.stubbornCollectorFailureChild),
+		step(`^guarded supervision loses host evidence$`, driver.loseHostEvidence),
+		step(`^the child is reaped before its resource lease is released$`, driver.requireReapedBeforeRelease),
+	}
+}
+
+func (driver *Driver) evidenceBindings() []contract.StepBinding {
+	return []contract.StepBinding{
+		step(`^a guarded evidence stream with small test chunks$`, driver.smallEvidenceStream),
+		step(`^the stream exceeds all retained raw chunks$`, driver.overflowEvidenceChunks),
+		step(`^only the bounded newest raw chunks remain$`, driver.requireBoundedEvidenceChunks),
+		step(`^the evidence summary counts every recorded sample$`, driver.requireLifetimeEvidenceSummary),
+		step(`^twenty live evidence streams in one shared root$`, driver.twentyLiveEvidenceStreams),
+		step(`^another evidence stream starts$`, driver.startExcessEvidenceStream),
+		step(`^the new stream is rejected before raw evidence is created$`, driver.requireExcessEvidenceRejected),
+		step(`^inactive evidence above the shared storage budget$`, driver.inactiveEvidenceAboveBudget),
+		step(`^evidence retention is enforced$`, driver.enforceEvidenceRetention),
+		step(`^the oldest inactive evidence is removed below the budget$`, driver.requireInactiveEvidencePruned),
 	}
 }
 
@@ -99,6 +118,8 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^Cobra reports the command and exits with code 1$`, driver.requireCobraDiagnostic),
 		step(`^run is requested without a command separator$`, driver.invalidRun),
 		step(`^the command fails with a useful validation error$`, driver.requireValidation),
+		step(`^operand-free commands are requested with positional arguments$`, driver.requestOperandFreeCommandsWithArguments),
+		step(`^every command rejects the unexpected argument$`, driver.requireOperandFreeCommandsRejected),
 		step(`^a healthy release summary file$`, func() error { return driver.summary(0) }),
 		step(`^release summary assessment is requested$`, driver.assessSummary),
 		step(`^the release evidence is accepted$`, driver.requireAccepted),

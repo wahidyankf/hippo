@@ -1,23 +1,24 @@
 package host
 
 import (
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/resource-guard/internal/guard"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 )
 
 type (
 	// CPUState contains cumulative CPU counters used for utilization deltas.
-	CPUState = guard.CPUState
+	CPUState = policy.CPUState
 	// Reading combines one host sample with its CPU counters.
-	Reading = guard.Reading
+	Reading = policy.Reading
 )
 
 // CommandRunner executes one local host probe.
-type CommandRunner func(string, ...string) ([]byte, error)
+type CommandRunner func(context.Context, string, ...string) ([]byte, error)
 
 // FileReader reads one local kernel evidence file.
 type FileReader func(string) ([]byte, error)
@@ -109,7 +110,7 @@ func ParseSwapUsage(output string) *SwapUsage {
 		if err != nil {
 			return nil
 		}
-		values[index] = int64(value * float64(guard.MiB))
+		values[index] = int64(value * float64(policy.MiB))
 	}
 
 	return &SwapUsage{values[0], values[1], values[2]}

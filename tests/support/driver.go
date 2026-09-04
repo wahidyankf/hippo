@@ -2,6 +2,7 @@ package support
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,11 +13,14 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/wahidyankf/resource-guard/internal/cli"
+	"github.com/wahidyankf/resource-guard/internal/evidence"
 	"github.com/wahidyankf/resource-guard/internal/guard"
 	"github.com/wahidyankf/resource-guard/internal/host"
+	"github.com/wahidyankf/resource-guard/internal/policy"
 	releaseguard "github.com/wahidyankf/resource-guard/internal/release"
 	"github.com/wahidyankf/resource-guard/tests/contract"
 )
@@ -27,23 +31,33 @@ const (
 	jsonFlag           = "--json"
 	statusCommandName  = "status"
 	monitorCommandName = "monitor"
+	versionCommandName = "version"
+	releaseCommandName = "release"
+	unexpectedArgument = "unexpected"
 	shellPath          = "/bin/sh"
 )
 
 type sequenceCollector struct {
-	samples []guard.Sample
-	index   int
+	samples     []policy.Sample
+	index       int
+	failureFrom int
 }
 
-func (collector *sequenceCollector) Collect(previous guard.CPUState, _ string) (guard.Reading, error) {
+func (collector *sequenceCollector) Collect(ctx context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
+	if err := ctx.Err(); err != nil {
+		return policy.Reading{}, err
+	}
+	if collector.failureFrom > 0 && collector.index >= collector.failureFrom {
+		return policy.Reading{}, errors.New("injected host evidence failure")
+	}
 	if len(collector.samples) == 0 {
-		return guard.Reading{}, errors.New("no samples")
+		return policy.Reading{}, errors.New("no samples")
 	}
 
 	index := min(collector.index, len(collector.samples)-1)
 	collector.index++
 
-	return guard.Reading{
+	return policy.Reading{
 		CPUState: previous,
 		Sample:   collector.samples[index],
 	}, nil
@@ -52,8 +66,8 @@ func (collector *sequenceCollector) Collect(previous guard.CPUState, _ string) (
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
 	mode                    string
-	samples                 []guard.Sample
-	assessment              guard.Assessment
+	samples                 []policy.Sample
+	assessment              policy.Assessment
 	admitted, accepted      bool
 	exitCode                int
 	output, errorOutput     string
@@ -73,9 +87,9 @@ type Driver struct {
 	stagedFormatting        bool
 	pushQuickGate           bool
 	coreCoverage            bool
-	resolution              guard.Resolution
+	resolution              policy.Resolution
 	requestedProfile        string
-	taskClass               string
+	taskClass               policy.TaskClass
 	effectiveMemory         int64
 	linuxMemInfo            string
 	linuxCgroupLimit        int64
@@ -90,6 +104,16 @@ type Driver struct {
 	inheritedSessions       bool
 	forceStopElapsed        time.Duration
 	terminationSignals      int
+	supervisionFailure      error
+	childReaped             bool
+	evidenceRoot            string
+	evidenceIdentifier      string
+	evidenceSampleCount     int
+	evidenceWriters         []*evidence.Writer
+	excessEvidencePath      string
+	excessEvidenceError     error
+	inactiveEvidencePaths   []string
+	operandCommandsRejected bool
 }
 
 // NewDriver returns isolated scenario state for one behavior adapter.
@@ -97,27 +121,27 @@ func NewDriver(adapter contract.Adapter) *Driver {
 	return &Driver{mode: adapter.Name}
 }
 
-func healthySample(at time.Time) guard.Sample {
-	return guard.Sample{
+func healthySample(at time.Time) policy.Sample {
+	return policy.Sample{
 		SchemaVersion:                       3,
 		MeasuredAt:                          at.UTC().Format(time.RFC3339Nano),
 		Platform:                            "darwin",
 		Capabilities:                        []string{"compressor", "memory-pressure", "swap"},
-		EffectiveMemoryLimitBytes:           32 * guard.GiB,
-		AvailableMemoryBytes:                new(12 * guard.GiB),
-		AvailableNonCompressedEstimateBytes: new(12 * guard.GiB),
+		EffectiveMemoryLimitBytes:           32 * policy.GiB,
+		AvailableMemoryBytes:                new(12 * policy.GiB),
+		AvailableNonCompressedEstimateBytes: new(12 * policy.GiB),
 		MemoryPressureLevel:                 new(1),
 		CompressorAvailable:                 new(true),
-		CompressorPayloadBytes:              new(7 * guard.GiB),
-		PhysicalMemoryBytes:                 32 * guard.GiB,
+		CompressorPayloadBytes:              new(7 * policy.GiB),
+		PhysicalMemoryBytes:                 32 * policy.GiB,
 		AvailableParallelism:                8,
 		CPUUtilizationPercent:               new(20.0),
-		DiskFreeBytes:                       new(40 * guard.GiB),
-		DiskTotalBytes:                      new(512 * guard.GiB),
+		DiskFreeBytes:                       new(40 * policy.GiB),
+		DiskTotalBytes:                      new(512 * policy.GiB),
 		PageSizeBytes:                       new(int64(16_384)),
 		SwapIns:                             new(int64(10)),
 		SwapOuts:                            new(int64(20)),
-		SwapFreeBytes:                       new(2 * guard.GiB),
+		SwapFreeBytes:                       new(2 * policy.GiB),
 		SwapState:                           "idle",
 	}
 }
@@ -135,6 +159,11 @@ func (driver *Driver) Reset() {
 }
 
 func (driver *Driver) cleanup() {
+	for _, writer := range driver.evidenceWriters {
+		_ = writer.Close()
+	}
+	driver.evidenceWriters = nil
+
 	for _, path := range driver.temporaryPaths {
 		_ = os.RemoveAll(path)
 	}
@@ -182,16 +211,16 @@ func environmentWith(values map[string]string) []string {
 
 func (driver *Driver) threeHealthy() {
 	base := time.Unix(0, 0)
-	driver.samples = []guard.Sample{healthySample(base), healthySample(base.Add(time.Second)), healthySample(base.Add(2 * time.Second))}
+	driver.samples = []policy.Sample{healthySample(base), healthySample(base.Add(time.Second)), healthySample(base.Add(2 * time.Second))}
 }
 
-func stableWarningSamples(base time.Time, interval time.Duration) []guard.Sample {
-	samples := make([]guard.Sample, 16)
+func stableWarningSamples(base time.Time, interval time.Duration) []policy.Sample {
+	samples := make([]policy.Sample, 16)
 
 	for index := range samples {
 		sample := healthySample(base.Add(time.Duration(index) * interval))
 		level := 2
-		available := 8 * guard.GiB
+		available := 8 * policy.GiB
 		sample.MemoryPressureLevel = &level
 		sample.AvailableMemoryBytes = &available
 		sample.AvailableNonCompressedEstimateBytes = &available
@@ -208,7 +237,7 @@ func (driver *Driver) stableDarwinWarning() {
 
 func (driver *Driver) growingDarwinWarning() {
 	driver.stableDarwinWarning()
-	payload := *driver.samples[0].CompressorPayloadBytes + 2*guard.GiB
+	payload := *driver.samples[0].CompressorPayloadBytes + 2*policy.GiB
 	driver.samples[len(driver.samples)-1].CompressorPayloadBytes = &payload
 }
 
@@ -221,41 +250,41 @@ func (driver *Driver) swapGrowth() {
 	first := healthySample(time.Unix(0, 0))
 	second := healthySample(time.Unix(15, 0))
 	first.SwapOuts = new(int64(0))
-	second.SwapOuts = new(128 * guard.MiB / 16_384)
-	driver.samples = []guard.Sample{first, second}
+	second.SwapOuts = new(128 * policy.MiB / 16_384)
+	driver.samples = []policy.Sample{first, second}
 }
 
 func (driver *Driver) compressorGrowth() {
 	first := healthySample(time.Unix(0, 0))
 	second := healthySample(time.Unix(15, 0))
-	first.CompressorPayloadBytes = new(11 * guard.GiB)
-	second.CompressorPayloadBytes = new(12 * guard.GiB)
-	driver.samples = []guard.Sample{first, second}
+	first.CompressorPayloadBytes = new(11 * policy.GiB)
+	second.CompressorPayloadBytes = new(12 * policy.GiB)
+	driver.samples = []policy.Sample{first, second}
 }
 
 func (driver *Driver) assessAdmission() {
 	if len(driver.samples) == 0 {
-		driver.assessment = guard.ResourceAssessment(nil, guard.DevelopmentPolicy)
+		driver.assessment = policy.ResourceAssessment(nil, policy.DefaultPolicy())
 
 		return
 	}
 
-	resolution, err := guard.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
+	resolution, err := policy.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		driver.errorOutput = err.Error()
-		driver.exitCode = guard.ReplanRequiredExitCode
+		driver.exitCode = policy.ReplanRequiredExitCode
 
 		return
 	}
 
 	driver.resolution = resolution
 	driver.exitCode = resolution.ExitCode
-	driver.assessment = guard.ResourceAssessment(driver.samples, resolution.Policy)
-	driver.admitted = resolution.ExitCode == 0 && guard.AdmissionReady(driver.samples, resolution.Policy)
+	driver.assessment = policy.ResourceAssessment(driver.samples, resolution.Policy)
+	driver.admitted = resolution.ExitCode == 0 && policy.AdmissionReady(driver.samples, resolution.Policy)
 	if !driver.admitted &&
 		driver.taskClass == taskClassEphemeral &&
 		resolution.ResolvedProfile == profileBalanced &&
-		guard.WarningAdmissionReady(driver.samples, resolution.Policy) {
+		policy.WarningAdmissionReady(driver.samples, resolution.Policy) {
 		driver.resolution.Concurrency = 1
 		driver.admitted = true
 	}
@@ -263,12 +292,12 @@ func (driver *Driver) assessAdmission() {
 
 func (driver *Driver) assessPressure() {
 	if len(driver.samples) == 0 {
-		driver.assessment = guard.ResourceAssessment(nil, guard.DevelopmentPolicy)
+		driver.assessment = policy.ResourceAssessment(nil, policy.DefaultPolicy())
 
 		return
 	}
 
-	resolution, err := guard.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
+	resolution, err := policy.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		driver.errorOutput = err.Error()
 
@@ -276,7 +305,7 @@ func (driver *Driver) assessPressure() {
 	}
 
 	driver.resolution = resolution
-	driver.assessment = guard.ResourceAssessment(driver.samples, resolution.Policy)
+	driver.assessment = policy.ResourceAssessment(driver.samples, resolution.Policy)
 }
 
 func (driver *Driver) requireAdmitted() error {
@@ -326,8 +355,8 @@ func (driver *Driver) temporaryRoot() (string, error) {
 	return directory, nil
 }
 
-func fastBehaviourPolicy() guard.Policy {
-	policy := guard.DevelopmentPolicy
+func fastBehaviourPolicy() policy.Policy {
+	policy := policy.DefaultPolicy()
 	policy.SampleInterval = time.Millisecond
 	policy.AdmissionWindow = time.Second
 	policy.TerminationGrace = time.Millisecond
@@ -336,7 +365,7 @@ func fastBehaviourPolicy() guard.Policy {
 	return policy
 }
 
-func (driver *Driver) prepareGuardedExecution(samples []guard.Sample) error {
+func (driver *Driver) prepareGuardedExecution(samples []policy.Sample) error {
 	root, err := driver.temporaryRoot()
 	if err != nil {
 		return err
@@ -355,7 +384,7 @@ func (driver *Driver) runGuardedShell(script string, environment []string) error
 
 	stderr := &bytes.Buffer{}
 	started := time.Now()
-	code, err := guard.Run(guard.RunConfig{
+	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      shellPath,
 		Arguments:    []string{"-c", script},
 		TaskClass:    taskClassEphemeral,
@@ -385,7 +414,7 @@ func (driver *Driver) liveLease() error {
 	driver.leaseRoot = root
 	driver.leaseHolder = os.Getpid()
 
-	holder, err := guard.AcquireSession(root, "", taskClassEphemeral, time.Second, func(time.Duration) {})
+	holder, err := guard.AcquireSession(context.Background(), root, "", taskClassEphemeral, time.Second)
 	if err != nil {
 		return err
 	}
@@ -399,7 +428,7 @@ func (driver *Driver) liveLease() error {
 }
 
 func (driver *Driver) waitLease() error {
-	second, err := guard.AcquireSession(driver.leaseRoot, "", taskClassEphemeral, 200*time.Millisecond, func(time.Duration) {})
+	second, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, 200*time.Millisecond)
 	if err != nil {
 		return err
 	}
@@ -439,7 +468,7 @@ func (driver *Driver) liveServiceLease() error {
 
 	driver.leaseRoot = root
 
-	service, err := guard.AcquireSession(root, "", "service", time.Second, func(time.Duration) {})
+	service, err := guard.AcquireSession(context.Background(), root, "", "service", time.Second)
 	if err != nil {
 		return err
 	}
@@ -453,7 +482,7 @@ func (driver *Driver) liveServiceLease() error {
 }
 
 func (driver *Driver) heavyRequestsLease() error {
-	heavy, err := guard.AcquireSession(driver.leaseRoot, "", taskClassEphemeral, time.Second, func(time.Duration) {})
+	heavy, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
 	if err != nil {
 		return err
 	}
@@ -479,7 +508,7 @@ func (driver *Driver) twoServiceSessions() error {
 	driver.leaseRoot = root
 
 	for range 2 {
-		service, acquireError := guard.AcquireSession(root, "", "service", time.Second, func(time.Duration) {})
+		service, acquireError := guard.AcquireSession(context.Background(), root, "", "service", time.Second)
 		if acquireError != nil {
 			return acquireError
 		}
@@ -512,11 +541,11 @@ func (driver *Driver) requireInheritedSessionsValid() error {
 
 func (driver *Driver) inherited() error {
 	base := time.Now()
-	if err := driver.prepareGuardedExecution([]guard.Sample{healthySample(base)}); err != nil {
+	if err := driver.prepareGuardedExecution([]policy.Sample{healthySample(base)}); err != nil {
 		return err
 	}
 
-	session, err := guard.AcquireSession(driver.leaseRoot, "", taskClassEphemeral, time.Second, func(time.Duration) {})
+	session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
 	if err != nil {
 		return err
 	}
@@ -549,7 +578,7 @@ func (driver *Driver) requirePreserved() error {
 func (driver *Driver) givenAdmitted() error {
 	base := time.Now()
 
-	return driver.prepareGuardedExecution([]guard.Sample{
+	return driver.prepareGuardedExecution([]policy.Sample{
 		healthySample(base),
 		healthySample(base.Add(time.Millisecond)),
 		healthySample(base.Add(2 * time.Millisecond)),
@@ -580,31 +609,31 @@ func (driver *Driver) stubbornChild() error {
 
 func (driver *Driver) interruptGuard() error {
 	base := time.Now()
-	policy := guard.DevelopmentPolicy
-	policy.SampleInterval = time.Millisecond
-	policy.AdmissionWindow = time.Second
-	policy.TerminationGrace = 200 * time.Millisecond
-	policy.LeaseWait = time.Second
+	resourcePolicy := policy.DefaultPolicy()
+	resourcePolicy.SampleInterval = time.Millisecond
+	resourcePolicy.AdmissionWindow = time.Second
+	resourcePolicy.TerminationGrace = 200 * time.Millisecond
+	resourcePolicy.LeaseWait = time.Second
 
 	marker := filepath.Join(driver.leaseRoot, "terminations")
-	interrupt := make(chan struct{})
-	time.AfterFunc(300*time.Millisecond, func() { close(interrupt) })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	time.AfterFunc(300*time.Millisecond, cancel)
 
 	started := time.Now()
-	_, err := guard.Run(guard.RunConfig{
+	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      shellPath,
 		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
 		TaskClass:    taskClassEphemeral,
 		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker),
 		EvidenceRoot: driver.leaseRoot,
-		Interrupt:    interrupt,
 		DiskPath:     ".",
-		Collector: &sequenceCollector{samples: []guard.Sample{
+		Collector: &sequenceCollector{samples: []policy.Sample{
 			healthySample(base),
 			healthySample(base.Add(time.Millisecond)),
 			healthySample(base.Add(2 * time.Millisecond)),
 		}},
-		Policy: policy,
+		Policy: resourcePolicy,
 		Sleep:  func(time.Duration) {},
 		Now:    time.Now,
 		Stderr: &bytes.Buffer{},
@@ -637,6 +666,279 @@ func (driver *Driver) requireForceStopped() error {
 	return nil
 }
 
+func (driver *Driver) stubbornCollectorFailureChild() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.leaseRoot = root
+
+	return nil
+}
+
+func (driver *Driver) loseHostEvidence() error {
+	base := time.Now()
+	resourcePolicy := fastBehaviourPolicy()
+	resourcePolicy.SampleInterval = 20 * time.Millisecond
+	resourcePolicy.TerminationGrace = 50 * time.Millisecond
+	pidPath := filepath.Join(driver.leaseRoot, "child.pid")
+	collector := &sequenceCollector{
+		samples: []policy.Sample{
+			healthySample(base),
+			healthySample(base.Add(time.Millisecond)),
+			healthySample(base.Add(2 * time.Millisecond)),
+		},
+		failureFrom: 3,
+	}
+
+	code, runError := guard.Run(context.Background(), guard.RunConfig{
+		Command:      shellPath,
+		Arguments:    []string{"-c", `trap '' TERM; printf '%s' "$$" > "$GUARD_CHILD_PID"; while :; do sleep 1; done`},
+		TaskClass:    policy.TaskEphemeral,
+		Environment:  append(os.Environ(), "GUARD_CHILD_PID="+pidPath),
+		EvidenceRoot: driver.leaseRoot,
+		DiskPath:     ".",
+		Collector:    collector,
+		Policy:       resourcePolicy,
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       &bytes.Buffer{},
+	})
+
+	driver.exitCode = code
+	driver.supervisionFailure = runError
+
+	pidData, readError := os.ReadFile(pidPath)
+	if readError != nil {
+		return fmt.Errorf("read guarded child PID: %w", readError)
+	}
+
+	pid, parseError := strconv.Atoi(strings.TrimSpace(string(pidData)))
+	if parseError != nil {
+		return fmt.Errorf("parse guarded child PID: %w", parseError)
+	}
+
+	driver.childReaped = errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
+
+	return nil
+}
+
+func (driver *Driver) requireReapedBeforeRelease() error {
+	if driver.supervisionFailure == nil {
+		return fmt.Errorf("exit=%d without a supervision error", driver.exitCode)
+	}
+	if driver.exitCode != 1 || !strings.Contains(driver.supervisionFailure.Error(), "injected host evidence failure") {
+		return fmt.Errorf("exit=%d with unexpected supervision error: %w", driver.exitCode, driver.supervisionFailure)
+	}
+	if !driver.childReaped {
+		return errors.New("guarded child remained live after supervision returned")
+	}
+	if _, err := os.Stat(filepath.Join(driver.leaseRoot, "heavy.lock")); err == nil {
+		return errors.New("heavy lease remained after child reaping")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect heavy lease after child reaping: %w", err)
+	}
+
+	session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", policy.TaskEphemeral, 0)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return errors.New("heavy lease was released before it became reacquirable")
+	}
+
+	return guard.ReleaseSession(driver.leaseRoot, session)
+}
+
+func (driver *Driver) smallEvidenceStream() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.evidenceRoot = root
+	driver.evidenceIdentifier = "bounded-lifetime"
+	driver.evidenceSampleCount = 40
+
+	return nil
+}
+
+func (driver *Driver) overflowEvidenceChunks() error {
+	writer, err := guard.NewEvidenceWriter(
+		driver.evidenceRoot,
+		driver.evidenceIdentifier,
+		evidence.Limits{ChunkBytes: 1024, Chunks: 5},
+	)
+	if err != nil {
+		return err
+	}
+
+	for index := range driver.evidenceSampleCount {
+		sample := healthySample(time.Unix(int64(index), 0))
+		if err := writer.Append(sample); err != nil {
+			return err
+		}
+	}
+
+	_, err = writer.Finalize(policy.TaskEphemeral, "passed", 0)
+
+	return err
+}
+
+func (driver *Driver) requireBoundedEvidenceChunks() error {
+	pattern := filepath.Join(driver.evidenceRoot, driver.evidenceIdentifier+"*.jsonl")
+	paths, err := filepath.Glob(pattern)
+	if err != nil {
+		return err
+	}
+	if len(paths) != 5 {
+		return fmt.Errorf("retained %d raw evidence chunks, want 5: %v", len(paths), paths)
+	}
+
+	expected := map[string]bool{
+		driver.evidenceIdentifier + ".jsonl":   true,
+		driver.evidenceIdentifier + ".1.jsonl": true,
+		driver.evidenceIdentifier + ".2.jsonl": true,
+		driver.evidenceIdentifier + ".3.jsonl": true,
+		driver.evidenceIdentifier + ".4.jsonl": true,
+	}
+	for _, path := range paths {
+		info, statError := os.Stat(path)
+		if statError != nil {
+			return statError
+		}
+		if !expected[filepath.Base(path)] || info.Size() > 1024 {
+			return fmt.Errorf("unexpected evidence chunk %s (%d bytes)", path, info.Size())
+		}
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireLifetimeEvidenceSummary() error {
+	path := filepath.Join(driver.evidenceRoot, driver.evidenceIdentifier+".summary.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var summary guard.EvidenceSummary
+	if err := json.Unmarshal(data, &summary); err != nil {
+		return err
+	}
+	if summary.SampleCount != driver.evidenceSampleCount {
+		return fmt.Errorf("summary counted %d samples, want %d", summary.SampleCount, driver.evidenceSampleCount)
+	}
+
+	return nil
+}
+
+func (driver *Driver) twentyLiveEvidenceStreams() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.evidenceRoot = root
+	for index := range 20 {
+		path := filepath.Join(root, fmt.Sprintf("live-%02d.jsonl", index))
+		writer, writerError := evidence.NewWriter(path, evidence.Limits{ChunkBytes: 1024, Chunks: 5})
+		if writerError != nil {
+			return fmt.Errorf("open live evidence stream %d: %w", index+1, writerError)
+		}
+		driver.evidenceWriters = append(driver.evidenceWriters, writer)
+	}
+
+	return nil
+}
+
+func (driver *Driver) startExcessEvidenceStream() {
+	driver.excessEvidencePath = filepath.Join(driver.evidenceRoot, "live-over-limit.jsonl")
+	writer, err := evidence.NewWriter(driver.excessEvidencePath, evidence.Limits{ChunkBytes: 1024, Chunks: 5})
+	driver.excessEvidenceError = err
+	if writer != nil {
+		driver.evidenceWriters = append(driver.evidenceWriters, writer)
+	}
+}
+
+func (driver *Driver) requireExcessEvidenceRejected() error {
+	if driver.excessEvidenceError == nil || !strings.Contains(driver.excessEvidenceError.Error(), "live evidence session limit") {
+		if driver.excessEvidenceError == nil {
+			return errors.New("twenty-first evidence writer was admitted")
+		}
+
+		return fmt.Errorf("unexpected twenty-first writer result: %w", driver.excessEvidenceError)
+	}
+	if _, err := os.Stat(driver.excessEvidencePath); err == nil {
+		return errors.New("rejected writer created raw evidence")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect rejected writer path: %w", err)
+	}
+
+	return nil
+}
+
+func (driver *Driver) inactiveEvidenceAboveBudget() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.evidenceRoot = root
+	base := time.Unix(2_000_000, 0)
+	for index := range 3 {
+		path := filepath.Join(root, fmt.Sprintf("inactive-%d.jsonl", index))
+		file, createError := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if createError != nil {
+			return createError
+		}
+		if truncateError := file.Truncate(20 * 1024 * 1024); truncateError != nil {
+			_ = file.Close()
+
+			return truncateError
+		}
+		if closeError := file.Close(); closeError != nil {
+			return closeError
+		}
+
+		modified := base.Add(time.Duration(index) * time.Second)
+		if chtimesError := os.Chtimes(path, modified, modified); chtimesError != nil {
+			return chtimesError
+		}
+		driver.inactiveEvidencePaths = append(driver.inactiveEvidencePaths, path)
+	}
+
+	return nil
+}
+
+func (driver *Driver) enforceEvidenceRetention() error {
+	return evidence.Cleanup(driver.evidenceRoot, time.Unix(2_000_100, 0))
+}
+
+func (driver *Driver) requireInactiveEvidencePruned() error {
+	if len(driver.inactiveEvidencePaths) != 3 {
+		return fmt.Errorf("prepared %d inactive evidence files, want 3", len(driver.inactiveEvidencePaths))
+	}
+	if _, err := os.Stat(driver.inactiveEvidencePaths[0]); !errors.Is(err, os.ErrNotExist) {
+		return errors.New("oldest inactive evidence was retained")
+	}
+
+	var total int64
+	for _, path := range driver.inactiveEvidencePaths[1:] {
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		total += info.Size()
+	}
+	if total > 50*1024*1024 {
+		return fmt.Errorf("inactive evidence retained %d bytes", total)
+	}
+
+	return nil
+}
+
 func (driver *Driver) criticalChild() error {
 	base := time.Now()
 	healthy := healthySample(base)
@@ -644,7 +946,7 @@ func (driver *Driver) criticalChild() error {
 	level := 4
 	critical.MemoryPressureLevel = &level
 
-	return driver.prepareGuardedExecution([]guard.Sample{
+	return driver.prepareGuardedExecution([]policy.Sample{
 		healthy,
 		healthySample(base.Add(time.Millisecond)),
 		healthySample(base.Add(2 * time.Millisecond)),
@@ -680,27 +982,27 @@ func (driver *Driver) degradedGrowthChild() error {
 
 func (driver *Driver) observeDegradedWarning() error {
 	base := time.Now()
-	policy := guard.DevelopmentPolicy
-	policy.SampleInterval = time.Millisecond
-	policy.TrendWindow = 15 * time.Millisecond
-	policy.AdmissionWindow = 30 * time.Millisecond
-	policy.EphemeralWarningGrace = 3 * time.Millisecond
-	policy.TerminationGrace = time.Millisecond
-	policy.LeaseWait = time.Second
+	resourcePolicy := policy.DefaultPolicy()
+	resourcePolicy.SampleInterval = time.Millisecond
+	resourcePolicy.TrendWindow = 15 * time.Millisecond
+	resourcePolicy.AdmissionWindow = 30 * time.Millisecond
+	resourcePolicy.EphemeralWarningGrace = 3 * time.Millisecond
+	resourcePolicy.TerminationGrace = time.Millisecond
+	resourcePolicy.LeaseWait = time.Second
 
 	samples := stableWarningSamples(base, time.Millisecond)
 
 	for index := range 20 {
 		sample := samples[len(samples)-1]
 		sample.MeasuredAt = base.Add(time.Duration(16+index) * time.Millisecond).UTC().Format(time.RFC3339Nano)
-		payload := *samples[0].CompressorPayloadBytes + 2*guard.GiB
+		payload := *samples[0].CompressorPayloadBytes + 2*policy.GiB
 		sample.CompressorPayloadBytes = &payload
 		samples = append(samples, sample)
 	}
 
 	stderr := &bytes.Buffer{}
 
-	code, runError := guard.Run(guard.RunConfig{
+	code, runError := guard.Run(context.Background(), guard.RunConfig{
 		Command:      shellPath,
 		Arguments:    []string{"-c", `[ "$RESOURCE_GUARD_CONCURRENCY" = 1 ] && [ "$NX_PARALLEL" = 1 ] && [ "$GOMAXPROCS" = 1 ] && [ "$DOTNET_PROCESSOR_COUNT" = 1 ]; sleep 5`},
 		TaskClass:    taskClassEphemeral,
@@ -708,8 +1010,8 @@ func (driver *Driver) observeDegradedWarning() error {
 		EvidenceRoot: driver.leaseRoot,
 		DiskPath:     ".",
 		Collector:    &sequenceCollector{samples: samples},
-		Policy:       policy,
-		Resolution: guard.Resolution{
+		Policy:       resourcePolicy,
+		Resolution: policy.Resolution{
 			RequestedProfile: profileBalanced,
 			ResolvedProfile:  profileBalanced,
 			FallbackChain:    []string{profileBalanced},
@@ -773,14 +1075,14 @@ func (driver *Driver) jsonStatus() error {
 	}
 
 	base := time.Unix(0, 0)
-	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
+	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	var stdout, stderr bytes.Buffer
 	code, err := (cli.Application{
 		Stdout:    &stdout,
 		Stderr:    &stderr,
 		Collector: collector,
 		Sleep:     func(time.Duration) {},
-	}).Run([]string{statusCommandName, jsonFlag, "--disk-path", "."})
+	}).Run(context.Background(), []string{statusCommandName, jsonFlag, "--disk-path", "."})
 
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
@@ -800,7 +1102,7 @@ func (driver *Driver) jsonVersion() error {
 		Stderr:  &bytes.Buffer{},
 		Version: "v0.0.0-test",
 		Commit:  strings.Repeat("0", 40),
-	}).Run([]string{"version", jsonFlag})
+	}).Run(context.Background(), []string{versionCommandName, jsonFlag})
 
 	driver.exitCode, driver.output = code, stdout.String()
 
@@ -828,10 +1130,10 @@ func (driver *Driver) requireVersion() error {
 
 func (driver *Driver) requireStatus() error {
 	var payload struct {
-		SchemaVersion int               `json:"schemaVersion"`
-		Resource      *guard.Assessment `json:"resource"`
-		Profile       *guard.Resolution `json:"profile"`
-		Capabilities  []string          `json:"capabilities"`
+		SchemaVersion int                `json:"schemaVersion"`
+		Resource      *policy.Assessment `json:"resource"`
+		Profile       *policy.Resolution `json:"profile"`
+		Capabilities  []string           `json:"capabilities"`
 	}
 	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
 		return err
@@ -857,7 +1159,7 @@ func (driver *Driver) runCLI(arguments ...string) error {
 	exitCode, err := (cli.Application{
 		Stdout: &stdout,
 		Stderr: &stderr,
-	}).Run(arguments)
+	}).Run(context.Background(), arguments)
 
 	driver.exitCode = exitCode
 	driver.output = stdout.String()
@@ -871,7 +1173,7 @@ func (driver *Driver) rootHelp() error {
 }
 
 func (driver *Driver) requireHelp() error {
-	commands := []string{"completion", monitorCommandName, "release", "run", statusCommandName, "version"}
+	commands := []string{"completion", monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}
@@ -886,7 +1188,7 @@ func (driver *Driver) requireHelp() error {
 }
 
 func (driver *Driver) releaseHelp() error {
-	return driver.runCLI("release", "--help")
+	return driver.runCLI(releaseCommandName, "--help")
 }
 
 func (driver *Driver) requireReleaseHelp() error {
@@ -941,7 +1243,7 @@ func (driver *Driver) invalidRun() error {
 		Stdout:    &bytes.Buffer{},
 		Stderr:    &bytes.Buffer{},
 		Collector: &sequenceCollector{},
-	}).Run([]string{"run", "--class", taskClassEphemeral})
+	}).Run(context.Background(), []string{"run", "--class", taskClassEphemeral})
 	if err != nil {
 		driver.errorOutput = err.Error()
 		driver.exitCode = 1
@@ -957,18 +1259,57 @@ func (driver *Driver) requireValidation() error {
 	return nil
 }
 
-func healthySummary() guard.ReleaseSummary {
-	return guard.ReleaseSummary{
+func (driver *Driver) requestOperandFreeCommandsWithArguments() {
+	commands := [][]string{
+		{versionCommandName, unexpectedArgument},
+		{statusCommandName, unexpectedArgument},
+		{monitorCommandName, unexpectedArgument},
+		{releaseCommandName, "check", unexpectedArgument},
+		{releaseCommandName, "assess", unexpectedArgument},
+		{releaseCommandName, monitorCommandName, unexpectedArgument},
+	}
+
+	driver.operandCommandsRejected = true
+	for _, arguments := range commands {
+		driver.exitCode = 0
+		driver.output = ""
+		driver.errorOutput = ""
+		err := driver.runCLI(arguments...)
+
+		diagnostic := driver.errorOutput
+		if err != nil {
+			diagnostic += err.Error()
+		}
+		if driver.exitCode != 1 ||
+			!strings.Contains(diagnostic, "unknown command") && !strings.Contains(diagnostic, "accepts 0 arg") {
+			driver.operandCommandsRejected = false
+			driver.errorOutput = fmt.Sprintf("arguments=%v exit=%d diagnostic=%q", arguments, driver.exitCode, diagnostic)
+
+			return
+		}
+	}
+}
+
+func (driver *Driver) requireOperandFreeCommandsRejected() error {
+	if !driver.operandCommandsRejected {
+		return errors.New(driver.errorOutput)
+	}
+
+	return nil
+}
+
+func healthySummary() policy.ReleaseSummary {
+	return policy.ReleaseSummary{
 		SchemaVersion:                          5,
 		SampleCount:                            3,
 		AvailableParallelism:                   12,
-		AvailableNonCompressedEstimateMinBytes: 13 * guard.GiB,
+		AvailableNonCompressedEstimateMinBytes: 13 * policy.GiB,
 		MemoryPressureLevelMax:                 1,
 		CompressorAvailableAll:                 true,
-		CompressorPayloadPeakBytes:             7 * guard.GiB,
+		CompressorPayloadPeakBytes:             7 * policy.GiB,
 		CPUUtilizationP95Percent:               50,
-		DiskFreeMinBytes:                       30 * guard.GiB,
-		SwapFreeMinBytes:                       2 * guard.GiB,
+		DiskFreeMinBytes:                       30 * policy.GiB,
+		SwapFreeMinBytes:                       2 * policy.GiB,
 		HealthLatencyP95Ms:                     25,
 		RoutedJourneyLatencyP95Ms:              50,
 		RoutedJourneyLatencyMaxMs:              100,
@@ -1041,13 +1382,13 @@ func (driver *Driver) requestReleaseMonitoring() {
 	}
 
 	base := time.Unix(0, 0)
-	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base)}}
+	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base)}}
 	code, err := (cli.Application{
 		Stdout:      &bytes.Buffer{},
 		Stderr:      &bytes.Buffer{},
 		Environment: []string{},
 		Collector:   collector,
-	}).Run(arguments)
+	}).Run(context.Background(), arguments)
 
 	driver.exitCode = code
 	if err != nil {
@@ -1063,16 +1404,16 @@ func (driver *Driver) requireMissingHealthURL() error {
 }
 
 func (driver *Driver) releaseHost() {
-	driver.samples = []guard.Sample{capacitySample(5*guard.GiB, 700*guard.MiB)}
+	driver.samples = []policy.Sample{capacitySample(5*policy.GiB, 700*policy.MiB)}
 }
 
 func (driver *Driver) assessRelease() {
-	driver.resolution, _ = guard.BuiltinCatalog().Resolve(profileBalanced, "release", driver.samples[len(driver.samples)-1])
+	driver.resolution, _ = policy.BuiltinCatalog().Resolve(profileBalanced, "release", driver.samples[len(driver.samples)-1])
 	driver.exitCode = driver.resolution.ExitCode
 }
 
 func (driver *Driver) requireReleaseCPU() error {
-	if driver.exitCode != guard.ReplanRequiredExitCode || driver.resolution.Decision != "replan" {
+	if driver.exitCode != policy.ReplanRequiredExitCode || driver.resolution.Decision != "replan" {
 		return fmt.Errorf("got %+v", driver.resolution)
 	}
 	return nil
@@ -1547,7 +1888,7 @@ func (driver *Driver) requireCoreCoverage() error {
 	return nil
 }
 
-func capacitySample(memory, available int64) guard.Sample {
+func capacitySample(memory, available int64) policy.Sample {
 	sample := healthySample(time.Unix(0, 0))
 	sample.Platform = "linux"
 	sample.Capabilities = []string{"cgroup-v2", "memory-psi"}
@@ -1563,7 +1904,7 @@ func capacitySample(memory, available int64) guard.Sample {
 }
 
 func (driver *Driver) smallRunner() {
-	driver.samples = []guard.Sample{capacitySample(5*guard.GiB, 800*guard.MiB)}
+	driver.samples = []policy.Sample{capacitySample(5*policy.GiB, 800*policy.MiB)}
 }
 
 func (driver *Driver) requireConstrained() error {
@@ -1574,7 +1915,7 @@ func (driver *Driver) requireConstrained() error {
 }
 
 func (driver *Driver) tinyMachine() {
-	driver.samples = []guard.Sample{capacitySample(guard.GiB, 200*guard.MiB)}
+	driver.samples = []policy.Sample{capacitySample(policy.GiB, 200*policy.MiB)}
 }
 
 func (driver *Driver) requireMinimal() error {
@@ -1585,19 +1926,19 @@ func (driver *Driver) requireMinimal() error {
 }
 
 func (driver *Driver) exhaustedDisk() {
-	sample := capacitySample(guard.GiB, 512*guard.MiB)
-	sample.DiskFreeBytes = new(200 * guard.MiB)
-	sample.DiskTotalBytes = new(guard.GiB)
-	driver.samples = []guard.Sample{sample}
+	sample := capacitySample(policy.GiB, 512*policy.MiB)
+	sample.DiskFreeBytes = new(200 * policy.MiB)
+	sample.DiskTotalBytes = new(policy.GiB)
+	driver.samples = []policy.Sample{sample}
 }
 
 func (driver *Driver) strictTransaction() {
 	driver.taskClass = "transactional"
-	driver.samples = []guard.Sample{capacitySample(5*guard.GiB, 700*guard.MiB)}
+	driver.samples = []policy.Sample{capacitySample(5*policy.GiB, 700*policy.MiB)}
 }
 
 func (driver *Driver) requireReplan() error {
-	if driver.exitCode != guard.ReplanRequiredExitCode || driver.resolution.Decision != "replan" {
+	if driver.exitCode != policy.ReplanRequiredExitCode || driver.resolution.Decision != "replan" {
 		return fmt.Errorf("got %+v exit %d", driver.resolution, driver.exitCode)
 	}
 	return nil
@@ -1605,7 +1946,7 @@ func (driver *Driver) requireReplan() error {
 
 func (driver *Driver) linuxCgroupCapacity() {
 	driver.linuxMemInfo = "MemTotal: 16777216 kB\nMemAvailable: 8388608 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n"
-	driver.linuxCgroupLimit = 4 * guard.GiB
+	driver.linuxCgroupLimit = 4 * policy.GiB
 }
 
 func (driver *Driver) collectLinuxEvidence() error {
@@ -1620,14 +1961,14 @@ func (driver *Driver) collectLinuxEvidence() error {
 }
 
 func (driver *Driver) requireFourGiB() error {
-	if driver.effectiveMemory != 4*guard.GiB {
+	if driver.effectiveMemory != 4*policy.GiB {
 		return fmt.Errorf("effective memory is %d", driver.effectiveMemory)
 	}
 	return nil
 }
 
 func (driver *Driver) linuxWithoutSwap() {
-	driver.samples = []guard.Sample{capacitySample(4*guard.GiB, 3*guard.GiB)}
+	driver.samples = []policy.Sample{capacitySample(4*policy.GiB, 3*policy.GiB)}
 }
 
 func (driver *Driver) requireSwapUnavailable() error {
@@ -1638,9 +1979,9 @@ func (driver *Driver) requireSwapUnavailable() error {
 }
 
 func (driver *Driver) linuxPSIWarning() {
-	sample := capacitySample(4*guard.GiB, 3*guard.GiB)
+	sample := capacitySample(4*policy.GiB, 3*policy.GiB)
 	sample.MemoryPSISomeAvg10 = new(10.0)
-	driver.samples = []guard.Sample{sample}
+	driver.samples = []policy.Sample{sample}
 }
 
 func (driver *Driver) requirePSIWarning() error {
@@ -1674,13 +2015,13 @@ func (driver *Driver) statusWithConfig() {
 	}
 
 	base := time.Unix(0, 0)
-	collector := &sequenceCollector{samples: []guard.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
+	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	code, err := (cli.Application{
 		Stdout:    &bytes.Buffer{},
 		Stderr:    &bytes.Buffer{},
 		Collector: collector,
 		Sleep:     func(time.Duration) {},
-	}).Run([]string{"status", jsonFlag, "--config", driver.configPath})
+	}).Run(context.Background(), []string{"status", jsonFlag, "--config", driver.configPath})
 
 	driver.exitCode = code
 	if err != nil {
@@ -1689,7 +2030,7 @@ func (driver *Driver) statusWithConfig() {
 }
 
 func (driver *Driver) requireConfigExit() error {
-	if driver.exitCode != guard.ReplanRequiredExitCode || !strings.Contains(driver.errorOutput, "unknown") {
+	if driver.exitCode != policy.ReplanRequiredExitCode || !strings.Contains(driver.errorOutput, "unknown") {
 		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
 	}
 	return nil
