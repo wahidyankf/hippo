@@ -10,10 +10,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 const releaseFixtureVersion = "v0.4.0"
+
+// The CI smoke build must hand the builder and the validator one identical
+// release identity, so both commands are read rather than matched literally.
+var (
+	ciReleaseBuilderCommand   = regexp.MustCompile(`\./scripts/build-release\.sh (\S+) "\$GITHUB_SHA" dist`)
+	ciReleaseValidatorCommand = regexp.MustCompile(`\./tests/artifacts/release-assets\.sh dist (\S+) "\$GITHUB_SHA"`)
+	exactReleaseVersion       = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
+)
 
 func runGitV04(directory string, arguments ...string) ([]byte, error) {
 	command := exec.Command("git", arguments...)
@@ -987,7 +996,13 @@ func requireV04ReleaseTagPeeling(root string) error {
 	if _, err = runGitV04(repository, "tag", "reachable-lightweight"); err != nil {
 		return err
 	}
-	if _, err = runGitV04(repository, "tag", "-a", "reachable-annotated", "-m", "reachable"); err != nil {
+	// An annotated tag records a tagger, so it needs an identity the same way a
+	// commit does. Supplying it per invocation keeps the fixture working on a
+	// runner with no ambient identity without configuring one anywhere.
+	if _, err = runGitV04(
+		repository, "-c", "user.name=HIPPO fixture", "-c", "user.email=fixture@example.invalid",
+		"tag", "-a", "reachable-annotated", "-m", "reachable",
+	); err != nil {
 		return err
 	}
 	for _, tag := range []string{"reachable-lightweight", "reachable-annotated"} {
@@ -1145,9 +1160,23 @@ func requireV04CIValidatorCommit(string) error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(section, `./scripts/build-release.sh v0.0.0-test "$GITHUB_SHA" dist`) ||
-		!strings.Contains(section, `./tests/artifacts/release-assets.sh dist v0.0.0-test "$GITHUB_SHA"`) {
+	builder := ciReleaseBuilderCommand.FindStringSubmatch(section)
+	validator := ciReleaseValidatorCommand.FindStringSubmatch(section)
+	if builder == nil || validator == nil {
 		return errors.New("CI release builder and validator do not receive the same exact commit")
+	}
+	if builder[1] != validator[1] {
+		return fmt.Errorf(
+			"CI release builder and validator disagree on the release version: builder %q validator %q",
+			builder[1], validator[1],
+		)
+	}
+	// Pinning the literal placeholder here would let the smoke build drift away
+	// from the identity rule the real release enforces. Requiring an exact
+	// version instead keeps this job exercising the same validation a publish
+	// does, which is how a non-exact placeholder was caught reaching it.
+	if !exactReleaseVersion.MatchString(builder[1]) {
+		return fmt.Errorf("CI release smoke build uses a non-exact release version %q", builder[1])
 	}
 
 	return nil

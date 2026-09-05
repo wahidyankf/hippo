@@ -67,6 +67,6 @@ jobs:
           go-version-file: go.mod
           cache: false
       - name: Build all supported assets
-        run: ./scripts/build-release.sh v0.0.0-test "$GITHUB_SHA" dist
+        run: ./scripts/build-release.sh v0.0.0 "$GITHUB_SHA" dist
       - name: Verify asset inventory
-        run: ./tests/artifacts/release-assets.sh dist v0.0.0-test "$GITHUB_SHA"
+        run: ./tests/artifacts/release-assets.sh dist v0.0.0 "$GITHUB_SHA"

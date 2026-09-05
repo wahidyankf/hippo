@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -705,6 +706,76 @@ func TestLegacySchemaOnePIDOnlyOwnershipCompatibility(t *testing.T) { //nolint:c
 	}
 }
 
+// inodeKey identifies one file by the device and inode it lives on. The key is
+// textual because the two fields are signed on Darwin and unsigned on Linux, and
+// a formatted key compares them without a conversion that is only safe by
+// accident.
+func inodeKey(status unix.Stat_t) string {
+	return fmt.Sprintf("%d:%d", status.Dev, status.Ino)
+}
+
+// coordinationInodes collects every file living under the given coordination
+// roots. A payload descriptor pointing at one of them was inherited from the
+// launcher; anything else belongs to the payload itself.
+func coordinationInodes(roots string) (map[string]struct{}, error) {
+	owned := map[string]struct{}{}
+
+	for _, root := range filepath.SplitList(roots) {
+		if root == "" {
+			continue
+		}
+
+		//nolint:gosec // The parent fixture supplies test-owned coordination roots.
+		walkError := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				// A root the fixture has not finished populating is not a probe
+				// failure; the emptiness check downstream catches a root that
+				// never appears.
+				return nil //nolint:nilerr // Absent coordination state is an expected walk outcome here.
+			}
+			if entry.IsDir() {
+				return nil
+			}
+
+			var status unix.Stat_t
+			if statError := unix.Stat(path, &status); statError != nil {
+				// A file that disappeared between the walk and the stat cannot be
+				// the target of an inherited descriptor.
+				return nil //nolint:nilerr // A vanished coordination file is not a probe failure.
+			}
+			owned[inodeKey(status)] = struct{}{}
+
+			return nil
+		})
+		if walkError != nil {
+			return nil, walkError
+		}
+	}
+
+	return owned, nil
+}
+
+// inheritedCoordinationDescriptors counts the payload descriptors that point at
+// a coordination-owned file, and unlocks each one so a real leak also breaks the
+// ownership assertions the fixture makes afterwards.
+func inheritedCoordinationDescriptors(private map[string]struct{}) int {
+	inherited := 0
+
+	for descriptor := 3; descriptor < 32; descriptor++ {
+		var status unix.Stat_t
+		if unix.Fstat(descriptor, &status) != nil {
+			continue
+		}
+		if _, owned := private[inodeKey(status)]; !owned {
+			continue
+		}
+		inherited++
+		_ = unix.Flock(descriptor, unix.LOCK_UN)
+	}
+
+	return inherited
+}
+
 func TestLifetimeIdentityPayloadHelper(t *testing.T) { //nolint:gocognit // The self-exec helper exercises private descriptor visibility and descendant lifetimes using test-owned paths.
 	if os.Getenv("HIPPO_LIFETIME_IDENTITY_KEEPER") == "1" { //nolint:nestif // This isolated helper owns its descendant startup, report, and bounded teardown.
 		descendant := exec.Command("/bin/sh", "-c", "while :; do sleep 1; done")
@@ -770,13 +841,28 @@ func TestLifetimeIdentityPayloadHelper(t *testing.T) { //nolint:gocognit // The 
 			t.Fatal(err)
 		}
 	}
-	unlocked := 0
-	for descriptor := 3; descriptor < 32; descriptor++ {
-		if unix.Flock(descriptor, unix.LOCK_UN) == nil {
-			unlocked++
-		}
+	// Counting every descriptor that merely accepts an unlock says nothing about
+	// inheritance: a payload's own runtime descriptors accept it too, and on
+	// Linux the Go runtime holds four of them (a cgroup file, an eventpoll, an
+	// eventfd, and a pidfd). The launcher's private descriptors are identified by
+	// the files they point at instead, so this counts inheritance and nothing
+	// else, then still attempts the unlock so a real leak also breaks the
+	// ownership assertions downstream.
+	private, inodeError := coordinationInodes(os.Getenv("HIPPO_LIFETIME_PRIVATE_ROOTS"))
+	if inodeError != nil {
+		t.Fatal(inodeError)
 	}
-	result := strconv.Itoa(unlocked)
+	if len(private) == 0 {
+		// A probe that knows no private descriptor cannot witness a leak, so it
+		// must fail loudly rather than report a vacuous zero.
+		//nolint:gosec // The parent fixture supplies a test-owned temporary result path.
+		if err := os.WriteFile(os.Getenv("HIPPO_IDENTITY_RESULT"), []byte("no-private-descriptors"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		return
+	}
+	result := strconv.Itoa(inheritedCoordinationDescriptors(private))
 	if os.Getenv("HIPPO_LIFETIME_REPORT_FORGE") == "1" {
 		if _, err := unix.Write(3, []byte("{\"processGroup\":1}\n")); err == nil {
 			result += ":wrote"
@@ -815,6 +901,7 @@ func TestPayloadCannotInheritLifetimeIdentityDescriptors(t *testing.T) { //nolin
 			resultPath := filepath.Join(root, "payload-result")
 			environment = append(environment,
 				"HIPPO_LIFETIME_IDENTITY_PAYLOAD=1", "HIPPO_IDENTITY_RESULT="+resultPath,
+				"HIPPO_LIFETIME_PRIVATE_ROOTS="+reservationRoot+string(os.PathListSeparator)+portRoot,
 			)
 			policyValue := policy.DefaultPolicy()
 			policyValue.AdmissionWindow = 100 * time.Millisecond
@@ -862,7 +949,7 @@ func TestPayloadCannotInheritLifetimeIdentityDescriptors(t *testing.T) { //nolin
 				}
 			}
 			if string(payloadResult) != "0" {
-				t.Fatalf("payload unlocked %s launcher identity descriptors", payloadResult)
+				t.Fatalf("payload inherited %s launcher identity descriptors", payloadResult)
 			}
 			if statusError != nil || totals.ActiveOwners != 1 {
 				t.Fatalf("payload released reservation ownership: totals=%+v error=%v", totals, statusError)
@@ -952,6 +1039,9 @@ reportPipeFull:
 	command.Env = withEnvironment(command.Env, lifetimeCapabilityEnvironment, capability)
 	command.Env = withEnvironment(command.Env, "HIPPO_LIFETIME_IDENTITY_PAYLOAD", "1")
 	command.Env = withEnvironment(command.Env, "HIPPO_IDENTITY_RESULT", resultPath)
+	command.Env = withEnvironment(
+		command.Env, "HIPPO_LIFETIME_PRIVATE_ROOTS", reservationRoot+string(os.PathListSeparator)+portRoot,
+	)
 	command.Env = withEnvironment(command.Env, "HIPPO_IDENTITY_KEEPER_PIDS", keeperPIDsPath)
 	command.Env = withEnvironment(command.Env, "HIPPO_IDENTITY_KEEPER_RELEASE", keeperReleasePath)
 	command.ExtraFiles = []*os.File{reportWriter, capabilityReader, session.identityLock, lease.identityLock}
@@ -1311,6 +1401,9 @@ func TestPayloadCannotForgeLifetimeActivationReport(t *testing.T) {
 	command.Env = withEnvironment(command.Env, "HIPPO_LIFETIME_IDENTITY_PAYLOAD", "1")
 	command.Env = withEnvironment(command.Env, "HIPPO_LIFETIME_REPORT_FORGE", "1")
 	command.Env = withEnvironment(command.Env, "HIPPO_IDENTITY_RESULT", resultPath)
+	command.Env = withEnvironment(
+		command.Env, "HIPPO_LIFETIME_PRIVATE_ROOTS", reservationRoot+string(os.PathListSeparator)+portRoot,
+	)
 	command.ExtraFiles = []*os.File{reportWriter, capabilityReader, session.identityLock, lease.identityLock}
 	if err = command.Start(); err != nil {
 		t.Fatal(err)

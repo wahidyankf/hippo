@@ -72,7 +72,11 @@ for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
 			-o "$binary" ./cmd/hippo
 	)
 	chmod 755 "$binary"
-	tar --format ustar --uid 0 --gid 0 --uname root --gname root -C "$work" -czf "$output_dir/$archive" hippo
+	# Ownership metadata is pinned so an archive never carries the build user.
+	# The name:id spelling is the only one both implementations accept: GNU tar
+	# rejects bsdtar's --uid/--gid/--uname/--gname, and the release runner is
+	# Linux.
+	tar --format ustar --owner=root:0 --group=root:0 -C "$work" -czf "$output_dir/$archive" hippo
 done
 
 # Publish one checksum inventory covering exactly the archives above. The
