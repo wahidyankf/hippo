@@ -29,7 +29,7 @@ The diagrams use ASCII so they remain readable in terminals and plain-text tooli
                            +------------------+ +------------------+ +------------------+
 ```
 
-An operator, repository script, Git hook, or CI task invokes HIPPO before compute-bearing local work. HIPPO reads normalized host evidence, resolves a safe capacity profile, coordinates eligible work through a shared per-user lease, and supervises only the child process group it starts. Callers may select environment variables that receive resolved concurrency and may connect standard streams without teaching HIPPO about a build ecosystem. Release monitoring may probe explicit local and routed health endpoints supplied by the caller. HIPPO is repository-independent and does not know consumer project layouts, commands, or infrastructure defaults.
+An operator, repository script, Git hook, or CI task invokes HIPPO before compute-bearing local work. HIPPO reads normalized host evidence, resolves a safe capacity profile, coordinates eligible work through a shared per-user protocol, and supervises only the child process group it starts. The compatibility protocol briefly locks coordination mutations, advertises active exclusive-mode ownership, and retains the heavy-work lease until the guarded child exits. Callers may select environment variables that receive resolved concurrency and may connect standard streams without teaching HIPPO about a build ecosystem. Release monitoring may probe explicit local and routed health endpoints supplied by the caller. HIPPO is repository-independent and does not know consumer project layouts, commands, or infrastructure defaults.
 
 ## Container View
 
@@ -47,8 +47,8 @@ An operator, repository script, Git hook, or CI task invokes HIPPO before comput
   |  +--------+---------+                           v           |           v      |
   |  | Temporary store  |                   +-------+------+    |   +-------+-----+|
   |  | Build cache      |                   | Input file   |    |   | Data store  ||
-  |  +------------------+                   | Local config |    |   | Lease and   ||
-  |                                         +--------------+    |   | evidence    ||
+  |  +------------------+                   | Local config |    |   | Runtime     ||
+  |                                         +--------------+    |   | state       ||
   |                                                             |   +-------------+|
   +-------------------------------------------------------------|------------------+
                                                                 |
@@ -65,7 +65,7 @@ An operator, repository script, Git hook, or CI task invokes HIPPO before comput
 
 The POSIX shell bootstrap hashes the Go sources and module metadata, serializes compilation, retains a bounded platform cache, and then replaces itself with the compiled executable. Tagged-release consumers may invoke a verified binary directly and bypass this source-build container.
 
-The Go CLI is the only long-running HIPPO execution container. It reads an optional machine-local JSON configuration, collects host and process evidence through operating-system interfaces, and stores bounded lease and evidence records in a shared per-user state root. HIPPO instances launched by different repositories coordinate through that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
+The Go CLI is the only long-running HIPPO execution container. It reads an optional machine-local JSON configuration, collects host and process evidence through operating-system interfaces, and stores coordination, lease, and bounded evidence records in a shared per-user state root. HIPPO instances launched by different repositories coordinate through that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
 
 ## Component View
 
@@ -89,7 +89,7 @@ Container boundary: Go CLI process
 - **Config loader and profiles** resolve configuration precedence, validate strict overrides, and preserve compiled safety floors.
 - **Host collector** normalizes macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence into portable samples.
 - **Policy engine and profiles** classify evidence, choose an adaptive development profile, and preserve strict transaction and release envelopes.
-- **Execution guard** owns shared sessions, port leases, child-process lifecycle and streams, generic concurrency mapping, pressure monitoring, shedding, and bounded evidence retention.
+- **Execution guard** owns coordination mode, atomic session mutations, heavy and port leases, child-process lifecycle and streams, generic concurrency mapping, pressure monitoring, shedding, and bounded evidence retention.
 - **Release guard** owns consecutive release admission, health sampling, file or caller-owned stream sinks, summary schemas, and final overlap assessment.
 - **Evidence store** owns live-writer admission, raw chunk rotation, fixed-memory quantiles, expiry, and inactive-file retention.
 
@@ -98,14 +98,18 @@ The `internal/policy` package owns the shared typed samples, collectors, task cl
 ## Guarded Execution Dynamic View
 
 ```text
-Caller     CLI/config     Host/policy     Lease store     Child group
+Caller     CLI/config     Host/policy   Coordination store   Child group
   |             |              |               |               |
   | run request |              |               |               |
   |------------>| collect      |               |               |
   |             |------------->|               |               |
   |             | resolve      |               |               |
   |             |<-------------|               |               |
-  |             | acquire heavy-work lease     |               |
+  |             | lock, verify exclusive mode  |               |
+  |             |----------------------------->|               |
+  |             | register session/heavy lease |               |
+  |             |----------------------------->|               |
+  |             | unlock coordination mutation |               |
   |             |----------------------------->|               |
   |             | start admitted child         |               |
   |             |--------------------------------------------->|
@@ -115,20 +119,23 @@ Caller     CLI/config     Host/policy     Lease store     Child group
   |             |--------------------------------------------->|
   |             | wait until the owned child is reaped         |
   |             |<---------------------------------------------|
-  |             | finalize evidence, then release lease        |
+  |             | finalize evidence, then atomically release   |
+  |             | session/lease and clear idle mode marker     |
   |             |----------------------------->|               |
   | child code or stable guard exit             |               |
   |<------------|              |               |               |
 ```
 
-Admission failures return before child creation. An admitted child inherits the resolved profile, canonical concurrency, caller-selected concurrency mappings, and the caller's standard streams. HIPPO has no built-in knowledge of ecosystem-specific environment variables. Cancellation, collector failure, evidence failure, or resource pressure terminates and reaps the owned child group before evidence finalization and lease release. HIPPO preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity or lease pressure (`75`), and configuration or strict-profile replanning (`78`).
+Admission failures return before child creation. An active reservation-mode marker makes a compatibility client defer every new service, ephemeral, or transactional session with exit `75`; it never overwrites the marker or starts the child. An admitted child inherits the resolved profile, canonical concurrency, caller-selected concurrency mappings, and the caller's standard streams. HIPPO has no built-in knowledge of ecosystem-specific environment variables. Cancellation, collector failure, evidence failure, or resource pressure terminates and reaps the owned child group before evidence finalization and lease release. HIPPO preserves a normal child exit code; its own stable exit codes distinguish storage cleanup (`73`), retryable capacity, lease, or coordination pressure (`75`), and configuration or strict-profile replanning (`78`).
 
 ## Architectural Constraints
 
 - The public CLI and defaults remain generic across consuming repositories; consumers supply commands, paths, ports, health endpoints, and local policy inputs.
 - Supported runtime collectors normalize macOS and Linux evidence, including effective cgroup limits where available, without assuming one machine shape.
 - Machine-local configuration may tighten policy but cannot weaken compiled safety floors.
-- Heavy work coordinates through a shared per-user lease. Long-lived services retain independent inheritable sessions and do not monopolize the heavy-work lease.
+- Every session mutation is serialized by the shared `coordination.lock`. While any compatibility session is live, schema-1 `coordination-mode.json` advertises `exclusive`; the final release removes that marker. A valid `reservation` marker is owned by the later reservation protocol and must never be replaced by an exclusive client.
+- Heavy work continues to coordinate through one shared per-user `heavy.lock` for the full child lifecycle. Long-lived services retain independent inheritable sessions and do not monopolize that heavy-work lease. The coordination mutation lock is never held while a child runs.
+- An unreadable heavy-work owner or unsupported heavy-owner schema is never reclaimed automatically. Compatibility admission stays fail-closed until an operator confirms that no owner remains and corrects the private state.
 - HIPPO signals only the process group it creates. It never sheds unrelated user, repository, proxy, or production processes.
 - Child stdin, stdout, and stderr remain caller-owned and distinct from guard diagnostics. Consumers opt into tool concurrency mappings by valid environment name; no build system is compiled into the core.
 - One shared state root admits at most 20 live evidence streams across all consuming repositories. Each live stream keeps five rotating 400 KiB raw chunks, for about 2 MiB per session and about 40 MiB at the maximum live count.

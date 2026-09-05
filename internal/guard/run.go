@@ -301,6 +301,12 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		config.Policy.LeaseWait,
 	)
 	if err != nil {
+		if errors.Is(err, errCoordinationDeferred) {
+			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", err)
+
+			return CapacityDeferredExitCode, nil
+		}
+
 		return 1, err
 	}
 	if session == nil {

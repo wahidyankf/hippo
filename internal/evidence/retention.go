@@ -13,6 +13,12 @@ import (
 
 const maximumInactiveBytes int64 = 50 * 1024 * 1024
 
+func runtimeInternalFile(name string) bool {
+	return name == ".writers.lock" ||
+		name == "coordination.lock" ||
+		name == "coordination-mode.json"
+}
+
 type retainedFile struct {
 	path     string
 	size     int64
@@ -88,7 +94,7 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error {
 	retained := []retainedFile{}
 
 	for _, entry := range entries {
-		if !entry.Type().IsRegular() || entry.Name() == ".writers.lock" || strings.HasSuffix(entry.Name(), ".active.json") {
+		if !entry.Type().IsRegular() || runtimeInternalFile(entry.Name()) || strings.HasSuffix(entry.Name(), ".active.json") {
 			continue
 		}
 

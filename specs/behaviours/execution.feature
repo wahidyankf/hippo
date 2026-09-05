@@ -2,6 +2,19 @@ Feature: Guarded process execution
   The guard serializes heavy work, keeps long-lived services outside that lease, and owns only the process it launches.
 
   @e2e-exempt
+  Scenario: An exclusive session advertises compatibility coordination
+    Given an empty shared coordination root
+    When exclusive heavy work acquires a guarded session
+    Then the shared root advertises exclusive coordination
+    And releasing its final session removes the coordination marker
+
+  Scenario: Reservation coordination defers every compatibility class
+    Given the shared root advertises reservation coordination
+    When every compatibility task class requests a guarded session
+    Then every compatibility owner is deferred with exit 75
+    And the reservation coordination marker remains unchanged
+
+  @e2e-exempt
   Scenario: A live heavy lease defers a second owner
     Given another live process owns the heavy lease
     When a second owner waits for the lease

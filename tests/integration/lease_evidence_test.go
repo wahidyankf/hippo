@@ -3,10 +3,12 @@ package integration_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,6 +55,191 @@ func TestHeavyLeaseLifecycleAndInheritance(t *testing.T) {
 	}
 	if err := guard.ReleaseSession(root, nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCoordinationModeLifecycleAcrossConcurrentServices(t *testing.T) {
+	root := t.TempDir()
+	const owners = 12
+
+	sessions := make(chan *guard.Session, owners)
+	errorsFound := make(chan error, owners)
+	var wait sync.WaitGroup
+	for range owners {
+		wait.Go(func() {
+			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
+			if err != nil {
+				errorsFound <- err
+
+				return
+			}
+			if session == nil {
+				errorsFound <- errors.New("service admission was deferred")
+
+				return
+			}
+
+			sessions <- session
+		})
+	}
+	wait.Wait()
+	close(sessions)
+	close(errorsFound)
+
+	for err := range errorsFound {
+		t.Error(err)
+	}
+	if t.Failed() {
+		return
+	}
+
+	markerPath := filepath.Join(root, "coordination-mode.json")
+	marker := map[string]any{}
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &marker); err != nil {
+		t.Fatal(err)
+	}
+	if marker["schemaVersion"] != float64(1) || marker["mode"] != "exclusive" {
+		t.Fatalf("unexpected marker: %s", data)
+	}
+
+	owned := make([]*guard.Session, 0, owners)
+	for session := range sessions {
+		owned = append(owned, session)
+	}
+	if len(owned) != owners {
+		t.Fatalf("acquired %d service sessions, want %d", len(owned), owners)
+	}
+
+	for _, session := range owned[:len(owned)-1] {
+		if err = guard.ReleaseSession(root, session); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = os.Stat(markerPath); err != nil {
+			t.Fatalf("active coordination marker disappeared: %v", err)
+		}
+	}
+	if err = guard.ReleaseSession(root, owned[len(owned)-1]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(markerPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("idle coordination marker remained: %v", err)
+	}
+}
+
+func TestCoordinationMarkerRejectsIncompatibleOrMalformedState(t *testing.T) {
+	testCases := []struct {
+		name   string
+		marker string
+	}{
+		{name: "future schema", marker: `{"schemaVersion":2,"mode":"exclusive"}`},
+		{name: "unknown mode", marker: `{"schemaVersion":1,"mode":"unknown"}`},
+		{name: "unknown field", marker: `{"schemaVersion":1,"mode":"exclusive","extra":true}`},
+		{name: "duplicate mode", marker: `{"schemaVersion":1,"mode":"reservation","mode":"exclusive"}`},
+		{name: "multiple values", marker: `{"schemaVersion":1,"mode":"exclusive"} {}`},
+		{name: "invalid JSON", marker: `{`},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := t.TempDir()
+			markerPath := filepath.Join(root, "coordination-mode.json")
+			if err := os.WriteFile(markerPath, []byte(testCase.marker), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, 0)
+			if err == nil || session != nil {
+				t.Fatalf("incompatible marker was accepted: session=%+v error=%v", session, err)
+			}
+
+			data, readError := os.ReadFile(markerPath)
+			if readError != nil {
+				t.Fatal(readError)
+			}
+			if string(data) != testCase.marker {
+				t.Fatalf("marker changed from %q to %q", testCase.marker, data)
+			}
+		})
+	}
+}
+
+func TestReservationCoordinationDefersEveryCompatibilityClass(t *testing.T) {
+	root := t.TempDir()
+	marker := []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
+	markerPath := filepath.Join(root, "coordination-mode.json")
+	if err := os.WriteFile(markerPath, marker, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, class := range []policy.TaskClass{policy.TaskEphemeral, policy.TaskTransactional, policy.TaskService} {
+		t.Run(string(class), func(t *testing.T) {
+			session, err := guard.AcquireSession(context.Background(), root, "", class, 0)
+			if err == nil || session != nil {
+				t.Fatalf("reservation coordination admitted %s: session=%+v error=%v", class, session, err)
+			}
+			if !strings.Contains(err.Error(), "reservation mode is active") {
+				t.Fatalf("%s deferral was not actionable: %v", class, err)
+			}
+		})
+	}
+
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string(marker) {
+		t.Fatalf("reservation marker changed from %q to %q", marker, data)
+	}
+}
+
+func TestMalformedHeavyLeaseRemainsFailClosed(t *testing.T) {
+	testCases := []struct {
+		name  string
+		owner string
+	}{
+		{name: "invalid JSON", owner: `{`},
+		{name: "unsupported schema", owner: `{"schemaVersion":2,"pid":2147483647}`},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := t.TempDir()
+			heavyPath := filepath.Join(root, "heavy.lock")
+			if err := os.Mkdir(heavyPath, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ownerPath := filepath.Join(heavyPath, "owner.json")
+			if err := os.WriteFile(ownerPath, []byte(testCase.owner), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, 0)
+			if err != nil || session != nil {
+				t.Fatalf("unverifiable heavy lease did not defer safely: session=%+v error=%v", session, err)
+			}
+			if description := guard.DescribeHeavyLease(root); !strings.Contains(description, "cannot be verified") {
+				t.Fatalf("unverifiable owner diagnostic was not actionable: %q", description)
+			}
+
+			data, readError := os.ReadFile(ownerPath)
+			if readError != nil {
+				t.Fatal(readError)
+			}
+			if string(data) != testCase.owner {
+				t.Fatalf("unverifiable heavy owner changed from %q to %q", testCase.owner, data)
+			}
+			mode, readError := os.ReadFile(filepath.Join(root, "coordination-mode.json"))
+			if readError != nil {
+				t.Fatal(readError)
+			}
+			if !strings.Contains(string(mode), `"mode":"exclusive"`) {
+				t.Fatalf("fail-closed coordination marker missing: %q", mode)
+			}
+		})
 	}
 }
 
@@ -257,6 +444,39 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 
 	if _, err := writer.Finalize("ephemeral", "passed", 0); err == nil {
 		t.Fatal("second finalize accepted")
+	}
+}
+
+func TestEvidenceCleanupPreservesCoordinationProtocolFiles(t *testing.T) {
+	root := t.TempDir()
+	now := time.Unix(2_000_000, 0)
+	coordinationLock := filepath.Join(root, "coordination.lock")
+	coordinationMarker := filepath.Join(root, "coordination-mode.json")
+	expiredEvidence := filepath.Join(root, "expired.jsonl")
+	for path, content := range map[string]string{
+		coordinationLock:   "",
+		coordinationMarker: `{"schemaVersion":1,"mode":"exclusive"}`,
+		expiredEvidence:    "{}\n",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		stale := now.Add(-31 * 24 * time.Hour)
+		if err := os.Chtimes(path, stale, stale); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := evidence.Cleanup(root, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{coordinationLock, coordinationMarker} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("coordination protocol file %q was removed: %v", filepath.Base(path), err)
+		}
+	}
+	if _, err := os.Stat(expiredEvidence); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expired evidence remained: %v", err)
 	}
 }
 
