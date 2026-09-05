@@ -120,6 +120,9 @@ type Driver struct {
 	leaseHolder             int
 	heavySession            *guard.Session
 	serviceSessions         []*guard.Session
+	coordinationMarker      []byte
+	coordinationRequests    int
+	coordinationDeferrals   int
 	inheritedSessions       bool
 	forceStopElapsed        time.Duration
 	terminationSignals      int
@@ -608,6 +611,166 @@ func (driver *Driver) copyGuardedStreams() error {
 func (driver *Driver) requireComposableStreams() error {
 	if driver.exitCode != 0 || driver.output != "stdout:hello-pipeline\n" || driver.errorOutput != "stderr:hello-pipeline\n" {
 		return fmt.Errorf("exit=%d stdout=%q stderr=%q", driver.exitCode, driver.output, driver.errorOutput)
+	}
+
+	return nil
+}
+
+func (driver *Driver) emptyCoordinationRoot() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	driver.leaseRoot = root
+
+	return nil
+}
+
+func (driver *Driver) acquireExclusiveCompatibility() error {
+	session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return errors.New("exclusive compatibility work was deferred")
+	}
+
+	driver.heavySession = session
+
+	return nil
+}
+
+func (driver *Driver) requireExclusiveCoordination() error {
+	data, err := os.ReadFile(filepath.Join(driver.leaseRoot, "coordination-mode.json"))
+	if err != nil {
+		return fmt.Errorf("read coordination marker: %w", err)
+	}
+
+	var marker struct {
+		SchemaVersion int    `json:"schemaVersion"`
+		Mode          string `json:"mode"`
+	}
+	if err = json.Unmarshal(data, &marker); err != nil {
+		return fmt.Errorf("decode coordination marker: %w", err)
+	}
+	if marker.SchemaVersion != 1 || marker.Mode != "exclusive" {
+		return fmt.Errorf("unexpected coordination marker: %+v", marker)
+	}
+
+	return nil
+}
+
+func (driver *Driver) releaseFinalCoordinationSession() error {
+	if err := guard.ReleaseSession(driver.leaseRoot, driver.heavySession); err != nil {
+		return err
+	}
+	driver.heavySession = nil
+
+	if _, err := os.Stat(filepath.Join(driver.leaseRoot, "coordination-mode.json")); err == nil {
+		return errors.New("coordination marker remained after final release")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect coordination marker after final release: %w", err)
+	}
+
+	return nil
+}
+
+func (driver *Driver) reservationCoordination() error {
+	if err := driver.emptyCoordinationRoot(); err != nil {
+		return err
+	}
+
+	driver.coordinationMarker = []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
+
+	return os.WriteFile(
+		filepath.Join(driver.leaseRoot, "coordination-mode.json"),
+		driver.coordinationMarker,
+		0o600,
+	)
+}
+
+func (driver *Driver) requestEveryCompatibilityClass() error {
+	classes := []policy.TaskClass{policy.TaskEphemeral, policy.TaskTransactional, policy.TaskService}
+	driver.coordinationRequests = len(classes)
+	if driver.mode == contract.E2E {
+		return driver.requestEveryCompatibilityClassE2E(classes)
+	}
+
+	for _, class := range classes {
+		session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", class, 0)
+		if session != nil {
+			_ = guard.ReleaseSession(driver.leaseRoot, session)
+		}
+		if err != nil && session == nil && strings.Contains(err.Error(), "reservation mode is active") {
+			driver.coordinationDeferrals++
+			driver.supervisionFailure = errors.Join(driver.supervisionFailure, err)
+		}
+	}
+	if driver.coordinationDeferrals == driver.coordinationRequests {
+		driver.exitCode = guard.CapacityDeferredExitCode
+	}
+
+	return nil
+}
+
+func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskClass) error {
+	for _, class := range classes {
+		stderr := &bytes.Buffer{}
+		command := exec.Command(
+			driver.binary,
+			"run",
+			"--class", string(class),
+			"--disk-path", ".",
+			"--", shellPath, "-c", "exit 99",
+		)
+		command.Env = environmentWith(map[string]string{"HIPPO_ROOT": driver.leaseRoot})
+		command.Stderr = stderr
+
+		err := command.Run()
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) &&
+			exitError.ExitCode() == guard.CapacityDeferredExitCode &&
+			strings.Contains(stderr.String(), "reservation mode is active") {
+			driver.coordinationDeferrals++
+			driver.supervisionFailure = errors.Join(
+				driver.supervisionFailure,
+				fmt.Errorf("%s compatibility deferral: %w", class, err),
+			)
+		}
+		driver.errorOutput += stderr.String()
+	}
+	if driver.coordinationDeferrals == driver.coordinationRequests {
+		driver.exitCode = guard.CapacityDeferredExitCode
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireEveryCoordinationOwnerDeferred() error {
+	if driver.exitCode != guard.CapacityDeferredExitCode ||
+		driver.coordinationRequests != 3 ||
+		driver.coordinationDeferrals != driver.coordinationRequests ||
+		driver.supervisionFailure == nil {
+		return fmt.Errorf(
+			"exit=%d requests=%d deferrals=%d error=%w",
+			driver.exitCode,
+			driver.coordinationRequests,
+			driver.coordinationDeferrals,
+			driver.supervisionFailure,
+		)
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireReservationCoordinationUnchanged() error {
+	data, err := os.ReadFile(filepath.Join(driver.leaseRoot, "coordination-mode.json"))
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(data, driver.coordinationMarker) {
+		return fmt.Errorf("reservation coordination marker changed from %q to %q", driver.coordinationMarker, data)
 	}
 
 	return nil

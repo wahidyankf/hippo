@@ -84,13 +84,15 @@ tmux capture-pane -p -t hippo:0.0 -S -200
 
 Ordinary work resolves `balanced` → `constrained` → `minimal` from effective memory, available memory, disk, CPU, and swap capability. Balanced ephemeral work on Darwin may admit after a full stable warning window when 25% of effective memory, clamped to 4–8 GiB, remains available and CPU, disk, OOM, swap-out, and compressor-growth checks remain safe. This degraded path forces canonical concurrency and every consumer-selected mapping to one. Services, fallback profiles, Linux PSI, transactions, and releases cannot use it.
 
-Exit `73` requires storage cleanup. Exit `75` is retryable capacity pressure or a held heavy-work lease. Exit `78` requires configuration or strict-profile replanning. Never bypass the guard or change task class to obtain admission.
+Exit `73` requires storage cleanup. Exit `75` is retryable capacity, lease, or coordination pressure. If a heavy lease owner cannot be decoded or uses an unsupported schema, HIPPO deliberately leaves it in place and defers admission; inspect the shared HIPPO state and confirm that no owner remains before correcting private state. Exit `78` requires configuration or strict-profile replanning. Never bypass the guard or change task class to obtain admission.
 
 ## Configuration and state
 
 Copy [`hippo.local.json.example`](hippo.local.json.example) to ignored `hippo.local.json`. `--config` overrides `HIPPO_CONFIG`, which overrides the bootstrap default. Local configuration can make policy stricter but cannot weaken compiled floors.
 
-`HIPPO_ROOT` overrides the shared evidence and lease root. Defaults are `~/Library/Application Support/hippo` on macOS and `${XDG_STATE_HOME:-$HOME/.local/state}/hippo` on Linux. All repositories using the same root coordinate through the same leases and evidence budget. At most 20 evidence streams may be live at once; each stream retains five rotating 400 KiB raw chunks (about 2 MiB total) while its summary covers the complete session. Inactive evidence is capped at 50 MiB, raw samples expire after seven days, and summaries expire after thirty days. Evidence never records command arguments, origins, paths, credentials, or user data.
+`HIPPO_ROOT` overrides the shared coordination, lease, and evidence root. Defaults are `~/Library/Application Support/hippo` on macOS and `${XDG_STATE_HOME:-$HOME/.local/state}/hippo` on Linux. All repositories using the same root coordinate through the same protocol and evidence budget. At most 20 evidence streams may be live at once; each stream retains five rotating 400 KiB raw chunks (about 2 MiB total) while its summary covers the complete session. Inactive evidence is capped at 50 MiB, raw samples expire after seven days, and summaries expire after thirty days. Evidence never records command arguments, origins, paths, credentials, or user data.
+
+The compatibility protocol keeps execution behavior unchanged: services own independent inheritable sessions, while ephemeral and transactional work serialize on `heavy.lock`. HIPPO takes `coordination.lock` only while it creates or removes private session state; it never holds that mutation lock while a child runs. A schema-1 `coordination-mode.json` marker advertises `exclusive` while any compatibility session is live and is removed after the final session exits. If the shared root instead advertises active `reservation` coordination, the compatibility client defers every new service, ephemeral, or transactional session, preserves the marker, starts no child, and returns `75`. Upgrade every consumer to a compatibility-capable release and drain older live sessions before enabling reservation coordination.
 
 Runtime integration uses `HIPPO_ROOT`, `HIPPO_SESSION`, `HIPPO_BIN`, `HIPPO_PROFILE`, `HIPPO_CONCURRENCY`, `HIPPO_BUILD_CACHE`, `HIPPO_HEALTH_URL`, and `HIPPO_ROUTED_ORIGIN`.
 
@@ -184,15 +186,19 @@ A development lifetime summary uses schema 3. Its aggregate covers every sample 
 
 Runtime files are private implementation data under the shared state root:
 
-| File                                    | Purpose                                                    |
-| --------------------------------------- | ---------------------------------------------------------- |
-| `<stream>.jsonl`                        | Newest raw samples for an active or completed stream       |
-| `<stream>.1.jsonl` … `<stream>.4.jsonl` | Four progressively older raw chunks                        |
-| `<stream>.summary.json`                 | Complete lifetime aggregate for the stream                 |
-| `<stream>.active.json`                  | Schema-1 live-owner marker containing only the writer PID  |
-| `.writers.lock`                         | Cross-process lock protecting writer admission and cleanup |
+| File                                    | Purpose                                                             |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `coordination.lock`                     | Short advisory lock protecting coordination and session mutations   |
+| `coordination-mode.json`                | Schema-1 active mode marker: `exclusive` or future `reservation`    |
+| `heavy.lock/owner.json`                 | Exclusive heavy-work owner retained for the guarded child lifecycle |
+| `sessions/<token>.json`                 | Private inheritable live-session record                             |
+| `<stream>.jsonl`                        | Newest raw samples for an active or completed stream                |
+| `<stream>.1.jsonl` … `<stream>.4.jsonl` | Four progressively older raw chunks                                 |
+| `<stream>.summary.json`                 | Complete lifetime aggregate for the stream                          |
+| `<stream>.active.json`                  | Schema-1 live-owner marker containing only the writer PID           |
+| `.writers.lock`                         | Cross-process lock protecting writer admission and cleanup          |
 
-The active marker and lock are lifecycle internals, not supported evidence-reader APIs. Consumers should read the documented raw samples and summaries.
+Coordination, lease, active-writer, and lock files are lifecycle internals, not supported evidence-reader APIs. Consumers should read the documented raw samples and summaries.
 
 ## Release monitoring
 

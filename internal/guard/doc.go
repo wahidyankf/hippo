@@ -1,2 +1,2 @@
-// Package guard owns leases, evidence, and supervised process execution.
+// Package guard owns coordination, leases, evidence, and supervised process execution.
 package guard

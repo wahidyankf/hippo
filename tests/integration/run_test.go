@@ -3,8 +3,10 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,6 +111,47 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 
 	if err != nil || code != guard.StorageBlockedExitCode {
 		t.Fatalf("exit=%d error=%v", code, err)
+	}
+}
+
+func TestReservationCoordinationDefersBeforeChildExecution(t *testing.T) {
+	root := t.TempDir()
+	marker := []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
+	if err := os.WriteFile(filepath.Join(root, "coordination-mode.json"), marker, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	childMarker := filepath.Join(t.TempDir(), "child-started")
+	stderr := &bytes.Buffer{}
+	code, err := guard.Run(context.Background(), guard.RunConfig{
+		Command:      "/bin/sh",
+		Arguments:    []string{"-c", `printf started > "$CHILD_MARKER"`},
+		TaskClass:    "ephemeral",
+		Environment:  append(os.Environ(), "CHILD_MARKER="+childMarker),
+		EvidenceRoot: root,
+		DiskPath:     ".",
+		Collector:    &integrationCollector{samples: []policy.Sample{integrationSample(time.Now())}},
+		Policy:       fastPolicy(),
+		Sleep:        func(time.Duration) {},
+		Now:          time.Now,
+		Stderr:       stderr,
+	})
+
+	if err != nil || code != guard.CapacityDeferredExitCode {
+		t.Fatalf("exit=%d error=%v", code, err)
+	}
+	if !strings.Contains(stderr.String(), "reservation mode is active") {
+		t.Fatalf("missing actionable coordination diagnostic: %q", stderr.String())
+	}
+	if _, statError := os.Stat(childMarker); !errors.Is(statError, os.ErrNotExist) {
+		t.Fatalf("deferred child executed: %v", statError)
+	}
+	data, readError := os.ReadFile(filepath.Join(root, "coordination-mode.json"))
+	if readError != nil {
+		t.Fatal(readError)
+	}
+	if !bytes.Equal(data, marker) {
+		t.Fatalf("reservation marker changed from %q to %q", marker, data)
 	}
 }
 

@@ -153,6 +153,41 @@ func pruneSessionRecords(root string) {
 	}
 }
 
+func hasLiveSessionRecords(root string) bool {
+	entries, err := os.ReadDir(filepath.Join(root, "sessions"))
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		recordToken := strings.TrimSuffix(entry.Name(), ".json")
+		owner, readError := readSessionRecord(root, recordToken)
+		if readError == nil && livePID(owner.PID) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func removeExclusiveMarkerIfIdle(root string) error {
+	pruneSessionRecords(root)
+	if hasLiveSessionRecords(root) {
+		return nil
+	}
+
+	marker, present, err := readCoordinationMarker(root)
+	if err != nil || !present || marker.Mode != coordinationModeExclusive {
+		return err
+	}
+
+	if err = os.Remove(coordinationMarkerPath(root)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return nil
+}
+
 // InheritedSession reports whether candidate belongs to a live guarded owner.
 func InheritedSession(root, candidate string) bool {
 	if candidate == "" {
@@ -172,8 +207,11 @@ func InheritedSession(root, candidate string) bool {
 // DescribeHeavyLease explains who holds the heavy-work lease, for actionable deferrals.
 func DescribeHeavyLease(root string) string {
 	owner, err := readLeaseOwner(filepath.Join(root, "heavy.lock"))
-	if err != nil || !livePID(owner.PID) {
+	if errors.Is(err, os.ErrNotExist) || (err == nil && owner.SchemaVersion == 1 && !livePID(owner.PID)) {
 		return "the heavy-work lease reports no live owner"
+	}
+	if err != nil || owner.SchemaVersion != 1 {
+		return "the heavy-work lease owner cannot be verified; inspect the shared HIPPO state before retrying"
 	}
 
 	class := owner.Class
@@ -182,6 +220,83 @@ func DescribeHeavyLease(root string) string {
 	}
 
 	return fmt.Sprintf("the heavy-work lease is held by pid %d (class %s)", owner.PID, class)
+}
+
+func heavyLeaseHeld(lockPath string) bool {
+	owner, err := readLeaseOwner(lockPath)
+
+	return err != nil || owner.SchemaVersion != 1 || livePID(owner.PID)
+}
+
+func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, bool, error) {
+	lockPath := filepath.Join(root, "heavy.lock")
+
+	for range 2 {
+		if err := os.Mkdir(lockPath, 0o700); err == nil {
+			session, registerError := registerSession(root, lockPath, class)
+			if registerError != nil {
+				_ = os.RemoveAll(lockPath)
+				_ = removeExclusiveMarkerIfIdle(root)
+			}
+
+			return session, false, registerError
+		} else if !errors.Is(err, os.ErrExist) {
+			_ = removeExclusiveMarkerIfIdle(root)
+
+			return nil, false, err
+		}
+
+		if heavyLeaseHeld(lockPath) {
+			return nil, true, nil
+		}
+		if err := os.RemoveAll(lockPath); err != nil {
+			return nil, false, err
+		}
+	}
+
+	return nil, true, nil
+}
+
+func acquireSessionLocked(root, inheritedToken string, class policy.TaskClass) (*Session, bool, error) {
+	pruneSessionRecords(root)
+	if err := ensureExclusiveCoordination(root); err != nil {
+		return nil, false, err
+	}
+
+	if InheritedSession(root, inheritedToken) {
+		return &Session{
+			Inherited: true,
+			Token:     inheritedToken,
+		}, false, nil
+	}
+
+	if SerializesHeavyWork(class) {
+		return acquireHeavySessionLocked(root, class)
+	}
+
+	session, err := registerSession(root, "", class)
+	if err != nil {
+		_ = removeExclusiveMarkerIfIdle(root)
+	}
+
+	return session, false, err
+}
+
+func waitForLeaseRetry(ctx context.Context, deadline time.Time) error {
+	delay := min(time.Second, time.Until(deadline))
+	if delay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // AcquireSession obtains a guarded session, returning nil after the lease wait expires.
@@ -194,56 +309,32 @@ func AcquireSession(ctx context.Context, root, inheritedToken string, class poli
 		return nil, errors.New("lease wait must be nonnegative")
 	}
 
-	if InheritedSession(root, inheritedToken) {
-		return &Session{
-			Inherited: true,
-			Token:     inheritedToken,
-		}, nil
-	}
-
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
 
-	pruneSessionRecords(root)
-
-	if !SerializesHeavyWork(class) {
-		return registerSession(root, "", class)
-	}
-
-	lockPath := filepath.Join(root, "heavy.lock")
-	deadline := time.NewTimer(wait)
-	defer deadline.Stop()
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	deadline := time.Now().Add(wait)
 
 	for {
-		if err := os.Mkdir(lockPath, 0o700); err == nil {
-			session, registerError := registerSession(root, lockPath, class)
-			if registerError != nil {
-				_ = os.RemoveAll(lockPath)
-				return nil, registerError
-			}
-
-			return session, nil
-		} else if !errors.Is(err, os.ErrExist) {
+		remaining := max(time.Until(deadline), 0)
+		coordinationLock, err := acquireCoordinationLock(ctx, root, remaining)
+		if err != nil {
 			return nil, err
 		}
 
-		owner, ownerError := readLeaseOwner(lockPath)
-		if ownerError == nil && !livePID(owner.PID) {
-			if err := os.RemoveAll(lockPath); err != nil {
-				return nil, err
-			}
-			continue
+		session, deferred, acquireError := acquireSessionLocked(root, inheritedToken, class)
+		if err = errors.Join(acquireError, releaseCoordinationLock(coordinationLock)); err != nil {
+			return nil, err
+		}
+		if !deferred {
+			return session, nil
+		}
+		if wait == 0 || !time.Now().Before(deadline) {
+			return nil, nil
 		}
 
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-deadline.C:
-			return nil, nil
-		case <-ticker.C:
+		if err = waitForLeaseRetry(ctx, deadline); err != nil {
+			return nil, err
 		}
 	}
 }
@@ -280,23 +371,31 @@ func registerSession(root, lockPath string, class policy.TaskClass) (*Session, e
 }
 
 // ReleaseSession removes only the session record and heavy-work lease owned by session.
-func ReleaseSession(root string, session *Session) error {
+func ReleaseSession(root string, session *Session) (returnError error) {
 	if session == nil || session.Inherited {
 		return nil
 	}
+
+	coordinationLock, err := lockCoordinationForRelease(root)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		returnError = errors.Join(returnError, releaseCoordinationLock(coordinationLock))
+	}()
 
 	if session.RecordPath != "" {
 		expectedRecord, valid := sessionRecordPath(root, session.Token)
 		if !valid || session.RecordPath != expectedRecord {
 			return errors.New("refusing to release an invalid resource session")
 		}
-		if err := os.Remove(session.RecordPath); err != nil && !os.IsNotExist(err) {
+		if err = os.Remove(session.RecordPath); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
 
 	if session.Path == "" {
-		return nil
+		return removeExclusiveMarkerIfIdle(root)
 	}
 
 	expected := filepath.Join(root, "heavy.lock")
@@ -312,7 +411,11 @@ func ReleaseSession(root string, session *Session) error {
 		return errors.New("refusing to release a resource session owned by another process")
 	}
 
-	return os.RemoveAll(expected)
+	if err = os.RemoveAll(expected); err != nil {
+		return err
+	}
+
+	return removeExclusiveMarkerIfIdle(root)
 }
 
 var portOwnerPattern = regexp.MustCompile(`^[a-z0-9-]+$`)

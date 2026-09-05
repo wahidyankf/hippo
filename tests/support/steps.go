@@ -55,6 +55,14 @@ func (driver *Driver) admissionBindings() []contract.StepBinding {
 
 func (driver *Driver) executionBindings() []contract.StepBinding {
 	return []contract.StepBinding{
+		step(`^an empty shared coordination root$`, driver.emptyCoordinationRoot),
+		step(`^exclusive heavy work acquires a guarded session$`, driver.acquireExclusiveCompatibility),
+		step(`^the shared root advertises exclusive coordination$`, driver.requireExclusiveCoordination),
+		step(`^releasing its final session removes the coordination marker$`, driver.releaseFinalCoordinationSession),
+		step(`^the shared root advertises reservation coordination$`, driver.reservationCoordination),
+		step(`^every compatibility task class requests a guarded session$`, driver.requestEveryCompatibilityClass),
+		step(`^every compatibility owner is deferred with exit 75$`, driver.requireEveryCoordinationOwnerDeferred),
+		step(`^the reservation coordination marker remains unchanged$`, driver.requireReservationCoordinationUnchanged),
 		step(`^another live process owns the heavy lease$`, driver.liveLease),
 		step(`^a second owner waits for the lease$`, driver.waitLease),
 		step(`^the second owner is deferred with exit 75$`, driver.requireDeferred),

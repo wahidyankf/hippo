@@ -74,6 +74,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Linux cgroup memory limits host capacity", Boundary: hostEvidenceBoundary, Reason: "requires synthetic proc and cgroup files instead of the public host filesystem"},
 		{Scenario: "Linux without swap remains usable", Boundary: hostEvidenceBoundary, Reason: "requires synthetic swap capabilities instead of the public host state"},
 		{Scenario: "Linux PSI detects active memory contention", Boundary: hostEvidenceBoundary, Reason: "requires synthetic PSI evidence instead of the public host state"},
+		{Scenario: "An exclusive session advertises compatibility coordination", Boundary: leaseOwnershipBoundary, Reason: "requires deterministic inspection of private coordination ownership unavailable through the compiled binary"},
 		{Scenario: "A live heavy lease defers a second owner", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
 		{Scenario: "A long-lived service never holds the heavy-work lease", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
 		{Scenario: "Concurrent services keep their own inheritable sessions", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
