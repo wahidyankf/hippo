@@ -16,8 +16,17 @@ hash_stream() {
 	fi
 }
 
+# GNU stat reads `-f` as "file system status" and writes a block of filesystem
+# detail to stdout before failing on the format operand, so a `stat -f ... ||
+# stat -c ...` fallback chain captures that report alongside the real value.
+# Retention then derives removal targets from stat's prose instead of from the
+# validated cache-entry names, so branch on the platform rather than falling back.
 modified_time() {
-	stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1"
+	if [ "$goos" = darwin ]; then
+		stat -f '%m' "$1" 2>/dev/null
+	else
+		stat -c '%Y' "$1" 2>/dev/null
+	fi
 }
 
 # The binary cache is content-addressed by every production Go source and its
