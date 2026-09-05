@@ -6,6 +6,7 @@
 - Update every affected Gherkin scenario and C4 view in the same change; create behavior changes Gherkin-first, prove the binding failure, keep every adapter strict, and synchronize C4 with the final as-built boundaries and responsibilities. Record a verified no-op instead of churning an unaffected specification.
 - Run every Gherkin scenario through the unit adapter; never add a unit exemption tag or inventory entry. Any integration or E2E exemption must remain exact and name both the concrete boundary and the reason it cannot execute there.
 - Install locked contributor tooling with `npm ci`; hooks enforce Conventional Commits, staged formatting, and the quick pre-push gate.
+- Follow [GitHub Actions storage rules](.github/README.md) when changing workflows, caches, artifacts, packages, or repository Actions settings.
 - Run `npm run test:quick` for fast verification and `npm test` before release; never introduce Nx.
 - Keep deterministic production core coverage at or above 99%; prove platform and process boundaries through integration and E2E adapters.
 - Separate distinct setup, validation, decision, mutation, and return phases in Go functions with blank lines; automated formatters do not replace semantic grouping.
