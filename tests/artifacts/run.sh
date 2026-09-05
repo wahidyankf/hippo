@@ -24,6 +24,16 @@ for tracked in go.mod go.sum package.json package-lock.json commitlint.config.cj
 	test -f "$tracked"
 done
 
+# Version-four coordination, terminal, conformance, and release-hardening
+# surfaces are explicit repository artifacts rather than incidental files.
+for tracked in conformance.manifest.json.example cmd/hippo-conformance/main.go internal/conformance/conformance.go internal/conformance/conformance_test.go internal/guard/lifetime.go internal/guard/reservation.go internal/guard/run_test.go internal/guard/terminal.go internal/policy/units.go specs/behaviours/conformance.feature specs/behaviours/reservations.feature specs/behaviours/terminal.feature tests/integration/conformance_test.go tests/integration/pty_test.go tests/integration/reservation_test.go tests/support/blockers_v04.go tests/support/pending_v04.go tests/support/release_v04.go tests/support/review_v04.go tests/unit/config_schema2_errors_test.go tests/unit/conformance_test.go tests/unit/reservation_test.go; do
+	git check-ignore --quiet "$tracked" && {
+		echo "$tracked must remain committable" >&2
+		exit 1
+	}
+	test -f "$tracked"
+done
+
 tracked_artifacts=$(git ls-files '.env' '.env.*' '.cache/**' 'dist/**' 'coverage/**' 'local-tmp/**' 'generated-reports/**' 'node_modules/**' '.husky/_/**' '*.test')
 if [ -n "$tracked_artifacts" ]; then
 	echo "generated or private artifacts are tracked:" >&2

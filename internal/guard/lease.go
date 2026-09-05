@@ -15,22 +15,29 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/policy"
+	"golang.org/x/sys/unix"
 )
 
 type leaseOwner struct {
-	SchemaVersion int    `json:"schemaVersion"`
-	PID           int    `json:"pid"`
-	Token         string `json:"token,omitempty"`
-	Port          int    `json:"port,omitempty"`
-	Owner         string `json:"owner,omitempty"`
-	Class         string `json:"class,omitempty"`
+	SchemaVersion  int    `json:"schemaVersion"`
+	PID            int    `json:"pid"`
+	Token          string `json:"token,omitempty"`
+	Port           int    `json:"port,omitempty"`
+	Owner          string `json:"owner,omitempty"`
+	Class          string `json:"class,omitempty"`
+	IdentityDevice uint64 `json:"identityDevice,omitempty"`
+	IdentityInode  uint64 `json:"identityInode,omitempty"`
 }
 
 // Session identifies an owned or inherited guarded session.
 type Session struct {
-	Inherited   bool
-	Path, Token string
-	RecordPath  string
+	Inherited    bool
+	Path, Token  string
+	RecordPath   string
+	Requested    ReservationVector
+	Allocation   ReservationVector
+	WaitDuration time.Duration
+	identityLock *os.File
 }
 
 // SerializesHeavyWork reports whether class competes for the single heavy-work lease.
@@ -41,8 +48,9 @@ func SerializesHeavyWork(class policy.TaskClass) bool {
 
 // PortLease identifies ownership of one bounded service port.
 type PortLease struct {
-	Path, Owner string
-	Port        int
+	Path, Owner, Token string
+	Port               int
+	identityLock       *os.File
 }
 
 func livePID(pid int) bool {
@@ -136,43 +144,114 @@ func writeSessionRecord(root string, owner leaseOwner) (string, error) {
 	return path, nil
 }
 
-// pruneSessionRecords removes records whose owning process is gone.
-func pruneSessionRecords(root string) {
-	directory := filepath.Join(root, "sessions")
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		recordToken := strings.TrimSuffix(entry.Name(), ".json")
-		owner, readError := readSessionRecord(root, recordToken)
-		if readError != nil || !livePID(owner.PID) {
-			_ = os.Remove(filepath.Join(directory, entry.Name()))
-		}
-	}
-}
-
-func hasLiveSessionRecords(root string) bool {
-	entries, err := os.ReadDir(filepath.Join(root, "sessions"))
-	if err != nil {
+func validSessionRecord(owner *leaseOwner, recordToken string) bool {
+	if owner == nil || owner.SchemaVersion != 1 || owner.PID <= 0 || owner.Token != recordToken {
 		return false
 	}
 
+	switch policy.TaskClass(owner.Class) {
+	case policy.TaskEphemeral, policy.TaskService, policy.TaskTransactional, policy.TaskRelease:
+		return true
+	default:
+		return false
+	}
+}
+
+func compatibilityOwnerAlive(root string, owner *leaseOwner) (bool, error) {
+	if owner == nil {
+		return false, errors.New("compatibility owner is missing")
+	}
+	if (owner.IdentityDevice == 0) != (owner.IdentityInode == 0) {
+		return false, errors.New("compatibility owner identity metadata is invalid")
+	}
+	if owner.IdentityDevice == 0 {
+		return livePID(owner.PID), nil
+	}
+
+	return reservationIdentityAlive(root, owner.Token, owner.IdentityDevice, owner.IdentityInode)
+}
+
+func compatibilityStateDeferred(reason string) error {
+	return fmt.Errorf("%w: %s; inspect the shared HIPPO state before retrying", errCoordinationDeferred, reason)
+}
+
+// pruneSessionRecords removes only structurally valid records whose owning process is gone.
+// Unreadable or malformed records remain fail-closed evidence until an operator resolves them.
+func pruneSessionRecords(root string) error {
+	directory := filepath.Join(root, "sessions")
+	entries, err := os.ReadDir(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return compatibilityStateDeferred("exclusive compatibility session inventory cannot be enumerated")
+	}
+
 	for _, entry := range entries {
 		recordToken := strings.TrimSuffix(entry.Name(), ".json")
 		owner, readError := readSessionRecord(root, recordToken)
-		if readError == nil && livePID(owner.PID) {
-			return true
+		if readError != nil || !validSessionRecord(owner, recordToken) {
+			continue
+		}
+		alive, aliveError := compatibilityOwnerAlive(root, owner)
+		if aliveError != nil {
+			return compatibilityStateDeferred("exclusive compatibility session identity is unverifiable")
+		}
+		if !alive { //nolint:nestif // Stale session cleanup must retain heavy/session/identity ordering in one pass.
+			heavyPath := filepath.Join(root, "heavy.lock")
+			heavyOwner, heavyError := readLeaseOwner(heavyPath)
+			if heavyError == nil && heavyOwner.Token == owner.Token {
+				if err = os.RemoveAll(heavyPath); err != nil {
+					return compatibilityStateDeferred("stale compatibility heavy ownership cannot be removed")
+				}
+			} else if heavyError != nil && !errors.Is(heavyError, os.ErrNotExist) {
+				return compatibilityStateDeferred("exclusive compatibility heavy ownership is unverifiable")
+			}
+			if err = os.Remove(filepath.Join(directory, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return compatibilityStateDeferred("a stale compatibility session record cannot be removed")
+			}
+			if err = removeReservationIdentity(root, owner.Token); err != nil {
+				return compatibilityStateDeferred("a stale compatibility session identity cannot be removed")
+			}
 		}
 	}
 
-	return false
+	return nil
+}
+
+func hasLiveSessionRecords(root string) (bool, error) {
+	entries, err := os.ReadDir(filepath.Join(root, "sessions"))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, compatibilityStateDeferred("exclusive compatibility session inventory cannot be enumerated")
+	}
+
+	for _, entry := range entries {
+		recordToken := strings.TrimSuffix(entry.Name(), ".json")
+		owner, readError := readSessionRecord(root, recordToken)
+		if readError != nil || !validSessionRecord(owner, recordToken) {
+			return true, nil //nolint:nilerr // Unreadable records are deliberately retained as live fail-closed evidence.
+		}
+		alive, aliveError := compatibilityOwnerAlive(root, owner)
+		if aliveError != nil || alive {
+			return true, nil //nolint:nilerr // Unverifiable identities are deliberately retained as live fail-closed evidence.
+		}
+	}
+
+	return false, nil
 }
 
 func removeExclusiveMarkerIfIdle(root string) error {
-	pruneSessionRecords(root)
-	if hasLiveSessionRecords(root) {
+	if err := pruneSessionRecords(root); err != nil {
+		return err
+	}
+	liveSessions, err := hasLiveSessionRecords(root)
+	if err != nil {
+		return err
+	}
+	if liveSessions {
 		return nil
 	}
 
@@ -195,23 +274,38 @@ func InheritedSession(root, candidate string) bool {
 	}
 
 	if owner, err := readSessionRecord(root, candidate); err == nil &&
-		owner.SchemaVersion == 1 && owner.Token == candidate && livePID(owner.PID) {
-		return true
+		owner.SchemaVersion == 1 && owner.Token == candidate {
+		alive, aliveError := compatibilityOwnerAlive(root, owner)
+		if aliveError == nil && alive {
+			return true
+		}
 	}
 
 	owner, err := readLeaseOwner(filepath.Join(root, "heavy.lock"))
 
-	return err == nil && owner.SchemaVersion == 1 && owner.Token == candidate && livePID(owner.PID)
+	if err != nil || owner.SchemaVersion != 1 || owner.Token != candidate {
+		return false
+	}
+	alive, aliveError := compatibilityOwnerAlive(root, owner)
+
+	return aliveError == nil && alive
 }
 
 // DescribeHeavyLease explains who holds the heavy-work lease, for actionable deferrals.
 func DescribeHeavyLease(root string) string {
 	owner, err := readLeaseOwner(filepath.Join(root, "heavy.lock"))
-	if errors.Is(err, os.ErrNotExist) || (err == nil && owner.SchemaVersion == 1 && !livePID(owner.PID)) {
+	alive := false
+	if err == nil && owner.SchemaVersion == 1 {
+		alive, err = compatibilityOwnerAlive(root, owner)
+	}
+	if errors.Is(err, os.ErrNotExist) {
 		return "the heavy-work lease reports no live owner"
 	}
 	if err != nil || owner.SchemaVersion != 1 {
 		return "the heavy-work lease owner cannot be verified; inspect the shared HIPPO state before retrying"
+	}
+	if !alive {
+		return "the heavy-work lease reports no live owner"
 	}
 
 	class := owner.Class
@@ -224,8 +318,13 @@ func DescribeHeavyLease(root string) string {
 
 func heavyLeaseHeld(lockPath string) bool {
 	owner, err := readLeaseOwner(lockPath)
+	if err != nil || owner.SchemaVersion != 1 {
+		return true
+	}
+	root := filepath.Dir(lockPath)
+	alive, aliveError := compatibilityOwnerAlive(root, owner)
 
-	return err != nil || owner.SchemaVersion != 1 || livePID(owner.PID)
+	return aliveError != nil || alive
 }
 
 func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, bool, error) {
@@ -258,7 +357,9 @@ func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, b
 }
 
 func acquireSessionLocked(root, inheritedToken string, class policy.TaskClass) (*Session, bool, error) {
-	pruneSessionRecords(root)
+	if err := pruneSessionRecords(root); err != nil {
+		return nil, false, err
+	}
 	if err := ensureExclusiveCoordination(root); err != nil {
 		return nil, false, err
 	}
@@ -346,27 +447,47 @@ func registerSession(root, lockPath string, class policy.TaskClass) (*Session, e
 		return nil, tokenError
 	}
 
+	identity, identityError := openReservationIdentity(root, value)
+	if identityError != nil {
+		return nil, identityError
+	}
+	identityDevice, identityInode, identityError := reservationIdentityMetadata(identity)
+	if identityError != nil {
+		_ = identity.Close()
+		_ = removeReservationIdentity(root, value)
+
+		return nil, identityError
+	}
 	owner := leaseOwner{
-		SchemaVersion: 1,
-		PID:           os.Getpid(),
-		Token:         value,
-		Class:         string(class),
+		SchemaVersion:  1,
+		PID:            os.Getpid(),
+		Token:          value,
+		Class:          string(class),
+		IdentityDevice: identityDevice,
+		IdentityInode:  identityInode,
 	}
 	if lockPath != "" {
 		if writeError := writeLeaseOwner(lockPath, owner); writeError != nil {
+			_ = identity.Close()
+			_ = removeReservationIdentity(root, value)
+
 			return nil, writeError
 		}
 	}
 
 	recordPath, recordError := writeSessionRecord(root, owner)
 	if recordError != nil {
+		_ = identity.Close()
+		_ = removeReservationIdentity(root, value)
+
 		return nil, recordError
 	}
 
 	return &Session{
-		Path:       lockPath,
-		Token:      value,
-		RecordPath: recordPath,
+		Path:         lockPath,
+		Token:        value,
+		RecordPath:   recordPath,
+		identityLock: identity,
 	}, nil
 }
 
@@ -395,7 +516,7 @@ func ReleaseSession(root string, session *Session) (returnError error) {
 	}
 
 	if session.Path == "" {
-		return removeExclusiveMarkerIfIdle(root)
+		return errors.Join(releaseReservationIdentity(root, session), removeExclusiveMarkerIfIdle(root))
 	}
 
 	expected := filepath.Join(root, "heavy.lock")
@@ -415,13 +536,64 @@ func ReleaseSession(root string, session *Session) (returnError error) {
 		return err
 	}
 
-	return removeExclusiveMarkerIfIdle(root)
+	return errors.Join(releaseReservationIdentity(root, session), removeExclusiveMarkerIfIdle(root))
 }
 
 var portOwnerPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
 
+func openPortLeaseIdentity(path string) (*os.File, error) {
+	identityPath := filepath.Join(path, "identity.lock")
+	identity, err := os.OpenFile(identityPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err = unix.Flock(int(identity.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		_ = identity.Close()
+
+		return nil, err
+	}
+
+	return identity, nil
+}
+
+func portLeaseIdentityLive(path string, owner *leaseOwner) (bool, error) {
+	if owner.Token == "" {
+		return livePID(owner.PID), nil
+	}
+	if !sessionTokenPattern.MatchString(owner.Token) {
+		return true, errors.New("port lease identity is unverifiable")
+	}
+	identity, err := os.OpenFile(filepath.Join(path, "identity.lock"), os.O_RDWR, 0o600)
+	if errors.Is(err, os.ErrNotExist) {
+		return true, errors.New("port lease identity is unverifiable")
+	}
+	if err != nil {
+		return true, errors.New("port lease identity is unverifiable")
+	}
+	defer func() { _ = identity.Close() }()
+	var identityInfo unix.Stat_t
+	if err = unix.Fstat(int(identity.Fd()), &identityInfo); err != nil {
+		return true, errors.New("port lease identity is unverifiable")
+	}
+	device, deviceError := filesystemIdentifier(identityInfo.Dev)
+	inode, inodeError := filesystemIdentifier(identityInfo.Ino)
+	if deviceError != nil || inodeError != nil || owner.IdentityDevice == 0 || owner.IdentityInode == 0 ||
+		owner.IdentityDevice != device || owner.IdentityInode != inode {
+		return true, errors.New("port lease identity is unverifiable")
+	}
+	if err = unix.Flock(int(identity.Fd()), unix.LOCK_EX|unix.LOCK_NB); errors.Is(err, unix.EWOULDBLOCK) {
+		return true, nil
+	}
+	if err != nil {
+		return true, errors.New("port lease identity is unverifiable")
+	}
+	unlockError := unix.Flock(int(identity.Fd()), unix.LOCK_UN)
+
+	return false, unlockError
+}
+
 // AcquirePortLease obtains one validated port lease and reclaims a stale owner once.
-func AcquirePortLease(root string, port int, ownerName string, minimum, maximum int) (*PortLease, error) {
+func AcquirePortLease(root string, port int, ownerName string, minimum, maximum int) (*PortLease, error) { //nolint:gocognit // Creation and stale-owner recovery are one bounded ownership transaction.
 	if port < minimum || port > maximum {
 		return nil, fmt.Errorf("port must be between %d and %d", minimum, maximum)
 	}
@@ -437,30 +609,70 @@ func AcquirePortLease(root string, port int, ownerName string, minimum, maximum 
 	path := filepath.Join(root, fmt.Sprintf("%d.lock", port))
 
 	for range 2 {
-		if err := os.Mkdir(path, 0o700); err == nil {
+		if err := os.Mkdir(path, 0o700); err == nil { //nolint:nestif // Creation and stale-owner recovery are one bounded ownership transaction.
+			value, tokenError := token()
+			if tokenError != nil {
+				_ = os.RemoveAll(path)
+
+				return nil, tokenError
+			}
+			identity, identityError := openPortLeaseIdentity(path)
+			if identityError != nil {
+				_ = os.RemoveAll(path)
+
+				return nil, identityError
+			}
+			var identityInfo unix.Stat_t
+			if identityError = unix.Fstat(int(identity.Fd()), &identityInfo); identityError != nil {
+				_ = identity.Close()
+				_ = os.RemoveAll(path)
+
+				return nil, identityError
+			}
+			device, deviceError := filesystemIdentifier(identityInfo.Dev)
+			inode, inodeError := filesystemIdentifier(identityInfo.Ino)
+			if deviceError != nil || inodeError != nil {
+				_ = identity.Close()
+				_ = os.RemoveAll(path)
+
+				return nil, errors.New("port lease identity metadata is unavailable")
+			}
 			owner := leaseOwner{
-				SchemaVersion: 1,
-				PID:           os.Getpid(),
-				Port:          port,
-				Owner:         ownerName,
+				SchemaVersion:  1,
+				PID:            os.Getpid(),
+				Token:          value,
+				Port:           port,
+				Owner:          ownerName,
+				IdentityDevice: device,
+				IdentityInode:  inode,
 			}
 			if writeError := writeLeaseOwner(path, owner); writeError != nil {
+				_ = unix.Flock(int(identity.Fd()), unix.LOCK_UN)
+				_ = identity.Close()
 				_ = os.RemoveAll(path)
 				return nil, writeError
 			}
 
 			return &PortLease{
-				Path:  path,
-				Port:  port,
-				Owner: ownerName,
+				Path: path, Port: port, Owner: ownerName, Token: value, identityLock: identity,
 			}, nil
 		} else if !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
 
 		marker, markerError := readLeaseOwner(path)
-		if markerError != nil || marker.SchemaVersion != 1 || marker.Port != port || livePID(marker.PID) {
+		if markerError != nil || marker.SchemaVersion != 1 || marker.Port != port {
 			return nil, fmt.Errorf("port %d is already leased", port)
+		}
+		live, identityError := portLeaseIdentityLive(path, marker)
+		if identityError != nil {
+			return nil, fmt.Errorf("port %d is already leased", port)
+		}
+		if live {
+			// A live peer owning this port is retryable lease pressure, which the
+			// public contract reports as exit 75, not a failure the caller has no
+			// basis to retry.
+			return nil, fmt.Errorf("%w: port %d is already leased", errCoordinationDeferred, port)
 		}
 		if err := os.RemoveAll(path); err != nil {
 			return nil, err
@@ -485,9 +697,24 @@ func ReleasePortLease(root string, lease *PortLease) error {
 	if err != nil {
 		return err
 	}
-	if owner.PID != os.Getpid() || owner.Port != lease.Port || owner.Owner != lease.Owner {
+	if owner.PID != os.Getpid() || owner.Port != lease.Port || owner.Owner != lease.Owner || owner.Token != lease.Token {
 		return errors.New("refusing to release a port lease owned by another process")
 	}
+	var releaseError error
+	if lease.identityLock != nil {
+		releaseError = lease.identityLock.Close()
+		lease.identityLock = nil
+	}
 
-	return os.RemoveAll(expected)
+	return errors.Join(releaseError, os.RemoveAll(expected))
+}
+
+func abandonPortLeaseIdentity(lease *PortLease) error {
+	if lease == nil || lease.identityLock == nil {
+		return nil
+	}
+	err := lease.identityLock.Close()
+	lease.identityLock = nil
+
+	return err
 }

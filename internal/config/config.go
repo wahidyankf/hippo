@@ -15,13 +15,35 @@ import (
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
-const schemaVersion = 1
+const (
+	schemaVersionExclusive   = 1
+	schemaVersionReservation = 2
+	defaultMaxActiveOwners   = 20
+)
+
+// Coordination is the validated, privacy-safe shared-root coordination policy.
+type Coordination struct {
+	Mode            string
+	MaxCPU          int
+	MaxMemoryBytes  int64
+	MaxActiveOwners int
+	OwnerShares     map[string]int
+}
 
 // Result contains the validated catalog without retaining local file contents.
 type Result struct {
-	Catalog policy.Catalog
-	Hash    string
-	Source  string
+	Catalog      policy.Catalog
+	Coordination Coordination
+	Hash         string
+	Source       string
+}
+
+type coordinationFile struct {
+	Mode                 string         `json:"mode,omitempty"`
+	MaxCPU               int            `json:"maxCpu,omitempty"`
+	MaxMemoryMiB         int64          `json:"maxMemoryMiB,omitempty"`
+	MaxActiveOwners      int            `json:"maxActiveOwners,omitempty"`
+	AutomaticOwnerShares map[string]int `json:"automaticOwnerShares,omitempty"`
 }
 
 type profileOverride struct {
@@ -45,6 +67,106 @@ type file struct {
 	SchemaVersion  int                        `json:"schemaVersion"`
 	DefaultProfile string                     `json:"defaultProfile,omitempty"`
 	Profiles       map[string]profileOverride `json:"profiles,omitempty"`
+	Coordination   *coordinationFile          `json:"coordination,omitempty"`
+}
+
+func exclusiveCoordination() Coordination {
+	return Coordination{Mode: "exclusive"}
+}
+
+func reservationCoordination() Coordination {
+	return Coordination{
+		Mode:            "reservation",
+		MaxActiveOwners: defaultMaxActiveOwners,
+		OwnerShares: map[string]int{
+			"balanced":    4,
+			"constrained": 2,
+			"minimal":     1,
+		},
+	}
+}
+
+func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, error) { //nolint:cyclop,gocognit // Validation enumerates schema compatibility and profile inheritance invariants.
+	if decoded.SchemaVersion == schemaVersionExclusive {
+		if decoded.Coordination != nil {
+			return Coordination{}, errors.New("schema 1 does not support reservation coordination")
+		}
+
+		return exclusiveCoordination(), nil
+	}
+	if decoded.SchemaVersion != schemaVersionReservation {
+		return Coordination{}, fmt.Errorf("unsupported configuration schema %d", decoded.SchemaVersion)
+	}
+
+	result := reservationCoordination()
+	configured := decoded.Coordination
+	if configured == nil {
+		configured = &coordinationFile{}
+	}
+	if configured.Mode != "" && configured.Mode != "reservation" {
+		return Coordination{}, fmt.Errorf("unsupported schema 2 coordination mode %q", configured.Mode)
+	}
+	if configured.MaxCPU < 0 || configured.MaxMemoryMiB < 0 || configured.MaxActiveOwners < 0 {
+		return Coordination{}, errors.New("reservation limits must be nonnegative")
+	}
+	if configured.MaxMemoryMiB > 0 && configured.MaxMemoryMiB < 256 {
+		return Coordination{}, errors.New("maximum memory weakens the immutable 256 MiB floor")
+	}
+	if configured.MaxActiveOwners > defaultMaxActiveOwners {
+		return Coordination{}, fmt.Errorf("maxActiveOwners cannot exceed %d", defaultMaxActiveOwners)
+	}
+
+	if configured.MaxCPU > 0 {
+		result.MaxCPU = configured.MaxCPU
+	}
+	if configured.MaxMemoryMiB > 0 {
+		converted, conversionError := policy.MiBToBytes(configured.MaxMemoryMiB)
+		if conversionError != nil {
+			return Coordination{}, conversionError
+		}
+		result.MaxMemoryBytes = converted
+	}
+	if configured.MaxActiveOwners > 0 {
+		result.MaxActiveOwners = configured.MaxActiveOwners
+	}
+	for name, shares := range configured.AutomaticOwnerShares {
+		if _, exists := catalog.Profiles[name]; !exists {
+			return Coordination{}, fmt.Errorf("automatic owner shares name unknown profile %q", name)
+		}
+		if shares < 1 || shares > defaultMaxActiveOwners {
+			return Coordination{}, fmt.Errorf("automatic owner shares for %q must be between 1 and %d", name, defaultMaxActiveOwners)
+		}
+		result.OwnerShares[name] = shares
+	}
+	visiting := map[string]bool{}
+	var inheritShares func(string) (int, error)
+	inheritShares = func(name string) (int, error) {
+		if shares := result.OwnerShares[name]; shares > 0 {
+			return shares, nil
+		}
+		if visiting[name] {
+			return 0, fmt.Errorf("automatic owner shares inheritance cycle at %q", name)
+		}
+		visiting[name] = true
+		override := decoded.Profiles[name]
+		if override.Extends == "" {
+			return 0, fmt.Errorf("automatic owner shares unavailable for profile %q", name)
+		}
+		shares, err := inheritShares(override.Extends)
+		delete(visiting, name)
+		if err == nil {
+			result.OwnerShares[name] = shares
+		}
+
+		return shares, err
+	}
+	for name := range catalog.Profiles {
+		if _, err := inheritShares(name); err != nil {
+			return Coordination{}, err
+		}
+	}
+
+	return result, nil
 }
 
 func consumeJSON(decoder *json.Decoder) error {
@@ -119,13 +241,19 @@ func setFloat(target, override *float64) {
 	}
 }
 
-func setBytes(target, override *int64) {
+func setBytes(target, override *int64) error {
 	if override != nil {
-		*target = *override * policy.MiB
+		converted, err := policy.MiBToBytes(*override)
+		if err != nil {
+			return err
+		}
+		*target = converted
 	}
+
+	return nil
 }
 
-func apply(name string, base policy.Profile, override profileOverride) policy.Profile {
+func apply(name string, base policy.Profile, override profileOverride) (policy.Profile, error) {
 	base.Name = name
 	if override.Fallback != nil {
 		base.Fallback = *override.Fallback
@@ -135,14 +263,26 @@ func apply(name string, base policy.Profile, override profileOverride) policy.Pr
 	}
 
 	setFloat(&base.MemoryReservePercent, override.MemoryReservePercent)
-	setBytes(&base.MemoryReserveMinBytes, override.MemoryReserveMinMiB)
-	setBytes(&base.MemoryReserveMaxBytes, override.MemoryReserveMaxMiB)
+	if err := setBytes(&base.MemoryReserveMinBytes, override.MemoryReserveMinMiB); err != nil {
+		return policy.Profile{}, err
+	}
+	if err := setBytes(&base.MemoryReserveMaxBytes, override.MemoryReserveMaxMiB); err != nil {
+		return policy.Profile{}, err
+	}
 	setFloat(&base.NoSwapMemoryReservePercent, override.NoSwapMemoryReservePercent)
-	setBytes(&base.NoSwapMemoryReserveMinBytes, override.NoSwapMemoryReserveMinMiB)
-	setBytes(&base.NoSwapMemoryReserveMaxBytes, override.NoSwapMemoryReserveMaxMiB)
+	if err := setBytes(&base.NoSwapMemoryReserveMinBytes, override.NoSwapMemoryReserveMinMiB); err != nil {
+		return policy.Profile{}, err
+	}
+	if err := setBytes(&base.NoSwapMemoryReserveMaxBytes, override.NoSwapMemoryReserveMaxMiB); err != nil {
+		return policy.Profile{}, err
+	}
 	setFloat(&base.DiskReservePercent, override.DiskReservePercent)
-	setBytes(&base.DiskReserveMinBytes, override.DiskReserveMinMiB)
-	setBytes(&base.DiskReserveMaxBytes, override.DiskReserveMaxMiB)
+	if err := setBytes(&base.DiskReserveMinBytes, override.DiskReserveMinMiB); err != nil {
+		return policy.Profile{}, err
+	}
+	if err := setBytes(&base.DiskReserveMaxBytes, override.DiskReserveMaxMiB); err != nil {
+		return policy.Profile{}, err
+	}
 
 	if override.MaxConcurrency != nil {
 		base.MaxConcurrency = *override.MaxConcurrency
@@ -150,7 +290,7 @@ func apply(name string, base policy.Profile, override profileOverride) policy.Pr
 
 	setFloat(&base.MaxCPUUtilizationPercent, override.MaxCPUUtilizationPercent)
 
-	return base
+	return base, nil
 }
 
 func validateProfile(profile policy.Profile) error {
@@ -178,7 +318,7 @@ func validateProfile(profile policy.Profile) error {
 }
 
 func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // Recursive inheritance and fallback validation deliberately share one graph walk.
-	if decoded.SchemaVersion != schemaVersion {
+	if decoded.SchemaVersion != schemaVersionExclusive && decoded.SchemaVersion != schemaVersionReservation {
 		return policy.Catalog{}, fmt.Errorf("unsupported configuration schema %d", decoded.SchemaVersion)
 	}
 
@@ -217,7 +357,10 @@ func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // R
 			return policy.Profile{}, fmt.Errorf("custom profile %q requires extends", name)
 		}
 
-		base = apply(name, base, override)
+		base, err := apply(name, base, override)
+		if err != nil {
+			return policy.Profile{}, fmt.Errorf("profile %q: %w", name, err)
+		}
 		if err := validateProfile(base); err != nil {
 			return policy.Profile{}, fmt.Errorf("profile %q: %w", name, err)
 		}
@@ -279,12 +422,12 @@ func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // R
 // Load reads an explicit or optional local configuration.
 func Load(path string, explicit bool) (Result, error) {
 	if path == "" {
-		return Result{Catalog: policy.BuiltinCatalog()}, nil
+		return Result{Catalog: policy.BuiltinCatalog(), Coordination: exclusiveCoordination()}, nil
 	}
 
 	data, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, os.ErrNotExist) && !explicit {
-		return Result{Catalog: policy.BuiltinCatalog()}, nil
+		return Result{Catalog: policy.BuiltinCatalog(), Coordination: exclusiveCoordination()}, nil
 	}
 	if err != nil {
 		return Result{}, err
@@ -299,13 +442,18 @@ func Load(path string, explicit bool) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	coordination, err := buildCoordination(decoded, catalog)
+	if err != nil {
+		return Result{}, err
+	}
 
 	hash := sha256.Sum256(data)
 
 	return Result{
-		Catalog: catalog,
-		Hash:    hex.EncodeToString(hash[:]),
-		Source:  "local",
+		Catalog:      catalog,
+		Coordination: coordination,
+		Hash:         hex.EncodeToString(hash[:]),
+		Source:       "local",
 	}, nil
 }
 

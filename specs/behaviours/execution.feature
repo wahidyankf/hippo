@@ -76,6 +76,24 @@ Feature: Guarded process execution
     Then the child is signalled once and force-stopped within the grace
 
   @e2e-exempt
+  Scenario: A service port held by a live owner defers the contender
+    Given a service port already leased by a live owner
+    When another service requests that same port
+    Then the contender is deferred with exit 75 instead of failing
+
+  @e2e-exempt
+  Scenario: Stopping an exited but unreaped child group is not a supervision failure
+    Given a guarded child process group whose members exited without being reaped
+    When its owning guard stops that process group
+    Then the stop reports no supervision failure
+
+  @e2e-exempt
+  Scenario: An aggressive termination grace still confirms a forced stop
+    Given a killed child group that retires after an aggressive termination grace
+    When its owning guard waits for that retirement
+    Then retirement is confirmed instead of leaving the reservation owned
+
+  @e2e-exempt
   Scenario: A supervision failure reaps the guarded child before releasing ownership
     Given an admitted child that ignores termination during a collector failure
     When guarded supervision loses host evidence

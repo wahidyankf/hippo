@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +23,7 @@ const (
 	// CapacityDeferredExitCode indicates transient pressure that should be retried.
 	CapacityDeferredExitCode = 75
 	outcomeTaskFailed        = "task-failed"
+	outcomeSupervisionFailed = "supervision-failed"
 )
 
 // RunConfig describes one guarded child process and its resource policy.
@@ -40,6 +42,8 @@ type RunConfig struct {
 	Collector                             policy.Collector
 	Policy                                policy.Policy
 	Resolution                            policy.Resolution
+	ReservationPolicy                     ReservationPolicy
+	ReservationPlan                       ReservationPlan
 	EvidenceLimits                        evidence.Limits
 	ConfigHash                            string
 	Now                                   func() time.Time
@@ -47,6 +51,8 @@ type RunConfig struct {
 	ChildStdin                            io.Reader
 	ChildStdout, ChildStderr              io.Writer
 	Stderr                                io.Writer
+	startLifetime                         func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error)
+	stopLifetime                          func(*supervisedLifetime, time.Duration) (error, error)
 }
 
 func environmentValue(environment []string, name string) string {
@@ -100,12 +106,7 @@ func validEnvironmentName(name string) bool {
 }
 
 func reservedConcurrencyEnvironment(name string) bool {
-	switch name {
-	case "HIPPO_BIN", "HIPPO_CONCURRENCY", "HIPPO_PROFILE", "HIPPO_SESSION":
-		return true
-	default:
-		return false
-	}
+	return strings.HasPrefix(name, "HIPPO_")
 }
 
 func normalizeConcurrencyEnvironment(names []string) ([]string, error) {
@@ -147,6 +148,40 @@ func resolvedEnvironment(environment []string, resolution policy.Resolution, for
 	return environment
 }
 
+// ReservationEnvironment exports a fixed allocation and safely clamps mapped worker variables.
+func ReservationEnvironment(
+	environment []string,
+	resolution policy.Resolution,
+	allocation ReservationVector,
+	names []string,
+) ([]string, error) {
+	if allocation.CPU < MinimumReservationCPU || allocation.MemoryBytes < MinimumReservationMemoryBytes {
+		return nil, errors.New("reservation allocation is below the immutable floor")
+	}
+
+	concurrency := strconv.Itoa(allocation.CPU)
+	environment = withEnvironment(environment, "HIPPO_PROFILE", resolution.ResolvedProfile)
+	environment = withEnvironment(environment, "HIPPO_CONCURRENCY", concurrency)
+	environment = withEnvironment(environment, "HIPPO_RESERVED_MEMORY_BYTES", strconv.FormatInt(allocation.MemoryBytes, 10))
+	for _, name := range names {
+		value := environmentValue(environment, name)
+		if value == "" {
+			environment = withEnvironment(environment, name, concurrency)
+
+			continue
+		}
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			return nil, fmt.Errorf("concurrency environment %q must be a positive integer", name)
+		}
+		if parsed > allocation.CPU {
+			environment = withEnvironment(environment, name, concurrency)
+		}
+	}
+
+	return environment, nil
+}
+
 func waitStatusCode(err error) int {
 	if err == nil {
 		return 0
@@ -164,51 +199,86 @@ func waitStatusCode(err error) int {
 	return 1
 }
 
-func signalGroup(process *os.Process, signal syscall.Signal) error {
-	if process == nil {
+func signalGroup(processGroup int, signal syscall.Signal) error {
+	if processGroup <= 0 {
+		return errors.New("child process group is unavailable")
+	}
+
+	groupError := syscall.Kill(-processGroup, signal)
+	// A group signal reports ESRCH once the group is gone and, on Darwin, EPERM
+	// while its members have exited but have not been reaped yet: no member is
+	// left that this process may signal. Neither answer says the payload is
+	// still running, and a stop the child already completed is not a
+	// supervision failure. Liveness is decided by the authoritative lifetime
+	// exit, never by the delivery result of a signal.
+	if groupError == nil || errors.Is(groupError, syscall.ESRCH) || errors.Is(groupError, syscall.EPERM) {
 		return nil
 	}
 
-	groupError := syscall.Kill(-process.Pid, signal)
-	if groupError == nil || errors.Is(groupError, syscall.ESRCH) {
-		return nil
-	}
-
-	processError := process.Signal(signal)
-	if errors.Is(processError, os.ErrProcessDone) {
-		return nil
-	}
-
-	return errors.Join(groupError, processError)
+	return groupError
 }
 
-func directChild(ctx context.Context, config RunConfig, environment []string) int {
-	command := exec.CommandContext(ctx, config.Command, config.Arguments...)
-	command.Dir = config.WorkingDirectory
-	command.Env = environment
-	command.Stdin, command.Stdout, command.Stderr = config.ChildStdin, config.ChildStdout, config.ChildStderr
-	return waitStatusCode(command.Run())
+func waitReservationVictimRelease(root string, victim ReservationOwner, timeout time.Duration) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), max(timeout, time.Millisecond))
+	defer cancel()
+	for {
+		present, err := reservationVictimPresent(ctx, root, victim)
+		if err != nil || !present {
+			return !present, err
+		}
+		if err = waitForContext(ctx, coordinationPollInterval, nil); err != nil {
+			return false, nil
+		}
+	}
 }
 
-func terminateAndWait(command *exec.Cmd, exited <-chan error, grace time.Duration) (error, error) {
+// WaitPressureVictimRelease observes a selected remote owner through a bounded
+// deadline. The remote selector never signals another guard's process group;
+// only the owning guard may stop, reap, and release its supervised child.
+func WaitPressureVictimRelease(root string, victim ReservationOwner, timeout time.Duration) error {
+	released, observeError := waitReservationVictimRelease(root, victim, timeout)
+	if !released && observeError == nil {
+		observeError = errors.New("selected reservation victim remained owned after bounded observation")
+	}
+
+	return observeError
+}
+
+var errChildRetirementUnconfirmed = errors.New("child process-group retirement remained unconfirmed")
+
+// childRetirementConfirmation bounds the wait for a killed process group to
+// retire. It is deliberately not the caller's termination grace: that grace is
+// a shutdown policy for a cooperating child, while this window measures how
+// long the operating system needs to kill, orphan-reparent, and reap a group.
+// Deriving one from the other lets an aggressive grace report a healthy forced
+// stop as unconfirmed, which keeps the reservation owned and leaks capacity
+// from a coordination root every repository shares.
+const childRetirementConfirmation = 2 * time.Second
+
+func terminateAndWait(lifetime *supervisedLifetime, grace time.Duration) (error, error) {
 	select {
-	case waitError := <-exited:
+	case waitError := <-lifetime.exited:
 		return waitError, nil
 	default:
 	}
 
-	signalError := signalGroup(command.Process, syscall.SIGTERM)
+	signalError := signalGroup(lifetime.processGroup, syscall.SIGTERM)
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
 
 	select {
-	case waitError := <-exited:
+	case waitError := <-lifetime.exited:
 		return waitError, signalError
 	case <-timer.C:
-		killError := signalGroup(command.Process, syscall.SIGKILL)
-		waitError := <-exited
-
-		return waitError, errors.Join(signalError, killError)
+		killError := signalGroup(lifetime.processGroup, syscall.SIGKILL)
+		postKill := time.NewTimer(max(grace, childRetirementConfirmation))
+		defer postKill.Stop()
+		select {
+		case waitError := <-lifetime.exited:
+			return waitError, errors.Join(signalError, killError)
+		case <-postKill.C:
+			return nil, errors.Join(signalError, killError, errChildRetirementUnconfirmed)
+		}
 	}
 }
 
@@ -228,6 +298,42 @@ func waitForContext(ctx context.Context, duration time.Duration, pause func(time
 	case <-timer.C:
 		return nil
 	}
+}
+
+func launchConfiguredLifetime(
+	ctx context.Context,
+	config RunConfig,
+	session *Session,
+	portLease *PortLease,
+) (*supervisedLifetime, error) {
+	environment := withEnvironment(config.Environment, "HIPPO_SESSION", session.Token)
+	executable, err := exec.LookPath(config.Command)
+	if err != nil {
+		return nil, err
+	}
+	environment = withEnvironment(environment, "HIPPO_BIN", executableGuardPath())
+	var reservationIdentity, portIdentity *os.File
+	if session != nil {
+		reservationIdentity = session.identityLock
+	}
+	if portLease != nil {
+		portIdentity = portLease.identityLock
+	}
+
+	starter := startSupervisedLifetime
+	if config.startLifetime != nil {
+		starter = config.startLifetime
+	}
+
+	return starter(ctx, config, executable, environment, reservationIdentity, portIdentity)
+}
+
+func stopConfiguredLifetime(config RunConfig, lifetime *supervisedLifetime) (error, error) {
+	if config.stopLifetime != nil {
+		return config.stopLifetime(lifetime, config.Policy.TerminationGrace)
+	}
+
+	return terminateAndWait(lifetime, config.Policy.TerminationGrace)
 }
 
 // Run admits, supervises, and records one child process without touching unrelated processes.
@@ -277,10 +383,16 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 	concurrencyEnvironment, concurrencyError := normalizeConcurrencyEnvironment(config.ConcurrencyEnvironment)
 	if concurrencyError != nil {
+		if config.ReservationPolicy.Enabled {
+			return policy.ReplanRequiredExitCode, concurrencyError
+		}
+
 		return 1, concurrencyError
 	}
 	config.ConcurrencyEnvironment = concurrencyEnvironment
-	config.Environment = resolvedEnvironment(config.Environment, config.Resolution, false, config.ConcurrencyEnvironment)
+	if !config.ReservationPolicy.Enabled {
+		config.Environment = resolvedEnvironment(config.Environment, config.Resolution, false, config.ConcurrencyEnvironment)
+	}
 
 	if config.DiskPath == "" {
 		config.DiskPath = config.WorkingDirectory
@@ -293,14 +405,38 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		return 1, err
 	}
 
-	session, err := AcquireSession(
-		ctx,
-		config.EvidenceRoot,
-		environmentValue(config.Environment, "HIPPO_SESSION"),
-		config.TaskClass,
-		config.Policy.LeaseWait,
-	)
+	var session *Session
+	var err error
+	if config.ReservationPolicy.Enabled {
+		session, err = AcquireReservation(
+			ctx,
+			config.EvidenceRoot,
+			environmentValue(config.Environment, "HIPPO_SESSION"),
+			config.TaskClass,
+			config.Resolution.ResolvedProfile,
+			config.ConfigHash,
+			config.ReservationPlan,
+			config.ReservationPolicy.MaxActiveOwners,
+			config.Policy.LeaseWait,
+		)
+	} else {
+		session, err = AcquireSession(
+			ctx,
+			config.EvidenceRoot,
+			environmentValue(config.Environment, "HIPPO_SESSION"),
+			config.TaskClass,
+			config.Policy.LeaseWait,
+		)
+	}
 	if err != nil {
+		if errors.Is(err, ErrReservationReplan) {
+			return policy.ReplanRequiredExitCode, nil
+		}
+		if errors.Is(err, ErrReservationDeferred) {
+			_, _ = fmt.Fprintln(config.Stderr, "HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.")
+
+			return CapacityDeferredExitCode, nil
+		}
 		if errors.Is(err, errCoordinationDeferred) {
 			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", err)
 
@@ -310,35 +446,89 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		return 1, err
 	}
 	if session == nil {
-		_, _ = fmt.Fprintf(
-			config.Stderr,
-			"HIPPO deferred task: %s; it must exit before this work is admitted.\n",
-			DescribeHeavyLease(config.EvidenceRoot),
-		)
+		if config.ReservationPolicy.Enabled {
+			_, _ = fmt.Fprintln(config.Stderr, "HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.")
+		} else {
+			_, _ = fmt.Fprintf(
+				config.Stderr,
+				"HIPPO deferred task: %s; it must exit before this work is admitted.\n",
+				DescribeHeavyLease(config.EvidenceRoot),
+			)
+		}
 
 		return CapacityDeferredExitCode, nil
 	}
+	if config.ReservationPolicy.Enabled {
+		config.Environment, err = ReservationEnvironment(
+			config.Environment,
+			config.Resolution,
+			session.Allocation,
+			config.ConcurrencyEnvironment,
+		)
+		if err != nil {
+			_ = ReleaseReservation(config.EvidenceRoot, session) //nolint:contextcheck // Rejected environment cleanup owns its bounded release context.
 
-	defer func() {
-		if releaseError := ReleaseSession(config.EvidenceRoot, session); returnError == nil && releaseError != nil {
+			return policy.ReplanRequiredExitCode, err
+		}
+		config.Resolution.Concurrency = session.Allocation.CPU
+	}
+	ownershipRetired := true
+
+	defer func() { //nolint:contextcheck // Ownership release runs after caller cancellation and deliberately uses its own bounded context.
+		if !ownershipRetired {
+			if abandonError := abandonReservationIdentity(session); returnError == nil && abandonError != nil {
+				returnError = abandonError
+			}
+
+			return
+		}
+		var releaseError error
+		if config.ReservationPolicy.Enabled {
+			releaseError = ReleaseReservation(config.EvidenceRoot, session)
+		} else {
+			releaseError = ReleaseSession(config.EvidenceRoot, session)
+		}
+		if returnError == nil && releaseError != nil {
+			// A peer holding the shared lock at cleanup time already left a
+			// reconcilable owner mark, so the caller's completed work must not
+			// be reported as a failure.
+			if errors.Is(releaseError, ErrCoordinationCleanupDeferred) {
+				_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred coordination cleanup: %s.\n", releaseError)
+
+				return
+			}
 			returnError = releaseError
-			exitCode = 1
+			if exitCode != StorageBlockedExitCode && exitCode != CapacityDeferredExitCode {
+				exitCode = 1
+			}
 		}
 	}()
 
 	var portLease *PortLease
-	if config.LeasePort != 0 {
+	if config.LeasePort != 0 { //nolint:nestif // Lease acquisition retains atomic rollback for each ownership component.
 		root := config.PortLeaseRoot
 		if root == "" {
 			root = filepath.Join(os.TempDir(), "hippo-port-leases")
 		}
 
 		portLease, err = AcquirePortLease(root, config.LeasePort, config.LeaseOwner, config.LeaseMinimum, config.LeaseMaximum)
+		if errors.Is(err, errCoordinationDeferred) {
+			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", err)
+
+			return CapacityDeferredExitCode, nil
+		}
 		if err != nil {
 			return 1, err
 		}
 
 		defer func() {
+			if !ownershipRetired {
+				if abandonError := abandonPortLeaseIdentity(portLease); returnError == nil && abandonError != nil {
+					returnError = abandonError
+				}
+
+				return
+			}
 			if releaseError := ReleasePortLease(root, portLease); returnError == nil && releaseError != nil {
 				returnError = releaseError
 				exitCode = 1
@@ -347,7 +537,34 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 
 	if session.Inherited {
-		return directChild(ctx, config, config.Environment), nil
+		lifetime, launchError := launchConfiguredLifetime(ctx, config, session, portLease)
+		if launchError != nil {
+			if lifetime != nil {
+				ownershipRetired = false
+			}
+
+			return 1, launchError
+		}
+		ownershipRetired = false
+		stopLifetime := func() (error, error) {
+			waitError, stopError := stopConfiguredLifetime(config, lifetime)
+			ownershipRetired = !errors.Is(stopError, errChildRetirementUnconfirmed)
+
+			return waitError, stopError
+		}
+		select {
+		case waitError := <-lifetime.exited:
+			ownershipRetired = true
+
+			return waitStatusCode(waitError), nil
+		case <-ctx.Done():
+			waitError, stopError := stopLifetime()
+			if stopError != nil {
+				return 1, stopError
+			}
+
+			return waitStatusCode(waitError), nil
+		}
 	}
 
 	writer, err := NewEvidenceWriter(
@@ -360,13 +577,38 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 
 	writer.SetContext(config.Resolution, config.ConfigHash)
+	if config.ReservationPolicy.Enabled {
+		totals, statusError := ReservationStatus(ctx, config.EvidenceRoot)
+		// A peer holding the shared lock here is contention, and no child has
+		// started yet, so the caller receives the retryable deferral exit.
+		if errors.Is(statusError, errCoordinationDeferred) {
+			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", statusError)
+
+			return CapacityDeferredExitCode, nil
+		}
+		if statusError != nil {
+			return 1, statusError
+		}
+		writer.SetReservationContext(session, totals.ActiveOwners, "admitted")
+	}
 	outcome := "capacity-deferred"
 	finalized := false
-	finalize := func() error {
+	finalize := func() error { //nolint:contextcheck // Evidence finalization deliberately uses the bounded ownership lifecycle, not caller cancellation.
 		if finalized {
 			return nil
 		}
 		finalized = true
+		if config.ReservationPolicy.Enabled {
+			peakOwners, peakError := ReservationOwnerPeak(context.Background(), config.EvidenceRoot, session)
+			// The owner peak is evidence metadata: a contended shared root costs
+			// the summary one observation, never the completed run its outcome.
+			if peakError != nil && !errors.Is(peakError, errCoordinationDeferred) {
+				return peakError
+			}
+			if peakError == nil {
+				writer.ObserveReservationOwners(peakOwners)
+			}
+		}
 		_, finalizeError := writer.Finalize(config.TaskClass, outcome, 0)
 		cleanupError := evidence.Cleanup(config.EvidenceRoot, config.Now())
 
@@ -418,8 +660,10 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			config.Resolution.ResolvedProfile == "balanced" &&
 			policy.WarningAdmissionReady(samples, config.Policy) {
 			admitted, degraded = true, true
-			config.Resolution.Concurrency = 1
-			config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true, config.ConcurrencyEnvironment)
+			if !config.ReservationPolicy.Enabled {
+				config.Resolution.Concurrency = 1
+				config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true, config.ConcurrencyEnvironment)
+			}
 			writer.SetContext(config.Resolution, config.ConfigHash)
 			_, _ = fmt.Fprintln(config.Stderr, "HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1.")
 
@@ -441,26 +685,37 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		return CapacityDeferredExitCode, nil
 	}
 
-	environment := withEnvironment(config.Environment, "HIPPO_SESSION", session.Token)
-	executable, lookupError := exec.LookPath(config.Command)
-	if lookupError != nil {
-		return 1, lookupError
+	lifetime, launchError := launchConfiguredLifetime(ctx, config, session, portLease)
+	if launchError != nil {
+		if lifetime != nil {
+			ownershipRetired = false
+		}
+
+		return 1, launchError
 	}
+	ownershipRetired = false
+	stopLifetime := func() (error, error) {
+		waitError, stopError := stopConfiguredLifetime(config, lifetime)
+		ownershipRetired = !errors.Is(stopError, errChildRetirementUnconfirmed)
 
-	guardPath := executableGuardPath()
-	environment = withEnvironment(environment, "HIPPO_BIN", guardPath)
-	command := exec.Command(executable, config.Arguments...)
-	command.Dir = config.WorkingDirectory
-	command.Env = environment
-	command.Stdin, command.Stdout, command.Stderr = config.ChildStdin, config.ChildStdout, config.ChildStderr
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	if startError := command.Start(); startError != nil {
-		return 1, startError
+		return waitError, stopError
 	}
+	if config.ReservationPolicy.Enabled {
+		if activationError := ActivateReservation(config.EvidenceRoot, session, lifetime.processGroup); activationError != nil { //nolint:contextcheck // Activation owns a bounded atomic coordination transaction.
+			_, stopError := stopLifetime()
+			// Every repository on the host shares one coordination root, so a
+			// peer holding its lock through this bounded window is ordinary
+			// contention. The caller must receive the retryable deferral exit
+			// instead of a generic failure it cannot classify.
+			if errors.Is(activationError, errCoordinationDeferred) && stopError == nil {
+				_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", activationError)
 
-	exited := make(chan error, 1)
-	go func() { exited <- command.Wait() }()
+				return CapacityDeferredExitCode, nil
+			}
+
+			return 1, errors.Join(activationError, stopError)
+		}
+	}
 
 	ticker := time.NewTicker(config.Policy.SampleInterval)
 	defer ticker.Stop()
@@ -468,7 +723,8 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 	for {
 		select {
-		case waitError := <-exited:
+		case waitError := <-lifetime.exited:
+			ownershipRetired = true
 			if waitError == nil {
 				outcome = "passed"
 			} else {
@@ -478,7 +734,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			return waitStatusCode(waitError), nil
 
 		case <-ctx.Done():
-			waitError, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+			waitError, stopError := stopLifetime()
 			outcome = outcomeTaskFailed
 			if stopError != nil {
 				return 1, stopError
@@ -487,10 +743,31 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			return waitStatusCode(waitError), nil
 
 		case <-ticker.C:
+			if config.ReservationPolicy.Enabled {
+				selected, selectedExit, selectionError := ReservationSheddingSelection(config.EvidenceRoot, session) //nolint:contextcheck // Owner mark observation remains bounded independently of sampling cancellation.
+				// A contended shared root defers this observation to the next
+				// sample instead of costing the caller a healthy child.
+				if selectionError != nil && !errors.Is(selectionError, errCoordinationDeferred) {
+					outcome = outcomeSupervisionFailed
+					_, stopError := stopLifetime()
+
+					return 1, errors.Join(selectionError, stopError)
+				}
+				if selectionError == nil && selected {
+					outcome = "pressure-shed"
+					if selectedExit == StorageBlockedExitCode {
+						outcome = "storage-shed"
+					}
+					_, _ = fmt.Fprintln(config.Stderr, "HIPPO shedding this selected child from its owning guard.")
+					_, stopError := stopLifetime()
+
+					return selectedExit, stopError
+				}
+			}
 			reading, collectError := config.Collector.Collect(ctx, previous, config.DiskPath)
 			if collectError != nil {
 				if ctx.Err() != nil {
-					waitError, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+					waitError, stopError := stopLifetime()
 					outcome = outcomeTaskFailed
 					if stopError != nil {
 						return 1, stopError
@@ -499,8 +776,8 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					return waitStatusCode(waitError), nil
 				}
 
-				outcome = "supervision-failed"
-				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+				outcome = outcomeSupervisionFailed
+				_, stopError := stopLifetime()
 
 				return 1, errors.Join(collectError, stopError)
 			}
@@ -513,10 +790,25 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			}
 
 			if appendError := writer.Append(reading.Sample); appendError != nil {
-				outcome = "supervision-failed"
-				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+				outcome = outcomeSupervisionFailed
+				_, stopError := stopLifetime()
 
 				return 1, errors.Join(appendError, stopError)
+			}
+			if config.ReservationPolicy.Enabled {
+				peakOwners, statusError := ReservationOwnerPeak(ctx, config.EvidenceRoot, session)
+				// The owner peak is evidence metadata. A contended shared root,
+				// or a caller cancelling mid-observation, costs this sample its
+				// observation: never the child, and never the caller's exit.
+				if statusError != nil && !errors.Is(statusError, errCoordinationDeferred) && ctx.Err() == nil {
+					outcome = outcomeSupervisionFailed
+					_, stopError := stopLifetime()
+
+					return 1, errors.Join(statusError, stopError)
+				}
+				if statusError == nil {
+					writer.ObserveReservationOwners(peakOwners)
+				}
 			}
 
 			assessment := policy.ResourceAssessment(samples, config.Policy)
@@ -528,7 +820,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				warningSince = &value
 			}
 
-			if config.TaskClass == policy.TaskTransactional {
+			if config.TaskClass == policy.TaskTransactional && !config.ReservationPolicy.Enabled {
 				continue
 			}
 
@@ -537,7 +829,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				grace = config.Policy.ServiceWarningGrace
 			}
 
-			if assessment.State == policy.StateCritical || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) {
+			if assessment.State == policy.StateCritical || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) { //nolint:nestif // Pressure outcome, atomic victim election, and owned reaping remain one lifecycle branch.
 				shedCode := CapacityDeferredExitCode
 				if assessment.StorageBlocked {
 					shedCode, outcome = StorageBlockedExitCode, "storage-shed"
@@ -545,8 +837,37 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					outcome = "pressure-shed"
 				}
 
-				_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
-				_, stopError := terminateAndWait(command, exited, config.Policy.TerminationGrace)
+				if config.ReservationPolicy.Enabled {
+					victim, selected, selectionError := SelectPressureVictim(config.EvidenceRoot, shedCode) //nolint:contextcheck // Selection is one bounded locked evaluation.
+					// Pressure persists across samples, so a contended shared
+					// root re-elects on the next one rather than shedding work
+					// no one has been selected for.
+					if errors.Is(selectionError, errCoordinationDeferred) {
+						continue
+					}
+					if selectionError != nil {
+						_, stopError := stopLifetime()
+
+						return 1, errors.Join(selectionError, stopError)
+					}
+					if !selected {
+						continue
+					}
+					_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding selected %s child after %s.\n", victim.Class, assessment.Reason)
+					if victim.Token != session.Token {
+						observation := 2*config.Policy.SampleInterval + 2*config.Policy.TerminationGrace
+						if remoteError := WaitPressureVictimRelease(config.EvidenceRoot, victim, observation); remoteError != nil { //nolint:contextcheck // Remote observation has its own bounded deadline.
+							_, stopError := stopLifetime()
+
+							return 1, errors.Join(remoteError, stopError)
+						}
+
+						continue // The next pressure decision requires a fresh host sample after owned release.
+					}
+				} else {
+					_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
+				}
+				_, stopError := stopLifetime()
 
 				return shedCode, stopError
 			}

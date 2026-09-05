@@ -11,12 +11,21 @@ import (
 	"time"
 )
 
-const maximumInactiveBytes int64 = 50 * 1024 * 1024
+const (
+	maximumInactiveBytes          int64 = 50 * 1024 * 1024
+	atomicWriteTemporaryRetention       = time.Hour
+)
+
+func atomicWriteTemporary(name string) bool {
+	return strings.HasPrefix(name, ".coordination-mode-") && strings.HasSuffix(name, ".tmp") ||
+		strings.HasPrefix(name, ".reservations-") && strings.HasSuffix(name, ".tmp")
+}
 
 func runtimeInternalFile(name string) bool {
 	return name == ".writers.lock" ||
 		name == "coordination.lock" ||
-		name == "coordination-mode.json"
+		name == "coordination-mode.json" ||
+		name == "reservations.json"
 }
 
 type retainedFile struct {
@@ -45,6 +54,9 @@ func activePrefixes(entries []os.DirEntry, root string) (map[string]bool, error)
 
 		path := filepath.Join(root, entry.Name())
 		data, err := os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +87,7 @@ func protectedByActiveWriter(path string, active map[string]bool) bool {
 	return false
 }
 
-func cleanupLocked(root string, now time.Time, preserve ...string) error {
+func cleanupLocked(root string, now time.Time, preserve ...string) error { //nolint:cyclop,gocognit // One pass classifies every protected, active, expired, and capped evidence entry.
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return err
@@ -100,8 +112,22 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error {
 
 		path := filepath.Join(root, entry.Name())
 		info, infoError := entry.Info()
+		if errors.Is(infoError, os.ErrNotExist) {
+			continue
+		}
 		if infoError != nil {
 			return infoError
+		}
+		if atomicWriteTemporary(entry.Name()) {
+			age := now.Sub(info.ModTime())
+			if age < 0 || age < atomicWriteTemporaryRetention {
+				continue
+			}
+			if removeError := os.Remove(path); removeError != nil && !errors.Is(removeError, os.ErrNotExist) {
+				return removeError
+			}
+
+			continue
 		}
 
 		retention := 7 * 24 * time.Hour
@@ -111,7 +137,7 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error {
 
 		protected := preserved[path] || protectedByActiveWriter(path, active)
 		if now.Sub(info.ModTime()) > retention && !protected {
-			if removeError := os.Remove(path); removeError != nil {
+			if removeError := os.Remove(path); removeError != nil && !errors.Is(removeError, os.ErrNotExist) {
 				return removeError
 			}
 
@@ -138,7 +164,7 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error {
 		if preserved[entry.path] {
 			continue
 		}
-		if removeError := os.Remove(entry.path); removeError != nil {
+		if removeError := os.Remove(entry.path); removeError != nil && !errors.Is(removeError, os.ErrNotExist) {
 			return removeError
 		}
 

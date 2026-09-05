@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
 	resourceconfig "github.com/wahidyankf/hippo/internal/config"
 	"github.com/wahidyankf/hippo/internal/host"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -95,7 +96,12 @@ func (application Application) loadConfig(path string) (resourceconfig.Result, e
 	return resourceconfig.Load(resolvedPath, explicit)
 }
 
-func executeHandler(execution *commandExecution, handler func() (int, error)) error {
+func executeHandler(command *cobra.Command, execution *commandExecution, handler func() (int, error)) error {
+	// Cobra diagnoses argument and flag mistakes before RunE runs, so every
+	// failure from here on is a runtime outcome. Printing the usage block for
+	// those reads as though the caller mistyped the command and buries the real
+	// diagnostic under a flag list in consumer logs.
+	command.SilenceUsage = true
 	exitCode, err := handler()
 	execution.exitCode = exitCode
 

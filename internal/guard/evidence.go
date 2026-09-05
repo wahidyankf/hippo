@@ -37,11 +37,34 @@ func NewEvidenceWriter(root, identifier string, limits evidence.Limits) (*Eviden
 		output:      output,
 		summaryPath: filepath.Join(root, identifier+".summary.json"),
 		summary: EvidenceSummary{
-			SchemaVersion:          3,
+			SchemaVersion:          4,
 			CompressorAvailableAll: true,
 		},
 		cpu: evidence.NewHistogram(100, 0.01),
 	}, nil
+}
+
+// SetReservationContext attaches only aggregate resource allocation metadata.
+func (writer *EvidenceWriter) SetReservationContext(session *Session, peakOwners int, outcome string) {
+	if writer == nil || session == nil {
+		return
+	}
+	writer.summary.RequestedCPU = session.Requested.CPU
+	writer.summary.RequestedMemoryBytes = session.Requested.MemoryBytes
+	writer.summary.AllocatedCPU = session.Allocation.CPU
+	writer.summary.AllocatedMemoryBytes = session.Allocation.MemoryBytes
+	writer.summary.ReservationWaitMilliseconds = session.WaitDuration.Milliseconds()
+	writer.ObserveReservationOwners(peakOwners)
+	writer.summary.BudgetOutcome = outcome
+}
+
+// ObserveReservationOwners retains the highest shared-root owner count sampled during this child lifetime.
+func (writer *EvidenceWriter) ObserveReservationOwners(activeOwners int) {
+	if writer == nil {
+		return
+	}
+
+	writer.summary.PeakOwnerCount = max(writer.summary.PeakOwnerCount, activeOwners)
 }
 
 // SetContext attaches resolved, non-sensitive policy metadata to the summary.
@@ -169,6 +192,13 @@ type EvidenceSummary struct {
 	FallbackChain                          []string `json:"fallbackChain,omitempty"`
 	Concurrency                            int      `json:"concurrency,omitempty"`
 	ConfigHash                             string   `json:"configHash,omitempty"`
+	RequestedCPU                           int      `json:"requestedCpu,omitempty"`
+	RequestedMemoryBytes                   int64    `json:"requestedMemoryBytes,omitempty"`
+	AllocatedCPU                           int      `json:"allocatedCpu,omitempty"`
+	AllocatedMemoryBytes                   int64    `json:"allocatedMemoryBytes,omitempty"`
+	ReservationWaitMilliseconds            int64    `json:"reservationWaitMilliseconds,omitempty"`
+	PeakOwnerCount                         int      `json:"peakOwnerCount,omitempty"`
+	BudgetOutcome                          string   `json:"budgetOutcome,omitempty"`
 }
 
 func delta(first, last *int64) int64 {

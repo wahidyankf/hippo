@@ -113,7 +113,7 @@ func writeConfig(t *testing.T, content string) string {
 	return path
 }
 
-func TestStrictLocalConfiguration(t *testing.T) {
+func TestStrictLocalConfiguration(t *testing.T) { //nolint:cyclop,gocyclo // The strict table intentionally keeps all schema and precedence cases together.
 	valid := writeConfig(t, `{"schemaVersion":1,"defaultProfile":"local","profiles":{"local":{"extends":"constrained","fallback":"minimal","strict":true,"maxConcurrency":1,"maxCpuUtilizationPercent":90}}}`)
 	loaded, err := resourceconfig.Load(valid, true)
 	if err != nil ||
@@ -125,8 +125,17 @@ func TestStrictLocalConfiguration(t *testing.T) {
 	}
 
 	defaults, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":1}`), true)
-	if err != nil || defaults.Catalog.DefaultProfile != "balanced" {
+	if err != nil || defaults.Catalog.DefaultProfile != "balanced" || defaults.Coordination.Mode != "exclusive" {
 		t.Fatalf("default local config failed: %+v %v", defaults, err)
+	}
+	reservations, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":2,"coordination":{"maxCpu":6,"maxMemoryMiB":4096,"maxActiveOwners":8,"automaticOwnerShares":{"balanced":4,"constrained":2,"minimal":1}}}`), true)
+	if err != nil || reservations.Coordination.Mode != "reservation" || reservations.Coordination.MaxCPU != 6 ||
+		reservations.Coordination.MaxMemoryBytes != 4*policy.GiB || reservations.Coordination.MaxActiveOwners != 8 {
+		t.Fatalf("schema 2 reservation config failed: %+v %v", reservations, err)
+	}
+	reservationDefaults, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":2}`), true)
+	if err != nil || reservationDefaults.Coordination.Mode != "reservation" || reservationDefaults.Coordination.MaxActiveOwners != 20 {
+		t.Fatalf("schema 2 reservation defaults failed: %+v %v", reservationDefaults, err)
 	}
 
 	sharedParent := writeConfig(t, `{"schemaVersion":1,"profiles":{"one":{"extends":"constrained"},"two":{"extends":"constrained"}}}`)
@@ -147,13 +156,31 @@ func TestStrictLocalConfiguration(t *testing.T) {
 		``,
 		`{"schemaVersion":`,
 		`[`,
-		`{"schemaVersion":2}`,
+		`{"schemaVersion":1,]}`,
+		`{"schemaVersion":1,"unknown":[{"value":]}`,
+		`{"schemaVersion":3}`,
+		`{"schemaVersion":1,"coordination":{"mode":"reservation"}}`,
+		`{"schemaVersion":2,"coordination":{"mode":"exclusive"}}`,
+		`{"schemaVersion":2,"coordination":{"maxCpu":-1}}`,
+		`{"schemaVersion":2,"coordination":{"maxMemoryMiB":-1}}`,
+		`{"schemaVersion":2,"coordination":{"maxActiveOwners":-1}}`,
+		`{"schemaVersion":2,"coordination":{"maxMemoryMiB":255}}`,
+		`{"schemaVersion":2,"coordination":{"maxActiveOwners":21}}`,
+		`{"schemaVersion":2,"coordination":{"automaticOwnerShares":{"unknown":2}}}`,
+		`{"schemaVersion":2,"coordination":{"automaticOwnerShares":{"balanced":0}}}`,
+		`{"schemaVersion":2,"coordination":{"automaticOwnerShares":{"minimal":21}}}`,
 		`{"schemaVersion":1,"schemaVersion":1}`,
 		`{"schemaVersion":1,"unknown":true}`,
 		`{"schemaVersion":1} {}`,
 		`{"schemaVersion":1,"defaultProfile":"missing"}`,
 		`{"schemaVersion":1,"profiles":{"local":{"maxConcurrency":1}}}`,
 		`{"schemaVersion":1,"profiles":{"balanced":{"memoryReserveMinMiB":64}}}`,
+		`{"schemaVersion":1,"profiles":{"balanced":{"memoryReserveMinMiB":9223372036854775807}}}`,
+		`{"schemaVersion":1,"profiles":{"balanced":{"memoryReserveMaxMiB":9223372036854775807}}}`,
+		`{"schemaVersion":1,"profiles":{"balanced":{"noSwapMemoryReserveMinMiB":9223372036854775807}}}`,
+		`{"schemaVersion":1,"profiles":{"balanced":{"noSwapMemoryReserveMaxMiB":9223372036854775807}}}`,
+		`{"schemaVersion":1,"profiles":{"balanced":{"diskReserveMinMiB":9223372036854775807}}}`,
+		`{"schemaVersion":1,"profiles":{"balanced":{"diskReserveMaxMiB":9223372036854775807}}}`,
 		`{"schemaVersion":1,"profiles":{"balanced":{"memoryReserveMinMiB":2048,"memoryReserveMaxMiB":1024}}}`,
 		`{"schemaVersion":1,"profiles":{"balanced":{"maxCpuUtilizationPercent":99}}}`,
 		`{"schemaVersion":1,"profiles":{"balanced":{"memoryReservePercent":0}}}`,
