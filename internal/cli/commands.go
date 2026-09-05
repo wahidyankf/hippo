@@ -43,6 +43,8 @@ type runOptions struct {
 	leaseOwner             string
 	leaseMinimum           int
 	leaseMaximum           int
+	reserveCPU             int
+	reserveMemoryMiB       int64
 	concurrencyEnvironment []string
 }
 
@@ -99,8 +101,8 @@ func (application Application) versionCommand(execution *commandExecution) *cobr
 		Use:   "version",
 		Short: "Print build version information",
 		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return executeHandler(execution, func() (int, error) {
+		RunE: func(command *cobra.Command, _ []string) error {
+			return executeHandler(command, execution, func() (int, error) {
 				return application.version(options)
 			})
 		},
@@ -117,7 +119,7 @@ func (application Application) statusCommand(execution *commandExecution) *cobra
 		Short: "Inspect current resource evidence",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			return executeHandler(execution, func() (int, error) {
+			return executeHandler(command, execution, func() (int, error) {
 				return application.status(command.Context(), options)
 			})
 		},
@@ -136,7 +138,7 @@ func (application Application) monitorCommand(execution *commandExecution) *cobr
 		Short: "Monitor resource-state transitions",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			return executeHandler(execution, func() (int, error) {
+			return executeHandler(command, execution, func() (int, error) {
 				return application.monitor(command.Context(), options)
 			})
 		},
@@ -170,7 +172,7 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 		RunE: func(command *cobra.Command, arguments []string) error {
 			options.command = append([]string{}, arguments...)
 
-			return executeHandler(execution, func() (int, error) {
+			return executeHandler(command, execution, func() (int, error) {
 				return application.run(command.Context(), options)
 			})
 		},
@@ -182,6 +184,8 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 	command.Flags().StringVar(&options.leaseOwner, "lease-owner", "", "service port owner")
 	command.Flags().IntVar(&options.leaseMinimum, "lease-min", 0, "minimum allowed leased port")
 	command.Flags().IntVar(&options.leaseMaximum, "lease-max", 0, "maximum allowed leased port")
+	command.Flags().IntVar(&options.reserveCPU, "reserve-cpu", 0, "fixed CPU reservation; zero selects an automatic fair share")
+	command.Flags().Int64Var(&options.reserveMemoryMiB, "reserve-memory-mib", 0, "fixed memory reservation in MiB; zero selects an automatic fair share")
 	command.Flags().StringArrayVar(
 		&options.concurrencyEnvironment,
 		"concurrency-env",
@@ -214,7 +218,7 @@ func (application Application) releaseCheckCommand(execution *commandExecution) 
 		Short: "Check release admission and stability",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			return executeHandler(execution, func() (int, error) {
+			return executeHandler(command, execution, func() (int, error) {
 				return application.releaseCheck(command.Context(), options)
 			})
 		},
@@ -232,7 +236,7 @@ func (application Application) releaseAssessCommand(execution *commandExecution)
 		Short: "Assess a release evidence summary",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			return executeHandler(execution, func() (int, error) {
+			return executeHandler(command, execution, func() (int, error) {
 				return application.releaseAssess(command.Context(), options)
 			})
 		},
@@ -254,7 +258,7 @@ func (application Application) releaseMonitorCommand(execution *commandExecution
 		Short: "Capture release overlap evidence",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			return executeHandler(execution, func() (int, error) {
+			return executeHandler(command, execution, func() (int, error) {
 				return application.releaseMonitor(command.Context(), options)
 			})
 		},

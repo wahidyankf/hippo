@@ -14,6 +14,8 @@ import (
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
+const reservationCoordinationMode = "reservation"
+
 func (application Application) version(options versionOptions) (int, error) {
 	if options.jsonOutput {
 		encoded, err := json.Marshal(struct {
@@ -53,6 +55,27 @@ func withAssessmentDecision(resolution policy.Resolution, assessment policy.Asse
 	return resolution
 }
 
+func statusCoordination(ctx context.Context, root, configuredMode string) (guard.ReservationTotals, error) {
+	totals := guard.ReservationTotals{SchemaVersion: 4, Mode: configuredMode}
+	if root == "" {
+		return totals, nil
+	}
+	activeMode, present, err := guard.ActiveCoordinationMode(root)
+	if err != nil {
+		return guard.ReservationTotals{}, err
+	}
+	if !present {
+		return totals, nil
+	}
+	if activeMode != reservationCoordinationMode {
+		totals.Mode = activeMode
+
+		return totals, nil
+	}
+
+	return guard.ReservationStatus(ctx, root)
+}
+
 func (application Application) status(ctx context.Context, options statusOptions) (int, error) {
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
@@ -82,13 +105,20 @@ func (application Application) status(ctx context.Context, options statusOptions
 	resolution = withAssessmentDecision(resolution, assessment)
 
 	if options.jsonOutput {
+		root := host.DefaultEvidenceRoot(environmentMap(application.Environment))
+		coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
+		if coordinationError != nil {
+			return 1, fmt.Errorf("read coordination status: %w", coordinationError)
+		}
 		payload := struct {
 			policy.Sample
 
-			Resource   policy.Assessment `json:"resource"`
-			Profile    policy.Resolution `json:"profile"`
-			ConfigHash string            `json:"configHash,omitempty"`
-		}{second.Sample, assessment, resolution, configuration.Hash}
+			SchemaVersion int                     `json:"schemaVersion"`
+			Resource      policy.Assessment       `json:"resource"`
+			Profile       policy.Resolution       `json:"profile"`
+			Coordination  guard.ReservationTotals `json:"coordination"`
+			ConfigHash    string                  `json:"configHash,omitempty"`
+		}{second.Sample, 4, assessment, resolution, coordination, configuration.Hash}
 		encoded, marshalError := json.Marshal(payload)
 		if marshalError != nil {
 			return 1, fmt.Errorf("encode status JSON: %w", marshalError)
@@ -302,6 +332,37 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		return resolution.ExitCode, nil
 	}
 
+	reservationPolicy := guard.ReservationPolicy{
+		Enabled:         configuration.Coordination.Mode == reservationCoordinationMode,
+		MaxCPU:          configuration.Coordination.MaxCPU,
+		MaxMemoryBytes:  configuration.Coordination.MaxMemoryBytes,
+		MaxActiveOwners: configuration.Coordination.MaxActiveOwners,
+		OwnerShares:     configuration.Coordination.OwnerShares,
+	}
+	if options.reserveCPU < 0 || options.reserveMemoryMiB < 0 {
+		return policy.ReplanRequiredExitCode, errors.New("reservation flags must be nonnegative")
+	}
+	if !reservationPolicy.Enabled && (options.reserveCPU != 0 || options.reserveMemoryMiB != 0) {
+		return policy.ReplanRequiredExitCode, errors.New("explicit reservations require schema 2 coordination")
+	}
+	reservationPlan := guard.ReservationPlan{}
+	if reservationPolicy.Enabled {
+		reservationMemoryBytes, conversionError := policy.MiBToBytes(options.reserveMemoryMiB)
+		if conversionError != nil {
+			return policy.ReplanRequiredExitCode, conversionError
+		}
+		reservationPlan, resolveError = guard.PlanReservation(
+			probe.Sample,
+			resolution,
+			reservationPolicy,
+			options.reserveCPU,
+			reservationMemoryBytes,
+		)
+		if resolveError != nil {
+			return policy.ReplanRequiredExitCode, resolveError
+		}
+	}
+
 	return guard.Run(ctx, guard.RunConfig{
 		Command:                options.command[0],
 		Arguments:              options.command[1:],
@@ -318,6 +379,8 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		Collector:              application.Collector,
 		Policy:                 resolution.Policy,
 		Resolution:             resolution,
+		ReservationPolicy:      reservationPolicy,
+		ReservationPlan:        reservationPlan,
 		ConfigHash:             configuration.Hash,
 		Sleep:                  application.Sleep,
 		Now:                    application.Now,

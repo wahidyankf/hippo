@@ -289,17 +289,37 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	}}
 	policy := fastPolicy()
 	policy.TerminationGrace = 200 * time.Millisecond
-	marker := filepath.Join(t.TempDir(), "terminations")
+	childRoot := t.TempDir()
+	marker := filepath.Join(childRoot, "terminations")
+	ready := filepath.Join(childRoot, "trap-installed")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	time.AfterFunc(300*time.Millisecond, cancel)
 
-	started := time.Now()
+	// Interrupting on a wall clock does not promise the child is already ignoring
+	// termination: on a loaded host the signal can land after the shell starts but
+	// before it installs its trap, which kills the child by SIGTERM's default
+	// action and leaves this test nothing to observe. Interrupt on the child's own
+	// readiness mark so the premise holds every run.
+	interrupted := make(chan time.Time, 1)
+
+	go func() {
+		defer cancel()
+
+		interrupted <- awaitChildReadiness(ready)
+	}()
+
+	// The child waits without forking. A forked foreground child shares the
+	// payload process group, so one group SIGTERM kills it too and the shell then
+	// runs its trap a second time to report the child that died from that signal,
+	// which makes the trap count an unreliable witness for how often the guard
+	// actually signalled. A builtin-only wait counts kernel deliveries exactly,
+	// and its bound stops a guard that never force-stops from leaving a spinning
+	// orphan behind.
 	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      "/bin/sh",
-		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done`},
 		TaskClass:    "ephemeral",
-		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker),
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready),
 		EvidenceRoot: t.TempDir(),
 		DiskPath:     ".",
 		Collector:    collector,
@@ -309,10 +329,16 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 		Stderr:       &bytes.Buffer{},
 	})
 
-	elapsed := time.Since(started)
+	// The bound belongs to the stop, not to however long a busy host took to admit
+	// and start the child, so it is measured from the interrupt.
+	elapsed := time.Since(<-interrupted)
 
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if _, readyError := os.Stat(ready); readyError != nil {
+		t.Fatalf("child never installed its termination trap: %v", readyError)
 	}
 
 	delivered, readError := os.ReadFile(marker)
@@ -324,6 +350,24 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	}
 
 	if elapsed > 1500*time.Millisecond {
-		t.Fatalf("a child ignoring SIGTERM was not force-stopped: guard returned after %s", elapsed)
+		t.Fatalf("a child ignoring SIGTERM was not force-stopped: guard returned %s after the interrupt", elapsed)
 	}
+}
+
+// awaitChildReadiness waits for the guarded child to publish its readiness mark
+// and reports when the wait ended. It also returns on its own deadline so a
+// child that never becomes ready reaches an explicit assertion instead of
+// hanging the suite.
+func awaitChildReadiness(path string) time.Time {
+	deadline := time.Now().Add(30 * time.Second)
+
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			break
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	return time.Now()
 }

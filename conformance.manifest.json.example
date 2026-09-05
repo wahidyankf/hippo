@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "hippoBinary": "/path/to/pinned/hippo",
+  "hippoSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "sharedRoot": "/path/to/temporary/shared-state",
+  "consumers": [
+    {
+      "name": "consumer-a",
+      "path": "/path/to/consumer-a",
+      "bootstrap": [{ "arguments": ["./bootstrap"] }],
+      "gates": [{ "arguments": ["./run-gate"] }]
+    },
+    {
+      "name": "consumer-b",
+      "path": "/path/to/consumer-b",
+      "bootstrap": [{ "arguments": ["./bootstrap"] }],
+      "gates": [{ "arguments": ["./run-gate"] }]
+    },
+    {
+      "name": "consumer-c",
+      "path": "/path/to/consumer-c",
+      "bootstrap": [{ "arguments": ["./bootstrap"] }],
+      "gates": [{ "arguments": ["./run-gate"] }]
+    },
+    {
+      "name": "consumer-d",
+      "path": "/path/to/consumer-d",
+      "bootstrap": [{ "arguments": ["./bootstrap"] }],
+      "gates": [{ "arguments": ["./run-gate"] }]
+    }
+  ],
+  "coordinationChecks": [
+    {
+      "consumer": "consumer-a",
+      "command": { "arguments": ["./check-shared-overlap"] },
+      "allowCapacitySkip": true
+    }
+  ]
+}

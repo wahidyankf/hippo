@@ -431,7 +431,7 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary.SchemaVersion != 3 ||
+	if summary.SchemaVersion != 4 ||
 		summary.SampleCount != 2 ||
 		summary.CompressorAvailableAll ||
 		summary.SwapInsDelta != 1 ||
@@ -477,6 +477,45 @@ func TestEvidenceCleanupPreservesCoordinationProtocolFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(expiredEvidence); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expired evidence remained: %v", err)
+	}
+}
+
+func TestEvidenceCleanupBoundsAtomicTemporaryRetentionWithoutApplyingTheInactiveCap(t *testing.T) {
+	root := t.TempDir()
+	now := time.Unix(2_000_000, 0)
+	fresh := filepath.Join(root, ".coordination-mode-fresh.tmp")
+	future := filepath.Join(root, ".reservations-future.tmp")
+	boundary := filepath.Join(root, ".coordination-mode-boundary.tmp")
+	largeFresh := filepath.Join(root, ".reservations-large.tmp")
+	for _, path := range []string{fresh, future, boundary, largeFresh} {
+		if err := os.WriteFile(path, []byte("temporary\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Truncate(largeFresh, 51*1024*1024); err != nil {
+		t.Fatal(err)
+	}
+	for path, modified := range map[string]time.Time{
+		fresh:      now.Add(-time.Hour + time.Nanosecond),
+		future:     now.Add(time.Minute),
+		boundary:   now.Add(-time.Hour),
+		largeFresh: now,
+	} {
+		if err := os.Chtimes(path, modified, modified); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := evidence.Cleanup(root, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{fresh, future, largeFresh} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("fresh atomic temporary %q was removed: %v", filepath.Base(path), err)
+		}
+	}
+	if _, err := os.Stat(boundary); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("atomic temporary at the retention boundary remained: %v", err)
 	}
 }
 

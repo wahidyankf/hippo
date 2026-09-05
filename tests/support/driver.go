@@ -27,29 +27,61 @@ import (
 )
 
 const (
-	taskClassEphemeral = "ephemeral"
-	taskClassFlag      = "--class"
-	diskPathFlag       = "--disk-path"
-	profileBalanced    = "balanced"
-	jsonFlag           = "--json"
-	statusCommandName  = "status"
-	monitorCommandName = "monitor"
-	runCommandName     = "run"
-	versionCommandName = "version"
-	releaseCommandName = "release"
-	releaseAssessName  = "assess"
-	outputFlag         = "--output"
-	summaryFlag        = "--summary"
-	deploymentRootFlag = "--deployment-root"
-	healthURLFlag      = "--health-url"
-	routedOriginFlag   = "--routed-origin"
-	testHealthURL      = "http://127.0.0.1/health"
-	testRoutedOrigin   = "https://service.example"
-	callerWorkersName  = "CALLER_WORKERS"
-	toolWorkersName    = "TOOL_WORKERS"
-	unexpectedArgument = "unexpected"
-	shellPath          = "/bin/sh"
+	taskClassEphemeral    = "ephemeral"
+	taskClassFlag         = "--class"
+	diskPathFlag          = "--disk-path"
+	profileBalanced       = "balanced"
+	profileConstrained    = "constrained"
+	profileMinimal        = "minimal"
+	jsonFlag              = "--json"
+	statusCommandName     = "status"
+	monitorCommandName    = "monitor"
+	runCommandName        = "run"
+	usageBlockMarker      = "Usage:"
+	versionCommandName    = "version"
+	releaseCommandName    = "release"
+	releaseAssessName     = "assess"
+	outputFlag            = "--output"
+	summaryFlag           = "--summary"
+	deploymentRootFlag    = "--deployment-root"
+	healthURLFlag         = "--health-url"
+	routedOriginFlag      = "--routed-origin"
+	testHealthURL         = "http://127.0.0.1/health"
+	testRoutedOrigin      = "https://service.example"
+	callerWorkersName     = "CALLER_WORKERS"
+	toolWorkersName       = "TOOL_WORKERS"
+	unexpectedArgument    = "unexpected"
+	shellPath             = "/bin/sh"
+	configFlag            = "--config"
+	conformanceLabel      = "conformance"
+	e2eMode               = "e2e"
+	exclusiveMode         = "exclusive"
+	reservationMode       = "reservation"
+	fixtureOwner          = "fixture"
+	capacityField         = "capacity"
+	classField            = "class"
+	profileField          = "profile"
+	sequenceField         = "sequence"
+	ownersField           = "owners"
+	waitersField          = "waiters"
+	schemaVersionField    = "schemaVersion"
+	nextSequenceField     = "nextSequence"
+	maxActiveOwnersFld    = "maxActiveOwners"
+	succeedsOutcome       = "succeeds"
+	trueCommandName       = "true"
+	childStartedScript    = `printf started > "$CHILD_MARKER"`
+	schemaOneDocument     = `{"schemaVersion":1}`
+	pidField              = "pid"
+	tokenField            = "token"
+	requestedField        = "requested"
+	childStartedArgScript = `printf started > "$1"`
 )
+
+// interruptReadinessWait bounds how long a fixture waits for a guarded child to
+// publish readiness before interrupting it. It is generous because it only has
+// to outlast admission and process start on a busy host, and a fixture that
+// exceeds it fails with its own diagnostic rather than hanging.
+const interruptReadinessWait = 30 * time.Second
 
 type sequenceCollector struct {
 	samples     []policy.Sample
@@ -125,6 +157,9 @@ type Driver struct {
 	coordinationDeferrals   int
 	inheritedSessions       bool
 	forceStopElapsed        time.Duration
+	runtimeFailureOutput    string
+	runtimeFailureExit      int
+	usageErrorOutput        string
 	terminationSignals      int
 	supervisionFailure      error
 	childReaped             bool
@@ -148,6 +183,11 @@ type Driver struct {
 	releaseCollector        *sequenceCollector
 	streamCloseCalls        int
 	invalidMappingsRejected bool
+	v04Error                error
+	v04Session              *guard.Session
+	v04State                []byte
+	v04Action               func(string) error
+	v04Scenario             string
 }
 
 type failingStream struct {
@@ -539,7 +579,7 @@ func (driver *Driver) requestInvalidConcurrencyMappings() {
 	for _, name := range []string{"9INVALID", "HIPPO_SESSION"} {
 		code, err := guard.Run(context.Background(), guard.RunConfig{
 			Command:                shellPath,
-			Arguments:              []string{"-c", `printf started > "$CHILD_MARKER"`},
+			Arguments:              []string{"-c", childStartedScript},
 			TaskClass:              taskClassEphemeral,
 			Environment:            environmentWith(map[string]string{"CHILD_MARKER": marker}),
 			ConcurrencyEnvironment: []string{name},
@@ -654,7 +694,7 @@ func (driver *Driver) requireExclusiveCoordination() error {
 	if err = json.Unmarshal(data, &marker); err != nil {
 		return fmt.Errorf("decode coordination marker: %w", err)
 	}
-	if marker.SchemaVersion != 1 || marker.Mode != "exclusive" {
+	if marker.SchemaVersion != 1 || marker.Mode != exclusiveMode {
 		return fmt.Errorf("unexpected coordination marker: %+v", marker)
 	}
 
@@ -721,7 +761,7 @@ func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskCla
 			driver.binary,
 			"run",
 			"--class", string(class),
-			"--disk-path", ".",
+			diskPathFlag, ".",
 			"--", shellPath, "-c", "exit 99",
 		)
 		command.Env = environmentWith(map[string]string{"HIPPO_ROOT": driver.leaseRoot})
@@ -987,16 +1027,36 @@ func (driver *Driver) interruptGuard() error {
 	resourcePolicy.LeaseWait = time.Second
 
 	marker := filepath.Join(driver.leaseRoot, "terminations")
+	ready := filepath.Join(driver.leaseRoot, "trap-installed")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	time.AfterFunc(300*time.Millisecond, cancel)
 
-	started := time.Now()
+	// The scenario needs a child that is genuinely ignoring termination when the
+	// interrupt arrives. A wall-clock delay cannot promise that: on a loaded host
+	// the signal can land after the shell is running but before it installs its
+	// trap, which kills the child by SIGTERM's default action and leaves nothing
+	// for the scenario to observe. Interrupting on the child's own readiness mark
+	// establishes the Given instead of assuming it.
+	interrupted := make(chan time.Time, 1)
+
+	go func() {
+		defer cancel()
+
+		interrupted <- awaitMarker(ready, interruptReadinessWait)
+	}()
+
+	// The child waits without forking. A forked foreground child shares the
+	// payload process group, so one group SIGTERM kills it too and the shell then
+	// runs its trap a second time to report the child that died from that signal,
+	// which makes the trap count an unreliable witness for how often the guard
+	// actually signalled. A builtin-only wait counts kernel deliveries exactly,
+	// and its bound stops a guard that never force-stops from leaving a spinning
+	// orphan behind.
 	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      shellPath,
-		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; for attempt in $(seq 1 40); do sleep 0.05; done`},
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done`},
 		TaskClass:    taskClassEphemeral,
-		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker),
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready),
 		EvidenceRoot: driver.leaseRoot,
 		DiskPath:     ".",
 		Collector: &sequenceCollector{samples: []policy.Sample{
@@ -1010,10 +1070,16 @@ func (driver *Driver) interruptGuard() error {
 		Stderr: &bytes.Buffer{},
 	})
 
-	driver.forceStopElapsed = time.Since(started)
+	// The bound belongs to the stop, not to however long a busy host took to admit
+	// and start the child, so it is measured from the interrupt.
+	driver.forceStopElapsed = time.Since(<-interrupted)
 
 	if err != nil {
 		return err
+	}
+
+	if _, readyError := os.Stat(ready); readyError != nil {
+		return fmt.Errorf("child never installed its termination trap: %w", readyError)
 	}
 
 	delivered, readError := os.ReadFile(marker)
@@ -1026,13 +1092,30 @@ func (driver *Driver) interruptGuard() error {
 	return nil
 }
 
+// awaitMarker waits for a child readiness mark and reports when the wait ended.
+// It returns on the deadline as well, so a child that never publishes readiness
+// still reaches its own explicit assertion instead of hanging the suite.
+func awaitMarker(path string, wait time.Duration) time.Time {
+	deadline := time.Now().Add(wait)
+
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			break
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	return time.Now()
+}
+
 func (driver *Driver) requireForceStopped() error {
 	if driver.terminationSignals != 1 {
 		return fmt.Errorf("guard delivered %d termination signals, want exactly 1", driver.terminationSignals)
 	}
 
 	if driver.forceStopElapsed > 1500*time.Millisecond {
-		return fmt.Errorf("a child ignoring SIGTERM was not force-stopped: guard returned after %s", driver.forceStopElapsed)
+		return fmt.Errorf("a child ignoring SIGTERM was not force-stopped: guard returned %s after the interrupt", driver.forceStopElapsed)
 	}
 	return nil
 }
@@ -1449,7 +1532,7 @@ func (driver *Driver) runBinaryWithInput(input string, arguments ...string) {
 
 func (driver *Driver) jsonStatus() error {
 	if driver.mode == contract.E2E {
-		driver.runBinary("status", jsonFlag, "--disk-path", ".")
+		driver.runBinary(statusCommandName, jsonFlag, diskPathFlag, ".")
 
 		return nil
 	}
@@ -1462,7 +1545,7 @@ func (driver *Driver) jsonStatus() error {
 		Stderr:    &stderr,
 		Collector: collector,
 		Sleep:     func(time.Duration) {},
-	}).Run(context.Background(), []string{statusCommandName, jsonFlag, "--disk-path", "."})
+	}).Run(context.Background(), []string{statusCommandName, jsonFlag, diskPathFlag, "."})
 
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
@@ -1510,18 +1593,20 @@ func (driver *Driver) requireVersion() error {
 
 func (driver *Driver) requireStatus() error {
 	var payload struct {
-		SchemaVersion int                `json:"schemaVersion"`
-		Resource      *policy.Assessment `json:"resource"`
-		Profile       *policy.Resolution `json:"profile"`
-		Capabilities  []string           `json:"capabilities"`
+		SchemaVersion int                      `json:"schemaVersion"`
+		Resource      *policy.Assessment       `json:"resource"`
+		Profile       *policy.Resolution       `json:"profile"`
+		Capabilities  []string                 `json:"capabilities"`
+		Coordination  *guard.ReservationTotals `json:"coordination"`
 	}
 	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
 		return err
 	}
 	if driver.exitCode != 0 ||
-		payload.SchemaVersion != 3 ||
+		payload.SchemaVersion != 4 ||
 		payload.Resource == nil ||
 		payload.Profile == nil ||
+		payload.Coordination == nil || payload.Coordination.SchemaVersion != 4 ||
 		len(payload.Capabilities) == 0 {
 		return fmt.Errorf("invalid status: exit=%d payload=%+v", driver.exitCode, payload)
 	}
@@ -1546,6 +1631,36 @@ func (driver *Driver) runCLI(arguments ...string) error {
 	driver.errorOutput = stderr.String()
 
 	return err
+}
+
+func (driver *Driver) requestRuntimeFailureAndUsageError() error {
+	// An unresolvable guarded command fails only after its arguments were
+	// accepted, so it is a runtime failure and not a caller usage mistake.
+	// Cobra renders the error on the error stream and the usage block on the
+	// output stream, so both are inspected together.
+	_ = driver.runCLI(runCommandName, diskPathFlag, ".", "--", "/nonexistent/guarded-command")
+	driver.runtimeFailureOutput = driver.output + driver.errorOutput
+	driver.runtimeFailureExit = driver.exitCode
+	// Omitting the command separator is a usage mistake, which must still show
+	// the caller how the command is used.
+	_ = driver.runCLI(runCommandName)
+	driver.usageErrorOutput = driver.output + driver.errorOutput
+
+	return nil
+}
+
+func (driver *Driver) requireUsageOnlyForUsageErrors() error {
+	if driver.runtimeFailureExit == 0 {
+		return errors.New("an unresolvable guarded command exited successfully")
+	}
+	if strings.Contains(driver.runtimeFailureOutput, usageBlockMarker) {
+		return fmt.Errorf("a runtime failure printed the usage block: %q", driver.runtimeFailureOutput)
+	}
+	if !strings.Contains(driver.usageErrorOutput, usageBlockMarker) {
+		return fmt.Errorf("a usage error omitted the usage block: %q", driver.usageErrorOutput)
+	}
+
+	return nil
 }
 
 func (driver *Driver) rootHelp() error {
@@ -1817,7 +1932,7 @@ func (driver *Driver) monitorJSON() error {
 		Stdout:    stdout,
 		Stderr:    stderr,
 		Collector: collector,
-	}).Run(ctx, []string{monitorCommandName, jsonFlag, "--interval", "1ms", "--disk-path", "."})
+	}).Run(ctx, []string{monitorCommandName, jsonFlag, "--interval", "1ms", diskPathFlag, "."})
 	driver.exitCode = code
 	driver.output = stdout.String()
 	driver.errorOutput = stderr.String()
@@ -2243,7 +2358,7 @@ esac
 		return err
 	}
 
-	command := exec.Command(filepath.Join(toolRoot(), "tests", "e2e", "run.sh"))
+	command := exec.Command(filepath.Join(toolRoot(), "tests", e2eMode, "run.sh"))
 	command.Env = environmentWith(map[string]string{
 		"FAKE_GO_TEST_EXIT":     strconv.Itoa(testExit),
 		"HIPPO_E2E_TEMP_PARENT": temporaryParent,
@@ -2329,7 +2444,7 @@ func (driver *Driver) historicalGenerations() error {
 	if err := os.Mkdir(retentionLock, 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(retentionLock, "pid"), []byte("999999999\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(retentionLock, pidField), []byte("999999999\n"), 0o600); err != nil {
 		return err
 	}
 
@@ -2742,7 +2857,7 @@ func (driver *Driver) invalidExplicitConfig() {
 
 func (driver *Driver) statusWithConfig() {
 	if driver.mode == contract.E2E {
-		driver.runBinary("status", jsonFlag, "--config", driver.configPath)
+		driver.runBinary(statusCommandName, jsonFlag, configFlag, driver.configPath)
 
 		return
 	}
@@ -2754,7 +2869,7 @@ func (driver *Driver) statusWithConfig() {
 		Stderr:    &bytes.Buffer{},
 		Collector: collector,
 		Sleep:     func(time.Duration) {},
-	}).Run(context.Background(), []string{"status", jsonFlag, "--config", driver.configPath})
+	}).Run(context.Background(), []string{statusCommandName, jsonFlag, configFlag, driver.configPath})
 
 	driver.exitCode = code
 	if err != nil {

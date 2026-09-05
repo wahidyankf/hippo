@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -19,9 +21,46 @@ const (
 	coordinationModeExclusive   = "exclusive"
 	coordinationModeReservation = "reservation"
 	coordinationPollInterval    = 10 * time.Millisecond
+	coordinationLifecycleWait   = 100 * time.Millisecond
+	coordinationSelectionWait   = 500 * time.Millisecond
+	// Reading the shared root is an inspection every repository performs while
+	// its peers hold the lock for their own bounded transactions, so it waits
+	// out ordinary contention instead of reporting it as a coordination error.
+	coordinationObservationWait = 2 * time.Second
 )
 
 var errCoordinationDeferred = errors.New("shared coordination deferred admission")
+
+// ErrCoordinationCleanupDeferred reports that ownership cleanup could not take
+// the shared lock but left a reconcilable owner mark behind. The work itself
+// succeeded, so callers surface this as a note rather than a failure.
+var ErrCoordinationCleanupDeferred = errors.New("shared coordination deferred ownership cleanup")
+
+type coordinationProcessIdentity struct {
+	device uint64
+	inode  uint64
+}
+
+type coordinationProcessGate struct {
+	identity   coordinationProcessIdentity
+	available  chan struct{}
+	references int
+}
+
+var coordinationProcessGates = struct { //nolint:gochecknoglobals // Process-local flock serialization is shared by every guard entry point.
+	sync.Mutex
+
+	byIdentity map[coordinationProcessIdentity]*coordinationProcessGate
+	held       map[*os.File]*coordinationProcessGate
+}{
+	byIdentity: make(map[coordinationProcessIdentity]*coordinationProcessGate),
+	held:       make(map[*os.File]*coordinationProcessGate),
+}
+
+// IsCoordinationDeferred reports whether another compatible owner should be retried with exit 75.
+func IsCoordinationDeferred(err error) bool {
+	return errors.Is(err, errCoordinationDeferred)
+}
 
 type coordinationMarker struct {
 	SchemaVersion int    `json:"schemaVersion"`
@@ -36,15 +75,103 @@ func openCoordinationLock(root string) (*os.File, error) {
 	return os.OpenFile(filepath.Join(root, "coordination.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 }
 
+func filesystemIdentifier(value any) (uint64, error) {
+	return strconv.ParseUint(fmt.Sprint(value), 10, 64)
+}
+
+func acquireCoordinationProcessGate(ctx context.Context, lock *os.File, wait time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var info unix.Stat_t
+	if err := unix.Fstat(int(lock.Fd()), &info); err != nil {
+		return err
+	}
+	device, err := filesystemIdentifier(info.Dev)
+	if err != nil {
+		return err
+	}
+	inode, err := filesystemIdentifier(info.Ino)
+	if err != nil {
+		return err
+	}
+	identity := coordinationProcessIdentity{device: device, inode: inode}
+	coordinationProcessGates.Lock()
+	gate := coordinationProcessGates.byIdentity[identity]
+	if gate == nil {
+		gate = &coordinationProcessGate{identity: identity, available: make(chan struct{}, 1)}
+		gate.available <- struct{}{}
+		coordinationProcessGates.byIdentity[identity] = gate
+	}
+	gate.references++
+	coordinationProcessGates.Unlock()
+
+	releaseReference := func() {
+		coordinationProcessGates.Lock()
+		gate.references--
+		if gate.references == 0 {
+			delete(coordinationProcessGates.byIdentity, gate.identity)
+		}
+		coordinationProcessGates.Unlock()
+	}
+	if wait <= 0 {
+		select {
+		case <-gate.available:
+			coordinationProcessGates.Lock()
+			coordinationProcessGates.held[lock] = gate
+			coordinationProcessGates.Unlock()
+
+			return nil
+		default:
+			releaseReference()
+
+			return fmt.Errorf("%w: another admission is updating the shared root", errCoordinationDeferred)
+		}
+	}
+
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-gate.available:
+		coordinationProcessGates.Lock()
+		coordinationProcessGates.held[lock] = gate
+		coordinationProcessGates.Unlock()
+
+		return nil
+	case <-ctx.Done():
+		releaseReference()
+
+		return ctx.Err()
+	case <-timer.C:
+		releaseReference()
+
+		return fmt.Errorf("%w: another admission is updating the shared root", errCoordinationDeferred)
+	}
+}
+
+func releaseCoordinationProcessGate(lock *os.File) {
+	coordinationProcessGates.Lock()
+	gate := coordinationProcessGates.held[lock]
+	delete(coordinationProcessGates.held, lock)
+	if gate != nil {
+		gate.references--
+		gate.available <- struct{}{}
+		if gate.references == 0 {
+			delete(coordinationProcessGates.byIdentity, gate.identity)
+		}
+	}
+	coordinationProcessGates.Unlock()
+}
+
 func releaseCoordinationLock(lock *os.File) error {
 	if lock == nil {
 		return nil
 	}
+	unlockError := unix.Flock(int(lock.Fd()), unix.LOCK_UN)
+	closeError := lock.Close()
+	releaseCoordinationProcessGate(lock)
 
-	return errors.Join(
-		unix.Flock(int(lock.Fd()), unix.LOCK_UN),
-		lock.Close(),
-	)
+	return errors.Join(unlockError, closeError)
 }
 
 func acquireCoordinationLock(ctx context.Context, root string, wait time.Duration) (*os.File, error) {
@@ -54,17 +181,24 @@ func acquireCoordinationLock(ctx context.Context, root string, wait time.Duratio
 	}
 
 	deadline := time.Now().Add(wait)
+	if err = acquireCoordinationProcessGate(ctx, lock, wait); err != nil {
+		_ = lock.Close()
+
+		return nil, err
+	}
 	for {
 		err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB)
 		if err == nil {
 			return lock, nil
 		}
 		if !errors.Is(err, unix.EWOULDBLOCK) && !errors.Is(err, unix.EAGAIN) {
+			releaseCoordinationProcessGate(lock)
 			_ = lock.Close()
 
 			return nil, err
 		}
 		if wait == 0 || !time.Now().Before(deadline) {
+			releaseCoordinationProcessGate(lock)
 			_ = lock.Close()
 
 			return nil, fmt.Errorf("%w: another admission is updating the shared root", errCoordinationDeferred)
@@ -78,6 +212,7 @@ func acquireCoordinationLock(ctx context.Context, root string, wait time.Duratio
 			if !timer.Stop() {
 				<-timer.C
 			}
+			releaseCoordinationProcessGate(lock)
 			_ = lock.Close()
 
 			return nil, ctx.Err()
@@ -87,18 +222,7 @@ func acquireCoordinationLock(ctx context.Context, root string, wait time.Duratio
 }
 
 func lockCoordinationForRelease(root string) (*os.File, error) {
-	lock, err := openCoordinationLock(root)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
-		_ = lock.Close()
-
-		return nil, err
-	}
-
-	return lock, nil
+	return acquireCoordinationLock(context.Background(), root, coordinationLifecycleWait)
 }
 
 func readCoordinationMarker(root string) (coordinationMarker, bool, error) {
@@ -163,6 +287,16 @@ func readCoordinationMarker(root string) (coordinationMarker, bool, error) {
 	}
 
 	return marker, true, nil
+}
+
+// ActiveCoordinationMode returns the validated runtime marker when one exists.
+func ActiveCoordinationMode(root string) (string, bool, error) {
+	marker, present, err := readCoordinationMarker(root)
+	if err != nil || !present {
+		return "", present, err
+	}
+
+	return marker.Mode, true, nil
 }
 
 func writeCoordinationMarker(root string, marker coordinationMarker) (returnError error) {
