@@ -372,6 +372,22 @@ func awaitMarkerFile(path string, wait time.Duration) bool {
 	}
 }
 
+// awaitMarkerFileContext waits for a child-published mark until the caller's
+// deadline, so a fixture feeding a run never outlives it.
+func awaitMarkerFileContext(ctx context.Context, path string) bool {
+	for {
+		if _, statError := os.Stat(path); statError == nil {
+			return true
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
 // awaitPressureVictim keeps asking until the root gives a definite answer. Selection
 // competes with the owning guard's own bounded coordination transactions on that same
 // root, so an error here is contention rather than a verdict about the candidate.

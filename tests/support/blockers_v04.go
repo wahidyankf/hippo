@@ -597,7 +597,9 @@ func main() {
 	done := make(chan result, 1)
 	go func() {
 		code, runError := guard.Run(ctx, guard.RunConfig{
-			Command: shellPath, Arguments: []string{"-c", `printf '%s' "$$" > "$CHILD_PID"; trap '' TERM; while :; do sleep 0.01; done`},
+			// Install the trap before publishing the marker, so readiness means the
+			// child already ignores TERM and only the bounded KILL can stop it.
+			Command: shellPath, Arguments: []string{"-c", `trap '' TERM; printf '%s' "$$" > "$CHILD_PID"; while :; do sleep 0.01; done`},
 			TaskClass: policy.TaskEphemeral, Environment: append(os.Environ(), "CHILD_PID="+marker), EvidenceRoot: root,
 			Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now()), healthySample(time.Now()), healthySample(time.Now())}},
 			Policy:    settings, Resolution: policy.Resolution{RequestedProfile: profileBalanced, ResolvedProfile: profileBalanced, Concurrency: 1},

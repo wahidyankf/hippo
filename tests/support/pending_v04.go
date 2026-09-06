@@ -800,7 +800,8 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	}
 	driver.temporaryPaths = append(driver.temporaryPaths, root)
 	resultPath := filepath.Join(root, "result")
-	childScript := "value=; while [ -z \"$value\" ]; do IFS= read -r value || :; done; printf '%s' \"$value\" > \"$HIPPO_PTY_RESULT\""
+	readyPath := filepath.Join(root, "ready")
+	childScript := "printf ready > \"$HIPPO_PTY_READY\"; value=; while [ -z \"$value\" ]; do IFS= read -r value || :; done; printf '%s' \"$value\" > \"$HIPPO_PTY_RESULT\""
 	arguments, err := v04ScriptArguments(
 		driver.binary,
 		"run", "--class", "ephemeral", "--", shellPath, "-c", childScript,
@@ -811,7 +812,7 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, scriptPath, arguments...)
-	command.Env = append(os.Environ(), "HIPPO_ROOT="+root, "HIPPO_PTY_RESULT="+resultPath)
+	command.Env = append(os.Environ(), "HIPPO_ROOT="+root, "HIPPO_PTY_RESULT="+resultPath, "HIPPO_PTY_READY="+readyPath)
 	reader, writer, err := os.Pipe()
 	if err != nil {
 		return err
@@ -819,13 +820,40 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	defer func() { _ = reader.Close() }()
 	command.Stdin = reader
 	go func() {
-		time.Sleep(4 * time.Second)
+		// Synchronise on the child rather than on the clock. A constant cannot
+		// promise the compiled binary has launched, cleared admission, and reached
+		// its read, and the child's loop treats a failed read as "keep waiting", so
+		// any EOF that lands before the first read spins until the deadline. The
+		// in-process sibling of this scenario already publishes HIPPO_PTY_READY for
+		// exactly this reason. Holding the terminal open until the result is
+		// recorded keeps EOF strictly behind the read it must follow.
+		//
+		// This removes an unsynchronised fixture, which is a defect on its own
+		// terms. It is not a proven fix for the one CI timeout seen on macOS: that
+		// failure did not reproduce locally (0/30 at load 16), and its captured echo
+		// showed the input had been delivered, so its mechanism is still unknown.
+		defer func() { _ = writer.Close() }()
+		if !awaitMarkerFileContext(ctx, readyPath) {
+			return
+		}
 		_, _ = writer.WriteString("compiled-terminal-input\n")
-		_ = writer.Close()
+		_ = awaitMarkerFileContext(ctx, resultPath)
 	}()
+	started := time.Now()
 	output, runError := command.CombinedOutput()
 	if ctx.Err() != nil {
-		return fmt.Errorf("compiled PTY child timed out, consistent with SIGTTIN: %s", output)
+		// Name what was actually observed rather than guessing at a cause. The one
+		// CI occurrence of this timeout blamed SIGTTIN while its own captured echo
+		// showed the input had been delivered, which sent the investigation the
+		// wrong way; readiness and result state distinguish a child that never
+		// started from one that started and never read.
+		_, readyErr := os.Stat(readyPath)
+		_, resultErr := os.Stat(resultPath)
+
+		return fmt.Errorf(
+			"compiled PTY child did not finish within %s: child signalled readiness=%t, wrote a result=%t: %s",
+			time.Since(started).Round(time.Millisecond), readyErr == nil, resultErr == nil, output,
+		)
 	}
 	if runError != nil {
 		return fmt.Errorf("compiled PTY guard failed: %s: %w", output, runError)

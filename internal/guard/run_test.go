@@ -217,7 +217,12 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	done := make(chan runResult, 1)
 	go func() {
 		code, runError := Run(ctx, RunConfig{
-			Command: "/bin/sh", Arguments: []string{"-c", `printf '%s' "$$" > "$CHILD_PID"; trap '' TERM; while :; do sleep 0.01; done`},
+			// The marker is the only readiness signal the test waits on, so the trap
+			// must be installed before it is published. Published first, a child that
+			// stalls between the two statements takes the guard's TERM while that
+			// signal still kills it, and a correct bounded force-stop is reported as
+			// exit 143 instead of the 137 this scenario requires.
+			Command: "/bin/sh", Arguments: []string{"-c", `trap '' TERM; printf '%s' "$$" > "$CHILD_PID"; while :; do sleep 0.01; done`},
 			TaskClass: policy.TaskEphemeral, Environment: append(os.Environ(), "CHILD_PID="+marker), EvidenceRoot: root,
 			Collector: &controlledRunCollector{}, Policy: settings,
 			Resolution: policy.Resolution{RequestedProfile: "balanced", ResolvedProfile: "balanced", Concurrency: 1},
@@ -230,7 +235,11 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 		done <- runResult{code: code, err: runError}
 	}()
 
-	deadline := time.Now().Add(time.Second)
+	// These bounds are liveness maxima, not the property under test. A loaded host
+	// routinely needs more than a second to launch the child, clear admission, and
+	// publish the ledger, and a bound below that jitter reports a correct guard as
+	// broken. A healthy run never spends them.
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := os.Stat(marker); err == nil {
 			break
@@ -243,7 +252,7 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	ledgerPath := reservationLedgerPath(root)
 	var before []byte
 	var ledger reservationLedger
-	deadline = time.Now().Add(time.Second)
+	deadline = time.Now().Add(10 * time.Second)
 	for {
 		before, _ = os.ReadFile(ledgerPath)
 		if json.Unmarshal(before, &ledger) == nil && len(ledger.Owners) == 1 && ledger.Owners[0].ProcessGroup > 0 {
@@ -260,7 +269,7 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	}
 	assertReservationIdentityExternallyLocked(t, identityPath)
 
-	coordination, err := acquireCoordinationLock(context.Background(), root, time.Second)
+	coordination, err := acquireCoordinationLock(context.Background(), root, 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +281,12 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 			_ = releaseCoordinationLock(coordination)
 			t.Fatal(outcomeError)
 		}
-	case <-time.After(time.Second):
+	// The property is that cancellation returns at all while this test holds the
+	// coordination lock; an owner that waited on that lock would wait for the whole
+	// test, so a generous bound still proves it. The guard must deliver TERM, spend
+	// the 200 ms termination grace, force-stop, and reap before it returns, and
+	// under load that sequence outlasts one second.
+	case <-time.After(15 * time.Second):
 		_ = releaseCoordinationLock(coordination)
 		t.Fatal("owner cancellation blocked on same-process coordination")
 	}
@@ -330,7 +344,9 @@ func TestCompiledGuardHelper(t *testing.T) {
 		Requested: ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 	}
 	config := RunConfig{
-		Command: "/bin/sh", Arguments: []string{"-c", `printf '%s' "$$" > "$LONG_CHILD_PID"; trap '' TERM; while :; do sleep 0.05; done`},
+		// Install the trap before publishing the marker, so readiness means the
+		// child already ignores TERM and only the bounded KILL can stop it.
+		Command: "/bin/sh", Arguments: []string{"-c", `trap '' TERM; printf '%s' "$$" > "$LONG_CHILD_PID"; while :; do sleep 0.05; done`},
 		TaskClass: policy.TaskEphemeral, EvidenceRoot: os.Getenv("HIPPO_COMPILED_GUARD_ROOT"),
 		Environment: os.Environ(), Collector: &controlledRunCollector{}, Policy: policyValue,
 		Resolution:        policy.Resolution{RequestedProfile: "minimal", ResolvedProfile: "minimal", Concurrency: 1},
