@@ -275,6 +275,17 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 		case <-ctx.Done():
 			return 0, nil
 		case <-ticker.C:
+			// Cancellation and a tick routinely become ready together, because the
+			// interval is short and a loaded host leaves this loop unscheduled across
+			// both. Go then selects uniformly, and servicing the tick collects through
+			// an already-cancelled context, which turns a deliberate stop into a
+			// monitoring failure. Stopping is what the caller asked for, so it wins.
+			select {
+			case <-ctx.Done():
+				return 0, nil
+			default:
+			}
+
 			if err := observe(); err != nil {
 				return 1, err
 			}

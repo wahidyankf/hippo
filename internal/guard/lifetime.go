@@ -20,6 +20,7 @@ const (
 	lifetimeLauncherEnvironment   = "HIPPO_INTERNAL_LIFETIME_LAUNCHER"
 	lifetimeCapabilityEnvironment = "HIPPO_INTERNAL_LIFETIME_CAPABILITY"
 	lifetimeHandshakeTimeout      = 5 * time.Second
+	handshakeDrainGrace           = 250 * time.Millisecond
 	lifetimeGroupPollInterval     = 10 * time.Millisecond
 )
 
@@ -98,13 +99,37 @@ func awaitLifetimeHandshake(ctx context.Context, report io.Reader, timeout time.
 	}()
 	timer := time.NewTimer(max(timeout, time.Millisecond))
 	defer timer.Stop()
+	// A report that has already arrived is the truth about activation even when the
+	// caller cancels or the deadline expires in the same instant. Go selects
+	// uniformly among ready cases, and a loaded host routinely leaves this
+	// goroutine unscheduled long enough for both to become ready, so reading the
+	// report only through a peer case would report a launcher that did activate its
+	// payload as one that never confirmed. A caller interrupting a healthy start
+	// would then see a supervision fault instead of its own cancellation.
 	select {
-	case <-ctx.Done():
-		return lifetimeHandshake{}, ctx.Err()
-	case <-timer.C:
-		return lifetimeHandshake{}, errLifetimeHandshakeDeadline
 	case outcome := <-decoded:
 		return outcome.handshake, outcome.err
+	case <-ctx.Done():
+		// The launcher writes its report before the payload runs, so a cancellation
+		// that arrives once the payload is alive usually races a report that is
+		// already written and merely undecoded. Declaring non-confirmation there
+		// would blame the launcher for the caller's own interrupt and abandon a
+		// started payload, so give the in-flight report a bounded chance to land.
+		select {
+		case outcome := <-decoded:
+			return outcome.handshake, outcome.err
+		case <-time.After(handshakeDrainGrace):
+		}
+
+		return lifetimeHandshake{}, ctx.Err()
+	case <-timer.C:
+		select {
+		case outcome := <-decoded:
+			return outcome.handshake, outcome.err
+		default:
+		}
+
+		return lifetimeHandshake{}, errLifetimeHandshakeDeadline
 	}
 }
 

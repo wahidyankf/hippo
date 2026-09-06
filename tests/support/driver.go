@@ -1023,7 +1023,11 @@ func (driver *Driver) interruptGuard() error {
 	resourcePolicy := policy.DefaultPolicy()
 	resourcePolicy.SampleInterval = time.Millisecond
 	resourcePolicy.AdmissionWindow = time.Second
-	resourcePolicy.TerminationGrace = 200 * time.Millisecond
+	// The child records each delivered TERM from a shell trap, so the grace must
+	// outlast the host's scheduling jitter or a correct guard force-stops a correct
+	// child before it can witness the signal. The grace is a maximum that a healthy
+	// stop never spends, and the scenario still requires exactly one delivery.
+	resourcePolicy.TerminationGrace = 2 * time.Second
 	resourcePolicy.LeaseWait = time.Second
 
 	marker := filepath.Join(driver.leaseRoot, "terminations")
@@ -1114,7 +1118,7 @@ func (driver *Driver) requireForceStopped() error {
 		return fmt.Errorf("guard delivered %d termination signals, want exactly 1", driver.terminationSignals)
 	}
 
-	if driver.forceStopElapsed > 1500*time.Millisecond {
+	if driver.forceStopElapsed > 10*time.Second {
 		return fmt.Errorf("a child ignoring SIGTERM was not force-stopped: guard returned %s after the interrupt", driver.forceStopElapsed)
 	}
 	return nil

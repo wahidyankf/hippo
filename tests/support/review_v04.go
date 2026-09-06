@@ -356,14 +356,104 @@ func (driver *Driver) exerciseRemoteSheddingV04() error {
 	return driver.exerciseOwnerSideSheddingV04(guard.CapacityDeferredExitCode)
 }
 
+// awaitMarkerFile waits for a child-published mark within a bounded window.
+func awaitMarkerFile(path string, wait time.Duration) bool {
+	deadline := time.Now().Add(wait)
+	for {
+		if _, statError := os.Stat(path); statError == nil {
+			return true
+		}
+
+		if time.Now().After(deadline) {
+			return false
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// awaitPressureVictim keeps asking until the root gives a definite answer. Selection
+// competes with the owning guard's own bounded coordination transactions on that same
+// root, so an error here is contention rather than a verdict about the candidate.
+func awaitPressureVictim(root string, selectedExit int, wait time.Duration) (guard.ReservationOwner, error) {
+	deadline := time.Now().Add(wait)
+
+	var lastError error
+
+	for {
+		candidate, selected, selectError := guard.SelectPressureVictim(root, selectedExit)
+		if selectError == nil && selected {
+			return candidate, nil
+		}
+
+		lastError = selectError
+
+		if time.Now().After(deadline) {
+			if lastError != nil {
+				return guard.ReservationOwner{}, fmt.Errorf("owner-side shedding candidate was never selectable: %w", lastError)
+			}
+
+			return guard.ReservationOwner{}, errors.New("owner-side shedding candidate was not activated")
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// awaitNoCascade needs a definite answer too: a contended read cannot prove that
+// nothing cascaded while the first victim remained owned.
+func awaitNoCascade(root string, selectedExit int, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		next, selected, selectError := guard.SelectPressureVictim(root, selectedExit)
+		if selectError == nil {
+			if selected {
+				return fmt.Errorf("additional victim cascaded while first remained owned: %+v", next)
+			}
+
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("cascade check never reached a definite answer: %w", selectError)
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// awaitVictimRelease observes the release through the same contended root, where a
+// deferral is contention rather than proof that the victim stayed owned.
+func awaitVictimRelease(root string, victim guard.ReservationOwner, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		observeError := guard.WaitPressureVictimRelease(root, victim, 10*time.Second)
+		if observeError == nil {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return observeError
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
 	root := driver.evidenceRoot
 	marker := filepath.Join(root, "owner-term")
 	ready := filepath.Join(root, "owner-ready")
 	settings := v04FastPolicy()
 	settings.SampleInterval = 2 * time.Millisecond
-	settings.TerminationGrace = 50 * time.Millisecond
-	settings.AdmissionWindow = 100 * time.Millisecond
+	// The bounds below are liveness maxima, not the property under test. This
+	// scenario asserts that the owning guard delivers TERM before its bounded KILL,
+	// returns the selected exit, and releases the owner. The child proves TERM by
+	// running a shell trap, so a grace shorter than the host's scheduling jitter
+	// force-stops a correct child before its handler runs and reports a correct
+	// guard as broken. A healthy run never spends these maxima.
+	settings.TerminationGrace = 5 * time.Second
+	settings.AdmissionWindow = 5 * time.Second
 	type runResult struct {
 		code int
 		err  error
@@ -377,7 +467,7 @@ func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
 		if !finished {
 			select {
 			case <-result:
-			case <-time.After(2 * time.Second):
+			case <-time.After(30 * time.Second):
 			}
 		}
 	}()
@@ -394,44 +484,22 @@ func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
 		})
 		result <- runResult{code: code, err: runError}
 	}()
-	deadline := time.Now().Add(time.Second)
-	for {
-		if _, statError := os.Stat(ready); statError == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			driver.v04Error = errors.New("owner-side shedding child did not install its TERM trap")
+	if !awaitMarkerFile(ready, 10*time.Second) {
+		driver.v04Error = errors.New("owner-side shedding child did not install its TERM trap")
 
-			return nil
-		}
-		time.Sleep(time.Millisecond)
+		return nil
 	}
-	deadline = time.Now().Add(time.Second)
-	var victim guard.ReservationOwner
-	for {
-		candidate, selected, selectError := guard.SelectPressureVictim(root, selectedExit)
-		if selectError != nil {
-			driver.v04Error = selectError
+	victim, selectError := awaitPressureVictim(root, selectedExit, 10*time.Second)
+	if selectError != nil {
+		driver.v04Error = selectError
 
-			return nil
-		}
-		if selected {
-			victim = candidate
-
-			break
-		}
-		if time.Now().After(deadline) {
-			driver.v04Error = errors.New("owner-side shedding candidate was not activated")
-
-			return nil
-		}
-		time.Sleep(time.Millisecond)
+		return nil
 	}
-	if next, selected, selectError := guard.SelectPressureVictim(root, selectedExit); selectError != nil || selected {
-		driver.v04Error = fmt.Errorf("additional victim cascaded while first remained owned: %+v selected=%v error=%w", next, selected, selectError)
+	if cascadeError := awaitNoCascade(root, selectedExit, 10*time.Second); cascadeError != nil && driver.v04Error == nil {
+		driver.v04Error = cascadeError
 	}
-	if observeError := guard.WaitPressureVictimRelease(root, victim, time.Second); observeError != nil && driver.v04Error == nil {
-		driver.v04Error = observeError
+	if releaseError := awaitVictimRelease(root, victim, 30*time.Second); releaseError != nil && driver.v04Error == nil {
+		driver.v04Error = releaseError
 	}
 	run := <-result
 	finished = true

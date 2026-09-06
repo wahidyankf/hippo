@@ -370,6 +370,29 @@ func TestAwaitLifetimeHandshakeIsBounded(t *testing.T) {
 	}
 }
 
+func TestAwaitLifetimeHandshakeHonoursAReportThatRacesCancellation(t *testing.T) {
+	// The launcher reports activation before the payload runs, so a caller that
+	// interrupts once its payload is alive routinely cancels while that report is
+	// written but not yet decoded. Treating the cancellation as the answer blames
+	// the launcher for the caller's own interrupt and abandons a started payload,
+	// and because a ready peer case is selected uniformly it did so intermittently
+	// rather than never. An already-delivered report is the truth about activation.
+	report := `{"processGroup":4242}` + "\n"
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for attempt := range 50 {
+		handshake, err := awaitLifetimeHandshake(ctx, strings.NewReader(report), time.Second)
+		if err != nil {
+			t.Fatalf("attempt %d reported %v for a report that had already been written", attempt, err)
+		}
+
+		if handshake.ProcessGroup != 4242 {
+			t.Fatalf("attempt %d decoded process group %d, want 4242", attempt, handshake.ProcessGroup)
+		}
+	}
+}
+
 func TestStalledLifetimeHandshakeRetainsOwnershipUntilLauncherExit(t *testing.T) {
 	root := t.TempDir()
 	reservationRoot := filepath.Join(root, "reservation")
