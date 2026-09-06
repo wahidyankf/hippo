@@ -662,7 +662,14 @@ func (driver *Driver) requireCompiledConfigurationV04(root string) error {
 	if driver.binary == "" {
 		return errors.New("HIPPO_BIN is required for compiled configuration conformance")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// A liveness maximum for a real compiled run, not the property under test. The
+	// guarded binary samples the host and clears admission before it launches
+	// anything, and deferring under pressure is what it is for: a trivial "exit 0"
+	// payload measured 2.2 s idle and 17.0 s under a load of 16 on the same
+	// machine. A 15 s ceiling killed the binary mid-admission and reported the
+	// product as broken, which is how both macos-15 e2e timeouts happened. A
+	// healthy run spends a couple of seconds of this.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	for _, testCase := range []struct {
 		name, document, mode string
@@ -706,7 +713,14 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 	}
 	sharedRoot := filepath.Join(root, "shared")
 	environment := append(os.Environ(), "HIPPO_ROOT="+sharedRoot)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// A liveness maximum for a real compiled run, not the property under test. The
+	// guarded binary samples the host and clears admission before it launches
+	// anything, and deferring under pressure is what it is for: a trivial "exit 0"
+	// payload measured 2.2 s idle and 17.0 s under a load of 16 on the same
+	// machine. A 15 s ceiling killed the binary mid-admission and reported the
+	// product as broken, which is how both macos-15 e2e timeouts happened. A
+	// healthy run spends a couple of seconds of this.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	run := exec.CommandContext(
 		ctx, driver.binary, "run", configFlag, configPath,
@@ -809,7 +823,14 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// A liveness maximum for a real compiled run, not the property under test. The
+	// guarded binary samples the host and clears admission before it launches
+	// anything, and deferring under pressure is what it is for: a trivial "exit 0"
+	// payload measured 2.2 s idle and 17.0 s under a load of 16 on the same
+	// machine. A 15 s ceiling killed the binary mid-admission and reported the
+	// product as broken, which is how both macos-15 e2e timeouts happened. A
+	// healthy run spends a couple of seconds of this.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, scriptPath, arguments...)
 	command.Env = append(os.Environ(), "HIPPO_ROOT="+root, "HIPPO_PTY_RESULT="+resultPath, "HIPPO_PTY_READY="+readyPath)
