@@ -17,6 +17,29 @@ import (
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
+// retryDeferred repeats an operation until the shared root gives a definite
+// answer. A deferral means another admission holds that root for its own bounded
+// transaction: it is contention, not a verdict about this caller, and on a
+// contended host it is routine rather than exceptional. Reading one as a failure
+// is the single mistake every HIPPO consumer has made, and these tests were
+// making it too. It returns the last error rather than failing the test, because
+// it is called from goroutines where t.Fatalf is not allowed.
+func retryDeferred(attempt func() error) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		err := attempt()
+		if err == nil || !guard.IsCoordinationDeferred(err) {
+			return err
+		}
+
+		if time.Now().After(deadline) {
+			return err
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func integrationReservationPlan(cpu int, memory int64) guard.ReservationPlan {
 	vector := guard.ReservationVector{CPU: cpu, MemoryBytes: memory}
 
@@ -202,10 +225,15 @@ func TestConcurrentVictimSelectionAndReleaseKeepsLedgerConsistent(t *testing.T) 
 		errorsFound := make(chan error, 2)
 		var group sync.WaitGroup
 		group.Go(func() {
-			_, _, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
-			errorsFound <- selectionError
+			errorsFound <- retryDeferred(func() error {
+				_, _, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+
+				return selectionError
+			})
 		})
-		group.Go(func() { errorsFound <- guard.ReleaseReservation(root, ephemeral) })
+		group.Go(func() {
+			errorsFound <- retryDeferred(func() error { return guard.ReleaseReservation(root, ephemeral) })
+		})
 		group.Wait()
 		close(errorsFound)
 		for operationError := range errorsFound {
@@ -259,7 +287,17 @@ func TestConcurrentVictimSelectorsCannotCascadeBeforeOwnedRelease(t *testing.T) 
 		for range selectors {
 			group.Go(func() {
 				<-start
-				victim, selected, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+
+				var victim guard.ReservationOwner
+
+				var selected bool
+
+				selectionError := retryDeferred(func() error {
+					candidate, chose, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+					victim, selected = candidate, chose
+
+					return err
+				})
 				results <- selectionResult{victim: victim, selected: selected}
 				errorsFound <- selectionError
 			})

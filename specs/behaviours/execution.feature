@@ -110,3 +110,21 @@ Feature: Guarded process execution
     Given an admitted degraded ephemeral child encounters growing compressor pressure
     When the guard observes warning through the grace
     Then the degraded child starts and is terminated with exit 75
+
+  @e2e-exempt
+  Scenario: A caller that waits for admission rides out a deferral
+    Given a shared root that defers one owner before capacity frees
+    When that owner runs with a budget to wait for admission
+    Then it retries the deferral and reports the admitted child's own exit code
+
+  @e2e-exempt
+  Scenario: Waiting for admission still surrenders when the budget is spent
+    Given a shared root whose capacity never frees
+    When an owner waits for admission within a bounded budget
+    Then it stops retrying and reports the deferral as exit 75
+
+  @e2e-exempt
+  Scenario: Waiting for admission never retries a decision that is not a deferral
+    Given a shared root that admits an owner whose child fails
+    When that owner runs with a budget to wait for admission
+    Then the child runs once and its failing exit code is reported unchanged

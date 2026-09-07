@@ -206,7 +206,7 @@ func (driver *Driver) requestLooserOwnerLimitV04() error {
 		strictResult <- strict
 		strictErrors <- strictError
 	}()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		totals, statusError := guard.ReservationStatus(context.Background(), root)
 		if statusError == nil && totals.WaitingOwners == 1 {
@@ -280,7 +280,7 @@ func requireV04ActiveEpochCapacity(root string) error { //nolint:cyclop,gocognit
 			waiterResult <- waiter
 			waiterErrors <- waiterError
 		}()
-		deadline := time.Now().Add(time.Second)
+		deadline := time.Now().Add(fixtureLivenessWait)
 		for {
 			totals, statusError := guard.ReservationStatus(context.Background(), caseRoot)
 			if statusError == nil && totals.WaitingOwners == 1 {
@@ -630,7 +630,7 @@ func (driver *Driver) exerciseUnresponsiveRemoteOwnerV04() error {
 		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 		select {
 		case <-exited:
-		case <-time.After(time.Second):
+		case <-time.After(fixtureLivenessWait):
 		}
 	}()
 	if err = guard.ActivateReservation(root, session, command.Process.Pid); err != nil {
@@ -736,15 +736,8 @@ func initializeReviewCheckout(path string) error {
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return err
 	}
-	for _, arguments := range [][]string{
-		{"init", "-q"},
-		{"-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "--allow-empty", "-m", fixtureOwner},
-	} {
-		command := exec.Command("git", arguments...)
-		command.Dir = path
-		if output, err := command.CombinedOutput(); err != nil {
-			return fmt.Errorf("initialize checkout: %s: %w", output, err)
-		}
+	if err := initializeFixtureCheckout(path); err != nil {
+		return fmt.Errorf("create review checkout: %w", err)
 	}
 
 	return nil

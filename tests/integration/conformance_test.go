@@ -352,7 +352,7 @@ func TestCompiledConformanceSignalCleansDescendantsAndReconciles(t *testing.T) {
 		_ = command.Process.Kill()
 		t.Fatal("compiled cancellation was not bounded")
 	}
-	deadline = time.Now().Add(time.Second)
+	deadline = time.Now().Add(30 * time.Second)
 	for {
 		err := syscall.Kill(childPID, 0)
 		if errors.Is(err, syscall.ESRCH) {

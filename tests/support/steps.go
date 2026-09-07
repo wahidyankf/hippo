@@ -2,6 +2,7 @@ package support
 
 import (
 	"slices"
+	"time"
 
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -413,6 +414,19 @@ func (driver *Driver) conformanceBindings() []contract.StepBinding { //nolint:fu
 		}),
 		step(`^conformance classifies the joined coordination outcome$`, driver.exerciseReservationScenarioV04),
 		step(`^the integrity failure remains fatal and private instead of being skipped$`, assert("capacity skip integrity")),
+		step(`^a consumer whose declared probe waits for capacity to free$`, func() error {
+			return driver.declareDeferralProbe(probeWaitsForCapacity)
+		}),
+		step(`^a consumer whose declared probe treats exit 75 as final$`, func() error {
+			return driver.declareDeferralProbe(probeTreatsDeferralAsFinal)
+		}),
+		step(`^a consumer whose declared probe never consults HIPPO$`, func() error {
+			return driver.declareDeferralProbe(probeNeverConsultsHIPPO)
+		}),
+		step(`^conformance saturates that consumer's probe root before running it$`, driver.runDeferralProbeConformance),
+		step(`^the consumer is accepted for having retried instead of surrendering$`, driver.requireDeferralProbeAccepted),
+		step(`^conformance rejects it rather than trusting any later overlap result$`, driver.requireDeferralProbeRejectedForSurrender),
+		step(`^conformance rejects it for returning before capacity could free$`, driver.requireDeferralProbeRejectedForFinishingEarly),
 		step(`^a manifest whose HIPPO binary identity is a FIFO$`, prepare("conformance binary FIFO", requireV04ConformanceBinaryFIFO)),
 		step(`^conformance validates the binary identity$`, driver.exerciseReservationScenarioV04),
 		step(`^validation rejects the special file without blocking or exposing its path$`, assert("conformance binary FIFO")),
@@ -479,6 +493,27 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^every compatibility task class requests a guarded session$`, driver.requestEveryCompatibilityClass),
 		step(`^every compatibility owner is deferred with exit 75$`, driver.requireEveryCoordinationOwnerDeferred),
 		step(`^the reservation coordination marker remains unchanged$`, driver.requireReservationCoordinationUnchanged),
+		step(`^a reservation whose guard is gone while its process group still runs$`, func() error {
+			return driver.abandonOwner(true)
+		}),
+		step(`^a reservation whose guard and process group are both gone$`, func() error {
+			return driver.abandonOwner(false)
+		}),
+		step(`^reservation status reads that coordination root$`, driver.readAbandonedOwnerStatus),
+		step(`^it reclaims the capacity and names the abandoned process group$`, driver.requireAbandonedGroupNamed),
+		step(`^it reclaims the capacity and names no abandoned process group$`, driver.requireNoAbandonedGroupNamed),
+		step(`^a shared root that defers one owner before capacity frees$`, driver.deferringRootFreeingCapacity),
+		step(`^that owner runs with a budget to wait for admission$`, func() error {
+			return driver.runWaitingForAdmission(30*time.Second, 3)
+		}),
+		step(`^it retries the deferral and reports the admitted child's own exit code$`, driver.requireRetriedThenAdmitted),
+		step(`^a shared root whose capacity never frees$`, driver.permanentlyDeferringRoot),
+		step(`^an owner waits for admission within a bounded budget$`, func() error {
+			return driver.runWaitingForAdmission(time.Second, 3)
+		}),
+		step(`^it stops retrying and reports the deferral as exit 75$`, driver.requireDeferralSurvivesTheBudget),
+		step(`^a shared root that admits an owner whose child fails$`, driver.admittingRootWithFailingChild),
+		step(`^the child runs once and its failing exit code is reported unchanged$`, driver.requireFailingChildReportedUnchanged),
 		step(`^another live process owns the heavy lease$`, driver.liveLease),
 		step(`^a second owner waits for the lease$`, driver.waitLease),
 		step(`^the second owner is deferred with exit 75$`, driver.requireDeferred),

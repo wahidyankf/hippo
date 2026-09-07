@@ -474,3 +474,15 @@ Feature: Shared vector reservations
     Given two parallel reserved guards and concurrently finalized evidence entries
     When their evidence cleanup snapshots race with entry disappearance
     Then both commands complete without retry and their observed evidence remains
+
+  @e2e-exempt
+  Scenario: Status names a payload left running by a guard that died
+    Given a reservation whose guard is gone while its process group still runs
+    When reservation status reads that coordination root
+    Then it reclaims the capacity and names the abandoned process group
+
+  @e2e-exempt
+  Scenario: Status stays quiet about a payload that died with its guard
+    Given a reservation whose guard and process group are both gone
+    When reservation status reads that coordination root
+    Then it reclaims the capacity and names no abandoned process group

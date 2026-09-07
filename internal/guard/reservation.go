@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -107,6 +108,48 @@ type ReservationTotals struct {
 	Ephemeral     int               `json:"ephemeral"`
 	Service       int               `json:"service"`
 	Transactional int               `json:"transactional"`
+	// AbandonedProcessGroups names payloads still running under a guard that died.
+	AbandonedProcessGroups []int `json:"abandonedProcessGroups,omitempty"`
+}
+
+// abandonedProcessGroups reports process groups whose owning guard is gone while
+// the group itself is still running.
+//
+// Reservation accounting already heals here: owner liveness is an flock the
+// kernel drops when the guard dies, so the capacity is reclaimed either way. What
+// is not reclaimed is the payload. A guard killed outright cannot reap the child
+// it launched, and that child keeps its share of the host indefinitely, which is
+// the one way work escapes coordination entirely.
+//
+// This reports and never signals. The record holds a bare process group with no
+// start-time identity, so a group the kernel has since recycled would name an
+// unrelated process, and killing that is far worse than leaking the original. The
+// caller can confirm the group and decide; HIPPO will not guess.
+func abandonedProcessGroups(root string, ledger reservationLedger) ([]int, error) {
+	groups := make([]int, 0, len(ledger.Owners))
+	for _, owner := range ledger.Owners {
+		if owner.ProcessGroup <= 0 {
+			continue
+		}
+
+		alive, err := reservationIdentityAlive(root, owner.Token, owner.IdentityDevice, owner.IdentityInode)
+		if err != nil {
+			return nil, err
+		}
+
+		if alive {
+			continue
+		}
+
+		signalError := syscall.Kill(-owner.ProcessGroup, 0)
+		if signalError == nil || errors.Is(signalError, syscall.EPERM) {
+			groups = append(groups, owner.ProcessGroup)
+		}
+	}
+
+	slices.Sort(groups)
+
+	return slices.Compact(groups), nil
 }
 
 func ceilDivide(value int64, divisor int) int64 {
@@ -1198,9 +1241,16 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 	if err != nil {
 		return ReservationTotals{}, err
 	}
+	// Read the abandoned groups before reconciliation, which is what drops the
+	// stale records and with them the only handle on the orphaned payload.
+	abandoned, err := abandonedProcessGroups(root, ledger)
+	if err != nil {
+		return ReservationTotals{}, err
+	}
 	if err = reconcileReservationLedger(root, &ledger); err != nil {
 		return ReservationTotals{}, err
 	}
+	totals.AbandonedProcessGroups = abandoned
 	totals.Capacity = ledger.Capacity
 	totals.ActiveOwners = len(ledger.Owners)
 	totals.WaitingOwners = len(ledger.Waiters)

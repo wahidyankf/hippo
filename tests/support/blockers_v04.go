@@ -26,6 +26,13 @@ import (
 	"golang.org/x/sys/unix" //nolint:depguard // Cross-process flock fixtures must exercise the production kernel primitive.
 )
 
+// fixtureLivenessWait bounds how long a fixture waits for something to actually
+// happen: a child to start, a waiter to enqueue, ownership to retire. These are
+// liveness maxima, not the property under test, and a healthy run never spends
+// them. One second is an idle-machine assumption, and under real contention it
+// reports a correct product as broken.
+const fixtureLivenessWait = 30 * time.Second
+
 func requireV04UnknownIdentityError(root string) error {
 	session, err := guard.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
@@ -295,7 +302,7 @@ func requireV04WaiterAggregateOverflow(root string) error {
 			results <- acquireError
 		}()
 	}
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		data, readError := os.ReadFile(filepath.Join(root, "reservations.json"))
 		if readError == nil && bytes.Count(data, []byte(`"profile":"balanced"`)) >= 3 {
@@ -608,7 +615,7 @@ func main() {
 		})
 		done <- result{code: code, err: runError}
 	}()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		if _, statError := os.Stat(marker); statError == nil {
 			break
@@ -627,7 +634,7 @@ func main() {
 			ProcessGroup int    `json:"processGroup"`
 		} `json:"owners"`
 	}
-	deadline = time.Now().Add(time.Second)
+	deadline = time.Now().Add(fixtureLivenessWait)
 	for {
 		before, err = os.ReadFile(ledgerPath)
 		if err == nil && json.Unmarshal(before, &ledger) == nil && len(ledger.Owners) == 1 && ledger.Owners[0].ProcessGroup > 0 {
@@ -652,7 +659,7 @@ func main() {
 
 			return fmt.Errorf("owner cancellation exceeded bounded release: %s", elapsed)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(fixtureLivenessWait):
 		_ = releaseHeldCoordination(lock)
 		<-done
 
@@ -677,7 +684,7 @@ func main() {
 	if err = releaseHeldCoordination(lock); err != nil {
 		return err
 	}
-	deadline = time.Now().Add(time.Second)
+	deadline = time.Now().Add(fixtureLivenessWait)
 	for {
 		totals, statusError := guard.ReservationStatus(context.Background(), root)
 		if statusError == nil && totals.ActiveOwners == 0 {
@@ -724,7 +731,7 @@ func requireV04CancelledWaiterCleanup(root string) error {
 		result <- acquireError
 	}()
 	ledgerPath := filepath.Join(root, "reservations.json")
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		data, readError := os.ReadFile(ledgerPath)
 		if readError == nil && bytes.Contains(data, []byte(`"waiters":[{"token"`)) {
@@ -806,7 +813,7 @@ func requireV04FailedCancelledWaiterCleanup(root string) error { //nolint:cyclop
 	type ledgerRecord struct {
 		Waiters []waiterRecord `json:"waiters"`
 	}
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	var before []byte
 	var ledger ledgerRecord
 	for {
@@ -994,7 +1001,7 @@ func requireV04SupervisorDeathOwnership(root string) error {
 	if err = syscall.Kill(-childPID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
-	deadline = time.Now().Add(time.Second)
+	deadline = time.Now().Add(fixtureLivenessWait)
 	for {
 		totals, statusError = guard.ReservationStatus(context.Background(), sharedRoot)
 		if statusError == nil && totals.ActiveOwners == 0 {
@@ -1464,7 +1471,7 @@ func requireV04ShortOverlapPeak(root string) error {
 		})
 		done <- result{code: code, err: runError}
 	}()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		if _, err := os.Stat(marker); err == nil {
 			break
@@ -2072,7 +2079,7 @@ func requireV04ConformanceCancellation(root string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- conformance.Run(ctx, manifestPath, &bytes.Buffer{}) }()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	var childPID int
 	for {
 		data, readError := os.ReadFile(descendantPID)
@@ -2096,7 +2103,7 @@ func requireV04ConformanceCancellation(root string) error {
 
 		return fmt.Errorf("cancelled conformance did not reconcile with a fresh context: %w", runError)
 	}
-	deadline = time.Now().Add(time.Second)
+	deadline = time.Now().Add(fixtureLivenessWait)
 	for {
 		signalError := syscall.Kill(childPID, 0)
 		if errors.Is(signalError, syscall.ESRCH) {
@@ -2294,7 +2301,7 @@ func requireV04PinnedBinaryIdentity(root string) error {
 	}
 	done := make(chan error, 1)
 	go func() { done <- conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}) }()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		if _, statError := os.Stat(ready); statError == nil {
 			break
@@ -2652,7 +2659,7 @@ func (driver *Driver) requestCompiledWaiterOverflowStatusV04() error {
 			results <- acquireError
 		}()
 	}
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		data, readError := os.ReadFile(filepath.Join(root, "reservations.json"))
 		if readError == nil && bytes.Count(data, []byte(`"profile":"balanced"`)) >= 3 {

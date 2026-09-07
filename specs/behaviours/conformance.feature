@@ -188,3 +188,21 @@ Feature: Generic consumer conformance
     Given four consumers with sequential local bootstrap commands and multiple failing lanes
     When the generic harness executes the bootstrap phase
     Then consumer lanes overlap failures aggregate deterministically and no later phase starts
+
+  @e2e-exempt
+  Scenario: A consumer that waits out a capacity deferral passes its probe
+    Given a consumer whose declared probe waits for capacity to free
+    When conformance saturates that consumer's probe root before running it
+    Then the consumer is accepted for having retried instead of surrendering
+
+  @e2e-exempt
+  Scenario: A consumer that reads a capacity deferral as final fails its probe
+    Given a consumer whose declared probe treats exit 75 as final
+    When conformance saturates that consumer's probe root before running it
+    Then conformance rejects it rather than trusting any later overlap result
+
+  @e2e-exempt
+  Scenario: A probe that never reaches admission cannot pass by returning early
+    Given a consumer whose declared probe never consults HIPPO
+    When conformance saturates that consumer's probe root before running it
+    Then conformance rejects it for returning before capacity could free

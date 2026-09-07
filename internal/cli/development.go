@@ -374,7 +374,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		}
 	}
 
-	return guard.Run(ctx, guard.RunConfig{
+	config := guard.RunConfig{
 		Command:                options.command[0],
 		Arguments:              options.command[1:],
 		TaskClass:              taskClass,
@@ -399,5 +399,92 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		ChildStdout:            application.Stdout,
 		ChildStderr:            application.Stderr,
 		Stderr:                 application.Stderr,
-	})
+	}
+	if options.waitForAdmission <= 0 {
+		return guard.Run(ctx, config)
+	}
+
+	return application.runAwaitingAdmission(ctx, config, options.waitForAdmission)
+}
+
+// admissionRetryFloor and admissionRetryCeiling bound how often a deferred owner
+// asks again: the floor keeps a brief deferral cheap to ride out, and the ceiling
+// stops a long one from becoming a busy wait against the shared root.
+const (
+	admissionRetryFloor   = 100 * time.Millisecond
+	admissionRetryCeiling = 2 * time.Second
+)
+
+// runAwaitingAdmission retries a capacity deferral until the caller's budget is
+// spent. Exit 75 means this owner holds no reservation at all, so asking again is
+// the documented response to it and not a way to override the decision: HIPPO
+// deferred because admitting would have oversubscribed the host, and only waiting
+// changes that.
+//
+// A retry can re-run a payload that already started, because activation records
+// the supervised process group after the child exists and gives the shared root
+// back when it is contended. That is the same exposure a caller hand-writing this
+// loop already has, and it is safe for the idempotent build and test commands
+// this guards. A caller whose payload is not idempotent should leave the budget
+// at zero and decide for itself.
+func (application Application) runAwaitingAdmission(
+	ctx context.Context,
+	config guard.RunConfig,
+	budget time.Duration,
+) (int, error) {
+	deadline := application.Now().Add(budget)
+	backoff := admissionRetryFloor
+	for attempt := 1; ; attempt++ {
+		code, runError := guard.Run(ctx, config)
+		if runError != nil || code != guard.CapacityDeferredExitCode {
+			return code, runError
+		}
+
+		remaining := deadline.Sub(application.Now())
+		if remaining <= 0 {
+			_, _ = fmt.Fprintf(
+				application.Stderr,
+				"HIPPO stayed deferred across %d attempts in %s.\n",
+				attempt,
+				budget,
+			)
+
+			return code, nil
+		}
+
+		if backoff > remaining {
+			backoff = remaining
+		}
+		if !waitForAdmissionRetry(ctx, backoff, application.Sleep) {
+			return code, nil
+		}
+
+		backoff *= 2
+		if backoff > admissionRetryCeiling {
+			backoff = admissionRetryCeiling
+		}
+	}
+}
+
+// waitForAdmissionRetry pauses between attempts and reports whether the pause
+// finished, preferring an injected sleep so the wait stays deterministic under
+// test. A cancelled pause ends the retry loop rather than raising: the owner was
+// deferred and never admitted, which is precisely what exit 75 already reports,
+// so there is no second failure to describe.
+func waitForAdmissionRetry(ctx context.Context, duration time.Duration, pause func(time.Duration)) bool {
+	if pause != nil {
+		pause(duration)
+
+		return ctx.Err() == nil
+	}
+
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }

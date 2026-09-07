@@ -46,6 +46,7 @@ type runOptions struct {
 	reserveCPU             int
 	reserveMemoryMiB       int64
 	concurrencyEnvironment []string
+	waitForAdmission       time.Duration
 }
 
 type releaseCheckOptions struct {
@@ -186,6 +187,12 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 	command.Flags().IntVar(&options.leaseMaximum, "lease-max", 0, "maximum allowed leased port")
 	command.Flags().IntVar(&options.reserveCPU, "reserve-cpu", 0, "fixed CPU reservation; zero selects an automatic fair share")
 	command.Flags().Int64Var(&options.reserveMemoryMiB, "reserve-memory-mib", 0, "fixed memory reservation in MiB; zero selects an automatic fair share")
+	command.Flags().DurationVar(
+		&options.waitForAdmission,
+		"wait-for-admission",
+		0,
+		"retry a capacity deferral for up to this long; zero reports the deferral immediately",
+	)
 	command.Flags().StringArrayVar(
 		&options.concurrencyEnvironment,
 		"concurrency-env",

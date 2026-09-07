@@ -1,0 +1,50 @@
+name: Loaded host
+
+# HIPPO is a tool for hosts under contention, so an idle-only gate cannot see
+# the defect class that matters most to it. Every flake this suite has produced
+# was a constant chosen against an idle machine and then used as if it were a
+# property, and none of them reproduced idle.
+#
+# This runs nightly rather than per-push, and is deliberately not a required
+# check: a failure here is a finding to triage, usually a fixture bound tighter
+# than the host's scheduling jitter. Promote it to required once it has been
+# stable for long enough to trust.
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      multiplier:
+        description: "Busy workers per core"
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  loaded:
+    name: Loaded (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The gate is slower under load by construction, so it gets a budget that a
+    # contended runner can actually finish inside.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Run the release gate under synthetic load
+        env:
+          HIPPO_LOAD_MULTIPLIER: ${{ inputs.multiplier || '2' }}
+        run: ./scripts/test-loaded.sh

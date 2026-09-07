@@ -45,6 +45,11 @@ type Consumer struct {
 	Path      string    `json:"path"`
 	Bootstrap []Command `json:"bootstrap,omitempty"`
 	Gates     []Command `json:"gates"`
+	// DeferralRetryProbe is a command that must survive a guaranteed capacity
+	// deferral. Declaring one opts the consumer into the check below; omitting it
+	// leaves the consumer unproven on the one contract that is easiest to get
+	// wrong and most expensive to get wrong.
+	DeferralRetryProbe Command `json:"deferralRetryProbe,omitzero"`
 }
 
 // Check is an additional generic coordination check executed from a named consumer.
@@ -808,6 +813,98 @@ func reconcileCheckouts(ctx context.Context, consumers []Consumer, identities ma
 	return result
 }
 
+// reservationMarkerName and reservationMarkerDocument saturate a probe root.
+// A schema-1 client defers every compatibility class while reservation mode is
+// advertised, so writing this marker is a deterministic way to produce the exit
+// 75 a consumer must be able to survive, using only documented behaviour.
+const (
+	reservationMarkerName = "coordination-mode.json"
+	deferralProbeHold     = 2 * time.Second
+)
+
+var reservationMarkerDocument = []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
+
+// verifyDeferralRetry proves a consumer retries a capacity deferral rather than
+// reading it as an admission. That mistake is not cosmetic: two owners that both
+// believe they hold a reservation reproduce the oversubscription HIPPO exists to
+// prevent, and it is the single contract consumers have actually got wrong.
+//
+// The probe root is saturated before the command starts and freed only after
+// deferralProbeHold, so success is unreachable until capacity frees. A consumer
+// that treats 75 as final exits immediately and fails here. The elapsed check
+// closes the other hole: a probe that never went through admission at all would
+// otherwise pass by exiting zero straight away.
+func verifyDeferralRetry(
+	ctx context.Context,
+	consumer Consumer,
+	environment []string,
+	output io.Writer,
+	identity binaryIdentity,
+) error {
+	if len(consumer.DeferralRetryProbe.Arguments) == 0 {
+		return nil
+	}
+
+	root, err := os.MkdirTemp("", "hippo-deferral-probe-")
+	if err != nil {
+		return errors.New("deferral retry probe root is unavailable")
+	}
+
+	defer func() { _ = os.RemoveAll(root) }()
+
+	if err = os.WriteFile(filepath.Join(root, reservationMarkerName), reservationMarkerDocument, 0o600); err != nil {
+		return errors.New("deferral retry probe root could not be saturated")
+	}
+
+	freed := make(chan struct{})
+
+	go func() {
+		defer close(freed)
+
+		timer := time.NewTimer(deferralProbeHold)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+		case <-timer.C:
+		}
+
+		_ = os.Remove(filepath.Join(root, reservationMarkerName))
+	}()
+
+	started := time.Now()
+	executeError := executeVerifiedCommand(
+		ctx,
+		consumer.Path,
+		consumer.DeferralRetryProbe,
+		replaceEnvironment(environment, "HIPPO_ROOT", root),
+		output,
+		identity,
+	)
+	elapsed := time.Since(started)
+	<-freed
+
+	if executeError != nil {
+		return fmt.Errorf(
+			"consumer %q did not survive a capacity deferral, so it would read exit 75 as an admission: %w",
+			consumer.Name,
+			executeError,
+		)
+	}
+
+	if elapsed < deferralProbeHold {
+		return fmt.Errorf(
+			"consumer %q probe returned in %s, before capacity could free, so it never waited on HIPPO admission",
+			consumer.Name,
+			elapsed.Round(time.Millisecond),
+		)
+	}
+
+	_, _ = fmt.Fprintf(output, "consumer %q retried a capacity deferral instead of reading it as an admission\n", consumer.Name)
+
+	return nil
+}
+
 func executeConsumerPhase(
 	ctx context.Context,
 	consumers []Consumer,
@@ -866,6 +963,19 @@ func executeManifestCommands(
 ) error {
 	if err := executeConsumerPhase(ctx, manifest.Consumers, func(consumer Consumer) []Command { return consumer.Bootstrap }, "bootstrap", environment, output, identity, checkoutIdentities, manifest.SharedRoot, sharedRootIdentity); err != nil {
 		return err
+	}
+	// Probe the deferral contract before the coordination checks, because a
+	// consumer that misreads exit 75 makes every later overlap result untrustworthy.
+	for _, consumer := range manifest.Consumers {
+		if err := verifyDeferralRetry(ctx, consumer, environment, output, identity); err != nil {
+			return err
+		}
+		if err := errors.Join(
+			verifyCheckoutIdentity(consumer, checkoutIdentities[consumer.Name]),
+			verifySharedRootIdentity(manifest.SharedRoot, sharedRootIdentity),
+		); err != nil {
+			return fmt.Errorf("deferral retry probe for consumer %q disturbed state: %w", consumer.Name, err)
+		}
 	}
 	for _, check := range manifest.CoordinationChecks {
 		consumer := consumerByName(manifest, check.Consumer)

@@ -27,54 +27,55 @@ import (
 )
 
 const (
-	taskClassEphemeral    = "ephemeral"
-	taskClassFlag         = "--class"
-	diskPathFlag          = "--disk-path"
-	profileBalanced       = "balanced"
-	profileConstrained    = "constrained"
-	profileMinimal        = "minimal"
-	jsonFlag              = "--json"
-	statusCommandName     = "status"
-	monitorCommandName    = "monitor"
-	runCommandName        = "run"
-	usageBlockMarker      = "Usage:"
-	versionCommandName    = "version"
-	releaseCommandName    = "release"
-	releaseAssessName     = "assess"
-	outputFlag            = "--output"
-	summaryFlag           = "--summary"
-	deploymentRootFlag    = "--deployment-root"
-	healthURLFlag         = "--health-url"
-	routedOriginFlag      = "--routed-origin"
-	testHealthURL         = "http://127.0.0.1/health"
-	testRoutedOrigin      = "https://service.example"
-	callerWorkersName     = "CALLER_WORKERS"
-	toolWorkersName       = "TOOL_WORKERS"
-	unexpectedArgument    = "unexpected"
-	shellPath             = "/bin/sh"
-	configFlag            = "--config"
-	conformanceLabel      = "conformance"
-	e2eMode               = "e2e"
-	exclusiveMode         = "exclusive"
-	reservationMode       = "reservation"
-	fixtureOwner          = "fixture"
-	capacityField         = "capacity"
-	classField            = "class"
-	profileField          = "profile"
-	sequenceField         = "sequence"
-	ownersField           = "owners"
-	waitersField          = "waiters"
-	schemaVersionField    = "schemaVersion"
-	nextSequenceField     = "nextSequence"
-	maxActiveOwnersFld    = "maxActiveOwners"
-	succeedsOutcome       = "succeeds"
-	trueCommandName       = "true"
-	childStartedScript    = `printf started > "$CHILD_MARKER"`
-	schemaOneDocument     = `{"schemaVersion":1}`
-	pidField              = "pid"
-	tokenField            = "token"
-	requestedField        = "requested"
-	childStartedArgScript = `printf started > "$1"`
+	compatibilityDeferralAttempts = 40
+	taskClassEphemeral            = "ephemeral"
+	taskClassFlag                 = "--class"
+	diskPathFlag                  = "--disk-path"
+	profileBalanced               = "balanced"
+	profileConstrained            = "constrained"
+	profileMinimal                = "minimal"
+	jsonFlag                      = "--json"
+	statusCommandName             = "status"
+	monitorCommandName            = "monitor"
+	runCommandName                = "run"
+	usageBlockMarker              = "Usage:"
+	versionCommandName            = "version"
+	releaseCommandName            = "release"
+	releaseAssessName             = "assess"
+	outputFlag                    = "--output"
+	summaryFlag                   = "--summary"
+	deploymentRootFlag            = "--deployment-root"
+	healthURLFlag                 = "--health-url"
+	routedOriginFlag              = "--routed-origin"
+	testHealthURL                 = "http://127.0.0.1/health"
+	testRoutedOrigin              = "https://service.example"
+	callerWorkersName             = "CALLER_WORKERS"
+	toolWorkersName               = "TOOL_WORKERS"
+	unexpectedArgument            = "unexpected"
+	shellPath                     = "/bin/sh"
+	configFlag                    = "--config"
+	conformanceLabel              = "conformance"
+	e2eMode                       = "e2e"
+	exclusiveMode                 = "exclusive"
+	reservationMode               = "reservation"
+	fixtureOwner                  = "fixture"
+	capacityField                 = "capacity"
+	classField                    = "class"
+	profileField                  = "profile"
+	sequenceField                 = "sequence"
+	ownersField                   = "owners"
+	waitersField                  = "waiters"
+	schemaVersionField            = "schemaVersion"
+	nextSequenceField             = "nextSequence"
+	maxActiveOwnersFld            = "maxActiveOwners"
+	succeedsOutcome               = "succeeds"
+	trueCommandName               = "true"
+	childStartedScript            = `printf started > "$CHILD_MARKER"`
+	schemaOneDocument             = `{"schemaVersion":1}`
+	pidField                      = "pid"
+	tokenField                    = "token"
+	requestedField                = "requested"
+	childStartedArgScript         = `printf started > "$1"`
 )
 
 // interruptReadinessWait bounds how long a fixture waits for a guarded child to
@@ -155,6 +156,14 @@ type Driver struct {
 	coordinationMarker      []byte
 	coordinationRequests    int
 	coordinationDeferrals   int
+	admissionUnblockAfter   int
+	admissionAttempts       int
+	admissionElapsed        time.Duration
+	deferralProbeScript     string
+	deferralProbeError      error
+	abandonedGroup          int
+	abandonedPayload        *exec.Cmd
+	abandonedTotals         guard.ReservationTotals
 	inheritedSessions       bool
 	forceStopElapsed        time.Duration
 	runtimeFailureOutput    string
@@ -756,6 +765,27 @@ func (driver *Driver) requestEveryCompatibilityClass() error {
 
 func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskClass) error {
 	for _, class := range classes {
+		if err := driver.requestCompatibilityClassE2E(class); err != nil {
+			return err
+		}
+	}
+	if driver.coordinationDeferrals == driver.coordinationRequests {
+		driver.exitCode = guard.CapacityDeferredExitCode
+	}
+
+	return nil
+}
+
+// requestCompatibilityClassE2E asks until the answer is about coordination.
+//
+// A saturated host defers on capacity before the compatibility check is ever
+// reached, and both refusals are exit 75. Both are correct, but only the
+// coordination one is what this scenario is about, so a capacity deferral is
+// retried rather than counted or treated as a failure. The loaded gate found
+// exactly this: two classes reported the coordination verdict and the third
+// never got that far.
+func (driver *Driver) requestCompatibilityClassE2E(class policy.TaskClass) error {
+	for attempt := range compatibilityDeferralAttempts {
 		stderr := &bytes.Buffer{}
 		command := exec.Command(
 			driver.binary,
@@ -768,20 +798,39 @@ func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskCla
 		command.Stderr = stderr
 
 		err := command.Run()
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) &&
-			exitError.ExitCode() == guard.CapacityDeferredExitCode &&
-			strings.Contains(stderr.String(), "reservation mode is active") {
+		driver.errorOutput += stderr.String()
+
+		// Ask until coordination is what answers. A loaded host can refuse earlier
+		// for its own reasons and with its own exit codes, and none of those are the
+		// verdict this scenario is about. Reservation mode stays active throughout,
+		// so the compatibility refusal is the only terminal answer available and the
+		// loop cannot spin on a success.
+		if strings.Contains(stderr.String(), "reservation mode is active") {
 			driver.coordinationDeferrals++
 			driver.supervisionFailure = errors.Join(
 				driver.supervisionFailure,
 				fmt.Errorf("%s compatibility deferral: %w", class, err),
 			)
+
+			return nil
 		}
-		driver.errorOutput += stderr.String()
-	}
-	if driver.coordinationDeferrals == driver.coordinationRequests {
-		driver.exitCode = guard.CapacityDeferredExitCode
+
+		if attempt+1 == compatibilityDeferralAttempts {
+			code := 0
+			if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
+				code = exitError.ExitCode()
+			}
+
+			return fmt.Errorf(
+				"%s never reached the compatibility check in %d attempts; last exit was %d: %s",
+				class,
+				compatibilityDeferralAttempts,
+				code,
+				stderr.String(),
+			)
+		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return nil

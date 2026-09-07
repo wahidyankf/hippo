@@ -263,7 +263,7 @@ func requireV04FIFO(root string) error {
 		result <- session
 		errorsFound <- acquireError
 	}()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		totals, statusError := guard.ReservationStatus(context.Background(), root)
 		if statusError == nil && totals.WaitingOwners == 1 {
@@ -722,8 +722,13 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 	// healthy run spends a couple of seconds of this.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
+	// A saturated host defers admission, and a deferral is not a failure: the
+	// loaded gate reproduced exactly that and this fixture read it as one. Waiting
+	// is the documented response, and it is the behaviour every consumer should
+	// copy from here.
 	run := exec.CommandContext(
 		ctx, driver.binary, "run", configFlag, configPath,
+		"--wait-for-admission", "60s",
 		"--reserve-cpu", "1", "--reserve-memory-mib", "256", "--", shellPath, "-c", "exit 0",
 	)
 	run.Env = environment
@@ -818,7 +823,7 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	childScript := "printf ready > \"$HIPPO_PTY_READY\"; value=; while [ -z \"$value\" ]; do IFS= read -r value || :; done; printf '%s' \"$value\" > \"$HIPPO_PTY_RESULT\""
 	arguments, err := v04ScriptArguments(
 		driver.binary,
-		"run", "--class", "ephemeral", "--", shellPath, "-c", childScript,
+		"run", "--class", "ephemeral", "--wait-for-admission", "60s", "--", shellPath, "-c", childScript,
 	)
 	if err != nil {
 		return err
@@ -914,15 +919,8 @@ func (driver *Driver) requirePendingConformanceV04() error {
 		if err = os.MkdirAll(path, 0o700); err != nil {
 			return err
 		}
-		for _, arguments := range [][]string{
-			{"init", "-q"},
-			{"-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "--allow-empty", "-m", fixtureOwner},
-		} {
-			command := exec.Command("git", arguments...)
-			command.Dir = path
-			if output, commandError := command.CombinedOutput(); commandError != nil {
-				return fmt.Errorf("create temporary consumer %q: %s: %w", name, output, commandError)
-			}
+		if err = initializeFixtureCheckout(path); err != nil {
+			return fmt.Errorf("create temporary consumer %q: %w", name, err)
 		}
 		manifest.Consumers = append(manifest.Consumers, conformance.Consumer{
 			Name:      name,

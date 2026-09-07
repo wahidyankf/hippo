@@ -62,6 +62,12 @@ type Exemption struct {
 const (
 	liveLeaseExemption          = "would replace or contend with live process ownership outside the isolated binary fixture"
 	reservationCapacityBoundary = "reservation capacity"
+	// probeVerdictReason documents the deferral-probe scenarios, which assert on
+	// the harness's own verdict rather than on a consumer's observable output.
+	probeVerdictReason = "drives the conformance harness in process so the probe verdict itself can be inspected"
+	// abandonedOwnerReason documents scenarios that need a guard to be gone while
+	// the payload it launched is still running.
+	abandonedOwnerReason = "requires a reservation whose guard is gone while its process group survives, which cannot be staged through the compiled binary"
 )
 
 // ApprovedExemptions is the reviewed, exact adapter exemption inventory.
@@ -166,6 +172,14 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "An aggressive termination grace still confirms a forced stop", Boundary: processControlBoundary, Reason: "requires an impatient termination policy and deterministic interrupt timing unavailable to the public-host fixture"},
 		{Scenario: "A supervision failure reaps the guarded child before releasing ownership", Boundary: processControlBoundary, Reason: "requires an injected collector failure while controlling and inspecting the child process lifecycle"},
 		{Scenario: "Critical pressure sheds eligible work", Boundary: processControlBoundary, Reason: "requires synthetic critical pressure while controlling the child process lifecycle"},
+		{Scenario: "A caller that waits for admission rides out a deferral", Boundary: reservationCapacityBoundary, Reason: "requires capacity to be freed from inside the retry pause, which needs an injected clock the compiled binary does not expose"},
+		{Scenario: "Waiting for admission still surrenders when the budget is spent", Boundary: reservationCapacityBoundary, Reason: "requires an injected clock to spend the wait budget without spending the same wall time"},
+		{Scenario: "Waiting for admission never retries a decision that is not a deferral", Boundary: reservationCapacityBoundary, Reason: "shares the injected clock of the deferral scenarios it is contrasted against"},
+		{Scenario: "A consumer that waits out a capacity deferral passes its probe", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},
+		{Scenario: "A consumer that reads a capacity deferral as final fails its probe", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},
+		{Scenario: "A probe that never reaches admission cannot pass by returning early", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},
+		{Scenario: "Status names a payload left running by a guard that died", Boundary: processControlBoundary, Reason: abandonedOwnerReason},
+		{Scenario: "Status stays quiet about a payload that died with its guard", Boundary: processControlBoundary, Reason: abandonedOwnerReason},
 		{Scenario: "Worsening warning sheds degraded work", Boundary: processControlBoundary, Reason: "requires synthetic warning growth while controlling the child process lifecycle"},
 		{Scenario: "Active evidence rotates without truncating its lifetime summary", Boundary: evidenceFilesystemBoundary, Reason: "requires test-sized rotation limits and direct inspection of private runtime files"},
 		{Scenario: "A shared root admits at most twenty live evidence streams", Boundary: evidenceFilesystemBoundary, Reason: "requires concurrent private writer ownership and direct inspection of the shared runtime root"},
