@@ -124,6 +124,18 @@ Feature: Guarded process execution
     Then it stops retrying and reports the deferral as exit 75
 
   @e2e-exempt
+  Scenario: A caller waiting for admission reports the deferral once
+    Given a shared root whose capacity never frees
+    When an owner waits for admission across many attempts
+    Then the deferral is reported once and the surrender names every attempt
+
+  @e2e-exempt
+  Scenario: Quieting the deferral leaves every other notice audible
+    Given a shared root that frees capacity onto exhausted storage
+    When an owner waits for admission across many attempts
+    Then the storage notice is still reported and the deferral only once
+
+  @e2e-exempt
   Scenario: Waiting for admission never retries a decision that is not a deferral
     Given a shared root that admits an owner whose child fails
     When that owner runs with a budget to wait for admission

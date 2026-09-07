@@ -436,6 +436,12 @@ func (application Application) runAwaitingAdmission(
 	backoff := admissionRetryFloor
 	for attempt := 1; ; attempt++ {
 		code, runError := guard.Run(ctx, config)
+		// The first attempt says why this owner is waiting. Every later one would
+		// repeat that sentence verbatim, so the notice is quieted from here on and
+		// the surrender below reports the total instead. Quieting is scoped to the
+		// deferral itself: a storage refusal or a shedding notice on a later
+		// attempt is still reported.
+		config.QuietDeferralNotice = true
 		if runError != nil || code != guard.CapacityDeferredExitCode {
 			return code, runError
 		}

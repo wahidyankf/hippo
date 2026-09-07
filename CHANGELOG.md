@@ -7,6 +7,15 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.5.2] — 2026-09-07
+
+### Changed
+
+- `run --wait-for-admission` reports the deferral once instead of once per attempt. The notice reads
+  the same every attempt and a long budget is hundreds of them, so repeating it buried the surrender
+  line. The surrender still reports the total. Quieting is scoped to the deferral alone: storage
+  refusals, warning-pressure admissions, and shedding notices stay audible on every attempt.
+
 ## [v0.5.1] — 2026-09-07
 
 ### Fixed

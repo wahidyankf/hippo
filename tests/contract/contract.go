@@ -175,6 +175,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "A caller that waits for admission rides out a deferral", Boundary: reservationCapacityBoundary, Reason: "requires capacity to be freed from inside the retry pause, which needs an injected clock the compiled binary does not expose"},
 		{Scenario: "Waiting for admission still surrenders when the budget is spent", Boundary: reservationCapacityBoundary, Reason: "requires an injected clock to spend the wait budget without spending the same wall time"},
 		{Scenario: "Waiting for admission never retries a decision that is not a deferral", Boundary: reservationCapacityBoundary, Reason: "shares the injected clock of the deferral scenarios it is contrasted against"},
+		{Scenario: "A caller waiting for admission reports the deferral once", Boundary: reservationCapacityBoundary, Reason: "counting notices across many attempts needs an injected clock to spend the backoff without spending the same wall time"},
+		{Scenario: "Quieting the deferral leaves every other notice audible", Boundary: reservationCapacityBoundary, Reason: "degrades storage between attempts, which needs the injected sample sequence the compiled binary does not expose"},
 		{Scenario: "A consumer that waits out a capacity deferral passes its probe", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},
 		{Scenario: "A consumer that reads a capacity deferral as final fails its probe", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},
 		{Scenario: "A probe that never reaches admission cannot pass by returning early", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},

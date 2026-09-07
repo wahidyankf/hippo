@@ -99,6 +99,22 @@ $ echo $?
 a deferred owner until that budget is spent, backing off from 100 ms to a 2 s ceiling, and still
 reports `75` if capacity never frees.
 
+Only the first attempt prints the deferral notice. The sentence reads the same every attempt, and a
+long budget is hundreds of attempts, so repeating it would bury the surrender line and every other
+notice under identical copies. The surrender reports the total instead:
+
+```console
+$ hippo run --wait-for-admission 10m --disk-path . -- make test
+HIPPO deferred task: shared coordination deferred admission: reservation mode is active.
+HIPPO stayed deferred across 317 attempts in 10m0s.
+$ echo $?
+75
+```
+
+Quieting is scoped to the deferral alone. A storage refusal, a warning-pressure admission, or a
+shedding notice on any later attempt is still printed, because those describe something new the
+caller has to act on.
+
 A deferral can arrive _after_ a child has already started. Activation records the supervised process
 group under the coordination lock, and a child that could not be recorded would be unsheddable, so
 HIPPO stops it and reports `75` rather than supervising an untracked group. This is why

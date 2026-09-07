@@ -516,6 +516,12 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 			return driver.runWaitingForAdmission(time.Second, 3)
 		}),
 		step(`^it stops retrying and reports the deferral as exit 75$`, driver.requireDeferralSurvivesTheBudget),
+		step(`^an owner waits for admission across many attempts$`, func() error {
+			return driver.runWaitingForAdmission(5*time.Second, 3)
+		}),
+		step(`^the deferral is reported once and the surrender names every attempt$`, driver.requireDeferralReportedOnce),
+		step(`^a shared root that frees capacity onto exhausted storage$`, driver.deferringRootFreeingCapacityOntoExhaustedStorage),
+		step(`^the storage notice is still reported and the deferral only once$`, driver.requireBlockedNoticeSurvivesQuieting),
 		step(`^a shared root that admits an owner whose child fails$`, driver.admittingRootWithFailingChild),
 		step(`^the child runs once and its failing exit code is reported unchanged$`, driver.requireFailingChildReportedUnchanged),
 		step(`^another live process owns the heavy lease$`, driver.liveLease),

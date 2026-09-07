@@ -51,8 +51,14 @@ type RunConfig struct {
 	ChildStdin                            io.Reader
 	ChildStdout, ChildStderr              io.Writer
 	Stderr                                io.Writer
-	startLifetime                         func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error)
-	stopLifetime                          func(*supervisedLifetime, time.Duration) (error, error)
+	// QuietDeferralNotice suppresses the notice that accompanies a retryable
+	// deferral, and nothing else. A caller retrying a deferral sets it after its
+	// first attempt: the notice reads the same every time, and a long budget
+	// would otherwise bury the surrender, the storage refusal, and every
+	// shedding notice under hundreds of identical copies.
+	QuietDeferralNotice bool
+	startLifetime       func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error)
+	stopLifetime        func(*supervisedLifetime, time.Duration) (error, error)
 }
 
 func environmentValue(environment []string, name string) string {
@@ -336,6 +342,17 @@ func stopConfiguredLifetime(config RunConfig, lifetime *supervisedLifetime) (err
 	return terminateAndWait(lifetime, config.Policy.TerminationGrace)
 }
 
+// noteDeferral reports why admission was deferred. Only the notices that
+// accompany a retryable deferral go through here, so quieting a waiting caller
+// can never silence a refusal it has to act on.
+func (config RunConfig) noteDeferralf(format string, arguments ...any) {
+	if config.QuietDeferralNotice {
+		return
+	}
+
+	_, _ = fmt.Fprintf(config.Stderr, format, arguments...)
+}
+
 // Run admits, supervises, and records one child process without touching unrelated processes.
 func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error) {
 	if err := ctx.Err(); err != nil {
@@ -433,12 +450,12 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			return policy.ReplanRequiredExitCode, nil
 		}
 		if errors.Is(err, ErrReservationDeferred) {
-			_, _ = fmt.Fprintln(config.Stderr, "HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.")
+			config.noteDeferralf("HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.\n")
 
 			return CapacityDeferredExitCode, nil
 		}
 		if errors.Is(err, errCoordinationDeferred) {
-			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", err)
+			config.noteDeferralf("HIPPO deferred task: %s.\n", err)
 
 			return CapacityDeferredExitCode, nil
 		}
@@ -447,10 +464,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 	if session == nil {
 		if config.ReservationPolicy.Enabled {
-			_, _ = fmt.Fprintln(config.Stderr, "HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.")
+			config.noteDeferralf("HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.\n")
 		} else {
-			_, _ = fmt.Fprintf(
-				config.Stderr,
+			config.noteDeferralf(
 				"HIPPO deferred task: %s; it must exit before this work is admitted.\n",
 				DescribeHeavyLease(config.EvidenceRoot),
 			)
@@ -513,7 +529,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 		portLease, err = AcquirePortLease(root, config.LeasePort, config.LeaseOwner, config.LeaseMinimum, config.LeaseMaximum)
 		if errors.Is(err, errCoordinationDeferred) {
-			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", err)
+			config.noteDeferralf("HIPPO deferred task: %s.\n", err)
 
 			return CapacityDeferredExitCode, nil
 		}
@@ -582,7 +598,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		// A peer holding the shared lock here is contention, and no child has
 		// started yet, so the caller receives the retryable deferral exit.
 		if errors.Is(statusError, errCoordinationDeferred) {
-			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", statusError)
+			config.noteDeferralf("HIPPO deferred task: %s.\n", statusError)
 
 			return CapacityDeferredExitCode, nil
 		}
@@ -680,7 +696,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 
 	if !admitted {
-		_, _ = fmt.Fprintln(config.Stderr, "HIPPO deferred task: safe admission was not reached.")
+		config.noteDeferralf("HIPPO deferred task: safe admission was not reached.\n")
 
 		return CapacityDeferredExitCode, nil
 	}
@@ -708,7 +724,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			// contention. The caller must receive the retryable deferral exit
 			// instead of a generic failure it cannot classify.
 			if errors.Is(activationError, errCoordinationDeferred) && stopError == nil {
-				_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred task: %s.\n", activationError)
+				config.noteDeferralf("HIPPO deferred task: %s.\n", activationError)
 
 				return CapacityDeferredExitCode, nil
 			}

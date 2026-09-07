@@ -106,7 +106,9 @@ hippo run [flags] -- <command> [arguments...]
 | `--lease-max <n>`                 | `0`         | Maximum allowed leased port                                               |
 
 The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only.
-A normal child exit code is passed through unchanged.
+A normal child exit code is passed through unchanged. Under `--wait-for-admission` the deferral
+notice is printed once rather than once per attempt; every other notice stays audible on every
+attempt, and the surrender line reports the total.
 
 ```console
 $ hippo run --class ephemeral --disk-path . -- sh -c 'echo build-started; echo build-finished'

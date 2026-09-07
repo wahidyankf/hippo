@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -67,6 +68,89 @@ func (driver *Driver) admittingRootWithFailingChild() error {
 
 	driver.healthyAdmissionSamples()
 	driver.admissionUnblockAfter = 0
+
+	return nil
+}
+
+// deferralNoticePrefix is the notice a waiting caller would otherwise receive
+// once per attempt.
+const deferralNoticePrefix = "HIPPO deferred task:"
+
+// deferringRootFreeingCapacityOntoExhaustedStorage defers the first attempt and
+// then frees capacity onto a host whose disk sits under the floor. The second
+// attempt therefore gets past coordination and reaches the storage check, which
+// is the point: by then the caller has asked for the deferral notice to be quiet,
+// and the storage notice still has to be said out loud.
+func (driver *Driver) deferringRootFreeingCapacityOntoExhaustedStorage() error {
+	if err := driver.reservationCoordination(); err != nil {
+		return err
+	}
+
+	base := time.Now()
+	blocked := healthySample(base)
+	blocked.DiskFreeBytes = new(200 * policy.MiB)
+	blocked.DiskTotalBytes = new(policy.GiB)
+
+	// The CLI resolves a profile before it ever reaches the guard, and a host that
+	// is already blocked there never gets as far as a deferral. So the readings
+	// start healthy and only fall under the floor once the guard is sampling.
+	driver.samples = []policy.Sample{
+		healthySample(base),
+		healthySample(base.Add(time.Millisecond)),
+		healthySample(base.Add(2 * time.Millisecond)),
+		blocked, blocked, blocked,
+	}
+	driver.admissionUnblockAfter = 1
+
+	return nil
+}
+
+// requireDeferralReportedOnce proves the notice is reported per waiting run
+// rather than per attempt. It asserts the attempt count first, because one notice
+// across one attempt would say nothing at all.
+func (driver *Driver) requireDeferralReportedOnce() error {
+	if driver.admissionAttempts < 3 {
+		return fmt.Errorf(
+			"only %d attempts were made, too few to tell one notice from one per attempt",
+			driver.admissionAttempts,
+		)
+	}
+
+	if notices := strings.Count(driver.errorOutput, deferralNoticePrefix); notices != 1 {
+		return fmt.Errorf(
+			"the deferral was reported %d times across %d attempts, want once: %s",
+			notices, driver.admissionAttempts, driver.errorOutput,
+		)
+	}
+
+	if !strings.Contains(driver.errorOutput, "stayed deferred across") {
+		return fmt.Errorf("the surrender was never reported: %s", driver.errorOutput)
+	}
+
+	return nil
+}
+
+// requireBlockedNoticeSurvivesQuieting proves quieting is scoped to the deferral.
+// A caller that silenced the whole stream would pass the counting scenario and
+// fail here, which is the only reason this scenario exists.
+func (driver *Driver) requireBlockedNoticeSurvivesQuieting() error {
+	if driver.exitCode != guard.StorageBlockedExitCode {
+		return fmt.Errorf(
+			"exit=%d want storage blocked %d: stderr=%s",
+			driver.exitCode, guard.StorageBlockedExitCode, driver.errorOutput,
+		)
+	}
+
+	if !strings.Contains(driver.errorOutput, "HIPPO blocked task:") {
+		return fmt.Errorf("quieting the deferral also silenced the storage notice: %s", driver.errorOutput)
+	}
+
+	if notices := strings.Count(driver.errorOutput, deferralNoticePrefix); notices != 1 {
+		return fmt.Errorf(
+			"the deferral was reported %d times, want only the first: %s",
+			notices, driver.errorOutput,
+		)
+	}
 
 	return nil
 }
