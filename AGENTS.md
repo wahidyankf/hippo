@@ -3,6 +3,7 @@
 - Keep the CLI generic and repository-independent; do not add product-specific defaults.
 - Preserve exit codes `73`, `75`, and `78` and supported evidence readers. Preserve config compatibility unless the owner explicitly authorizes a breaking transition.
 - Before every repository change, assess both `specs/behaviours/` and `specs/architecture.md` for impact.
+- Keep `README.md`, `docs/`, and `CHANGELOG.md` true to the shipped binary. `docs/` follows Diátaxis: a page belongs to exactly one of `tutorials/`, `how-to/`, `reference/`, or `explanation/`. Never publish a command or transcript that has not been executed against the current build; where a path cannot be exercised safely, say so rather than inventing output. `specs/` stays canonical, and `docs/` must not contradict it.
 - Update every affected Gherkin scenario and C4 view in the same change; create behavior changes Gherkin-first, prove the binding failure, keep every adapter strict, and synchronize C4 with the final as-built boundaries and responsibilities. Record a verified no-op instead of churning an unaffected specification.
 - Run every Gherkin scenario through the unit adapter; never add a unit exemption tag or inventory entry. Any integration or E2E exemption must remain exact and name both the concrete boundary and the reason it cannot execute there.
 - Install locked contributor tooling with `npm ci`; hooks enforce Conventional Commits, staged formatting, and the quick pre-push gate.
