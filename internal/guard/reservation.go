@@ -115,41 +115,60 @@ type ReservationTotals struct {
 // abandonedProcessGroups reports process groups whose owning guard is gone while
 // the group itself is still running.
 //
-// Reservation accounting already heals here: owner liveness is an flock the
-// kernel drops when the guard dies, so the capacity is reclaimed either way. What
-// is not reclaimed is the payload. A guard killed outright cannot reap the child
-// it launched, and that child keeps its share of the host indefinitely, which is
-// the one way work escapes coordination entirely.
+// Liveness for accounting is the identity flock, and that is deliberately not the
+// test here. The lifetime launcher inherits the lock's open file description and
+// outlives a guard that is killed outright, so the flock stays held for as long
+// as the payload runs. That is the correct answer for capacity, because the work
+// really is still consuming the host and releasing its reservation would
+// oversubscribe the root. It is the wrong answer for this report: judged by the
+// lock, a guard that died never looks dead, and nothing is ever named.
+//
+// So this asks after the guard's own process instead. Nothing reaps the payload
+// once its guard is gone, and nothing releases the reservation either, so a
+// shared root fills with owners no one will ever clean up until every later
+// admission defers forever. An operator has no other way to see that.
+//
+// A recycled guard identifier reads as alive and is passed over, which loses a
+// report rather than inventing one.
 //
 // This reports and never signals. The record holds a bare process group with no
 // start-time identity, so a group the kernel has since recycled would name an
 // unrelated process, and killing that is far worse than leaking the original. The
 // caller can confirm the group and decide; HIPPO will not guess.
-func abandonedProcessGroups(root string, ledger reservationLedger) ([]int, error) {
+func abandonedProcessGroups(ledger reservationLedger) []int {
 	groups := make([]int, 0, len(ledger.Owners))
 	for _, owner := range ledger.Owners {
 		if owner.ProcessGroup <= 0 {
 			continue
 		}
 
-		alive, err := reservationIdentityAlive(root, owner.Token, owner.IdentityDevice, owner.IdentityInode)
-		if err != nil {
-			return nil, err
-		}
-
-		if alive {
+		if owner.PID > 0 && processExists(owner.PID) {
 			continue
 		}
 
-		signalError := syscall.Kill(-owner.ProcessGroup, 0)
-		if signalError == nil || errors.Is(signalError, syscall.EPERM) {
+		if processGroupExists(owner.ProcessGroup) {
 			groups = append(groups, owner.ProcessGroup)
 		}
 	}
 
 	slices.Sort(groups)
 
-	return slices.Compact(groups), nil
+	return slices.Compact(groups)
+}
+
+// processExists reports whether a process identifier still names a live process.
+// EPERM means it exists under another user, which is still alive.
+func processExists(pid int) bool {
+	err := syscall.Kill(pid, 0)
+
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+// processGroupExists reports whether any process remains in a process group.
+func processGroupExists(group int) bool {
+	err := syscall.Kill(-group, 0)
+
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 func ceilDivide(value int64, divisor int) int64 {
@@ -1243,10 +1262,7 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 	}
 	// Read the abandoned groups before reconciliation, which is what drops the
 	// stale records and with them the only handle on the orphaned payload.
-	abandoned, err := abandonedProcessGroups(root, ledger)
-	if err != nil {
-		return ReservationTotals{}, err
-	}
+	abandoned := abandonedProcessGroups(ledger)
 	if err = reconcileReservationLedger(root, &ledger); err != nil {
 		return ReservationTotals{}, err
 	}

@@ -163,6 +163,7 @@ type Driver struct {
 	deferralProbeError      error
 	abandonedGroup          int
 	abandonedPayload        *exec.Cmd
+	abandonedIdentityLock   *os.File
 	abandonedTotals         guard.ReservationTotals
 	inheritedSessions       bool
 	forceStopElapsed        time.Duration

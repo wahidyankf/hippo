@@ -479,7 +479,13 @@ Feature: Shared vector reservations
   Scenario: Status names a payload left running by a guard that died
     Given a reservation whose guard is gone while its process group still runs
     When reservation status reads that coordination root
-    Then it reclaims the capacity and names the abandoned process group
+    Then it keeps the capacity held for the running payload and names its process group
+
+  @e2e-exempt
+  Scenario: Status stays quiet about a payload whose guard is still running
+    Given a reservation whose guard is still running alongside its process group
+    When reservation status reads that coordination root
+    Then it counts the held reservation and names no abandoned process group
 
   @e2e-exempt
   Scenario: Status stays quiet about a payload that died with its guard

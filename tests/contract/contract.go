@@ -67,7 +67,7 @@ const (
 	probeVerdictReason = "drives the conformance harness in process so the probe verdict itself can be inspected"
 	// abandonedOwnerReason documents scenarios that need a guard to be gone while
 	// the payload it launched is still running.
-	abandonedOwnerReason = "requires a reservation whose guard is gone while its process group survives, which cannot be staged through the compiled binary"
+	abandonedOwnerReason = "requires a reservation whose guard liveness is controlled independently of its process group, which cannot be staged through the compiled binary"
 )
 
 // ApprovedExemptions is the reviewed, exact adapter exemption inventory.
@@ -179,6 +179,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "A consumer that reads a capacity deferral as final fails its probe", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},
 		{Scenario: "A probe that never reaches admission cannot pass by returning early", Boundary: consumerHarnessBoundary, Reason: probeVerdictReason},
 		{Scenario: "Status names a payload left running by a guard that died", Boundary: processControlBoundary, Reason: abandonedOwnerReason},
+		{Scenario: "Status stays quiet about a payload whose guard is still running", Boundary: processControlBoundary, Reason: abandonedOwnerReason},
 		{Scenario: "Status stays quiet about a payload that died with its guard", Boundary: processControlBoundary, Reason: abandonedOwnerReason},
 		{Scenario: "Worsening warning sheds degraded work", Boundary: processControlBoundary, Reason: "requires synthetic warning growth while controlling the child process lifecycle"},
 		{Scenario: "Active evidence rotates without truncating its lifetime summary", Boundary: evidenceFilesystemBoundary, Reason: "requires test-sized rotation limits and direct inspection of private runtime files"},

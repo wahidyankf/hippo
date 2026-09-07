@@ -499,8 +499,12 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^a reservation whose guard and process group are both gone$`, func() error {
 			return driver.abandonOwner(false)
 		}),
+		step(`^a reservation whose guard is still running alongside its process group$`, func() error {
+			return driver.liveGuardOwner()
+		}),
 		step(`^reservation status reads that coordination root$`, driver.readAbandonedOwnerStatus),
-		step(`^it reclaims the capacity and names the abandoned process group$`, driver.requireAbandonedGroupNamed),
+		step(`^it counts the held reservation and names no abandoned process group$`, driver.requireHeldOwnerNotNamed),
+		step(`^it keeps the capacity held for the running payload and names its process group$`, driver.requireAbandonedGroupNamed),
 		step(`^it reclaims the capacity and names no abandoned process group$`, driver.requireNoAbandonedGroupNamed),
 		step(`^a shared root that defers one owner before capacity frees$`, driver.deferringRootFreeingCapacity),
 		step(`^that owner runs with a budget to wait for admission$`, func() error {

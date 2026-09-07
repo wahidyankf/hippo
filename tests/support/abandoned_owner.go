@@ -17,10 +17,15 @@ import (
 )
 
 // abandonOwner builds the one state a guard cannot clean up after itself: a real
-// reservation whose owning guard is gone. Deleting the identity lock is what a
-// killed guard does implicitly, because the kernel drops its flock, so the record
-// is reached the same way a crash reaches it rather than by hand-writing a
-// ledger.
+// reservation whose owning guard is gone while its payload keeps running.
+//
+// The shape here is dictated by the real process tree, which is guard ->
+// internal lifetime launcher -> payload group. The launcher inherits the identity
+// lock's open file description and outlives a guard that is killed outright, so
+// the flock is still held afterwards and the reservation stays correctly counted
+// against the work that is still running. A fixture that drops the lock instead
+// describes a host where the payload died too, which is the other scenario. Only
+// the guard's own process is gone, so that is the one thing this fixture ends.
 func (driver *Driver) abandonOwner(withLivePayload bool) error {
 	root, err := os.MkdirTemp("", "hippo-abandoned-owner-")
 	if err != nil {
@@ -52,7 +57,30 @@ func (driver *Driver) abandonOwner(withLivePayload bool) error {
 		return err
 	}
 
+	// Hard-link the identity the product issued so release cannot destroy it. The
+	// inode is what the ledger recorded, and a guard that dies never reaches
+	// release at all, so restoring that exact object is what its death looks like.
+	identities := filepath.Join(root, "reservation-identities")
+	lockPath := filepath.Join(identities, session.Token+".lock")
+	preserved := filepath.Join(root, "preserved-identity.lock")
+
+	if err = os.Link(lockPath, preserved); err != nil {
+		return err
+	}
+
 	if err = guard.ReleaseReservation(root, session); err != nil {
+		return err
+	}
+
+	if err = os.MkdirAll(identities, 0o700); err != nil {
+		return err
+	}
+
+	if err = os.Link(preserved, lockPath); err != nil {
+		return err
+	}
+
+	if err = os.Remove(preserved); err != nil {
 		return err
 	}
 
@@ -90,23 +118,129 @@ func (driver *Driver) abandonOwner(withLivePayload bool) error {
 		}
 	}
 
-	// A guard that is killed outright leaves its identity file behind with the
-	// kernel's flock already dropped. That, not a missing file, is what a dead
-	// owner looks like, so the fixture reproduces exactly that state.
 	owner["processGroup"] = group
-	delete(owner, "identityDevice")
-	delete(owner, "identityInode")
+
+	deadGuard, err := exitedProcessID()
+	if err != nil {
+		return err
+	}
+
+	owner["pid"] = deadGuard
 
 	if err = writeSingleOwner(root, ledger, owner); err != nil {
 		return err
 	}
 
-	identities := filepath.Join(root, "reservation-identities")
-	if err = os.MkdirAll(identities, 0o700); err != nil {
+	// A live payload means a live launcher, so the identity lock is still held.
+	// A payload that died took its launcher with it, which frees the lock.
+	if !withLivePayload {
+		return nil
+	}
+
+	return driver.holdIdentityLock(lockPath)
+}
+
+// holdIdentityLock stands in for the lifetime launcher, which is what actually
+// keeps the flock after the guard is gone.
+func (driver *Driver) holdIdentityLock(path string) error {
+	held, err := os.OpenFile(path, os.O_RDWR, 0o600)
+	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(identities, session.Token+".lock"), nil, 0o600)
+	if err = syscall.Flock(int(held.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = held.Close()
+
+		return err
+	}
+
+	driver.abandonedIdentityLock = held
+
+	return nil
+}
+
+// exitedProcessID returns the identifier of a process that has already been
+// reaped, which is what the ledger holds once a guard is killed outright.
+func exitedProcessID() (int, error) {
+	finished := exec.Command(shellPath, "-c", shellExitZero)
+	if err := finished.Run(); err != nil {
+		return 0, err
+	}
+
+	return finished.Process.Pid, nil
+}
+
+// liveGuardOwner holds a real reservation whose guard is this process, so the
+// recorded process group is running under a guard that is demonstrably alive.
+// It is the control for the abandonment report: without it, an implementation
+// that named every recorded group would still satisfy the other two scenarios.
+func (driver *Driver) liveGuardOwner() error {
+	root, err := os.MkdirTemp("", "hippo-live-guard-owner-")
+	if err != nil {
+		return err
+	}
+
+	driver.temporaryPaths = append(driver.temporaryPaths, root)
+	driver.leaseRoot = root
+
+	session, err := guard.AcquireReservation(
+		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
+		v04Plan(1, 256*policy.MiB), 20, 0,
+	)
+	if err != nil {
+		return err
+	}
+
+	payload := exec.Command(shellPath, "-c", "while :; do sleep 0.05; done")
+	payload.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err = payload.Start(); err != nil {
+		return err
+	}
+
+	group, err := syscall.Getpgid(payload.Process.Pid)
+	if err != nil {
+		return err
+	}
+
+	driver.abandonedGroup = group
+	driver.abandonedPayload = payload
+
+	// Record the process group the way activation does, leaving every other part
+	// of the owner record exactly as the product wrote it.
+	ledger, err := readLedgerDocument(root)
+	if err != nil {
+		return err
+	}
+
+	owner, err := ownerRecord(ledger, session.Token)
+	if err != nil {
+		return err
+	}
+
+	owner["processGroup"] = group
+
+	return writeSingleOwner(root, ledger, owner)
+}
+
+// requireHeldOwnerNotNamed asserts a live guard's payload is never reported.
+func (driver *Driver) requireHeldOwnerNotNamed() error {
+	defer driver.stopAbandonedPayload()
+
+	if driver.abandonedTotals.ActiveOwners != 1 {
+		return fmt.Errorf(
+			"a held reservation was not counted: activeOwners=%d",
+			driver.abandonedTotals.ActiveOwners,
+		)
+	}
+
+	if len(driver.abandonedTotals.AbandonedProcessGroups) != 0 {
+		return fmt.Errorf(
+			"a payload supervised by a live guard was reported as abandoned: %v",
+			driver.abandonedTotals.AbandonedProcessGroups,
+		)
+	}
+
+	return nil
 }
 
 // ownerRecord returns the live owner record the product just wrote.
@@ -191,8 +325,13 @@ func (driver *Driver) readAbandonedOwnerStatus() error {
 func (driver *Driver) requireAbandonedGroupNamed() error {
 	defer driver.stopAbandonedPayload()
 
-	if driver.abandonedTotals.ActiveOwners != 0 {
-		return fmt.Errorf("capacity was not reclaimed: activeOwners=%d", driver.abandonedTotals.ActiveOwners)
+	// The capacity stays held on purpose: the payload is still running and still
+	// consuming the host, so releasing it here would oversubscribe the root.
+	if driver.abandonedTotals.ActiveOwners != 1 {
+		return fmt.Errorf(
+			"capacity for still-running work was not held: activeOwners=%d",
+			driver.abandonedTotals.ActiveOwners,
+		)
 	}
 	if !slices.Contains(driver.abandonedTotals.AbandonedProcessGroups, driver.abandonedGroup) {
 		return fmt.Errorf(
@@ -222,6 +361,11 @@ func (driver *Driver) requireNoAbandonedGroupNamed() error {
 }
 
 func (driver *Driver) stopAbandonedPayload() {
+	if driver.abandonedIdentityLock != nil {
+		_ = driver.abandonedIdentityLock.Close()
+		driver.abandonedIdentityLock = nil
+	}
+
 	if driver.abandonedPayload == nil {
 		return
 	}
