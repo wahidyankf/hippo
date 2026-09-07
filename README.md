@@ -1,305 +1,218 @@
-# HIPPO
+# 🦛 HIPPO
 
-**HIPPO** — **H**ost **I**nfrastructure **P**ressure & **P**rocess **O**rchestrator — is a standalone Go CLI that admits, supervises, and sheds local development work from host resource evidence. It supports macOS and Linux, coordinates concurrent repositories through a shared CPU-and-memory reservation ledger, and lets only the guard that owns a child signal and reap that child process group.
+**Host Infrastructure Pressure & Process Orchestrator** — stop several repositories from thrashing
+one developer machine.
 
-## v0.4 reservation contract
+[![CI](https://github.com/wahidyankf/hippo/actions/workflows/ci.yml/badge.svg)](https://github.com/wahidyankf/hippo/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/wahidyankf/hippo?sort=semver)](https://github.com/wahidyankf/hippo/releases)
+[![Go](https://img.shields.io/badge/go-1.26.1-00ADD8)](https://go.dev/)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey)](#-install)
+[![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-Version `v0.4` adds schema-2 reservation configuration while retaining schema-1 exclusive behavior for a staged rollout. Reservation mode gives every service, ephemeral, and transactional owner one fixed CPU-and-memory allocation. Admission is atomic, overflow-safe, and strict FIFO; host pressure thresholds remain authoritative after a vector fits. Automatic `balanced`, `constrained`, and `minimal` reservations use four, two, and one fair-share owners respectively. An explicit reservation may be smaller than its automatic share but never below one CPU or 256 MiB. The effective owner limit is the strictest limit contributed by any live owner or FIFO waiter in the shared root.
-
-## v0.3.0 identity cutover
-
-Version `v0.3.0` is a hard rename from Resource Guard to HIPPO. The repository, Go module,
-executable, release archives, environment protocol, local configuration, cache, and state namespace
-all use `hippo` or `HIPPO_*`; the former names are not aliases. Commands, flags, exit codes, JSON
-schemas, and supported evidence readers remain unchanged. Existing pre-v0.3.0 releases stay immutable,
-and HIPPO does not delete their local cache, configuration, or evidence.
-
-## Install
-
-Download a tagged archive for `darwin` or `linux` on `amd64` or `arm64`, then verify it against the release `checksums.txt`. Consumers should pin both the tag and the expected SHA-256; they must not follow `main` at runtime.
-
-Source users can run the tracked bootstrap, which builds and retains a bounded local cache:
-
-```sh
-./hippo version --json
-./hippo status --json --disk-path .
-./hippo run --class ephemeral --disk-path . -- <command>
-
-# Override either automatic dimension when a task has a measured smaller footprint.
-./hippo run --reserve-cpu 2 --reserve-memory-mib 1024 -- <command>
-```
-
-## Command-line interface
-
-Run `./hippo --help` to discover the `version`, `status`, `monitor`, `run`, and `release` commands. Release checks, summary assessment, and overlap monitoring are grouped under `release`. Guarded child commands must follow an explicit `--` boundary so their arguments are never interpreted as hippo flags.
-
-HIPPO always exports `HIPPO_PROFILE` and `HIPPO_CONCURRENCY` to an admitted child. Reservation mode fixes `HIPPO_CONCURRENCY` to allocated CPU and also exports `HIPPO_RESERVED_MEMORY_BYTES`. A consumer can map the fixed concurrency into any tool-specific positive-integer variable without coupling HIPPO to that tool:
-
-```sh
-./hippo run \
-  --concurrency-env BUILD_WORKERS \
-  --concurrency-env TEST_JOBS \
-  -- make test
-```
-
-`--concurrency-env` is repeatable. In reservation mode, a missing mapping receives allocated CPU, a positive lower value survives, and a higher value is clamped to the allocation. Zero, negative, or malformed mapped values require replanning with exit `78` before child execution. Schema-1 exclusive mode retains the v0.3.1 mapping behavior, including degraded admission at concurrency one. Names must be POSIX environment identifiers and cannot be HIPPO's protocol variables.
-
-Usage output belongs to usage mistakes. A missing `--` boundary, an unknown command, or an unusable flag prints the command usage next to its diagnostic, while a failure that happens after the arguments were accepted prints only the diagnostic, so consumer logs keep the real cause instead of a flag list.
-
-Cobra-powered completion scripts are generated on demand for Bash, Fish, PowerShell, and Zsh:
-
-```sh
-./hippo completion zsh
-```
-
-## What a running guard looks like
-
-HIPPO is not a full-screen TUI. A healthy `run` is deliberately quiet: the child keeps its normal stdin, stdout, and stderr, so existing scripts and CI logs still look familiar.
+HIPPO is a standalone Go CLI that admits, supervises, and sheds local development work based on what
+the host can actually spare. It coordinates concurrent repositories through a shared CPU-and-memory
+reservation ledger, and only the guard that owns a child may signal that child's process group.
 
 ```console
-$ ./hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=7 swap=idle availableGiB=12.00 diskFreeGiB=40.00 cpu=18.4%
+$ hippo run --class ephemeral --disk-path . -- make test
+```
 
-$ ./hippo run --class ephemeral --disk-path . -- sh -c 'echo build-started; echo build-finished'
+## ✨ Highlights
+
+- **Cross-repository coordination.** Four checkouts on one laptop share one CPU-and-memory budget
+  instead of each assuming it owns the machine.
+- **Works with any build tool.** `--concurrency-env BUILD_WORKERS` writes HIPPO's allocation into the
+  variable your tool already reads. No build system is compiled into HIPPO.
+- **Invisible when healthy.** Your command keeps its stdin, stdout, stderr, and exit code. A healthy
+  run prints nothing extra.
+- **Safe by construction.** A guard signals only the process group it started. Pressure shedding
+  works by marking a victim and waiting for that victim's own guard to act.
+- **Fails closed.** Unreadable shared state defers admission and preserves bytes rather than guessing
+  and rewriting.
+- **A stable exit contract.** `73` cleanup, `75` retry, `78` replan — everything else is your
+  command's own exit code.
+- **No daemon.** One short-lived process per guarded command, plus files in a shared state root.
+
+## 🤔 Why
+
+Run a build in one checkout, a test suite in another, and a dev server in a third, and each one sizes
+itself to the machine: `make -j$(nproc)`, one test worker per core, a bundler that assumes it owns the
+box. Individually reasonable, collectively ruinous. The machine starts swapping and everything slows
+down together — including the editor you are actually looking at.
+
+Turning parallelism down everywhere is wrong in both directions: too low wastes an idle machine, too
+high brings the contention straight back. `nice` and cgroups shape work that is already running; they
+do not decide whether it should start. And your bundler will never know about your Gradle daemon.
+
+HIPPO puts a small, generic arbiter in front of the work. Before a heavy command runs, it reads host
+evidence, claims a fixed share from a ledger every repository on the machine can see, and tells the
+command how much of the host it may actually use. The command does not change — it reads a number out
+of an environment variable it already understands.
+
+Longer version: [Why HIPPO exists](./docs/explanation/why-hippo-exists.md).
+
+## 📦 Install
+
+Download a tagged archive for `darwin` or `linux` on `amd64` or `arm64`, and verify it against the
+release `checksums.txt`. **Pin both the tag and the expected SHA-256; never follow `main` at
+runtime.**
+
+```sh
+VERSION=v0.5.1
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
+BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
+
+curl -fsSLO "${BASE}/hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
+curl -fsSLO "${BASE}/checksums.txt"
+
+# Verify before extracting. sha256sum on Linux, shasum on macOS.
+grep " hippo_${VERSION}_${OS}_${ARCH}.tar.gz\$" checksums.txt |
+  { command -v sha256sum >/dev/null 2>&1 && sha256sum -c - || shasum -a 256 -c -; }
+
+tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
+./hippo version --json
+```
+
+```console
+hippo_v0.5.1_darwin_arm64.tar.gz: OK
+{"schemaVersion":1,"version":"v0.5.1","commit":"5722854fddfd68b1fc7ca9feca935fe3e7eec625"}
+```
+
+Working from a source checkout instead? The tracked `./hippo` bootstrap compiles the CLI once and
+caches it. Full details: [How to install a pinned release](./docs/how-to/install-a-pinned-release.md).
+
+## 🚀 Quick start
+
+Ask what the host looks like:
+
+```console
+$ hippo status --disk-path .
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
+```
+
+Guard a command. Everything after `--` belongs to the child, so its flags are never parsed as HIPPO's:
+
+```console
+$ hippo run --class ephemeral --disk-path . -- sh -c 'echo build-started; echo build-finished'
 build-started
 build-finished
-$ echo $?
-0
+```
 
-$ printf 'hello\n' | ./hippo run -- sh -c 'read value; printf "%s-world\n" "$value"' | tr a-z A-Z
+That is the entire output. HIPPO writes to stderr only when an operator needs to know about a
+degraded admission, a deferral, a storage block, or a pressure shed.
+
+Your exit code and your pipeline both survive:
+
+```console
+$ hippo run --disk-path . -- sh -c 'exit 3'; echo $?
+3
+
+$ printf 'hello\n' | hippo run --disk-path . -- sh -c 'read v; printf "%s-world\n" "$v"' | tr a-z A-Z
 HELLO-WORLD
 ```
 
-Admission can wait silently while the configured sample window fills. The guard writes a message to stderr only when an operator needs to know about a degraded admission, deferral, storage block, or pressure shed. `monitor` prints the initial state and then only state/profile transitions:
+Hand the allocation to your build tool:
 
 ```console
-$ ./hippo monitor --interval 1s --disk-path .
-2026-01-02T03:04:05Z state=normal reason=normal profile=balanced swap=idle
-2026-01-02T03:05:10Z state=warning reason=memory-psi profile=constrained swap=idle
-^C
+$ hippo run --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS"'
+BUILD_WORKERS=11 TEST_JOBS=11
 ```
 
-Use `monitor --json` for machine consumers. It emits one schema-1 JSON object per transition, one object per line, with `measuredAt`, `state`, `reason`, `profile`, and `swapState`.
+Walk through it properly: [Guard your first command](./docs/tutorials/guard-your-first-command.md).
 
-Cancellation is propagated through the caller-owned context. A private, capability-authenticated HIPPO launcher owns the admitted command group and its reservation and port identities. Normal or nonzero leader exit is not group retirement: the launcher waits for the complete group to disappear. On cancellation or owner-side shedding, it signals only that group, applies independently bounded TERM and KILL observation, and releases ownership only after positive group retirement. An unconfirmed retirement returns boundedly while leaving accounting fail closed.
+## ⚙️ How it works
 
-When inherited stdin is the caller's controlling terminal, HIPPO makes the guarded child group foreground before it can read and restores the original foreground group on every return path. Pipes, regular files, and non-controlling TTYs are unchanged. This preserves interactive reads without weakening process-group signal cleanup.
+**Admission.** HIPPO samples memory, disk, CPU, swap, the macOS compressor, and Linux PSI, then
+resolves `balanced` → `constrained` → `minimal` from that evidence. It claims a fixed CPU-and-memory
+vector from a ledger shared by every repository using the same state root. Capacity is the host's
+available parallelism minus one safety unit, and effective memory minus the profile's reserve — never
+the whole machine.
 
-For a long-running pane, the same plain-text transcript can be captured without machine-specific tooling in the repository:
+**Supervision.** The admitted command runs as its own process group, holding `HIPPO_PROFILE`,
+`HIPPO_CONCURRENCY`, and any variables you mapped. A private launcher holds the reservation identity
+through complete group retirement, so a leader exiting early or forking a background descendant
+cannot release capacity while the work is still running.
+
+**Shedding.** Under critical pressure one locked evaluation marks a single victim — newest ephemeral
+first, then newest service, never a transactional owner. A remote guard **never** signals another
+guard's process group; it marks and waits for that owner to stop its own child. A live unresponsive
+victim blocks any further selection, so pressure cannot cascade into emptying the ledger.
+
+**Failure.** Exit `73` needs storage cleanup, `75` is retryable pressure and holds no reservation,
+`78` needs a changed request. Corrupt or unreadable shared state returns an error and preserves the
+bytes rather than reporting a synthetic zero that would let everyone in at once.
+
+| Mode                     | Behavior                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| Schema 1 — `exclusive`   | One heavy task host-wide; services keep independent sessions. The default without configuration. |
+| Schema 2 — `reservation` | Concurrent owners against a shared vector budget. Opt in per repository.                         |
+
+The two never mix within one state root; a client meeting the other mode defers with `75` until the
+old sessions drain.
+
+## 📚 Documentation
+
+Full documentation lives in [`docs/`](./docs/README.md) and follows the
+[Diátaxis framework](https://diataxis.fr/).
+
+| Section                                     | Use it when                                          |
+| ------------------------------------------- | ---------------------------------------------------- |
+| [Tutorials](./docs/tutorials/README.md)     | You are new and want to learn by doing               |
+| [How-to guides](./docs/how-to/README.md)    | You have a specific goal and need the steps          |
+| [Reference](./docs/reference/README.md)     | You need an exact flag, exit code, field, or default |
+| [Explanation](./docs/explanation/README.md) | You want to understand why HIPPO works this way      |
+
+Popular entry points:
+
+- [Guard your first command](./docs/tutorials/guard-your-first-command.md) — five minutes
+- [Command-line interface](./docs/reference/cli.md) — every command and flag
+- [Exit codes](./docs/reference/exit-codes.md) — the `73` / `75` / `78` contract
+- [How to enable reservation coordination](./docs/how-to/enable-reservation-coordination.md)
+
+The [specifications tree](./specs/README.md) is canonical: `specs/architecture.md` holds the as-built
+C4 model and [`specs/behaviours/`](./specs/behaviours/README.md) holds the executable Gherkin corpus
+that every test adapter runs.
+
+## 📋 Project status
+
+HIPPO is in active development. It coordinates real work across the Open Sharia Enterprise
+repositories, and its behavior is pinned by an executable specification, but versions below `1.0.0`
+may still make breaking changes — see the [changelog](./CHANGELOG.md).
+
+Released tags are immutable. A published release is never rebuilt or replaced.
+
+**External contributions are currently closed.** Issues and pull requests from outside the project
+are not being accepted while the engineering patterns stabilize. You are welcome to fork the
+repository under the MIT license and use it however you like.
+
+Contributor rules for the maintainer and automated agents are in [`AGENTS.md`](./AGENTS.md).
+
+## 🌙 Part of Open Sharia Enterprise
+
+HIPPO belongs to the [Open Sharia Enterprise](https://github.com/wahidyankf/ose-public) project
+family, where it supplies resource coordination for the other repositories. It has no OSE-specific
+defaults compiled into it and is designed to be used entirely on its own — consumers supply their own
+commands, paths, ports, and health endpoints.
+
+## 🛠️ Development
+
+Source contributors need Go 1.26.1 and Node.js 24.
 
 ```sh
-tmux capture-pane -p -t hippo:0.0 -S -200
+npm ci            # installs locked tooling; the prepare lifecycle installs Git hooks
+npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact policy
+npm test           # the full release gate, including race detection and vulnerability scan
 ```
 
-## Resource policy
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/). Pre-commit formats
+staged Go, shell, Markdown, JSON, and YAML; pre-push runs the quick gate. The quick gate enforces at
+least 99% statement coverage over deterministic production policy, configuration, host-parsing, and
+evidence-aggregation logic; platform, filesystem, and process boundaries are covered by strict
+integration and compiled-binary end-to-end adapters.
 
-Ordinary work resolves `balanced` → `constrained` → `minimal` from effective memory, available memory, disk, CPU, and swap capability. Balanced ephemeral work on Darwin may admit after a full stable warning window when 25% of effective memory, clamped to 4–8 GiB, remains available and CPU, disk, OOM, swap-out, and compressor-growth checks remain safe. This degraded path forces canonical concurrency and every consumer-selected mapping to one. Services, fallback profiles, Linux PSI, transactions, and releases cannot use it.
+Release assets are built only through `./scripts/build-release.sh <version> <commit> <output-dir>`.
 
-Reservation capacity is the host's available parallelism minus one safety unit and effective memory minus the resolved profile reserve, optionally tightened by schema-2 caps. Both dimensions must fit together using checked subtraction, so integer overflow cannot turn an exhausted vector into an admission. An impossible vector returns exit `78`; temporary exhaustion remains at the FIFO head through the bounded lease interval and then returns exit `75`. Under critical pressure, one locked evaluation marks the newest ephemeral owner, then the newest service only when no eligible ephemeral remains. Transactional owners are never shed after admission. A remote selector never signals another owner's process group: it waits boundedly for the owning guard to observe its mark, terminate and reap its own child, and release the reservation. A live unresponsive selected owner remains the global no-cascade barrier. The mark preserves storage exit `73` versus retryable pressure exit `75` for the owner that performs termination.
+## 📄 License
 
-Exit `73` requires storage cleanup. Exit `75` is retryable capacity, lease, or coordination pressure. If compatibility session inventory cannot be enumerated, a heavy owner or service session cannot be decoded, or positively stale heavy state cannot be removed, HIPPO deliberately leaves the existing bytes in place and defers reservation takeover. Inspect the private shared state, confirm that no owner remains, correct its filesystem accessibility, and retry; HIPPO never creates a mixed reservation/exclusive epoch. A malformed reservation marker, lock, or ledger also fails closed: admission and `status --json` return an error instead of rewriting state or reporting zero coordination totals. A guard that is killed outright cannot reap the child it launched. The launcher holds the reservation identity through full group retirement, so that orphan keeps its reservation rather than escaping coordination, which is the right answer for capacity because the work really is still consuming the host. It is also why nothing ever reclaims it: no supervisor remains to shed the payload under pressure or to release its reservation when it ends, so a shared root accumulates owners no one will clean up until every later admission defers. `status --json` therefore reports `abandonedProcessGroups`, the recorded process groups still running while the guard process that owned them is gone. Because the launcher deliberately keeps the identity lock held, that report asks after the guard's own process rather than the lock; a recycled guard identifier reads as alive and is passed over, which loses a report rather than inventing one. HIPPO reports these and never signals them: the record holds a bare process group with no start-time identity, so a group the kernel has recycled would name an unrelated process, and killing that is worse than leaking the original. Confirm the group before acting on it. Exit `78` requires configuration, impossible reservation, invalid mapping, or strict-profile replanning. Never bypass the guard or change task class to obtain admission.
-
-Every repository on a host shares one coordination root, so its lock is routinely held by a peer for a bounded transaction. That contention is never a supervision failure, and it resolves differently in each window. Before admission it returns retryable exit `75` and no child has run. At activation it returns the same retryable `75` and stops the child that has already started: activation records the supervised process group, and critical-pressure shedding can only select an owner whose process group was recorded, so a child that could not be recorded would be unsheddable. After activation the contended observation is skipped and the healthy child keeps running, and `status --json` waits the contention out before reporting. Because activation follows its child's start, a caller can watch its payload run and still receive `75`; an owner that receives `75` holds no reservation whatever its payload did, so callers retry instead of reading the deferral as an admission. Because retrying is the only correct response to `75`, `run` can do it for you: `--wait-for-admission <duration>` re-attempts a deferred owner until that budget is spent, backing off from 100ms to a 2s ceiling, and still reports `75` if capacity never frees. Zero, the default, reports the deferral immediately and leaves the decision to the caller. Note that a retry can re-run a payload that had already started, for the activation reason above, so it suits the idempotent build and test commands HIPPO guards; a caller whose payload is not idempotent should keep the default and decide for itself. Ownership cleanup that cannot take the lock leaves a reconcilable owner mark behind, reports a deferred-cleanup note rather than a failure, and the next repository to take the lock completes the release. Malformed state still fails closed.
-
-## Configuration and state
-
-Copy [`hippo.local.json.example`](hippo.local.json.example) to ignored `hippo.local.json`. `--config` overrides `HIPPO_CONFIG`, which overrides the bootstrap default. Schema 2 enables reservation coordination and may cap `maxCpu`, `maxMemoryMiB`, and `maxActiveOwners` or set automatic shares. It cannot raise `maxActiveOwners` above 20 or weaken the one-CPU and 256 MiB floors. Within one shared root, every live owner and queued waiter contributes its configured maximum; HIPPO uses the minimum until that participant exits or times out and resets the effective limit when the ledger becomes idle. A retained schema-1 file deliberately selects the v0.3.1 exclusive mode.
-
-`HIPPO_ROOT` overrides the shared coordination, lease, and evidence root. Defaults are `~/Library/Application Support/hippo` on macOS and `${XDG_STATE_HOME:-$HOME/.local/state}/hippo` on Linux. All repositories using the same root coordinate through the same protocol and evidence budget. At most 20 evidence streams may be live at once; each stream retains five rotating 400 KiB raw chunks (about 2 MiB total) while its summary covers the complete session. Inactive evidence is capped at 50 MiB, raw samples expire after seven days, and summaries expire after thirty days. Evidence never records command arguments, origins, paths, credentials, or user data.
-
-Reservation mode holds `coordination.lock` only while it reconciles liveness, changes the FIFO queue, admits a complete vector, records a process group, marks one pressure victim, observes an owner mark, or releases an owner. Lifecycle acquisitions have bounded deadlines and an inode-keyed in-process gate in addition to cross-process advisory locking. If final ledger release cannot acquire the lock, HIPPO retains the identity evidence and retries atomically rather than making the unreleased record look stale; cancelled waiters use a fresh bounded cleanup attempt and retain verifiable FIFO evidence if that attempt fails. Decoded ledgers are rejected unless tokens, classes, monotonic sequences, nonnegative vectors, checked totals, owner/waiter structure, owner limits, and shedding state are internally consistent. A missing ledger is initialized only after the marker and identity directory positively prove an empty epoch. Sequence exhaustion remains byte-preserving while any participant is live or unverifiable and resets only after the epoch is positively empty. Per-token advisory identities include device and inode metadata, with a hard-link anchor preserving the live object when its primary path is corrupted. The private HIPPO launcher, never the arbitrary payload, holds both reservation and port identities through full group retirement, so supervisor death, payload descriptor closure, or a background descendant cannot release capacity early. Unconfirmed embedded returns abandon only the caller's local descriptor copies. New schema-1 ownership uses the same launcher lifetime; legacy zero-metadata PID records remain conservative. Inherited `HIPPO_SESSION` children reuse the existing fixed allocation and never create or expand an owner.
-
-The compatibility protocol remains available: services own independent inheritable sessions, while ephemeral and transactional work serialize on `heavy.lock`. A schema-1 `coordination-mode.json` marker advertises `exclusive` while any compatibility session is live and is removed after the final session exits. Reservation mode refuses to replace live or unverifiable exclusive state. Conversely, a compatibility client defers every class when `reservation` is active. Both paths preserve state, start no child, and return `75`, so consumers can move only after old sessions drain.
-
-Runtime integration uses `HIPPO_ROOT`, `HIPPO_SESSION`, `HIPPO_BIN`, `HIPPO_PROFILE`, `HIPPO_CONCURRENCY`, `HIPPO_BUILD_CACHE`, `HIPPO_HEALTH_URL`, and `HIPPO_ROUTED_ORIGIN`.
-
-## JSON and evidence formats
-
-`version --json` is the smallest public document:
-
-```json
-{
-  "schemaVersion": 1,
-  "version": "v1.2.3",
-  "commit": "0123456789abcdef0123456789abcdef01234567"
-}
-```
-
-`status --json` emits schema 4 with the latest host sample at the top level, the current assessment and resolved profile, and privacy-safe `coordination` totals. Coordination corruption is an error, never a synthetic zero-total success. Byte values are integer bytes; timestamps are UTC RFC 3339 with optional fractional seconds; unavailable optional readings are `null` or omitted according to the field's compatibility contract.
-
-```json
-{
-  "schemaVersion": 4,
-  "measuredAt": "2026-01-02T03:04:05Z",
-  "platform": "linux",
-  "capabilities": ["cgroup-v2", "memory-psi"],
-  "effectiveMemoryLimitBytes": 17179869184,
-  "availableMemoryBytes": 12884901888,
-  "availableNonCompressedEstimateBytes": null,
-  "memoryPressureLevel": 1,
-  "compressorAvailable": null,
-  "compressorPayloadBytes": null,
-  "physicalMemoryBytes": 34359738368,
-  "availableParallelism": 8,
-  "cpuUtilizationPercent": 18.4,
-  "diskFreeBytes": 42949672960,
-  "diskTotalBytes": 549755813888,
-  "pageSizeBytes": 4096,
-  "compressorStoredPages": null,
-  "compressorOccupiedPages": null,
-  "swapIns": 0,
-  "swapOuts": 0,
-  "swapTotalBytes": 4294967296,
-  "swapUsedBytes": 0,
-  "swapFreeBytes": 4294967296,
-  "swapState": "idle",
-  "memoryPsiSomeAvg10": 0,
-  "memoryPsiFullAvg10": 0,
-  "oomEvents": 0,
-  "oomKillEvents": 0,
-  "resource": {
-    "compressorGrowthWindowBytes": 0,
-    "swapOutWindowBytes": 0,
-    "reason": "normal",
-    "state": "normal",
-    "storageBlocked": false,
-    "swapState": "idle"
-  },
-  "profile": {
-    "requestedProfile": "balanced",
-    "resolvedProfile": "balanced",
-    "fallbackChain": ["balanced"],
-    "strict": false,
-    "concurrency": 7,
-    "memoryReserveBytes": 2576980378,
-    "diskReserveBytes": 21474836480,
-    "decision": "run",
-    "exitCode": 0,
-    "retryable": false
-  },
-  "coordination": {
-    "schemaVersion": 4,
-    "mode": "reservation",
-    "capacity": { "cpu": 7, "memoryBytes": 14602888806 },
-    "allocated": { "cpu": 2, "memoryBytes": 1073741824 },
-    "waiting": { "cpu": 0, "memoryBytes": 0 },
-    "activeOwners": 1,
-    "waitingOwners": 0,
-    "ephemeral": 1,
-    "service": 0,
-    "transactional": 0
-  },
-  "configHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-}
-```
-
-The complete host-sample field inventory is grouped below. The same sample object is written as one JSON object per line in development raw evidence.
-
-| Group          | Fields                                                                                                                                   |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity       | `schemaVersion`, `measuredAt`, `platform`, `capabilities`                                                                                |
-| Memory         | `effectiveMemoryLimitBytes`, `availableMemoryBytes`, `availableNonCompressedEstimateBytes`, `memoryPressureLevel`, `physicalMemoryBytes` |
-| Compressor     | `compressorAvailable`, `compressorPayloadBytes`, `compressorStoredPages`, `compressorOccupiedPages`                                      |
-| CPU and disk   | `availableParallelism`, `cpuUtilizationPercent`, `diskFreeBytes`, `diskTotalBytes`                                                       |
-| Swap           | `pageSizeBytes`, `swapIns`, `swapOuts`, `swapTotalBytes`, `swapUsedBytes`, `swapFreeBytes`, `swapState`                                  |
-| Linux pressure | `memoryPsiSomeAvg10`, `memoryPsiFullAvg10`, `oomEvents`, `oomKillEvents`                                                                 |
-
-A development lifetime summary uses schema 4. Its aggregate covers every sample even when older raw chunks have rotated away. Schema-3 fields retain their meaning; reservation sessions add only aggregate request, allocation, wait, peak-owner, and outcome fields. `peakOwnerCount` is raised atomically by every admission event during the child's lifetime, so even an owner admitted and released between host-sampling ticks is included.
-
-| Summary group       | Fields                                                                                                                                                                                                                                                                    |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity and result | `schemaVersion`, `sampleCount`, `taskClass`, `outcome`                                                                                                                                                                                                                    |
-| Capacity aggregate  | `availableParallelism`, `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `compressorAvailableAll`, `compressorPayloadPeakBytes`, `cpuUtilizationP95Percent`, `diskFreeMinBytes`, `swapInsDelta`, `swapOutsDelta`, `swapFreeMinBytes`, `healthFailures` |
-| Source platform     | `platform`, `capabilities`                                                                                                                                                                                                                                                |
-| Resolved policy     | `requestedProfile`, `resolvedProfile`, `fallbackChain`, `concurrency`, `configHash`                                                                                                                                                                                       |
-| Reservation         | `requestedCpu`, `requestedMemoryBytes`, `allocatedCpu`, `allocatedMemoryBytes`, `reservationWaitMilliseconds`, `peakOwnerCount`, `budgetOutcome`                                                                                                                          |
-
-Runtime files are private implementation data under the shared state root:
-
-| File                                    | Purpose                                                             |
-| --------------------------------------- | ------------------------------------------------------------------- |
-| `coordination.lock`                     | Short advisory lock protecting coordination and session mutations   |
-| `coordination-mode.json`                | Schema-1 active mode marker: `exclusive` or `reservation`           |
-| `heavy.lock/owner.json`                 | Exclusive heavy-work owner retained for the guarded child lifecycle |
-| `sessions/<token>.json`                 | Private inheritable live-session record                             |
-| `reservations.json`                     | Schema-2 vectors, FIFO waiters, owners, and numeric shedding cause  |
-| `reservation-identities/<token>.lock`   | Advisory liveness proof resistant to stale or reused PIDs           |
-| `reservation-identities/<token>.anchor` | Same-inode recovery anchor for a live reservation identity          |
-| `.coordination-mode-*.tmp`              | Protected atomic-write staging for the active mode marker           |
-| `.reservations-*.tmp`                   | Protected atomic-write staging for the reservation ledger           |
-| `<stream>.jsonl`                        | Newest raw samples for an active or completed stream                |
-| `<stream>.1.jsonl` … `<stream>.4.jsonl` | Four progressively older raw chunks                                 |
-| `<stream>.summary.json`                 | Complete lifetime aggregate for the stream                          |
-| `<stream>.active.json`                  | Schema-1 live-owner marker containing only the writer PID           |
-| `.writers.lock`                         | Cross-process lock protecting writer admission and cleanup          |
-
-Coordination, lease, active-writer, and lock files are lifecycle internals, not supported evidence-reader APIs. Consumers should read the documented raw samples and summaries.
-
-## Four-consumer conformance
-
-`go run ./cmd/hippo-conformance <manifest.json>` runs a generic, manifest-driven adoption check. Start from [`conformance.manifest.json.example`](conformance.manifest.json.example). The manifest supplies exactly four consumer names and checkout paths, the pinned HIPPO binary and SHA-256, a shared root, argv-safe bootstrap and gate commands, and any coordination checks. Absolute, relative, and symlink-resolved paths must identify four different checkouts and cannot overlap the shared root in either direction. The harness freezes each checkout object plus the created shared-root object, revalidates both around every command, and snapshots every checkout's HEAD and complete dirty-path set before running any command. Bootstrap commands remain sequential within one consumer while all four consumer lanes run concurrently; any bootstrap failure is aggregated deterministically and blocks later phases. Coordination checks form the next barrier, then consumer gates run concurrently. Each command receives its own read-and-execute-only copy of one safely opened verified binary; the exact command copy is checked after execution, while the hidden master and manifest source are checked before later work and final reconciliation. Caller `HIPPO_SESSION` and fixed-allocation outputs plus the caller repository's bootstrap-only `HIPPO_DEFAULT_CONFIG` are removed from the consumer base environment; an explicit operator `HIPPO_CONFIG` remains available, and each consumer's own outer guard may establish the only session inherited by its nested work. Every started group must retire completely after normal, nonzero, or cancelled leader exit before its phase can finish; cancellation prevents the next sequential command from starting, applies bounded TERM/KILL observation, and reconciliation uses a fresh deadline. Cleanup and integrity failures remain fatal even beside an otherwise skippable capacity exit and join, rather than mask, execution or reconciliation failures. HIPPO compiles no consumer name, path, command, port, or product default, and its own validation, start, cancellation, and cleanup errors do not expose machine paths.
-
-A live coordination check may set `allowCapacitySkip` when exit `75` means the current host cannot safely reproduce overlap. The harness records that check as an explicit capacity skip and continues deterministic integrity gates; other exits and all consumer-gate failures remain failures.
-
-## Release monitoring
-
-Strict release monitoring requires explicit local health and routed endpoints:
-
-```sh
-./hippo release monitor \
-  --output samples.jsonl \
-  --summary summary.json \
-  --deployment-root /path/to/deployment \
-  --health-url http://127.0.0.1:8080/health/ready \
-  --routed-origin https://service.example \
-  --service-port 8080 --service-port 8081
-```
-
-Without `--duration-ms`, monitoring continues until cancellation; a positive value makes the caller context end the capture after that many milliseconds. The current raw chunk remains at the requested `--output` path and older chunks use numbered suffixes.
-
-Either release destination may use the Unix `-` convention, but not both in one invocation:
-
-```sh
-# Stream raw JSONL; retain the final summary as a file.
-./hippo release monitor \
-  --output - --summary summary.json \
-  --deployment-root /path/to/deployment \
-  --health-url http://127.0.0.1:8080/health/ready \
-  --routed-origin https://service.example | jq -c .
-
-# Retain rotating raw evidence; stream the final summary for assessment.
-./hippo release monitor \
-  --output samples.jsonl --summary - \
-  --deployment-root /path/to/deployment \
-  --health-url http://127.0.0.1:8080/health/ready \
-  --routed-origin https://service.example |
-  ./hippo release assess --summary -
-```
-
-File output remains exclusive, private, rotating, and retention-managed. Standard output is caller-owned: HIPPO neither closes nor retains it, applies normal pipe backpressure, and returns a failure if the downstream writer fails. Diagnostics remain on stderr. Raw JSONL and the final summary cannot both target stdout because their schemas must never be mixed.
-
-New summaries use schema 5 with generic health fields. Assessment remains compatible with retained schema 2–4 summaries.
-
-Each release raw JSONL record embeds the complete host sample and adds `oneMinuteLoad`, `serviceRssBytes`, `healthStatus`, `healthLatencyMs`, `routedJourneyStatus`, and `routedJourneyLatencyMs`. The schema-5 summary contains `schemaVersion`, `platform`, `capabilities`, `sampleCount`, `availableParallelism`, `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `compressorAvailableAll`, `compressorPayloadPeakBytes`, `physicalMemoryBytes`, `cpuUtilizationP95Percent`, `serviceRssPeakBytes`, `diskFreeMinBytes`, `swapInsDelta`, `swapOutsDelta`, `swapFreeMinBytes`, `healthLatencyP95Ms`, `healthFailures`, `routedJourneyLatencyP95Ms`, `routedJourneyLatencyMaxMs`, and `routedJourneyFailures`.
-
-`release assess --summary <path>` prints `{"accepted":true,"schemaVersion":5}` when that evidence remains inside the release envelope; `--summary -` reads the same document from stdin. Rejected evidence returns exit `75` with `accepted` set to `false`.
-
-## Development
-
-The canonical specification includes the current [C4 architecture](specs/architecture.md) and executable [`specs/behaviours`](specs/behaviours/README.md). The shared behavior contract enforces strict unit, integration, and compiled-binary E2E adapters with complete step resolution. Unit runs the entire corpus; any integration or E2E exemption is exact and documents its boundary and reason. Executable scenarios cover canonical and mapped concurrency, child stream separation, JSON transitions, stdin assessment, release streaming, stdout conflicts, and downstream failures.
-
-Source contributors need Go 1.26.1 and Node.js 24. Install the locked contributor tooling once; npm's prepare lifecycle installs the repository hooks:
-
-```sh
-npm ci
-npm run test:quick
-npm test
-```
-
-Commits follow Conventional Commits. Pre-commit formats supported staged Go, shell, Markdown, JSON, and YAML files; pre-push runs the direct no-Nx quick gate. The quick gate enforces at least 99% statement coverage over deterministic production policy, configuration, host-parsing, and fixed-memory evidence aggregation logic. Platform, filesystem, and process boundaries remain covered by strict integration and compiled-binary E2E adapters.
-
-Release artifacts are built with `./scripts/build-release.sh <version> <commit> <output-dir>`. The version must be exact `vX.Y.Z`; the commit must be the full lowercase current `HEAD`, and the checkout must be clean before output begins. All four binaries are compiled from an isolated exact-commit materialization, so ignored or excluded checkout files cannot affect them. Validation requires exactly the four supported archives plus their checksums, one regular mode-755 `hippo` member per archive, matching clean VCS metadata, and matching native version JSON; symbolic links, hard links, and special archive members are rejected before extraction. Disposable scratch belongs in `local-tmp/`; requested non-authoritative reports belong in `generated-reports/`. Both directories, generated build output, and local configuration are enforced by the artifact suite and `.gitignore`.
-
-## License
-
-HIPPO is available under the [MIT License](LICENSE).
+HIPPO is available under the [MIT License](./LICENSE).
