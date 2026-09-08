@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# This script clones the checkout and then checks out a commit inside the clone.
+# A Git hook in a linked worktree exports GIT_DIR, which Git prefers over -C, so
+# without this the detach would move the real repository's HEAD instead.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+	GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_PREFIX
+
 if [ "$#" -ne 3 ]; then
 	echo "usage: $0 <version> <commit> <output-dir>" >&2
 	exit 1

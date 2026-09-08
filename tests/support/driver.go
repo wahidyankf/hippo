@@ -130,6 +130,11 @@ type Driver struct {
 	historicalCaches        []string
 	lintConfiguration       string
 	lintCommand             string
+	hookEnvironment         []string
+	ambientRepository       string
+	ambientHead             string
+	fixtureCheckout         string
+	gateScripts             map[string]string
 	strictAdapters          bool
 	unitExemptionsForbidden bool
 	approvedExemptions      bool
@@ -2354,8 +2359,7 @@ func (driver *Driver) requireRejected() error {
 }
 
 func (driver *Driver) inspectBuildCaching() error {
-	command := exec.Command("git", "check-ignore", "--quiet", "dist/hippo_test_linux_amd64.tar.gz")
-	command.Dir = toolRoot()
+	command := GitCommand(toolRoot(), "check-ignore", "--quiet", "dist/hippo_test_linux_amd64.tar.gz")
 
 	driver.lifecycleOK = command.Run() == nil
 
@@ -2959,8 +2963,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 
 	driver.privateArtifacts = true
 	for _, path := range ignoredPaths {
-		ignore := exec.Command("git", "check-ignore", "--quiet", path)
-		ignore.Dir = root
+		ignore := GitCommand(root, "check-ignore", "--quiet", path)
 		if ignore.Run() != nil {
 			driver.privateArtifacts = false
 		}
@@ -2984,8 +2987,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 	driver.privateArtifacts = driver.privateArtifacts && trackedError == nil && len(bytes.TrimSpace(trackedOutput)) == 0
 
 	examplePath := "hippo.local.json.example"
-	example := exec.Command("git", "ls-files", "--error-unmatch", examplePath)
-	example.Dir = root
+	example := GitCommand(root, "ls-files", "--error-unmatch", examplePath)
 	driver.exampleTracked = example.Run() == nil
 
 	moduleData, moduleError := os.ReadFile(filepath.Join(root, "go.mod"))

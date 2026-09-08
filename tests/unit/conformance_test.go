@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/conformance"
+	"github.com/wahidyankf/hippo/tests/support"
 	"golang.org/x/sys/unix" //nolint:depguard // Manifest identity fixtures require direct kernel metadata and flock probes.
 )
 
@@ -126,8 +126,7 @@ func runnableConformanceManifest(t *testing.T) conformance.Manifest {
 			{"init", "-q", "-b", "main"},
 			{"-c", "user.name=HIPPO fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-q", "-m", "fixture"},
 		} {
-			command := exec.Command("git", arguments...)
-			command.Dir = consumer.Path
+			command := support.GitCommand(consumer.Path, arguments...)
 			if output, commandError := command.CombinedOutput(); commandError != nil {
 				t.Fatalf("initialize conformance checkout: %s: %v", output, commandError)
 			}
