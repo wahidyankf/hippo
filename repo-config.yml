@@ -32,14 +32,22 @@ governance-word-budget:
 governance-directory-map:
   # `docs/` stays excluded on purpose: its READMEs are Diátaxis landing pages
   # that link into their sections by name, which is a different contract from
-  # naming every direct sibling exactly once. See
+  # naming every direct sibling exactly once. `plans/` is mapped for the
+  # opposite reason -- a stage index whose folders are not listed is a stage
+  # whose plans are found by luck. See
   # repo-governance/conventions/directory-maps.md.
   trees:
+    - path: plans
     - path: specs
     - path: repo-governance
 
 md-internal-link:
-  exclude-sources: []
+  # Archived plans are excluded as link *sources* only, and stay valid link
+  # targets. A completed plan describes the repository as it was, on purpose,
+  # and may name paths that have since moved; reporting those would make
+  # finishing a plan emit findings. See plans/done/README.md.
+  exclude-sources:
+    - "plans/done/**"
 
 md-mermaid:
   # Okabe-Ito, chosen because it stays distinguishable under the common forms

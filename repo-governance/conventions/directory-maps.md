@@ -6,7 +6,7 @@ The mapped trees are declared in [`repo-config.yml`](../../repo-config.yml) and 
 
 ## What Is Mapped
 
-`specs/` and `repo-governance/`. Both are trees a reader navigates by structure: a specification directory whose contents are not listed is a directory whose scenarios are found by luck.
+`specs/`, `repo-governance/`, and `plans/`. All three are trees a reader navigates by structure: a specification directory whose contents are not listed is a directory whose scenarios are found by luck, and a plan stage whose folders are not listed is a stage nobody can tell is empty.
 
 ## What Is Not
 
