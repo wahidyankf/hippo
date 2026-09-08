@@ -28,17 +28,23 @@ md-internal-link:
   exclude-sources: []
 
 md-mermaid:
-  # HIPPO documents with ASCII art and carries no Mermaid diagram at all, so
-  # every value below is vacuous today. They are stated rather than omitted
-  # because the schema requires a repository to declare its palette before it
-  # can have one: the first `classDef` anyone adds will fail this gate until
-  # someone decides, explicitly, what this repository's colours are. That is
-  # the intended outcome, not an oversight.
+  # Okabe-Ito, chosen because it stays distinguishable under the common forms
+  # of colour blindness. `#029E73` reaches only 3.42:1 against white, so it
+  # carries black text; the validator enforces the pairing rather than trusting
+  # whoever adds the next diagram to remember it.
   node-label-graphemes: 32
   edge-label-graphemes: 24
-  fill-colors: []
-  edge-colors: []
-  text-colors: []
+  fill-colors:
+    - "#0173B2"
+    - "#DE8F05"
+    - "#029E73"
+    - "#CA9161"
+  edge-colors:
+    - "#0173B2"
+    - "#000000"
+  text-colors:
+    - "#000000"
+    - "#FFFFFF"
 
 harness-parity:
   # HIPPO has one always-on instruction body and no coding-harness adapters of
