@@ -5,63 +5,69 @@ Process Orchestrator. It describes the public system boundary, runtime container
 responsibilities, and material constraints without prescribing any consuming repository's
 architecture.
 
-The diagrams use ASCII so they remain readable in terminals and plain-text tooling. Every relationship and constraint also appears in searchable prose.
+The diagrams are Mermaid. Every relationship and constraint also appears in searchable prose beside its diagram, so the model stays complete for a reader who cannot see it.
 
 ## System Context
 
-```text
-+----------------------+       invokes        +----------------------+
-| Person               | -------------------> | Software system      |
-| Operator/contributor |                      | HIPPO                |
-+----------------------+                      |                      |
-                                              | Admits, supervises,  |
-+----------------------+       invokes        | and sheds local work |
-| External system      | -------------------> +----------+-----------+
-| Hooks/automation     |                                 |
-+----------------------+                                 |
-                                      +------------------+------------------+
-                                      |                  |                  |
-                                      | reads            | supervises       | probes
-                                      v                  v                  v
-                           +----------+-------+ +---------+--------+ +-------+----------+
-                           | External system  | | External system  | | External system  |
-                           | Host OS          | | Guarded workload | | Health endpoints |
-                           +------------------+ +------------------+ +------------------+
+```mermaid
+graph TD
+    Operator["Operator or contributor"]
+    Automation["Hooks and automation"]
+    HIPPO["HIPPO"]
+    Host["Host operating system"]
+    Workload["Guarded workload"]
+    Health["Health endpoints"]
+
+    Operator -->|invokes| HIPPO
+    Automation -->|invokes| HIPPO
+    HIPPO -->|reads evidence| Host
+    HIPPO -->|supervises| Workload
+    HIPPO -->|probes| Health
+
+    classDef person fill:#0173B2,stroke:#000000,color:#FFFFFF
+    classDef system fill:#029E73,stroke:#000000,color:#000000
+    classDef external fill:#CA9161,stroke:#000000,color:#000000
+
+    class Operator,Automation person
+    class HIPPO system
+    class Host,Workload,Health external
 ```
 
 An operator, repository script, Git hook, or CI task invokes HIPPO before compute-bearing local work. HIPPO reads normalized host evidence, resolves a safe capacity profile, and atomically coordinates eligible work through a shared CPU-and-memory reservation ledger. Every service, ephemeral, and transactional owner participates. A schema-1 exclusive bridge remains for v0.3.1 consumers during rollout. Each guard supervises and signals only the child process group it owns; remote guards coordinate pressure shedding through an owner mark and never signal one another's groups. Callers may select environment variables that receive fixed allocated concurrency and may connect standard streams without teaching HIPPO about a build ecosystem. Release monitoring may probe explicit local and routed health endpoints supplied by the caller. HIPPO is repository-independent and does not know consumer project layouts, commands, or infrastructure defaults.
 
 ## Container View
 
-```text
-                                      HIPPO system
-  +--------------------------------------------------------------------------------+
-  |                                                                                |
-  |  +------------------+    builds/executes    +-------------------------------+  |
-  |  | Container        | --------------------> | Container                     |  |
-  |  | Shell bootstrap  |                       | Go CLI process                |  |
-  |  +--------+---------+                       | Cobra command boundary        |  |
-  |           |                                 +---+-----------+-----------+---+  |
-  |           | caches                              |           |           |      |
-  |           v                                     | reads     | owns      | writes
-  |  +--------+---------+                           v           |           v      |
-  |  | Temporary store  |                   +-------+------+    |   +-------+-----+|
-  |  | Build cache      |                   | Input file   |    |   | Data store  ||
-  |  +------------------+                   | Local config |    |   | Runtime     ||
-  |                                         +--------------+    |   | state       ||
-  |                                                             |   +-------------+|
-  +-------------------------------------------------------------|------------------+
-                                                                |
-                                      +-------------------------+------------------+
-                                      |                         |                  |
-                                      | collects                | starts/signals   | probes
-                                      v                         v                  v
-                           +----------+-------+       +---------+--------+ +-------+----------+
-                           | External system  |       | External system  | | External system  |
-                           | Host OS          |       | Child process    | | Health endpoints |
-                           +------------------+       | group            | +------------------+
-                                                      +------------------+
+```mermaid
+graph TD
+    Bootstrap["Shell bootstrap"]
+    CLI["Go CLI process"]
+    Cache["Build cache"]
+    Config["Local configuration"]
+    State["Runtime state store"]
+    Host["Host operating system"]
+    Child["Child process group"]
+    Health["Health endpoints"]
+
+    Bootstrap -->|builds and execs| CLI
+    Bootstrap -->|caches builds| Cache
+    CLI -->|reads| Config
+    CLI -->|owns| State
+    CLI -->|collects| Host
+    CLI -->|starts and signals| Child
+    CLI -->|probes| Health
+
+    classDef unit fill:#0173B2,stroke:#000000,color:#FFFFFF
+    classDef data fill:#CA9161,stroke:#000000,color:#000000
+    classDef external fill:#029E73,stroke:#000000,color:#000000
+
+    class Bootstrap,CLI unit
+    class Cache,Config,State data
+    class Host,Child,Health external
 ```
+
+`Shell bootstrap`, `Go CLI process`, `Build cache`, `Local configuration`, and
+`Runtime state store` are inside the HIPPO system boundary; `Host operating
+system`, `Child process group`, and `Health endpoints` are outside it.
 
 The POSIX shell bootstrap hashes the Go sources and module metadata, serializes compilation, retains a bounded platform cache, and then replaces itself with the compiled executable. Tagged-release consumers may invoke a verified binary directly and bypass this source-build container.
 
@@ -69,20 +75,39 @@ The Go CLI is the only long-running HIPPO execution container. It reads an optio
 
 ## Component View
 
-```text
-Container boundary: Go CLI process
+```mermaid
+graph TD
+    Entry["Process entry"]
+    Commands["Command tree"]
+    Loader["Config loader"]
+    Policy["Policy engine"]
+    Collector["Host collector"]
+    Execution["Execution guard"]
+    Release["Release guard"]
+    Evidence["Evidence store"]
 
-[Process entry] --delegates--> [Command tree]
+    Entry -->|delegates| Commands
+    Commands -->|loads| Loader
+    Commands -->|collects| Collector
+    Commands -->|maps streams| Execution
+    Commands -->|selects sink| Release
+    Loader -->|resolves| Policy
+    Collector -->|samples| Policy
+    Policy -->|assesses| Execution
+    Policy -->|assesses| Release
+    Execution -->|writes| Evidence
+    Release -->|writes| Evidence
 
-[Command tree] --loads-------> [Config loader] --resolves--> [Policy engine]
-[Command tree] --collects----> [Host collector] --samples---> [Policy engine]
-[Command tree] --maps streams-> [Execution guard] <--assesses-- [Policy engine]
-[Command tree] --selects sink-> [Release guard] <---assesses-- [Policy engine]
+    classDef entry fill:#DE8F05,stroke:#000000,color:#000000
+    classDef guard fill:#0173B2,stroke:#000000,color:#FFFFFF
+    classDef shared fill:#029E73,stroke:#000000,color:#000000
 
-[Execution guard] --writes--+
-                             +--> [Evidence store]
-[Release guard] ----writes---+
+    class Entry,Commands entry
+    class Execution,Release guard
+    class Loader,Policy,Collector,Evidence shared
 ```
+
+Every component above sits inside the `Go CLI process` container.
 
 - **Process entry** maps the operating-system argument vector to the application's exit code.
 - **Command tree** owns Cobra commands, flags, validation, stdin/stdout selection, and dependency injection.
@@ -97,39 +122,29 @@ The `internal/policy` package owns the shared typed samples, collectors, task cl
 
 ## Guarded Execution Dynamic View
 
-```text
-Caller     CLI/config     Host/policy   Coordination store   Child group
-  |             |              |               |               |
-  | run request |              |               |               |
-  |------------>| collect      |               |               |
-  |             |------------->|               |               |
-  |             | resolve      |               |               |
-  |             |<-------------|               |               |
-  |             | validate floors/total capacity               |
-  |             |------------->|               |               |
-  |             | lock, reconcile liveness/FIFO |               |
-  |             |----------------------------->|               |
-  |             | reserve CPU+memory atomically |               |
-  |             |----------------------------->|               |
-  |             | unlock coordination mutation |               |
-  |             |----------------------------->|               |
-  |             | foreground/start admitted child group        |
-  |             |--------------------------------------------->|
-  |             | observe own shedding mark before sampling    |
-  |             |----------------------------->|               |
-  |             | sample and assess repeatedly |               |
-  |             |------------->|               |               |
-  |             | mark newest ephemeral, then service + 73/75  |
-  |             |----------------------------->|               |
-  |             | remote selector waits; owner stops own group |
-  |             |--------------------------------------------->|
-  |             | wait until the owned child is reaped         |
-  |             |<---------------------------------------------|
-  |             | finalize evidence, then atomically release   |
-  |             | vector/identity and clear idle mode marker   |
-  |             |----------------------------->|               |
-  | child code or stable guard exit             |               |
-  |<------------|              |               |               |
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant CLI as CLI and config
+    participant Policy as Host and policy
+    participant Store as Coordination store
+    participant Child as Child group
+
+    Caller->>CLI: run request
+    CLI->>Policy: collect evidence
+    Policy-->>CLI: resolved profile
+    CLI->>Policy: validate capacity
+    CLI->>Store: lock and reconcile
+    CLI->>Store: reserve CPU+memory
+    CLI->>Store: unlock
+    CLI->>Child: start admitted child
+    CLI->>Store: observe own mark
+    CLI->>Policy: sample and assess
+    CLI->>Store: mark newest eligible
+    CLI->>Child: stop own group
+    Child-->>CLI: reaped
+    CLI->>Store: finalize and release
+    CLI-->>Caller: child or guard exit
 ```
 
 Admission failures return before child creation. Reservation mode derives a safe vector from host parallelism and effective memory, applies optional caps, and divides automatic requests by profile shares of four, two, or one. Explicit dimensions may be smaller but cannot cross one CPU or 256 MiB. Checked subtraction verifies both dimensions without integer wrap. Impossible requests replan immediately; temporary exhaustion joins a strict FIFO bounded wait. The effective active-owner limit is the minimum contributed by every live owner and queued waiter. Inheritance reuses the token's fixed allocation without a second owner. Host thresholds remain authoritative after budget fit.

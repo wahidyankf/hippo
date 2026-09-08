@@ -5,18 +5,47 @@ help output; run `hippo <command> --help` to confirm against the version you hav
 
 ## Command tree
 
-```text
-hippo
-├── version        Print build version information
-├── status         Inspect current resource evidence
-├── monitor        Monitor resource-state transitions
-├── run            Run a command under resource supervision
-├── release        Check and monitor release resource safety
-│   ├── check      Check release admission and stability
-│   ├── assess     Assess a release evidence summary
-│   └── monitor    Capture release overlap evidence
-└── completion     Generate a shell autocompletion script
+```mermaid
+graph LR
+    hippo["hippo"]
+    version["version"]
+    status["status"]
+    monitor["monitor"]
+    run["run"]
+    release["release"]
+    completion["completion"]
+    check["check"]
+    assess["assess"]
+    rmonitor["monitor"]
+
+    hippo --> version
+    hippo --> status
+    hippo --> monitor
+    hippo --> run
+    hippo --> release
+    hippo --> completion
+    release --> check
+    release --> assess
+    release --> rmonitor
+
+    classDef root fill:#DE8F05,stroke:#000000,color:#000000
+    classDef command fill:#0173B2,stroke:#000000,color:#FFFFFF
+
+    class hippo root
+    class version,status,monitor,run,release,completion,check,assess,rmonitor command
 ```
+
+| Command                 | Does                                      |
+| ----------------------- | ----------------------------------------- |
+| `hippo version`         | Print build version information           |
+| `hippo status`          | Inspect current resource evidence         |
+| `hippo monitor`         | Monitor resource-state transitions        |
+| `hippo run`             | Run a command under resource supervision  |
+| `hippo release`         | Check and monitor release resource safety |
+| `hippo release check`   | Check release admission and stability     |
+| `hippo release assess`  | Assess a release evidence summary         |
+| `hippo release monitor` | Capture release overlap evidence          |
+| `hippo completion`      | Generate a shell autocompletion script    |
 
 ## Shared flags
 
