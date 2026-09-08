@@ -222,3 +222,7 @@ Release assets are built only through `./scripts/build-release.sh <version> <com
 ## 📄 License
 
 HIPPO is available under the [MIT License](./LICENSE).
+
+##  Probe
+
+A deliberate [broken link](docs/does-not-exist.md).
