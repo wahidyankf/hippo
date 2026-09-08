@@ -16,6 +16,8 @@ A convention chooses a path. It does not authorize anyone to walk it; see [commi
 - [Last-resort questions](last-resort-questions.md) — exhaust the repository before asking.
 - [Markdown links](markdown-links.md) — every internal link resolves.
 - [Markdown visualizations](markdown-visualizations.md) — Mermaid, legible and accessible.
+- [Plan lifecycle](plan-lifecycle.md) — the four stages a plan moves through, and what each folder holds.
+- [Plan specification changes](plan-specification-changes.md) — how a plan states its specification work in advance.
 - [Public repository data safety](public-repository-data-safety.md) — what may never be committed.
 - [Pull request body](pull-request-body.md) — what a reviewer is owed.
 - [Pull request boundaries](pull-request-boundaries.md) — one delivery boundary per pull request.
