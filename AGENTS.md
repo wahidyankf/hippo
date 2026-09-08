@@ -1,19 +1,51 @@
 # HIPPO Contributor Rules
 
-- Keep the CLI generic and repository-independent; do not add product-specific defaults.
-- Preserve exit codes `73`, `75`, and `78` and supported evidence readers. Preserve config compatibility unless the owner explicitly authorizes a breaking transition.
-- Before every repository change, assess both `specs/behaviours/` and `specs/architecture.md` for impact.
-- Keep `README.md`, `docs/`, and `CHANGELOG.md` true to the shipped binary. `docs/` follows Diátaxis: a page belongs to exactly one of `tutorials/`, `how-to/`, `reference/`, or `explanation/`. Never publish a command or transcript that has not been executed against the current build; where a path cannot be exercised safely, say so rather than inventing output. `specs/` stays canonical, and `docs/` must not contradict it.
-- Update every affected Gherkin scenario and C4 view in the same change; create behavior changes Gherkin-first, prove the binding failure, keep every adapter strict, and synchronize C4 with the final as-built boundaries and responsibilities. Record a verified no-op instead of churning an unaffected specification.
-- Run every Gherkin scenario through the unit adapter; never add a unit exemption tag or inventory entry. Any integration or E2E exemption must remain exact and name both the concrete boundary and the reason it cannot execute there.
-- Install locked contributor tooling with `npm ci`; hooks enforce Conventional Commits, staged formatting, and the quick pre-push gate.
-- Keep GitHub Actions storage within the free allowance when changing workflows: declare `retention-days` on every artifact upload, keep repository artifact/log retention at or below 7 days, keep the cache limit at or below 10 GB with retention at or below 7 days, and keep the owner's Actions budget at `$0`.
-- Run `npm run test:quick` for fast verification and `npm test` before release; never introduce Nx.
-- Documentation hygiene runs under the pinned RHINO release in `rhino.lock`; what it enforces lives in `repo-config.yml`, so change the declaration rather than the tool.
-- Keep deterministic production core coverage at or above 99%; prove platform and process boundaries through integration and E2E adapters.
-- Separate distinct setup, validation, decision, mutation, and return phases in Go functions with blank lines; automated formatters do not replace semantic grouping.
-- Keep generated binaries, coverage, local configuration, runtime evidence, `local-tmp/` scratch, and `generated-reports/` ignored.
-- Never commit credentials, personal or machine identifiers, absolute local paths, or private infrastructure values.
-- Comment non-obvious shell safety invariants and lifecycle boundaries; avoid line-by-line narration.
-- Build release assets only through `./scripts/build-release.sh <version> <commit> <output-dir>`.
-- Never replace an existing release tag or weaken checksum verification.
+This file is an index. Every rule lives in [`repo-governance/`](repo-governance/README.md), and this file states none of its own.
+
+Start with [the vision](repo-governance/vision/README.md) if you have not worked here before. It explains what a guard nobody notices is for.
+
+## The Product
+
+HIPPO holds no defaults about the work it guards: [repository independence](repo-governance/principles/repository-independence.md).
+
+Exit codes `73`, `75`, and `78`, the evidence readers, and configuration compatibility are the [public contract](repo-governance/development/public-contract.md). None of them moves without authorization.
+
+## Specifications
+
+`specs/` is canonical. Assess it before every change and write behaviour there first: [specification maintenance](repo-governance/development/specification-maintenance.md). Keep the C4 model as-built: [architecture specifications](repo-governance/development/architecture-specifications.md).
+
+`README.md`, `docs/`, and `CHANGELOG.md` follow Diátaxis and may not contradict `specs/`: [documentation architecture](repo-governance/conventions/documentation-architecture.md).
+
+## Testing
+
+One corpus, three executing boundaries: [behaviour-driven development](repo-governance/development/behaviour-driven-development.md), with the outermost one in [end-to-end testing](repo-governance/development/end-to-end-testing.md).
+
+Red, green, refactor, with the evidence of each: [test-driven development](repo-governance/development/test-driven-development.md) and [the cycle](repo-governance/workflows/red-green-refactor.md). A changed scenario or binding needs [a manual review](repo-governance/workflows/gherkin-implementation-review.md).
+
+What runs and where: [quality gates](repo-governance/development/quality-gates.md). What must pass before a change is done: [software quality enforcement](repo-governance/development/software-quality-enforcement.md). This repository never acquires Nx.
+
+## Change Discipline
+
+[Minimal sufficiency](repo-governance/principles/minimal-sufficiency.md) governs the size of a change; [code clarity](repo-governance/development/code-clarity.md) governs its shape; [dependency selection](repo-governance/development/dependency-selection.md) governs what it may depend on.
+
+HIPPO cannot guard HIPPO. The reason, and the contract this repository owes its consumers, is in [resource-aware development](repo-governance/development/resource-aware-development.md).
+
+Workflow storage stays inside the free allowance: [GitHub Actions storage](repo-governance/development/github-actions-storage.md).
+
+## Version Control
+
+Only `main` persists. Work reaches it through [worktree to pull request](repo-governance/workflows/worktree-to-pull-request.md), under the [integration path](repo-governance/conventions/integration-path.md), from a worktree beside this checkout rather than inside it — [worktree location](repo-governance/conventions/worktree-location.md).
+
+[Thematic commits](repo-governance/conventions/thematic-commits.md), one [delivery boundary](repo-governance/conventions/pull-request-boundaries.md) per pull request, a [body](repo-governance/conventions/pull-request-body.md) a reviewer can use, and [merge preconditions](repo-governance/conventions/pull-request-merge.md) that hold every time.
+
+Committing and pushing need [authorization](repo-governance/conventions/commit-authorization.md). Never commit what [data safety](repo-governance/conventions/public-repository-data-safety.md) prohibits. Never bypass a [push hook](repo-governance/conventions/push-hook-verification.md). Keep the [working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub [no faster than three minutes](repo-governance/conventions/github-polling.md).
+
+Releases: [release cut](repo-governance/workflows/release-cut.md). A published tag is never replaced.
+
+## Harnesses
+
+One canonical instruction body, expressed per harness: [coding harness contract](repo-governance/conventions/coding-harness-contract.md). Changing it follows [the change workflow](repo-governance/workflows/coding-harness-contract-change.md) and [parity verification](repo-governance/workflows/coding-harness-parity-verification.md).
+
+## Working Here
+
+Write in [English](repo-governance/conventions/language.md). Keep [task state in the repository](repo-governance/conventions/task-tracking.md). [Exhaust the repository before asking](repo-governance/conventions/last-resort-questions.md). Diagrams are [Mermaid](repo-governance/conventions/markdown-visualizations.md) and every internal [link resolves](repo-governance/conventions/markdown-links.md).

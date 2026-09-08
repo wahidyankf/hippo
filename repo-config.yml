@@ -1,28 +1,41 @@
 # schema: rhino/repo-config/v1
 #
 # What this repository enforces about its own documentation, declared rather
-# than compiled in. HIPPO had no validator before RHINO, so nothing here is a
-# transcription of prior behaviour -- every value is taken from a rule this
-# repository already wrote down or a convention its tree already keeps, and
-# where it has neither, the list is empty rather than filled with a guess.
+# than compiled in.
+#
+# The earlier version of this file was almost entirely inert: HIPPO kept its
+# rules in one AGENTS.md and drew in ASCII, so there was nothing to declare and
+# empty lists said so honestly. The sections that gained content here gained it
+# because the rule they point at now exists -- a governance hierarchy to budget
+# and map, Mermaid diagrams to colour. `harness-parity` is still inert, and
+# still says so: nothing here is aspirational.
 
 governance-word-budget:
-  # Inert, and deliberately so. HIPPO's contributor rules require its
-  # documentation to stay true to the shipped binary; they set no length limit
-  # on anything. An empty surface list says that in the schema's own terms --
-  # nothing is budgeted -- rather than importing a sibling repository's number
-  # and enforcing a policy this repository never adopted.
-  count: whitespace-separated
-  surfaces: []
+  # A word is a run of letters and digits, so a Markdown link costs one word
+  # per path segment. That is the honest count for an index: a line that is
+  # mostly links is mostly navigation, and `wc -w` understates it by about a
+  # third. The budget is a maximum, not a target -- a document that outgrows it
+  # is split, never given a larger number.
+  count: letters-and-digits
+  surfaces:
+    - glob: "AGENTS.md"
+      fail: 650
+      warn: 550
+    - glob: "README.md"
+      fail: 1600
+      warn: 1400
+    - glob: "repo-governance/**/*.md"
+      fail: 750
+      warn: 650
 
 governance-directory-map:
-  # `specs/` is the one tree here that keeps directory maps, and it keeps them
-  # in both of its READMEs. `docs/` is excluded on purpose: its READMEs are
-  # Diátaxis landing pages that link into their sections by name, which is a
-  # different contract from naming every direct sibling exactly once, and
-  # declaring it would impose a rule this repository never adopted.
+  # `docs/` stays excluded on purpose: its READMEs are Diátaxis landing pages
+  # that link into their sections by name, which is a different contract from
+  # naming every direct sibling exactly once. See
+  # repo-governance/conventions/directory-maps.md.
   trees:
     - path: specs
+    - path: repo-governance
 
 md-internal-link:
   exclude-sources: []
@@ -62,6 +75,11 @@ harness-parity:
   constraints: []
 
 scan:
+  # No `worktrees` entry, deliberately. This repository's worktrees live beside
+  # the checkout rather than inside it, because `go build` walks up out of a
+  # worktree and takes the outermost `.git` directory. An exclusion here would
+  # invite the layout that breaks it. See
+  # repo-governance/conventions/worktree-location.md.
   exclude-directories:
     - .git
     - .husky
