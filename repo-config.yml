@@ -4,11 +4,12 @@
 # than compiled in.
 #
 # The earlier version of this file was almost entirely inert: HIPPO kept its
-# rules in one AGENTS.md and drew in ASCII, so there was nothing to declare and
-# empty lists said so honestly. The sections that gained content here gained it
-# because the rule they point at now exists -- a governance hierarchy to budget
-# and map, Mermaid diagrams to colour. `harness-parity` is still inert, and
-# still says so: nothing here is aspirational.
+# rules in one AGENTS.md, drew in ASCII, and ran no coding-harness adapters, so
+# there was nothing to declare and empty lists said so honestly. Each section
+# below now has content because the rule it points at exists -- a governance
+# hierarchy to budget, Mermaid diagrams to colour, a canonical agent roster to
+# reconcile. Nothing here is aspirational; a value with no rule behind it is
+# still an empty list.
 
 governance-word-budget:
   # A word is a run of letters and digits, so a Markdown link costs one word
@@ -60,19 +61,146 @@ md-mermaid:
     - "#FFFFFF"
 
 harness-parity:
-  # HIPPO has one always-on instruction body and no coding-harness adapters of
-  # any kind -- no CLAUDE.md, no .agents/, no .claude/. The roster is empty and
-  # says so; the prohibition below does not weaken because of it, which is the
-  # whole point of checking a repository that has nothing to reconcile.
   canonical:
     instruction: AGENTS.md
-  harnesses: []
+    # Claude Code reads CLAUDE.md and nothing else. The adapter holds one
+    # import directive and no rule of its own, so this repository has one
+    # instruction body rather than two that drift.
+    instruction-adapter: CLAUDE.md
+    skills-root: .agents/skills
+    skill-route: "Read {path} completely, resolve every relative resource from that skill directory, and follow it as authoritative before acting."
+    agents-root: .agents/agents
+    agent-route: "Before acting, read the complete canonical agent definition at the repository-root path {path} and follow it as authoritative. If it cannot be read, stop and report the missing path."
+    # The names are this repository's own. A list read under a name nobody
+    # wrote comes back empty rather than missing, so a validator that chose
+    # these itself would find no capabilities, fire no translation, and report
+    # a clean repository -- the one kind of defect a gate cannot survive.
+    declaration:
+      grants: requires
+      denials: denies
+      limits: constraints
+      fixed: { mode: subagent }
+  harnesses:
+    # Codex and OpenCode both read `.agents/skills/` natively, so the canon is
+    # already their surface and a skill adapter would be a second copy of a
+    # file they were going to read anyway. Claude Code reads only
+    # `.claude/skills/`, so it is the one harness that needs a route.
+    - name: claude
+      skill-adapter:
+        path: ".claude/skills/{name}/SKILL.md"
+        format: front-matter
+        route-field: body
+        identity: { name: name, description: description }
+        # A wrapper declares its identity and the route. Nothing else: an
+        # adapter that could add front matter could add an instruction.
+        closed: true
+      agent-adapter:
+        path: ".claude/agents/{name}.md"
+        format: front-matter
+        route-field: body
+        identity: { name: name, description: description }
+        translations:
+          - { when: always, field: tools, members: [Read] }
+          - {
+              when: requires,
+              capability: repository-read,
+              field: tools,
+              members: [Glob, Grep],
+            }
+          - {
+              when: denies,
+              capability: repository-write,
+              field: tools,
+              absent-members: [Write, Edit],
+            }
+          - {
+              when: denies,
+              capability: shell,
+              field: tools,
+              absent-members: [Bash, PowerShell],
+            }
+          - {
+              when: denies,
+              capability: nested-agent,
+              field: tools,
+              absent-members: [Agent, Task],
+            }
+    - name: codex
+      agent-adapter:
+        path: ".codex/agents/{name}.toml"
+        format: toml
+        route-field: developer_instructions
+        identity: { name: name, description: description }
+        # The sandbox is fixed rather than translated: Codex expresses the
+        # whole read-only boundary in one field, and a portable adapter may
+        # not pin a model.
+        fixed: { sandbox_mode: read-only }
+        absent: [model]
+    - name: opencode
+      agent-adapter:
+        path: ".opencode/agents/{name}.md"
+        format: front-matter
+        route-field: body
+        identity: { description: description }
+        fixed: { mode: subagent }
+        translations:
+          - { when: always, field: permission, entries: { read: allow } }
+          - {
+              when: requires,
+              capability: repository-read,
+              field: permission,
+              entries: { glob: allow, grep: allow },
+            }
+          - {
+              when: denies,
+              capability: repository-write,
+              field: permission,
+              entries: { edit: deny },
+            }
+          - {
+              when: denies,
+              capability: shell,
+              field: permission,
+              entries: { bash: deny },
+            }
+          - {
+              when: denies,
+              capability: nested-agent,
+              field: permission,
+              entries: { task: deny },
+            }
+  # No `required-mcp` and no per-harness `capability`. This repository uses no
+  # workspace task runner and needs no credential-free capability vector, and
+  # the schema treats that absence as an answer rather than an omission.
   prohibited-instruction-sources:
-    - "**/CLAUDE.md"
+    # `CLAUDE.md` stays on this list even though it is now the declared
+    # adapter: the validator exempts the canonical instruction and its adapter
+    # from a glob that matches them, and keeps reporting every *nested* one.
+    # A nested CLAUDE.md is the case this entry exists for.
+    - "**/AGENTS.md"
     - "**/AGENTS.override.md"
-    - ".cursorrules"
-  capabilities: []
-  constraints: []
+    - "**/CLAUDE.md"
+    - ".claude/rules/**/*.md"
+    - "**/GEMINI.md"
+    - "**/.cursorrules"
+    - "**/.windsurfrules"
+    - ".github/copilot-instructions.md"
+  # A competing always-on instruction written into a harness's own settings is
+  # the same violation as a second CLAUDE.md, in the vendor's syntax. Only
+  # OpenCode's key is declared: Codex's equivalent was not established from
+  # current vendor documentation, and a prohibition naming a key nobody
+  # confirmed would claim coverage it does not have.
+  prohibited-instruction-fields:
+    - file: opencode.json
+      format: json
+      field: instructions
+  capabilities:
+    - repository-read
+    - repository-write
+    - shell
+    - nested-agent
+  constraints:
+    - inline-result-only
 
 scan:
   # No `worktrees` entry, deliberately. This repository's worktrees live beside
