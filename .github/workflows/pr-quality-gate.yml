@@ -1,0 +1,239 @@
+name: PR Quality Gate
+
+# Integration moved to worktree-to-pull-request, so the guarantees that used to
+# rest on this workstation's Git hooks need a server-side mirror: a pull request
+# can be opened from any checkout, including one whose hooks never ran.
+#
+# This workflow replaces `ci.yml` rather than sitting beside it. Two workflows
+# would mean two places to edit when a hook contract changes, and one of them
+# would eventually be missed. Everything the retired workflow ran is here.
+#
+# Nothing here is wrapped in the guard, and here that is not a judgement call:
+# HIPPO cannot guard HIPPO. The wrapper resolves a pinned release of this same
+# tool, so a gate that ran the build under it would be testing the released
+# binary rather than the change. The local hooks run the gate directly for the
+# same reason.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-quality-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # The real head, not the synthetic merge commit: commitlint must read the
+      # messages this branch actually contributes. GitHub's merge commit carries
+      # a "Merge ... into ..." subject that no Conventional Commits rule accepts.
+      - name: Check out the pull request head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Validate pull request commits
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          git fetch --no-tags origin "${BASE_REF}"
+          # The fork point, not the base tip: a branch behind `main` would
+          # otherwise re-lint commits it never authored and fail on history it
+          # did not write.
+          from=$(git merge-base FETCH_HEAD HEAD)
+          npm exec -- commitlint --from "${from}" --to HEAD --verbose
+
+  formatting:
+    name: Formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      # `scripts/test.sh` runs this too, inside a job that takes minutes on two
+      # operating systems. Named again here because `lint-staged` only ever sees
+      # staged paths, so formatting is the one hook contract with no independent
+      # signal -- and a formatting failure should be legible in the job list
+      # rather than found by reading a long test log.
+      - name: Formatters and Prettier across the repository
+        run: ./scripts/format-check.sh
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      # A superset of `.husky/pre-push`, which runs `test:quick`. This adds the
+      # integration and E2E adapters, race detection, and a vulnerability scan
+      # -- boundaries a hook has no business making someone wait for, on two
+      # operating systems a workstation cannot provide at once.
+      - run: ./scripts/test.sh
+
+  repository-contract:
+    name: Repository contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # The `test` job runs this too, as part of the quick gate it contains.
+      # Named again, and narrowed, so that a broken directory map or a dead link
+      # is legible in the job list rather than buried in a long test log --
+      # and so an ordinary code change does not resolve a pinned release to
+      # answer a question about documentation it did not touch.
+      - name: Route on the governed surface
+        id: route
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          git fetch --no-tags origin "${BASE_REF}"
+          changed=$(git diff --name-only FETCH_HEAD...HEAD -- \
+            '*.md' specs docs repo-governance .agents .claude .codex .opencode \
+            repo-config.yml rhino rhino.lock scripts/docs-check.sh \
+            '.github/workflows/pr-quality-gate.yml')
+          if [ -n "${changed}" ]; then
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Documentation hygiene under the pinned RHINO
+        if: steps.route.outputs.changed == 'true'
+        run: ./scripts/docs-check.sh
+
+  consumer-bootstrap:
+    name: Pinned RHINO bootstrap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Narrower than the rest of the gate on purpose: an ordinary pull request
+      # pays nothing for a consumer boundary it did not touch.
+      - name: Route on the pinned consumer boundary
+        id: route
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          git fetch --no-tags origin "${BASE_REF}"
+          changed=$(git diff --name-only FETCH_HEAD...HEAD -- \
+            rhino rhino.lock '.github/workflows/pr-quality-gate.yml')
+          if [ -n "${changed}" ]; then
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # The one condition a local hook, with its warm cache, can never observe:
+      # a clean machine resolving the pinned release from nothing and verifying
+      # its checksum before running it.
+      - name: Verify the pinned bootstrap resolves and verifies
+        if: steps.route.outputs.changed == 'true'
+        run: ./rhino version
+
+  release-build:
+    name: Release build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # A release tag is permanent, so the moment to discover that the asset
+      # matrix no longer builds is before the change lands, not during the cut.
+      - name: Build all supported assets
+        run: ./scripts/build-release.sh v0.0.0 "$GITHUB_SHA" dist
+
+      - name: Verify asset inventory
+        run: ./tests/artifacts/release-assets.sh dist v0.0.0 "$GITHUB_SHA"
+
+  quality-gate:
+    name: Quality gate
+    # The single required status check. Branch protection names one context, so
+    # adding or splitting a job below never means editing the ruleset -- and a
+    # job that is added but forgotten here still cannot pass unnoticed, because
+    # `needs` fails the aggregate when any dependency does.
+    needs:
+      [
+        commit-messages,
+        formatting,
+        test,
+        repository-contract,
+        consumer-bootstrap,
+        release-build,
+      ]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check every gate
+        env:
+          # A cancelled or skipped dependency is not a pass: only an explicit
+          # success from every job may open the merge button.
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -eu
+          echo "Gate results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              echo "A quality gate job did not succeed." >&2
+              exit 1
+            fi
+          done
+          echo "All quality gates passed."

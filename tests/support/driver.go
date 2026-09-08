@@ -141,6 +141,7 @@ type Driver struct {
 	serialCompliance        bool
 	e2ePlacement            bool
 	conventionalCommits     bool
+	pullRequestOnlyGate     bool
 	stagedFormatting        bool
 	pushQuickGate           bool
 	coreCoverage            bool
@@ -2727,7 +2728,7 @@ func (driver *Driver) inspectContributorEnforcement() error {
 		return err
 	}
 
-	workflow, err := read(".github", "workflows", "ci.yml")
+	workflow, err := read(".github", "workflows", "pr-quality-gate.yml")
 	if err != nil {
 		return err
 	}
@@ -2742,10 +2743,14 @@ func (driver *Driver) inspectContributorEnforcement() error {
 		return err
 	}
 
+	// No pushed-commits job to require any more. Integration is pull-request
+	// only, so a commit reaches `main` exactly by merging a pull request this
+	// gate already validated; a second job on the push event would re-lint
+	// history it had just approved.
 	driver.conventionalCommits = strings.Contains(commitHook, "commitlint --edit") &&
 		strings.Contains(workflow, "commitlint --from") &&
-		strings.Contains(workflow, "Validate pull request commits") &&
-		strings.Contains(workflow, "Validate pushed commits")
+		strings.Contains(workflow, "Validate pull request commits")
+	driver.pullRequestOnlyGate = workflowTriggers(workflow) == "pull_request"
 	driver.stagedFormatting = strings.Contains(preCommitHook, "lint-staged") &&
 		strings.Contains(stagedConfig, `"**/*.go"`) &&
 		strings.Contains(stagedConfig, "goimports -w") &&
@@ -2771,6 +2776,39 @@ func (driver *Driver) requireConventionalCommits() error {
 		return errors.New("the commit hook and CI do not invoke conventional commit validation")
 	}
 	return nil
+}
+
+func (driver *Driver) requirePullRequestOnlyGate() error {
+	if !driver.pullRequestOnlyGate {
+		return errors.New("the quality gate does not run on pull requests alone")
+	}
+	return nil
+}
+
+// workflowTriggers joins the event names under a workflow's `on:` block. A gate
+// that also fired on `push` would re-run against `main` after every merge and
+// re-report a verdict it had already given, so the contract is the whole set of
+// events rather than the presence of one.
+func workflowTriggers(workflow string) string {
+	events := make([]string, 0, 2)
+	inside := false
+	for line := range strings.SplitSeq(workflow, "\n") {
+		if line == "on:" {
+			inside = true
+			continue
+		}
+		if !inside {
+			continue
+		}
+		if !strings.HasPrefix(line, "  ") {
+			break
+		}
+		if strings.HasPrefix(line, "    ") || !strings.HasSuffix(line, ":") {
+			continue
+		}
+		events = append(events, strings.TrimSuffix(strings.TrimSpace(line), ":"))
+	}
+	return strings.Join(events, ",")
 }
 
 func (driver *Driver) requireStagedFormatting() error {

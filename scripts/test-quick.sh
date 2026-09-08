@@ -27,23 +27,7 @@ HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd
 HIPPO_BDD_ADAPTER=e2e go test -count=1 ./tests/bdd
 ./tests/artifacts/run.sh
 
-# Documentation hygiene, against the pinned RHINO release in rhino.lock. Six
-# independent questions with no ordering between them, so they run together and
-# the gate waits for the slowest rather than the sum; one resolution serves all
-# six, because the wrapper verifies and installs before handing over.
-#
-# shellcheck disable=SC2016 # $RHINO_BIN belongs to the shell ./rhino execs.
-./rhino --bootstrap-exec sh -c '
-	set -u
-	"$RHINO_BIN" repo-config validate & a=$!
-	"$RHINO_BIN" governance word-budget validate & b=$!
-	"$RHINO_BIN" governance directory-map validate & c=$!
-	"$RHINO_BIN" harness parity validate & d=$!
-	"$RHINO_BIN" md internal-link validate & e=$!
-	"$RHINO_BIN" md mermaid validate & f=$!
-	documentation=0
-	for check in $a $b $c $d $e $f; do
-		wait "$check" || documentation=1
-	done
-	exit "$documentation"
-'
+# Documentation hygiene, against the pinned RHINO release in rhino.lock. Kept in
+# a script of its own so the pull-request gate can name it as a job without
+# holding a second copy of the invocation.
+./scripts/docs-check.sh

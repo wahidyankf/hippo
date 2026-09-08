@@ -3,7 +3,7 @@
 **Host Infrastructure Pressure & Process Orchestrator** — stop several repositories from thrashing
 one developer machine.
 
-[![CI](https://github.com/wahidyankf/hippo/actions/workflows/ci.yml/badge.svg)](https://github.com/wahidyankf/hippo/actions/workflows/ci.yml)
+[![Quality gate](https://github.com/wahidyankf/hippo/actions/workflows/pr-quality-gate.yml/badge.svg)](https://github.com/wahidyankf/hippo/actions/workflows/pr-quality-gate.yml)
 [![Release](https://img.shields.io/github/v/release/wahidyankf/hippo?sort=semver)](https://github.com/wahidyankf/hippo/releases)
 [![Go](https://img.shields.io/badge/go-1.26.1-00ADD8)](https://go.dev/)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey)](#-install)

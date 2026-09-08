@@ -22,6 +22,7 @@ Feature: HIPPO quality gates
   Scenario: Contributor gate wiring is complete
     When contributor gate wiring is inspected
     Then the commit hook and CI invoke conventional commit validation
+    And the quality gate runs on pull requests rather than pushes
     And pre-commit invokes staged formatting for supported files
     And pre-push invokes the direct quick gate without Nx
     And the quick gate invokes deterministic core coverage at 99 percent
