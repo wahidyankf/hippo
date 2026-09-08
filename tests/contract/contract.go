@@ -34,6 +34,7 @@ const (
 	consumerHarnessBoundary     = "consumer harness"
 	privateLedgerReason         = "requires injected private ledger corruption and byte-level inspection"
 	repositoryStateBoundary     = "repository state"
+	repositoryConfigBoundary    = "repository configuration"
 	releaseArtifactsBoundary    = "release artifacts"
 	releaseWorkflowBoundary     = "release workflow"
 )
@@ -195,9 +196,10 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release builds stay outside repository history", Boundary: repositoryStateBoundary, Reason: "Git ignore policy is outside the compiled binary boundary"},
 		{Scenario: "End-to-end binaries are temporary", Boundary: "test harness", Reason: "binary cleanup is owned by the harness outside the compiled binary boundary"},
 		{Scenario: "Bootstrap cache retention is bounded", Boundary: "bootstrap wrapper", Reason: "cache retention is owned by the wrapper outside the compiled binary boundary"},
-		{Scenario: "Lint gate wiring is exhaustive and module scoped", Boundary: "repository configuration", Reason: "lint configuration is outside the compiled binary boundary"},
+		{Scenario: "Lint gate wiring is exhaustive and module scoped", Boundary: repositoryConfigBoundary, Reason: "lint configuration is outside the compiled binary boundary"},
 		{Scenario: "Behavior adapter wiring is complete", Boundary: "test harness", Reason: "adapter registration is outside the compiled binary boundary"},
-		{Scenario: "Contributor gate wiring is complete", Boundary: "repository configuration", Reason: "hooks and CI configuration are outside the compiled binary boundary"},
+		{Scenario: "Contributor gate wiring is complete", Boundary: repositoryConfigBoundary, Reason: "hooks and CI configuration are outside the compiled binary boundary"},
+		{Scenario: "Gate scripts clear the redirecting Git environment", Boundary: repositoryConfigBoundary, Reason: "gate script text is outside the compiled binary boundary"},
 		{Scenario: "Machine-local configuration and binaries stay private", Boundary: repositoryStateBoundary, Reason: "Git index and ignore policy are outside the compiled binary boundary"},
 		{Scenario: "Release versions use exact semantic syntax", Boundary: repositoryStateBoundary, Reason: "requires isolated clean Git history and pre-output release builder inspection"},
 		{Scenario: "Release commits are full lowercase real commits", Boundary: repositoryStateBoundary, Reason: "requires isolated valid and invalid Git object identities"},

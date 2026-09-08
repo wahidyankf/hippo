@@ -25,8 +25,7 @@ var (
 )
 
 func runGitV04(directory string, arguments ...string) ([]byte, error) {
-	command := exec.Command("git", arguments...)
-	command.Dir = directory
+	command := GitCommand(directory, arguments...)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git %s: %s: %w", strings.Join(arguments, " "), bytes.TrimSpace(output), err)
@@ -939,8 +938,7 @@ func requireV04ReleaseBinaryIdentity(root string) error {
 }
 
 func workflowIdentityGateV04(repository, tag, eventCommit string) error {
-	command := exec.Command("git", "fetch", "--quiet", "--no-tags", "origin", "main:refs/remotes/origin/main")
-	command.Dir = repository
+	command := GitCommand(repository, "fetch", "--quiet", "--no-tags", "origin", "main:refs/remotes/origin/main")
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("fetch origin main: %s: %w", bytes.TrimSpace(output), err)
 	}
@@ -963,7 +961,7 @@ func initializeWorkflowHistoryV04(root string) (string, error) {
 		return "", err
 	}
 	origin := filepath.Join(root, "origin.git")
-	if output, initError := exec.Command("git", "init", "-q", "--bare", origin).CombinedOutput(); initError != nil {
+	if output, initError := GitCommand(root, "init", "-q", "--bare", origin).CombinedOutput(); initError != nil {
 		return "", fmt.Errorf("initialize origin: %s: %w", bytes.TrimSpace(output), initError)
 	}
 	if _, err = runGitV04(repository, "remote", "add", "origin", origin); err != nil {

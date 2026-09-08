@@ -793,6 +793,12 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^pre-commit invokes staged formatting for supported files$`, driver.requireStagedFormatting),
 		step(`^pre-push invokes the direct quick gate without Nx$`, driver.requirePushQuickGate),
 		step(`^the quick gate invokes deterministic core coverage at 99 percent$`, driver.requireCoreCoverage),
+		step(`^a hook environment naming another repository$`, driver.adoptHookGitEnvironment),
+		step(`^a fixture checkout is initialized and committed$`, driver.initializeFixtureUnderHookEnvironment),
+		step(`^the fixture checkout holds the commit$`, driver.requireFixtureHoldsCommit),
+		step(`^the named repository is unchanged$`, driver.requireNamedRepositoryUnchanged),
+		step(`^gate script Git isolation is inspected$`, driver.inspectGateScriptIsolation),
+		step(`^every gate script unsets the redirecting Git variables$`, driver.requireGateScriptsUnsetGitEnvironment),
 	}
 }
 

@@ -25,3 +25,14 @@ Feature: HIPPO quality gates
     And pre-commit invokes staged formatting for supported files
     And pre-push invokes the direct quick gate without Nx
     And the quick gate invokes deterministic core coverage at 99 percent
+
+  Scenario: Fixture Git work ignores the repository a hook names
+    Given a hook environment naming another repository
+    When a fixture checkout is initialized and committed
+    Then the fixture checkout holds the commit
+    And the named repository is unchanged
+
+  @e2e-exempt
+  Scenario: Gate scripts clear the redirecting Git environment
+    When gate script Git isolation is inspected
+    Then every gate script unsets the redirecting Git variables

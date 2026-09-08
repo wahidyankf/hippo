@@ -19,6 +19,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/conformance"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/tests/support"
 )
 
 func integrationModuleRoot(t *testing.T) string {
@@ -61,8 +62,7 @@ func initializeConformanceCheckout(t *testing.T, path string) {
 		{"-c", "user.name=HIPPO fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-q", "-m", "fixture"},
 	}
 	for _, arguments := range commands {
-		command := exec.Command("git", arguments...)
-		command.Dir = path
+		command := support.GitCommand(path, arguments...)
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("initialize checkout: %s: %v", output, err)
 		}

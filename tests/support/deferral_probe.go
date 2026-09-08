@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -149,8 +148,7 @@ func initializeFixtureCheckout(path string) error {
 		{"init", "-q"},
 		{"-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "--allow-empty", "-m", fixtureOwner},
 	} {
-		command := exec.Command("git", arguments...)
-		command.Dir = path
+		command := GitCommand(path, arguments...)
 		if output, commandError := command.CombinedOutput(); commandError != nil {
 			return fmt.Errorf("%s: %w", output, commandError)
 		}
