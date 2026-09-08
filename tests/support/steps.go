@@ -790,6 +790,7 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^compiled end-to-end behavior runs only in the full gate$`, driver.requireE2EPlacement),
 		step(`^contributor gate wiring is inspected$`, driver.inspectContributorEnforcement),
 		step(`^the commit hook and CI invoke conventional commit validation$`, driver.requireConventionalCommits),
+		step(`^the quality gate runs on pull requests rather than pushes$`, driver.requirePullRequestOnlyGate),
 		step(`^pre-commit invokes staged formatting for supported files$`, driver.requireStagedFormatting),
 		step(`^pre-push invokes the direct quick gate without Nx$`, driver.requirePushQuickGate),
 		step(`^the quick gate invokes deterministic core coverage at 99 percent$`, driver.requireCoreCoverage),

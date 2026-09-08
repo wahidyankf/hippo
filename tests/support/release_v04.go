@@ -1126,7 +1126,7 @@ func requireV04ReleaseCacheDisabled(string) error {
 		job  string
 	}{
 		{path: filepath.Join(moduleRoot, ".github", "workflows", "release.yml")},
-		{path: filepath.Join(moduleRoot, ".github", "workflows", "ci.yml"), job: "release-build"},
+		{path: filepath.Join(moduleRoot, ".github", "workflows", "pr-quality-gate.yml"), job: "release-build"},
 	}
 	for _, check := range checks {
 		section, readError := workflowReleaseSectionV04(check.path, check.job)
@@ -1154,7 +1154,7 @@ func requireV04CIValidatorCommit(string) error {
 	if err != nil {
 		return err
 	}
-	section, err := workflowReleaseSectionV04(filepath.Join(moduleRoot, ".github", "workflows", "ci.yml"), "release-build")
+	section, err := workflowReleaseSectionV04(filepath.Join(moduleRoot, ".github", "workflows", "pr-quality-gate.yml"), "release-build")
 	if err != nil {
 		return err
 	}
