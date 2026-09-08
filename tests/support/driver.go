@@ -117,93 +117,95 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
-	mode                    string
-	samples                 []policy.Sample
-	assessment              policy.Assessment
-	admitted, accepted      bool
-	exitCode                int
-	output, errorOutput     string
-	binary, summaryPath     string
-	temporaryPaths          []string
-	lifecycleOK             bool
-	cacheRoot               string
-	historicalCaches        []string
-	lintConfiguration       string
-	lintCommand             string
-	hookEnvironment         []string
-	ambientRepository       string
-	ambientHead             string
-	fixtureCheckout         string
-	gateScripts             map[string]string
-	strictAdapters          bool
-	unitExemptionsForbidden bool
-	approvedExemptions      bool
-	serialCompliance        bool
-	e2ePlacement            bool
-	conventionalCommits     bool
-	pullRequestOnlyGate     bool
-	stagedFormatting        bool
-	pushQuickGate           bool
-	coreCoverage            bool
-	resolution              policy.Resolution
-	requestedProfile        string
-	taskClass               policy.TaskClass
-	effectiveMemory         int64
-	linuxMemInfo            string
-	linuxCgroupLimit        int64
-	configPath              string
-	privateArtifacts        bool
-	exampleTracked          bool
-	applicationLayout       bool
-	leaseRoot               string
-	leaseHolder             int
-	heavySession            *guard.Session
-	serviceSessions         []*guard.Session
-	coordinationMarker      []byte
-	coordinationRequests    int
-	coordinationDeferrals   int
-	admissionUnblockAfter   int
-	admissionAttempts       int
-	admissionElapsed        time.Duration
-	deferralProbeScript     string
-	deferralProbeError      error
-	abandonedGroup          int
-	abandonedPayload        *exec.Cmd
-	abandonedIdentityLock   *os.File
-	abandonedTotals         guard.ReservationTotals
-	inheritedSessions       bool
-	forceStopElapsed        time.Duration
-	runtimeFailureOutput    string
-	runtimeFailureExit      int
-	usageErrorOutput        string
-	terminationSignals      int
-	supervisionFailure      error
-	childReaped             bool
-	evidenceRoot            string
-	evidenceIdentifier      string
-	evidenceSampleCount     int
-	evidenceWriters         []*evidence.Writer
-	excessEvidencePath      string
-	excessEvidenceError     error
-	inactiveEvidencePaths   []string
-	operandCommandsRejected bool
-	childInput              string
-	childEnvironment        []string
-	concurrencyEnvironment  []string
-	childResolution         policy.Resolution
-	releaseMonitorRun       func() error
-	releaseMonitorError     error
-	releaseRawPath          string
-	releaseSummaryPath      string
-	releaseArguments        []string
-	releaseCollector        *sequenceCollector
-	streamCloseCalls        int
-	invalidMappingsRejected bool
-	v04Error                error
-	v04Session              *guard.Session
-	v04State                []byte
-	v04Action               func(string) error
-	v04Scenario             string
+	mode                     string
+	samples                  []policy.Sample
+	assessment               policy.Assessment
+	admitted, accepted       bool
+	exitCode                 int
+	output, errorOutput      string
+	binary, summaryPath      string
+	temporaryPaths           []string
+	lifecycleOK              bool
+	cacheRoot                string
+	historicalCaches         []string
+	lintConfiguration        string
+	lintCommand              string
+	hookEnvironment          []string
+	ambientRepository        string
+	ambientHead              string
+	fixtureCheckout          string
+	gateScripts              map[string]string
+	strictAdapters           bool
+	unitExemptionsForbidden  bool
+	approvedExemptions       bool
+	serialCompliance         bool
+	e2ePlacement             bool
+	conventionalCommits      bool
+	pullRequestOnlyGate      bool
+	sharedDocumentationCheck bool
+	pinnedValidatorsRun      bool
+	stagedFormatting         bool
+	pushQuickGate            bool
+	coreCoverage             bool
+	resolution               policy.Resolution
+	requestedProfile         string
+	taskClass                policy.TaskClass
+	effectiveMemory          int64
+	linuxMemInfo             string
+	linuxCgroupLimit         int64
+	configPath               string
+	privateArtifacts         bool
+	exampleTracked           bool
+	applicationLayout        bool
+	leaseRoot                string
+	leaseHolder              int
+	heavySession             *guard.Session
+	serviceSessions          []*guard.Session
+	coordinationMarker       []byte
+	coordinationRequests     int
+	coordinationDeferrals    int
+	admissionUnblockAfter    int
+	admissionAttempts        int
+	admissionElapsed         time.Duration
+	deferralProbeScript      string
+	deferralProbeError       error
+	abandonedGroup           int
+	abandonedPayload         *exec.Cmd
+	abandonedIdentityLock    *os.File
+	abandonedTotals          guard.ReservationTotals
+	inheritedSessions        bool
+	forceStopElapsed         time.Duration
+	runtimeFailureOutput     string
+	runtimeFailureExit       int
+	usageErrorOutput         string
+	terminationSignals       int
+	supervisionFailure       error
+	childReaped              bool
+	evidenceRoot             string
+	evidenceIdentifier       string
+	evidenceSampleCount      int
+	evidenceWriters          []*evidence.Writer
+	excessEvidencePath       string
+	excessEvidenceError      error
+	inactiveEvidencePaths    []string
+	operandCommandsRejected  bool
+	childInput               string
+	childEnvironment         []string
+	concurrencyEnvironment   []string
+	childResolution          policy.Resolution
+	releaseMonitorRun        func() error
+	releaseMonitorError      error
+	releaseRawPath           string
+	releaseSummaryPath       string
+	releaseArguments         []string
+	releaseCollector         *sequenceCollector
+	streamCloseCalls         int
+	invalidMappingsRejected  bool
+	v04Error                 error
+	v04Session               *guard.Session
+	v04State                 []byte
+	v04Action                func(string) error
+	v04Scenario              string
 }
 
 type failingStream struct {
@@ -2774,6 +2776,70 @@ func (driver *Driver) inspectContributorEnforcement() error {
 func (driver *Driver) requireConventionalCommits() error {
 	if !driver.conventionalCommits {
 		return errors.New("the commit hook and CI do not invoke conventional commit validation")
+	}
+	return nil
+}
+
+// pinnedValidators are the six questions the documentation gate asks. They are
+// listed here rather than counted, because a gate that silently stopped asking
+// one of them would still report a clean run.
+var pinnedValidators = []string{
+	"repo-config validate",
+	"governance word-budget validate",
+	"governance directory-map validate",
+	"harness parity validate",
+	"md internal-link validate",
+	"md mermaid validate",
+}
+
+func (driver *Driver) inspectDocumentationGate() error {
+	root := toolRoot()
+
+	read := func(parts ...string) (string, error) {
+		data, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
+
+		return string(data), err
+	}
+
+	check, err := read("scripts", "docs-check.sh")
+	if err != nil {
+		return err
+	}
+
+	quick, err := read("scripts", "test-quick.sh")
+	if err != nil {
+		return err
+	}
+
+	workflow, err := read(".github", "workflows", "pr-quality-gate.yml")
+	if err != nil {
+		return err
+	}
+
+	// One definition, named twice. Two copies of the invocation would drift, and
+	// the copy that stopped asking a question would be the one nobody reran.
+	driver.sharedDocumentationCheck = strings.Contains(quick, "./scripts/docs-check.sh") &&
+		strings.Contains(workflow, "./scripts/docs-check.sh")
+
+	driver.pinnedValidatorsRun = strings.Contains(check, "./rhino")
+	for _, validator := range pinnedValidators {
+		driver.pinnedValidatorsRun = driver.pinnedValidatorsRun &&
+			strings.Contains(check, validator)
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireSharedDocumentationCheck() error {
+	if !driver.sharedDocumentationCheck {
+		return errors.New("the quick gate and the pull request gate do not share one documentation check")
+	}
+	return nil
+}
+
+func (driver *Driver) requirePinnedValidatorsRun() error {
+	if !driver.pinnedValidatorsRun {
+		return errors.New("the documentation check does not run every pinned validator")
 	}
 	return nil
 }

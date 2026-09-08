@@ -27,6 +27,12 @@ Feature: HIPPO quality gates
     And pre-push invokes the direct quick gate without Nx
     And the quick gate invokes deterministic core coverage at 99 percent
 
+  @e2e-exempt
+  Scenario: Documentation hygiene wiring is complete
+    When documentation gate wiring is inspected
+    Then the quick gate and the pull request gate share one documentation check
+    And the documentation check runs every pinned validator
+
   Scenario: Fixture Git work ignores the repository a hook names
     Given a hook environment naming another repository
     When a fixture checkout is initialized and committed
