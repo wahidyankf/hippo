@@ -47,9 +47,25 @@ corpus wins — and that disagreement is a bug worth reporting.
 
 ## Project context
 
-HIPPO is part of the [Open Sharia Enterprise](https://github.com/wahidyankf/ose-public) project
-family, where it supplies resource coordination for the other repositories. It is usable on its own
-and has no OSE-specific defaults compiled into it.
+HIPPO is one of the five **OSE Code Repositories** — the repositories
+[Open Sharia Enterprise](https://github.com/wahidyankf/ose-public) is built and maintained in:
+
+| Repository                                                 | What it does                            |
+| ---------------------------------------------------------- | --------------------------------------- |
+| [`ose-public`](https://github.com/wahidyankf/ose-public)   | The OSE product platform and research   |
+| `ose-private`                                              | Authorized operations, private          |
+| [`rhino`](https://github.com/wahidyankf/rhino)             | Repository hygiene                      |
+| **`hippo`**                                                | Resource coordination — this repository |
+| [`beaver-nest`](https://github.com/wahidyankf/beaver-nest) | An independent family product           |
+
+HIPPO coordinates real work across the other four, which consume its published releases through
+their own checksum-pinned bootstraps. Nothing crosses the other way: HIPPO consumes none of them,
+and cannot guard itself.
+
+**That name is navigation, not coupling.** The five are developed, versioned, and released
+independently — no shared version number, no shared release cadence, no monorepo, and no parent
+repository above them. Membership means only that a reader who finds one can find the other four.
+HIPPO is usable entirely on its own and has no OSE-specific defaults compiled into it.
 
 External contributions are currently closed. See the
 [repository README](../README.md#-project-status) for the current status.

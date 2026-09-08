@@ -169,9 +169,8 @@ that every test adapter runs.
 
 ## 📋 Project status
 
-HIPPO is in active development. It coordinates real work across the Open Sharia Enterprise
-repositories, and its behavior is pinned by an executable specification, but versions below `1.0.0`
-may still make breaking changes — see the [changelog](./CHANGELOG.md).
+HIPPO is in active development. Its behavior is pinned by an executable specification, but versions
+below `1.0.0` may still make breaking changes — see the [changelog](./CHANGELOG.md).
 
 Released tags are immutable. A published release is never rebuilt or replaced.
 
@@ -185,10 +184,12 @@ import directive, so there is a single instruction body rather than two that dri
 
 ## 🌙 Part of Open Sharia Enterprise
 
-HIPPO belongs to the [Open Sharia Enterprise](https://github.com/wahidyankf/ose-public) project
-family, where it supplies resource coordination for the other repositories. It has no OSE-specific
-defaults compiled into it and is designed to be used entirely on its own — consumers supply their own
-commands, paths, ports, and health endpoints.
+HIPPO is one of the five **OSE Code Repositories**, with `ose-public`, `ose-private`, `rhino`, and
+`beaver-nest`. It supplies their host resource coordination. The name is navigation, not coupling —
+see [project context](./docs/README.md#project-context).
+
+HIPPO has no OSE-specific defaults compiled into it and is designed to be used entirely on its own —
+consumers supply their own commands, paths, ports, and health endpoints.
 
 ## 🛠️ Development
 
