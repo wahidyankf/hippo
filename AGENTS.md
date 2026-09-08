@@ -1,14 +1,18 @@
 # HIPPO Contributor Rules
 
-This file is an index. Every rule lives in [`repo-governance/`](repo-governance/README.md), and this file states none of its own.
+This file is an index. Every rule lives in [`repo-governance/`](repo-governance/README.md); this file states none of its own.
 
-Start with [the vision](repo-governance/vision/README.md) if you have not worked here before. It explains what a guard nobody notices is for.
+Start with [the vision](repo-governance/vision/README.md) if you have not worked here before: it explains what a guard nobody notices is for.
 
 ## The Product
 
 HIPPO holds no defaults about the work it guards: [repository independence](repo-governance/principles/repository-independence.md).
 
-Exit codes `73`, `75`, and `78`, the evidence readers, and configuration compatibility are the [public contract](repo-governance/development/public-contract.md). None of them moves without authorization.
+Exit codes `73`, `75`, and `78`, the evidence readers, and configuration compatibility are the [public contract](repo-governance/development/public-contract.md); none moves without authorization.
+
+## Plans
+
+Plans are working records under [`plans/`](plans/README.md), never architecture: [lifecycle](repo-governance/conventions/plan-lifecycle.md), [specification changes](repo-governance/conventions/plan-specification-changes.md), [execution](repo-governance/workflows/plan-execution.md), and a [gate](repo-governance/workflows/plan-quality-gate.md) an explicit request starts.
 
 ## Specifications
 
@@ -20,7 +24,7 @@ Exit codes `73`, `75`, and `78`, the evidence readers, and configuration compati
 
 One corpus, three executing boundaries: [behaviour-driven development](repo-governance/development/behaviour-driven-development.md), with the outermost one in [end-to-end testing](repo-governance/development/end-to-end-testing.md).
 
-Red, green, refactor, with the evidence of each: [test-driven development](repo-governance/development/test-driven-development.md) and [the cycle](repo-governance/workflows/red-green-refactor.md). A changed scenario or binding needs [a manual review](repo-governance/workflows/gherkin-implementation-review.md).
+Red, green, refactor, with evidence of each: [test-driven development](repo-governance/development/test-driven-development.md) and [the cycle](repo-governance/workflows/red-green-refactor.md). A changed scenario or binding needs [a manual review](repo-governance/workflows/gherkin-implementation-review.md).
 
 What runs and where: [quality gates](repo-governance/development/quality-gates.md). What must pass before a change is done: [software quality enforcement](repo-governance/development/software-quality-enforcement.md). This repository never acquires Nx.
 
@@ -28,7 +32,7 @@ What runs and where: [quality gates](repo-governance/development/quality-gates.m
 
 [Minimal sufficiency](repo-governance/principles/minimal-sufficiency.md) governs the size of a change; [code clarity](repo-governance/development/code-clarity.md) governs its shape; [dependency selection](repo-governance/development/dependency-selection.md) governs what it may depend on.
 
-HIPPO cannot guard HIPPO. The reason, and the contract this repository owes its consumers, is in [resource-aware development](repo-governance/development/resource-aware-development.md).
+HIPPO cannot guard HIPPO; the reason, and the contract this repository owes consumers, is in [resource-aware development](repo-governance/development/resource-aware-development.md).
 
 Workflow storage stays inside the free allowance: [GitHub Actions storage](repo-governance/development/github-actions-storage.md).
 
