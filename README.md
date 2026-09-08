@@ -163,13 +163,6 @@ Full documentation lives in [`docs/`](./docs/README.md) and follows the
 | [Reference](./docs/reference/README.md)     | You need an exact flag, exit code, field, or default |
 | [Explanation](./docs/explanation/README.md) | You want to understand why HIPPO works this way      |
 
-Popular entry points:
-
-- [Guard your first command](./docs/tutorials/guard-your-first-command.md) — five minutes
-- [Command-line interface](./docs/reference/cli.md) — every command and flag
-- [Exit codes](./docs/reference/exit-codes.md) — the `73` / `75` / `78` contract
-- [How to enable reservation coordination](./docs/how-to/enable-reservation-coordination.md)
-
 The [specifications tree](./specs/README.md) is canonical: `specs/architecture.md` holds the as-built
 C4 model and [`specs/behaviours/`](./specs/behaviours/README.md) holds the executable Gherkin corpus
 that every test adapter runs.
@@ -186,7 +179,9 @@ Released tags are immutable. A published release is never rebuilt or replaced.
 are not being accepted while the engineering patterns stabilize. You are welcome to fork the
 repository under the MIT license and use it however you like.
 
-Contributor rules for the maintainer and automated agents are in [`AGENTS.md`](./AGENTS.md).
+Contributor rules live in [`repo-governance/`](./repo-governance/README.md), one document each with
+the reason it exists. `AGENTS.md` indexes them and states none itself, and `CLAUDE.md` holds one
+import directive, so there is a single instruction body rather than two that drift.
 
 ## 🌙 Part of Open Sharia Enterprise
 
@@ -205,19 +200,19 @@ npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact a
 npm test           # the full release gate, including race detection and vulnerability scan
 ```
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/). Pre-commit formats
-staged Go, shell, Markdown, JSON, and YAML; pre-push runs the quick gate. The quick gate enforces at
-least 99% statement coverage over deterministic production policy, configuration, host-parsing, and
-evidence-aggregation logic; platform, filesystem, and process boundaries are covered by strict
-integration and compiled-binary end-to-end adapters.
+Only `main` persists. Work reaches it through a pull request from a branch in a worktree beside this
+checkout; direct pushes are refused for every actor, with no bypass. One aggregate `Quality gate`
+check, defined in `.github/workflows/pr-quality-gate.yml`, is required, and it is a superset of the
+Git hooks.
 
-Documentation hygiene is checked by [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and
-SHA-256 in `rhino.lock` and installed on first use by `./rhino`. What it enforces —
-directory maps under `specs/`, resolvable internal links, one always-on instruction body — is
-declared in `repo-config.yml` rather than compiled into the tool. The two repositories pin each
-other: RHINO guards its own builds with a pinned `./hippo`.
+Documentation hygiene runs under [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and
+SHA-256 in `rhino.lock`, through `scripts/docs-check.sh` — one definition the quick gate and the
+pull-request gate both call. What it enforces is declared in `repo-config.yml` rather than compiled
+into the tool. The two repositories pin each other: RHINO guards its own builds with a pinned
+`./hippo`.
 
-Release assets are built only through `./scripts/build-release.sh <version> <commit> <output-dir>`.
+Everything else — the coverage floor, the exemption boundaries, where a worktree may live, how a
+release is cut — is in `repo-governance/`.
 
 ## 📄 License
 
