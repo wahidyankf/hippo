@@ -1,0 +1,66 @@
+# schema: rhino/repo-config/v1
+#
+# What this repository enforces about its own documentation, declared rather
+# than compiled in. HIPPO had no validator before RHINO, so nothing here is a
+# transcription of prior behaviour -- every value is taken from a rule this
+# repository already wrote down or a convention its tree already keeps, and
+# where it has neither, the list is empty rather than filled with a guess.
+
+governance-word-budget:
+  # Inert, and deliberately so. HIPPO's contributor rules require its
+  # documentation to stay true to the shipped binary; they set no length limit
+  # on anything. An empty surface list says that in the schema's own terms --
+  # nothing is budgeted -- rather than importing a sibling repository's number
+  # and enforcing a policy this repository never adopted.
+  count: whitespace-separated
+  surfaces: []
+
+governance-directory-map:
+  # `specs/` is the one tree here that keeps directory maps, and it keeps them
+  # in both of its READMEs. `docs/` is excluded on purpose: its READMEs are
+  # Diátaxis landing pages that link into their sections by name, which is a
+  # different contract from naming every direct sibling exactly once, and
+  # declaring it would impose a rule this repository never adopted.
+  trees:
+    - path: specs
+
+md-internal-link:
+  exclude-sources: []
+
+md-mermaid:
+  # HIPPO documents with ASCII art and carries no Mermaid diagram at all, so
+  # every value below is vacuous today. They are stated rather than omitted
+  # because the schema requires a repository to declare its palette before it
+  # can have one: the first `classDef` anyone adds will fail this gate until
+  # someone decides, explicitly, what this repository's colours are. That is
+  # the intended outcome, not an oversight.
+  node-label-graphemes: 32
+  edge-label-graphemes: 24
+  fill-colors: []
+  edge-colors: []
+  text-colors: []
+
+harness-parity:
+  # HIPPO has one always-on instruction body and no coding-harness adapters of
+  # any kind -- no CLAUDE.md, no .agents/, no .claude/. The roster is empty and
+  # says so; the prohibition below does not weaken because of it, which is the
+  # whole point of checking a repository that has nothing to reconcile.
+  canonical:
+    instruction: AGENTS.md
+  harnesses: []
+  prohibited-instruction-sources:
+    - "**/CLAUDE.md"
+    - "**/AGENTS.override.md"
+    - ".cursorrules"
+  capabilities: []
+  constraints: []
+
+scan:
+  exclude-directories:
+    - .git
+    - .husky
+    - node_modules
+    - dist
+    - coverage
+    - local-tmp
+    - generated-reports

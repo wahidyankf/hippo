@@ -201,7 +201,7 @@ Source contributors need Go 1.26.1 and Node.js 24.
 
 ```sh
 npm ci            # installs locked tooling; the prepare lifecycle installs Git hooks
-npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact policy
+npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact and documentation policy
 npm test           # the full release gate, including race detection and vulnerability scan
 ```
 
@@ -210,6 +210,12 @@ staged Go, shell, Markdown, JSON, and YAML; pre-push runs the quick gate. The qu
 least 99% statement coverage over deterministic production policy, configuration, host-parsing, and
 evidence-aggregation logic; platform, filesystem, and process boundaries are covered by strict
 integration and compiled-binary end-to-end adapters.
+
+Documentation hygiene is checked by [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and
+SHA-256 in `rhino.lock` and installed on first use by `./rhino`. What it enforces —
+directory maps under `specs/`, resolvable internal links, one always-on instruction body — is
+declared in `repo-config.yml` rather than compiled into the tool. The two repositories pin each
+other: RHINO guards its own builds with a pinned `./hippo`.
 
 Release assets are built only through `./scripts/build-release.sh <version> <commit> <output-dir>`.
 

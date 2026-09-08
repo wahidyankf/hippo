@@ -9,6 +9,7 @@
 - Install locked contributor tooling with `npm ci`; hooks enforce Conventional Commits, staged formatting, and the quick pre-push gate.
 - Keep GitHub Actions storage within the free allowance when changing workflows: declare `retention-days` on every artifact upload, keep repository artifact/log retention at or below 7 days, keep the cache limit at or below 10 GB with retention at or below 7 days, and keep the owner's Actions budget at `$0`.
 - Run `npm run test:quick` for fast verification and `npm test` before release; never introduce Nx.
+- Documentation hygiene runs under the pinned RHINO release in `rhino.lock`; what it enforces lives in `repo-config.yml`, so change the declaration rather than the tool.
 - Keep deterministic production core coverage at or above 99%; prove platform and process boundaries through integration and E2E adapters.
 - Separate distinct setup, validation, decision, mutation, and return phases in Go functions with blank lines; automated formatters do not replace semantic grouping.
 - Keep generated binaries, coverage, local configuration, runtime evidence, `local-tmp/` scratch, and `generated-reports/` ignored.
