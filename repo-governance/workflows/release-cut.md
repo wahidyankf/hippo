@@ -4,7 +4,7 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
 
 ## Preconditions
 
-- On `main`, synced with `origin/main`, in a worktree like any other work. This repository has no primary checkout to prefer — its clone is bare.
+- On `main`, synced with `origin/main`, in a worktree like any other work. A release is not a reason to prefer one checkout over another, and "synced" means reconciled by the [integration path](../conventions/integration-path.md), not assumed.
 - The working tree is clean **including untracked files**. `scripts/build-release.sh` verifies this itself and refuses otherwise.
 - `scripts/test.sh` — the full gate — passes.
 - `CHANGELOG.md`, `README.md`, and `docs/` are true to the binary being cut.

@@ -12,14 +12,16 @@ Task worktrees for this repository live in `hippo-worktrees/` **beside** the che
 
 `go build` resolves the version-control root by walking **up** from the module and taking the outermost directory holding a `.git`. It does not accept a `.git` _file_, which is what a linked worktree has — so it walks straight past the worktree and keeps going.
 
-In this repository's layout the next `.git` up is a bare repository, where `git status` is fatal by definition:
+What the next `.git` up turns out to be depends on the clone, and neither answer is safe. Bareness is a per-clone property rather than a fact about this repository: verify it with `git worktree list`, reading the `(bare)` marker, and never with `git rev-parse --is-bare-repository`, which answers the narrower "is _this checkout_ bare" and returns `false` from inside a linked worktree by design.
+
+Where the clone is bare, `git status` is fatal by definition and the build stops loudly:
 
 ```
 error obtaining VCS status: exit status 128
 	Use -buildvcs=false to disable VCS stamping.
 ```
 
-An ordinary clone fails more quietly and worse. With the worktree inside, `go build` finds the main checkout's `.git`, succeeds, and stamps the binary with the **main checkout's** revision plus `vcs.modified=true` — provenance belonging to a checkout that contributed nothing to the build, and nothing anywhere says so.
+Where the clone has a primary checkout, the failure is quieter and worse. With the worktree inside, `go build` finds that checkout's `.git`, succeeds, and stamps the binary with **its** revision plus `vcs.modified=true` — provenance belonging to a checkout that contributed nothing to the build, and nothing anywhere says so. The rule holds whichever shape a clone has, which is the point: nobody has to check the topology before obeying it.
 
 Placed beside the checkout, there is no `.git` directory above the worktree at all. Go stamps nothing rather than stamping a lie, and `scripts/build-release.sh` — which clones into a temporary directory that does have a real `.git` — keeps its own stamping intact.
 

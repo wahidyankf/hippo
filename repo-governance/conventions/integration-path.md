@@ -14,7 +14,7 @@ Local `main` has no executable path to `origin/main`: the `main` ruleset refuses
 - Keep history linear; never merge `main` into a task branch.
 - A task branch is short-lived in a measurable sense: merge it the day it is created where possible, one to two days maximum, and past two days rebase or abandon it.
 - Delete all three artifacts the work created — the worktree, the local branch, and that branch on `origin` — once every unit that used the worktree has landed. Confirm nothing is unpushed and nothing is running first. Retain a worktree whose run failed, and say so, rather than deleting the evidence.
-- Cut a release from a worktree on `main` like any other work. This repository has no primary checkout to prefer: its clone is bare, so every checkout is a worktree and a release exception would name a directory that does not exist. See [release cut](../workflows/release-cut.md).
+- Cut a release from a worktree on `main` like any other work. A release exception would have to name a checkout by topology, and topology is a per-clone property this repository does not fix. See [release cut](../workflows/release-cut.md).
 
 ## Why the Server Enforces It
 
