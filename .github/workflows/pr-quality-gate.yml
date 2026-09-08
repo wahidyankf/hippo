@@ -203,6 +203,16 @@ jobs:
       - name: Verify asset inventory
         run: ./tests/artifacts/release-assets.sh dist v0.0.0 "$GITHUB_SHA"
 
+  skip-probe:
+    name: Skip probe
+    # Never runs. Present only to prove that the aggregate refuses a dependency
+    # which reports `skipped` rather than `success`.
+    if: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: echo "this step never executes"
+
   quality-gate:
     name: Quality gate
     # The single required status check. Branch protection names one context, so
@@ -217,6 +227,7 @@ jobs:
         repository-contract,
         consumer-bootstrap,
         release-build,
+        skip-probe,
       ]
     if: always()
     runs-on: ubuntu-24.04
