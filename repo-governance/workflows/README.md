@@ -9,6 +9,7 @@ A workflow describes how something is done. It never grants permission to do it 
 - [Coding harness contract change](coding-harness-contract-change.md) — changing the canon or a harness adapter.
 - [Coding harness parity verification](coding-harness-parity-verification.md) — proving the roster still reconciles.
 - [Gherkin implementation review](gherkin-implementation-review.md) — the manual review a changed scenario or adapter requires.
+- [Git clean-up](git-clean-up.md) — removing the artifacts one piece of work created, and nothing else.
 - [Plan execution](plan-execution.md) — executing one plan while its record stays true.
 - [Plan quality gate](plan-quality-gate.md) — one plan's readiness, on explicit request only.
 - [Red green refactor](red-green-refactor.md) — the cycle, with its evidence.
