@@ -285,7 +285,7 @@ func requireV04FIFO(root string) error {
 
 		return fmt.Errorf("small waiter bypassed FIFO head: session=%+v error=%w", small, smallError)
 	}
-	if err = guard.ReleaseReservation(root, owner); err != nil {
+	if err = releaseContendedReservation(root, owner); err != nil {
 		return err
 	}
 	large, largeError := <-result, <-errorsFound

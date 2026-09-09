@@ -33,6 +33,22 @@ import (
 // reports a correct product as broken.
 const fixtureLivenessWait = 30 * time.Second
 
+// releaseContendedReservation releases an owner that a fixture's own peer
+// goroutine may be contending for, and honours the documented contract of
+// guard.ErrCoordinationCleanupDeferred: the release succeeded and left a
+// reconcilable owner mark behind, so it is a note rather than a failure.
+// guard.Run treats the same sentinel the same way. Only fixtures that keep a
+// live peer during release may use this; a sequential release has no peer to
+// lose the shared lock to, so there the sentinel would be a real defect.
+func releaseContendedReservation(root string, session *guard.Session) error {
+	if err := guard.ReleaseReservation(root, session); err != nil &&
+		!errors.Is(err, guard.ErrCoordinationCleanupDeferred) {
+		return err
+	}
+
+	return nil
+}
+
 func requireV04UnknownIdentityError(root string) error {
 	session, err := guard.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
@@ -889,7 +905,7 @@ func requireV04FailedCancelledWaiterCleanup(root string) error { //nolint:cyclop
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if err = guard.ReleaseReservation(root, owner); err != nil {
+	if err = releaseContendedReservation(root, owner); err != nil {
 		return err
 	}
 	ownerReleased = true
