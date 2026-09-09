@@ -13,7 +13,7 @@ A workflow describes how something is done. It never grants permission to do it 
 - [Plan quality gate](plan-quality-gate.md) — one plan's readiness, on explicit request only.
 - [Red green refactor](red-green-refactor.md) — the cycle, with its evidence.
 - [Release cut](release-cut.md) — publishing a version.
-- [Rules grooming](rules-grooming.md) — keeping this tree true.
-- [Rules propagation](rules-propagation.md) — where a rule change stops.
+- [Rules grooming](rules-grooming.md) — keeping this tree true, on request, without writing.
+- [Rules propagation](rules-propagation.md) — carrying a rule change through this repository, and where it stops.
 - [Rules quality gate](rules-quality-gate.md) — reviewing this tree on request.
 - [Worktree to pull request](worktree-to-pull-request.md) — the integration procedure, start to finish.

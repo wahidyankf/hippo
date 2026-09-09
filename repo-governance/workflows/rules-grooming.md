@@ -16,7 +16,7 @@ Keeping this tree true. Run on request, never automatically.
 
 ## What It Produces
 
-A list of findings, each naming the document and what makes it untrue. Fixes land as ordinary changes through [worktree to pull request](worktree-to-pull-request.md), one theme at a time.
+A list of findings, each naming the document and what makes it untrue. Grooming hands them to [rules propagation](rules-propagation.md), which is the sole writer, and the repairs land as ordinary changes through [worktree to pull request](worktree-to-pull-request.md), one theme at a time.
 
 Grooming never rewrites a rule's substance on its own authority. A rule that looks wrong is a finding to raise, not a paragraph to quietly improve — see [governance continuity](../principles/governance-continuity.md).
 

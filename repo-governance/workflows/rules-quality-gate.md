@@ -22,6 +22,6 @@ For each document:
 
 Findings, ordered by how likely each is to cause someone to do the wrong thing. Each names the document, what is wrong, and what would make it right.
 
-Fixes land through [worktree to pull request](worktree-to-pull-request.md) like anything else. The review produces findings; it does not produce commits.
+The review produces findings; it does not produce commits. They go to [rules propagation](rules-propagation.md), which is the sole writer, and the repairs land through [worktree to pull request](worktree-to-pull-request.md) like anything else.
 
 The machine-checkable part — budgets, links, maps, diagrams, harness parity — already runs on every gate. This gate is for what a validator cannot read.
