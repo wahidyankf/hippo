@@ -1,6 +1,6 @@
 # Rules Propagation
 
-Apply this workflow whenever a [rule](../conventions/rules.md) in this tree is created, changed, moved, or deleted, or an explicitly requested [rules quality gate](rules-quality-gate.md) hands over findings.
+Apply this workflow automatically whenever a [rule](../conventions/rules.md) in this tree is created, changed, moved, or deleted, or an explicitly requested [rules quality gate](rules-quality-gate.md) hands over findings. No separate user instruction is required: the actor that proposes or notices the change enters propagation as part of the work in hand, and the absence of a request to run it is never permission to skip it.
 
 Propagation is the sole writer. The quality gate and [grooming](rules-grooming.md) discover, rank, and hand off; neither edits. Edits made inside one transaction do not start another.
 
