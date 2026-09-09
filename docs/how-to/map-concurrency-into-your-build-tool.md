@@ -51,8 +51,14 @@ hippo run --concurrency-env JOBS -- sh -c 'make -j"$JOBS" all'
 
 ## Understand how your existing value is treated
 
-If the variable is already set when HIPPO runs, that value is read as a request and reconciled
-against the allocation.
+A value you already exported is treated differently in each coordination mode, so establish which
+mode you are in before relying on either behavior. Reservation mode reconciles the value against the
+allocation; exclusive mode passes it through untouched.
+
+### Reservation mode reconciles it
+
+Under a fixed reservation allocation the existing value is read as a request and reconciled against
+the allocation.
 
 | Your value                   | Result                            |
 | ---------------------------- | --------------------------------- |
@@ -72,6 +78,27 @@ BUILD_WORKERS=2 HIPPO_CONCURRENCY=2
 A deliberately low value is respected; an optimistic one is capped. This means you can keep an
 existing `BUILD_WORKERS=2` in a `.env` and HIPPO will not raise it.
 
+### Exclusive mode leaves it alone
+
+Schema 1 — the default when you supply no configuration — retains the v0.3.1 mapping behavior. A
+mapped variable is written only when it is missing, so a value already in the environment reaches
+the child unchanged. Nothing is clamped and nothing is rejected, and an optimistic value therefore
+survives even though `HIPPO_CONCURRENCY` reports the smaller allocation beside it.
+
+```console
+$ BUILD_WORKERS=64 hippo run --disk-path . --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
+BUILD_WORKERS=64 HIPPO_CONCURRENCY=11
+```
+
+Two consequences are worth planning around. A stale `BUILD_WORKERS=64` inherited from a shell
+profile or a `.env` oversubscribes the host despite the guard, and a `0` or a typo reaches your
+build tool rather than being caught. If you want the reconciliation, enable
+[reservation coordination](./enable-reservation-coordination.md); otherwise keep the variable out of
+the environment and let HIPPO supply it.
+
+Degraded admission is the one exclusive-mode case that does overwrite an existing value — see
+[the note below](#note-on-degraded-admission).
+
 ## Fix a rejected mapping
 
 Two different failures look similar. Check the exit code.
@@ -88,7 +115,8 @@ Error: concurrency environment name "HIPPO_CONCURRENCY" is reserved
 
 Use a POSIX identifier that is not one of HIPPO's own `HIPPO_*` protocol variables.
 
-**Exit `78` — the inherited value is wrong.**
+**Exit `78` — the inherited value is wrong.** Reservation mode only; exclusive mode does not
+inspect the value.
 
 ```console
 $ BUILD_WORKERS=0 hippo run --config reservation.json --concurrency-env BUILD_WORKERS -- true
