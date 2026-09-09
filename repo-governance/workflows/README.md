@@ -12,6 +12,7 @@ A workflow describes how something is done. It never grants permission to do it 
 - [Git clean-up](git-clean-up.md) — removing the artifacts one piece of work created, and nothing else.
 - [Plan execution](plan-execution.md) — executing one plan while its record stays true.
 - [Plan quality gate](plan-quality-gate.md) — one plan's readiness, on explicit request only.
+- [PR leak review](pr-leak-review.md) — the posted, current-head review a merge requires.
 - [Red green refactor](red-green-refactor.md) — the cycle, with its evidence.
 - [Release cut](release-cut.md) — publishing a version.
 - [Rules grooming](rules-grooming.md) — keeping this tree true, on request, without writing.
