@@ -2207,3 +2207,33 @@ func TestRunDefersWhenTheRequestedPortIsHeldByALiveOwner(t *testing.T) {
 		t.Fatalf("a held service port exited %d, want the retryable %d", code, CapacityDeferredExitCode)
 	}
 }
+
+// TestEnvironmentValueResolvesLastDuplicate pins duplicate-key resolution to the
+// semantics the child actually observes. os/exec dedupes Cmd.Env keeping the last
+// occurrence of a key, and withEnvironment already produces that layout by stripping
+// prior matches before appending. A first-match reader disagrees with both, so the
+// guard would admit against one value while the child it launches reads another.
+// The ordinary Go idiom for overriding one variable, append(os.Environ(), "K=v"),
+// produces exactly this duplicate.
+func TestEnvironmentValueResolvesLastDuplicate(t *testing.T) {
+	environment := []string{"HIPPO_SESSION=ambient", "OTHER=1", "HIPPO_SESSION=override"}
+
+	if got := environmentValue(environment, "HIPPO_SESSION"); got != "override" {
+		t.Fatalf("environmentValue resolved %q, want the last duplicate %q", got, "override")
+	}
+
+	// The reader must agree with the writer.
+	written := withEnvironment(environment, "HIPPO_SESSION", "written")
+	if got := environmentValue(written, "HIPPO_SESSION"); got != "written" {
+		t.Fatalf("environmentValue after withEnvironment resolved %q, want %q", got, "written")
+	}
+
+	// withEnvironmentIfMissing reads through the same helper, so an ambient empty
+	// first entry must not mask a real later value.
+	unchanged := withEnvironmentIfMissing(
+		[]string{"BUILD_WORKERS=", "BUILD_WORKERS=8"}, "BUILD_WORKERS", "11",
+	)
+	if got := environmentValue(unchanged, "BUILD_WORKERS"); got != "8" {
+		t.Fatalf("withEnvironmentIfMissing produced %q, want the caller's %q", got, "8")
+	}
+}
