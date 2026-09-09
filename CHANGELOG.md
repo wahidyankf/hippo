@@ -7,6 +7,19 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.5.3] — 2026-09-09
+
+### Fixed
+
+- Duplicate environment keys now resolve to the **last** occurrence, matching what the guarded child
+  observes. `os/exec` deduplicates its environment keeping the last entry, and HIPPO's own writer
+  already produced that layout, but the reader returned the first match — so the guard could admit
+  against one value while the process it launched read another. The trigger is ordinary:
+  `append(os.Environ(), "HIPPO_SESSION="+token)` leaves a duplicate, and an ambient session from an
+  outer guard shadowed the caller's explicit override, causing a spurious exit `75` instead of
+  session inheritance. The same reader backs `--concurrency-env` mapping, the reservation clamp, and
+  launcher identity detection.
+
 ## [v0.5.2] — 2026-09-07
 
 ### Changed
