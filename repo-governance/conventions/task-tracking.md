@@ -14,6 +14,12 @@ Task state lives in the repository, not in a session. A list held only in a conv
 
 Anything the next reader needs to resume: the plan, its delivery units, the evidence each unit produced, and the decisions taken along the way. Scratch work belongs in ignored `local-tmp/`; a report someone asked for belongs in ignored `generated-reports/`. Neither is authoritative, and neither is a plan.
 
+## New Direction Mid-Task
+
+New, follow-on, or changed direction reaches the list before it reaches the work. Read it against every open item first: some are now wrong, some are superseded, some are unaffected, and the new direction is usually more than one item. Record that reconciliation, then continue.
+
+Acting first and updating afterwards produces a list that describes the task as it was requested rather than as it is being done, which is the state the list exists to prevent. The reconciliation is also where a contradiction between old and new direction becomes visible; carrying both silently resolves it by accident.
+
 ## Discovered Work
 
 Work found on the way is a new item, said out loud. Folding it into the current one hides both: the reviewer cannot find the fix, and the discovery has no record of why it was needed. See [pull request boundaries](pull-request-boundaries.md).
