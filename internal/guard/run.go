@@ -61,15 +61,23 @@ type RunConfig struct {
 	stopLifetime        func(*supervisedLifetime, time.Duration) (error, error)
 }
 
+// environmentValue resolves name against the duplicate-key semantics the child
+// actually observes: os/exec dedupes Cmd.Env keeping the last occurrence, and
+// withEnvironment produces that same layout by stripping prior matches before
+// appending. Reading the first match instead would let an ambient value shadow a
+// caller's explicit override — append(os.Environ(), "K=v") is the ordinary way to
+// set one variable — and the guard would then admit against a value the child
+// never sees.
 func environmentValue(environment []string, name string) string {
 	prefix := name + "="
+	value := ""
 	for _, entry := range environment {
 		if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
-			return entry[len(prefix):]
+			value = entry[len(prefix):]
 		}
 	}
 
-	return ""
+	return value
 }
 
 func withEnvironment(environment []string, name, value string) []string {

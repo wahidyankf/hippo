@@ -19,6 +19,12 @@ Both sets are fixed: HIPPO compiles in no build-tool or product-specific names.
 Configuration precedence, strongest first: `--config`, then `HIPPO_CONFIG`, then
 `HIPPO_DEFAULT_CONFIG`.
 
+Where an environment carries the same variable twice, the **last** occurrence wins. That matches what
+the child observes, because Go's `os/exec` deduplicates its environment keeping the last entry. It
+matters because `append(os.Environ(), "HIPPO_SESSION="+token)` — the ordinary way to override one
+variable — produces exactly such a duplicate, and reading the first would let an ambient value from an
+outer guard shadow the caller's explicit override.
+
 ## Exported to a guarded child
 
 | Variable                      | Always?               | Value                                                                        |
