@@ -37,4 +37,4 @@ When every [merge precondition](../conventions/pull-request-merge.md) holds, reb
 
 More units: sync from `origin/main` and branch the next in the same directory.
 
-Finished: run [git clean-up](git-clean-up.md), which removes the worktree, both copies of the branch, and reconciles the primary checkout.
+Finished: run [dev artifact clean-up](dev-artifact-clean-up.md), which removes the worktree, both copies of the branch, and the build output this work produced, then reconciles the primary checkout.

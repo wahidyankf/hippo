@@ -1,10 +1,12 @@
-# Git Clean-Up
+# Dev Artifact Clean-Up
 
-Removing exactly the Git artifacts one piece of work created, and bringing the primary checkout's `main` back level with `origin/main`. The obligation is stated in [integration path](../conventions/integration-path.md); this is the order, and the checks that make deleting safe.
+Removing exactly the development artifacts one piece of work created, and bringing the primary checkout's `main` back level with `origin/main`. The obligation is stated in [integration path](../conventions/integration-path.md); this is the order, and the checks that make deleting safe.
 
 ## Scope
 
-Four things, and nothing else: the worktree this work provisioned, its local branch, that branch on `origin`, and the primary checkout's `main` ref.
+Five things, and nothing else: the worktree this work provisioned, its local branch, that branch on `origin`, the regenerable build output this work produced, and the primary checkout's `main` ref.
+
+Build output means the compiled binaries and build caches a documented command rebuilds — in the worktree, and the same regenerable output in the primary checkout. It never means a `.env*` file or any other local secret: those are not build output, exist nowhere else, and are out of scope in every location.
 
 Everything else on the machine belongs to someone else — a worktree this work did not create, a branch it did not open, another repository's state. That holds even when they look abandoned.
 
@@ -35,6 +37,9 @@ git push origin --delete worktree/<name>
 rmdir ../hippo-worktrees
 ```
 
+Purge the build output this work produced once delivery has landed and nothing is using it. Retain
+logs, traces, and any other non-regenerable evidence a failure would need.
+
 The count must read `0 0`. `--prune` drops the remote-tracking ref for a branch the forge deleted on merge; without it the branch keeps appearing in `git branch -a` after it is gone. Delete on `origin` only if merging did not, and remove the parent directory only if this work created it and it is now empty.
 
 Where a clone has no primary checkout, `git fetch origin main:main` reconciles without one — never against a branch checked out somewhere.
@@ -47,8 +52,12 @@ Read the refusal before answering it. Where the pull request reports merged and 
 
 ## Verification
 
-`git worktree list` no longer names the path, `git branch --list` no longer prints the branch, the branch is gone from `origin`, and the count above reads `0 0`.
+`git worktree list` no longer names the path, `git branch --list` no longer prints the branch, the branch is gone from `origin`, the purged build output is gone, and the count above reads `0 0`.
 
 ## Never
+
+Never delete a `.env*` file or any other local secret. They are gitignored and unregenerable — nothing in the repository reconstructs one — so deleting one is permanent loss of the operator's own configuration, not a reclaimed artifact. That holds inside a worktree being removed too, which is part of why removal is never forced: `git worktree remove` refuses while untracked files remain, and that refusal is a signal to stop.
+
+In the primary checkout, only regenerable build output is removable. Every other removal targets the worktree this work provisioned or the branch it opened. The primary checkout holds the only copies of gitignored secrets and local state, so a deletion there is unrecoverable. Never delete `main` itself, locally or on `origin`.
 
 Never delete an artifact another actor created. Never stash to clear a worktree before removing it — the stash stack is shared across every worktree of a clone, so a pop elsewhere takes an entry it did not create.
