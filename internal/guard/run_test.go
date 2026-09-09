@@ -2039,6 +2039,39 @@ func TestTerminateAndWaitConfirmsRetirementAfterAnAggressiveGrace(t *testing.T) 
 	}
 }
 
+// contendedRoot is an evidence root for a contention fixture, which cannot use
+// t.TempDir. Such a fixture returns as soon as the guard defers, while the child
+// it started is still running and its launcher is still retiring into this
+// directory. t.TempDir removes its directory once and fails the test when that
+// racing writer makes it non-empty — reporting a cleanup race as a scenario
+// failure after the scenario's own assertions already passed. Retiring is
+// bounded, so a bounded retry is enough; nothing here weakens what the scenario
+// asserts.
+func contendedRoot(t *testing.T) string {
+	t.Helper()
+	//nolint:usetesting // t.TempDir is exactly what cannot be used here: it removes once and fails the test when the retiring launcher repopulates the directory.
+	root, err := os.MkdirTemp("", "hippo-contended-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if removeError := os.RemoveAll(root); removeError == nil {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Errorf("contended root %s stayed non-empty past the retirement window", root)
+
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+
+	return root
+}
+
 func contendedReservationConfig(t *testing.T, root string, hold func(string)) RunConfig {
 	t.Helper()
 	settings := policy.DefaultPolicy()
@@ -2106,7 +2139,7 @@ func TestActivationContentionDefersInsteadOfFailing(t *testing.T) {
 	// shared lock while this guard activates its reservation is ordinary
 	// contention, not a supervision failure. It must return the retryable
 	// deferral exit rather than a generic failure the caller cannot classify.
-	root := t.TempDir()
+	root := contendedRoot(t)
 	config := contendedReservationConfig(t, root, func(sharedRoot string) {
 		holdCoordinationLock(t, sharedRoot, 0, 400*time.Millisecond)
 	})
@@ -2124,7 +2157,7 @@ func TestSupervisionContentionDoesNotStopHealthyWork(t *testing.T) {
 	// Once the child is running, every shared-root read is an observation. A
 	// peer holding the lock through several sample intervals must never cost
 	// the caller its healthy child.
-	root := t.TempDir()
+	root := contendedRoot(t)
 	config := contendedReservationConfig(t, root, func(sharedRoot string) {
 		holdCoordinationLock(t, sharedRoot, 50*time.Millisecond, 400*time.Millisecond)
 	})
