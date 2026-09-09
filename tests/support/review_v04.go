@@ -227,7 +227,7 @@ func (driver *Driver) requestLooserOwnerLimitV04() error {
 	if loose != nil || !errors.Is(acquireError, guard.ErrReservationDeferred) {
 		driver.v04Error = fmt.Errorf("looser configuration bypassed strict waiter: session=%+v error=%w", loose, acquireError)
 	}
-	if releaseError := guard.ReleaseReservation(root, owner); releaseError != nil && driver.v04Error == nil {
+	if releaseError := releaseContendedReservation(root, owner); releaseError != nil && driver.v04Error == nil {
 		driver.v04Error = releaseError
 	}
 	strict, strictError := <-strictResult, <-strictErrors
@@ -319,7 +319,7 @@ func requireV04ActiveEpochCapacity(root string) error { //nolint:cyclop,gocognit
 			//nolint:errorlint // The diagnostic intentionally reports both persisted and decoded active-epoch outcomes.
 			return fmt.Errorf("%s lower cap changed active epoch: before=%q after=%q totals=%+v read=%v status=%w", testCase.name, before, after, totals, readError, statusError)
 		}
-		if err = guard.ReleaseReservation(caseRoot, owner); err != nil {
+		if err = releaseContendedReservation(caseRoot, owner); err != nil {
 			return err
 		}
 		waiter, waiterError := <-waiterResult, <-waiterErrors
