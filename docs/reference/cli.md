@@ -66,10 +66,10 @@ graph LR
 
 ```console
 $ hippo version
-v0.5.1 (5722854fddfd68b1fc7ca9feca935fe3e7eec625)
+v0.5.3 (b13567145a86942c76a32ea3371d5f75a817e3d9)
 
 $ hippo version --json
-{"schemaVersion":1,"version":"v0.5.1","commit":"5722854fddfd68b1fc7ca9feca935fe3e7eec625"}
+{"schemaVersion":1,"version":"v0.5.3","commit":"b13567145a86942c76a32ea3371d5f75a817e3d9"}
 ```
 
 A binary built from source outside the release script reports `dev (unknown)`, because the version
