@@ -51,6 +51,13 @@ run() {
 	probe="box$((octet)).internal"
 	probe_blocks internal-hostname "$probe" || return 1
 
+	# A machine addressed through more than one label is still a machine on
+	# someone's LAN, and publishing the deeper name publishes the same topology
+	# as publishing the flat one. This probe is what stops an anchor from being
+	# bought by narrowing the shape until only the flattest name is caught.
+	probe="box$((octet)).rack$((octet)).internal"
+	probe_blocks internal-hostname "$probe" || return 1
+
 	# The shapes must also leave ordinary text alone. A screen that blocks
 	# everything is as useless as one that blocks nothing, and it is the one
 	# people learn to work around.
@@ -58,6 +65,15 @@ run() {
 		printf 'The documented form is a repository-relative path such as scripts/run.sh.\n'
 		printf 'A public address is ordinary content, and so is a version: 9.8.7.6, v9.8.7.\n'
 		printf 'A placeholder reads <private-host> or <repository-path>, never a real value.\n'
+		# A dotted filename is not a hostname. `.env.local` is the name of a
+		# file in the working tree of most projects that have one, and a
+		# hostname shape that matches it turns an ordinary sentence about
+		# configuration into a blocked commit. The literal is written out
+		# rather than assembled because it is the one probe whose whole point
+		# is that this repository's own gate does not flag it: if the shape
+		# ever loses its anchor again, the gate blocks this file, and the
+		# blocked file is the report.
+		printf 'Local overrides live in .env.local, which the ignore list already covers.\n'
 	} >"$CASE_TMP/ordinary.txt"
 	out=$("$PREFLIGHT" --surface logs --file "$CASE_TMP/ordinary.txt" 2>&1)
 	rc=$?
