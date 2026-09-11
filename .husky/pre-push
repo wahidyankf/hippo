@@ -2,4 +2,11 @@ set -e
 
 # The last local moment before anything reaches the remote, which for a public
 # repository is the moment publication begins.
-exec ./rhino gate run --surface pre-push -- "$@"
+#
+# Git's own arguments are deliberately not forwarded. Arguments after `--` reach
+# every gate on the surface, not only the one that wants them, and Git hands
+# this hook a remote name and a URL that none of the pinned validators take.
+# Forwarding them made every validator fail on the argument rather than on the
+# repository -- wired-looking, and screening nothing. What the ref screen reads
+# is the ref-update lines on stdin, which flow through either way.
+exec ./rhino gate run --surface pre-push

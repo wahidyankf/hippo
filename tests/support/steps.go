@@ -794,6 +794,7 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^documentation gate wiring is inspected$`, driver.inspectDocumentationGate),
 		step(`^the push hook and the pull request gate dispatch declared surfaces$`, driver.requireSharedDocumentationCheck),
 		step(`^both declared surfaces run every pinned validator$`, driver.requirePinnedValidatorsRun),
+		step(`^the push hook forwards no argument its validators cannot take$`, driver.requirePushHookForwardsNoArgument),
 		step(`^the pre-commit surface invokes staged formatting for supported files$`, driver.requireStagedFormatting),
 		step(`^the pre-push surface invokes the direct quick gate without Nx$`, driver.requirePushQuickGate),
 		step(`^the quick gate invokes deterministic core coverage at 99 percent$`, driver.requireCoreCoverage),
