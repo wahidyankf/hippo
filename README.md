@@ -184,9 +184,10 @@ import directive, so there is a single instruction body rather than two that dri
 
 ## 🌙 Part of Open Sharia Enterprise
 
-HIPPO is one of the five **OSE Code Repositories**, with `ose-public`, `ose-private`, `rhino`, and
-`beaver-nest`. It supplies their host resource coordination. The name is navigation, not coupling —
-see [project context](./docs/README.md#project-context).
+HIPPO is one of the five **OSE Code Repositories**, with `ose-public`, `rhino`, `beaver-nest`, and
+one private operations repository this public one does not name. It supplies their host resource
+coordination. The name is navigation, not coupling — see
+[project context](./docs/README.md#project-context).
 
 HIPPO has no OSE-specific defaults compiled into it and is designed to be used entirely on its own —
 consumers supply their own commands, paths, ports, and health endpoints.

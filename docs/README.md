@@ -53,7 +53,7 @@ HIPPO is one of the five **OSE Code Repositories** — the repositories
 | Repository                                                 | What it does                            |
 | ---------------------------------------------------------- | --------------------------------------- |
 | [`ose-public`](https://github.com/wahidyankf/ose-public)   | The OSE product platform and research   |
-| `ose-private`                                              | Authorized operations, private          |
+| _(unnamed, private)_                                       | Authorized operations                   |
 | [`rhino`](https://github.com/wahidyankf/rhino)             | Repository hygiene                      |
 | **`hippo`**                                                | Resource coordination — this repository |
 | [`beaver-nest`](https://github.com/wahidyankf/beaver-nest) | An independent family product           |
@@ -61,6 +61,10 @@ HIPPO is one of the five **OSE Code Repositories** — the repositories
 HIPPO coordinates real work across the other four, which consume its published releases through
 their own checksum-pinned bootstraps. Nothing crosses the other way: HIPPO consumes none of them,
 and cannot guard itself.
+
+The private one is left unnamed here on purpose: this repository is public, and a public document
+naming a private repository publishes the fact that it exists and what it is called. Anyone
+authorized to work in it already knows its name.
 
 **That name is navigation, not coupling.** The five are developed, versioned, and released
 independently — no shared version number, no shared release cadence, no monorepo, and no parent
