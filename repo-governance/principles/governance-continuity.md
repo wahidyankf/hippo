@@ -16,4 +16,4 @@ This is a principle rather than a convention because it constrains how every oth
 
 ## Applied Here
 
-The [plan lifecycle](../conventions/plan-lifecycle.md) and [task tracking](../conventions/task-tracking.md) exist for the same reason: they move state out of a session and into the repository, where the next reader — human or otherwise — starts from the same place the last one left.
+The [plans convention](../conventions/plans.md) and [task tracking](../conventions/task-tracking.md) exist for the same reason: they move state out of a session and into the repository, where the next reader — human or otherwise — starts from the same place the last one left.

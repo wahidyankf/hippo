@@ -34,4 +34,4 @@ The same run reports any file that would compete with the canon. Prove that too:
 
 ## When to Run It
 
-On every contract change, and on every gate run: the check is part of [`scripts/docs-check.sh`](../development/software-quality-enforcement.md), so it runs before every push and in the pull-request gate.
+On every contract change, and on every gate run: the check is a [declared gate](../development/software-quality-enforcement.md) on the `pre-push` and `ci` surfaces, so it runs before every push and in the pull-request gate.

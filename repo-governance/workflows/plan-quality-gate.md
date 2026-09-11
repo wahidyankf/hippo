@@ -1,40 +1,32 @@
-# Plan Quality Gate
+# Quality Gate
 
-Run this only when the user names this gate or unambiguously directs its semantic audit. Authorization is never inferred from creating, editing, reviewing, or executing a plan, from a harness planning mode, or another workflow. One instruction may authorize several named checkpoints; otherwise it authorizes one run.
+## Entry
 
-A run returns one terminal result — `PASS`, or one `BLOCKED_*` variant — for one plan's readiness at the directed pre-execution, post-material-change, or completion checkpoint. It never recurses and never starts another run.
+A complete draft, with both decision gates finished. The draft is frozen at a named commit for the duration of the gate.
 
-## What It Judges
+## Sequence
 
-Meaning, consistency, safety, executability, and proof. `PASS` means good enough for the authorized scope, its known risks, and applicable rules — not perfect, and not future-proof. Do not block on style, speculative hardening, or an improvement that could wait without leaving execution unsafe or ambiguous. Apply [minimal sufficiency](../principles/minimal-sufficiency.md).
+1. **Freeze the snapshot.** Record the commit. A gate that re-reads a changing draft cannot state what it verified.
+2. **Run structural validation** against the frozen snapshot. Structure is mechanical and is checked mechanically — see
+   [Structural Validation](../conventions/plans/006-structural-validation.md).
+3. **Review what validation cannot reach**: whether the acceptance criteria are testable and the right ones, whether
+   `delivery.md` is genuinely executable by someone who was not present, whether the technical shape matches the work.
+4. **Record one terminal verdict** — `PASS`, `PASS_WITH_FINDINGS`, or `FAIL` — with the command, the commit, the time,
+   and the findings, sanitized.
+5. **Repair within the budget.** At most two repair cycles. Each cycle repairs against the frozen finding list and
+   re-verifies once.
+6. **Decide at the ceiling.** If findings remain after the second cycle, choose between the repaired draft and the last
+   known-good state on the criteria declared before the first cycle, and record the choice and its reasoning. Do not
+   extend the budget because the next attempt looks close.
 
-Machine-decidable questions belong to the tooling: links, directory maps, word budgets, Mermaid, harness parity. Do not re-derive them by reading or second-guess a verdict they returned; run them once, in verification. Where the plan _delivers_ a check, confirm `delivery.md` has a task that builds it and one that proves it, rather than simulating a tool that does not exist yet; at completion it must exist and pass.
+## Exit
 
-## Snapshot and Ledger
+A terminal verdict exists as a file, with its command, commit, timestamp, result, and sanitized findings.
 
-Freeze the plan path and stage, Git revision and dirty paths, scope, relevant specification and governance paths, unresolved decisions, and cycle `1`. Carry it through compaction or handoff under [governance continuity](../principles/governance-continuity.md). A material external input change ends the run as `BLOCKED_INPUT_CHANGED`; it never restarts one.
+## Why Bounded
 
-Audit before editing. Build one finite ledger whose rows carry an ID, canonical rule, location, material gap, required repair, proof, and a status of `OPEN`, `FIXED`, `NOT_APPLICABLE`, or `BLOCKED`. A row exists only where a gap violates a rule or leaves scoped execution unsafe, ambiguous, or unprovable. A mandatory finding cannot be waived, and `NOT_APPLICABLE` needs evidence.
+An unbounded quality gate is a gate that always passes eventually. Each repair cycle costs judgement, and the third
+cycle is usually spent defending the second rather than improving the plan.
 
-## Procedure
-
-1. Inventory and read the plan, its assets, relevant implementation and specifications, and the governance behind them. Do not audit a machine-owned concern.
-2. Complete one semantic audit, editing nothing. Check the [plan lifecycle](../conventions/plan-lifecycle.md) contract — one stage, required documents, one technical shape, truthful status; a route from BRD and PRD through the technical set into delivery that a junior could walk; necessary, non-placeholder artifacts; architecture, Gherkin, file impact, and dependencies synchronized against [software quality enforcement](../development/software-quality-enforcement.md); ownership, acceptance traceability, RED, GREEN, and REFACTOR tasks, checkpoints, evidence; the [specification-change](../conventions/plan-specification-changes.md) contract; and conflicts with current specifications, governance, implementation, or another live plan.
-3. Freeze the ledger. Repair only its rows, in dependency and safety order, each closing one `OPEN` row without widening product scope. A missing decision, missing authority, or irreconcilable rule becomes `BLOCKED`; never invent the answer.
-4. Verify semantically in read-only mode, reviewing only repaired meaning and its cross-document effects. Then run the gate:
-
-   ```sh
-   npm run test:quick
-   ```
-
-   It runs unguarded, because [HIPPO cannot guard HIPPO](../development/resource-aware-development.md).
-
-5. Return `PASS` when no row is `OPEN` or `BLOCKED`, the gate passes, no new semantic gap appeared, and the snapshot moved only through recorded repairs.
-6. Otherwise take exactly one stabilization cycle: add only repair-caused semantic gaps and deterministic findings, set cycle `2`, repair them once, and repeat step 4. A fixed finding cannot reopen without changed input, which yields `BLOCKED_INPUT_CHANGED`.
-7. After cycle `2`, return `PASS` if step 5 now holds. Otherwise return `BLOCKED_NON_CONVERGENT` with the remaining rows and evidence. Do not repair again, restart, or invoke this workflow automatically.
-
-Where the gate reaches no deterministic verdict, return `BLOCKED_TOOLING` with the failure evidence. Never simulate the check or retry it unbounded.
-
-## Terminal Contract
-
-`PASS` authorizes neither execution nor commit. Every `BLOCKED_*` result names its reason, remaining rows, and the external change needed. Resume only when new input and an explicit direction authorize a fresh run. [Plan execution](plan-execution.md) consumes this result and never starts it.
+The budget forces the more useful question: is this draft good enough to execute, or is the last known-good state better
+than what two cycles produced? Either answer closes the gate.

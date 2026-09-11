@@ -4,3 +4,6 @@ dist/
 generated-reports/
 local-tmp/
 node_modules/
+
+# Verified against the catalog digest, never edited. See specs/fixtures/README.md.
+specs/fixtures/

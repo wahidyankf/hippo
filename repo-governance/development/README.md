@@ -10,6 +10,10 @@ Engineering standards for changing this repository's code. They sit under the [c
 - [Dependency selection](dependency-selection.md) — what may be depended on, and what that costs.
 - [End-to-end testing](end-to-end-testing.md) — the boundary that spawns the executable.
 - [GitHub Actions storage](github-actions-storage.md) — staying inside the free allowance.
+- [Manual verification](manual-verification.md) — the claims a green pipeline cannot establish.
+- [Manual verification modules](manual-verification/README.md) — the ordered modules of that standard.
+- [Planning capabilities](planning-capabilities.md) — the workflows, skills and agents a plan is executed with.
+- [Planning capabilities modules](planning-capabilities/README.md) — the ordered modules of that roster.
 - [Public contract](public-contract.md) — exit codes, evidence readers, configuration compatibility.
 - [Quality gates](quality-gates.md) — what runs, where, and in what order.
 - [Resource-aware development](resource-aware-development.md) — the guard, and why this repository cannot use it on itself.

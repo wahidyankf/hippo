@@ -8,7 +8,7 @@ One kebab-case Markdown file per idea, in the quadrant its evidence supports. Re
 
 In order: an H1 title, a one-line summary, and a dated provenance note; the problem and its evidence; why now; prior art, with direct links and the date each was read; the proposed direction as a sketch; rough scope and non-goals; risks and open questions; and what success would look like, with the signal that would promote the brief.
 
-Leave out file-level design, Gherkin, and delivery checklists. A brief carrying those is a plan that skipped being reviewed as one. When the important unknowns are answered, replace the brief with a formal plan folder in [`../backlogs/`](../backlogs/README.md) that carries its evidence and its decisions forward.
+Leave out file-level design, Gherkin, and delivery checklists. A brief carrying those is a plan that skipped being reviewed as one. When the important unknowns are answered, replace the brief with a formal plan folder in [`../backlog/`](../backlog/README.md) that carries its evidence and its decisions forward.
 
 ## Quadrants
 

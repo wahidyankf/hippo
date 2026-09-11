@@ -10,14 +10,19 @@ A convention chooses a path. It does not authorize anyone to walk it; see [commi
 - [Commit authorization](commit-authorization.md) — when committing and pushing are permitted.
 - [Directory maps](directory-maps.md) — every mapped directory lists its siblings.
 - [Documentation architecture](documentation-architecture.md) — Diátaxis, and what `docs/` may not contradict.
+- [File naming](file-naming.md) — the ordered prefix an accompanying set carries.
 - [GitHub polling](github-polling.md) — three minutes between checks, never a watch.
 - [Integration path](integration-path.md) — trunk-based development through pull requests.
 - [Language](language.md) — English, in every artifact.
 - [Last-resort questions](last-resort-questions.md) — exhaust the repository before asking.
 - [Markdown links](markdown-links.md) — every internal link resolves.
 - [Markdown visualizations](markdown-visualizations.md) — Mermaid, legible and accessible.
-- [Plan lifecycle](plan-lifecycle.md) — the four stages a plan moves through, and what each folder holds.
+- [Plan lifecycle](plan-lifecycle.md) — the local rules layered on the plans convention.
+- [Plan validator contract](plan-validator-contract.md) — what the plan validator reads, reports and exits with.
+- [Plan validator contract modules](plan-validator-contract/README.md) — the ordered modules of that contract.
+- [Plans](plans.md) — the lifecycle, documents, workflows and validation a formal plan follows.
 - [Plan specification changes](plan-specification-changes.md) — how a plan states its specification work in advance.
+- [Plans modules](plans/README.md) — the ordered modules of the plans convention.
 - [Public repository data safety](public-repository-data-safety.md) — what may never be committed.
 - [Pull request body](pull-request-body.md) — what a reviewer is owed.
 - [Pull request boundaries](pull-request-boundaries.md) — one delivery boundary per pull request.

@@ -12,7 +12,9 @@ Exit codes `73`, `75`, and `78`, the evidence readers, and configuration compati
 
 ## Plans
 
-Plans are working records under [`plans/`](plans/README.md), never architecture: [lifecycle](repo-governance/conventions/plan-lifecycle.md), [specification changes](repo-governance/conventions/plan-specification-changes.md), [execution](repo-governance/workflows/plan-execution.md), and a [gate](repo-governance/workflows/plan-quality-gate.md) an explicit request starts.
+Plans are working records under [`plans/`](plans/README.md), never architecture: the [plans convention](repo-governance/conventions/plans.md), the [local rules](repo-governance/conventions/plan-lifecycle.md) layered on it, and [specification changes](repo-governance/conventions/plan-specification-changes.md).
+
+What a plan is groomed, written, executed and reviewed with — every workflow, skill and agent of the roster — is [planning capabilities](repo-governance/development/planning-capabilities.md).
 
 ## Specifications
 

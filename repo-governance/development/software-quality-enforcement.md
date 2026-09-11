@@ -10,7 +10,7 @@ A change is not done when it compiles. It is done when the gates that would have
 
 ## Documentation Hygiene
 
-`scripts/docs-check.sh` runs the pinned RHINO release over six independent questions: the configuration parses, word budgets hold, directory maps match the tree, internal links resolve, diagrams stay legible, and the harness roster is in parity with the canon.
+The pinned RHINO release answers six independent questions: the configuration parses, word budgets hold, directory maps match the tree, internal links resolve, diagrams stay legible, and the harness roster is in parity with the canon. All six are declared gates on both publication surfaces, so `./rhino gate run --surface pre-push` and `--surface ci` each run the whole set.
 
 What it enforces lives in [`repo-config.yml`](../../repo-config.yml), not in the tool. **Change the declaration, never the tool** — a repository that edits its validator to pass is a repository whose validator means nothing.
 

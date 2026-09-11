@@ -8,9 +8,14 @@ A workflow describes how something is done. It never grants permission to do it 
 
 - [Coding harness contract change](coding-harness-contract-change.md) — changing the canon or a harness adapter.
 - [Coding harness parity verification](coding-harness-parity-verification.md) — proving the roster still reconciles.
+- [Exploratory and usability review](exploratory-usability-review.md) — a bounded exploration, recorded with its evidence.
 - [Gherkin implementation review](gherkin-implementation-review.md) — the manual review a changed scenario or adapter requires.
 - [Dev artifact clean-up](dev-artifact-clean-up.md) — removing the artifacts one piece of work created, and nothing else.
+- [Plan backlog grooming](plan-backlog-grooming.md) — keeping the backlog ordered and current.
 - [Plan execution](plan-execution.md) — executing one plan while its record stays true.
+- [Plan execution check](plan-execution-check.md) — judging a finished plan against what it promised.
+- [Plan ideas grooming](plan-ideas-grooming.md) — turning a raw idea into a brief worth planning.
+- [Plan planning](plan-planning.md) — writing the plan itself, gate by gate.
 - [Plan quality gate](plan-quality-gate.md) — one plan's readiness, on explicit request only.
 - [PR leak review](pr-leak-review.md) — the posted, current-head review a merge requires.
 - [Red green refactor](red-green-refactor.md) — the cycle, with its evidence.
