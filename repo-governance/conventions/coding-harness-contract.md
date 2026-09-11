@@ -16,6 +16,8 @@ An adapter exists only where a harness cannot read the canon. It routes and decl
 
 Where a harness translates a capability into its own vocabulary — a tool list, a permission map, a sandbox mode — the translation is declared in configuration and checked. A denial weakened in an adapter is a finding, not a local preference.
 
+Adapters are generated from the canon by `node scripts/generate-adapters.mjs`, never edited in place. An adapter a hand can edit is a second place for the rule to live, and the two will disagree. The writer and the judge stay apart: the generator writes and checks nothing, and `./rhino harness parity validate` decides whether what is on disk matches what `repo-config.yml` declares.
+
 ## Prohibited Instruction Sources
 
 Files that would compete with the canon are prohibited by name, and the prohibition is checked. A second instruction file does not add rules; it splits them, and the reader has no way to know which half they got.
