@@ -13,24 +13,30 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 
 # Documentation hygiene, against the pinned RHINO release in rhino.lock. Six
 # independent questions with no ordering between them, so they run together and
-# the gate waits for the slowest rather than the sum; one resolution serves all
-# six, because the wrapper verifies and installs before handing over.
+# the gate waits for the slowest rather than the sum.
+#
+# Each check invokes the wrapper itself rather than sharing one resolution
+# through `--bootstrap-exec`. The released consumer bootstrap has no such
+# option, and it does not need one: the first call installs, and the five that
+# follow re-digest an already-warm cache, which is a read.
 #
 # Extracted from the quick gate so the pull-request gate can name this check as
 # a job of its own without holding a second copy of the invocation.
-#
-# shellcheck disable=SC2016 # $RHINO_BIN belongs to the shell ./rhino execs.
-./rhino --bootstrap-exec sh -c '
-	set -u
-	"$RHINO_BIN" repo-config validate & a=$!
-	"$RHINO_BIN" governance word-budget validate & b=$!
-	"$RHINO_BIN" governance directory-map validate & c=$!
-	"$RHINO_BIN" harness parity validate & d=$!
-	"$RHINO_BIN" md internal-link validate & e=$!
-	"$RHINO_BIN" md mermaid validate & f=$!
-	documentation=0
-	for check in $a $b $c $d $e $f; do
-		wait "$check" || documentation=1
-	done
-	exit "$documentation"
-'
+./rhino repo-config validate &
+a=$!
+./rhino governance word-budget validate &
+b=$!
+./rhino governance directory-map validate &
+c=$!
+./rhino harness parity validate &
+d=$!
+./rhino md internal-link validate &
+e=$!
+./rhino md mermaid validate &
+f=$!
+
+documentation=0
+for check in $a $b $c $d $e $f; do
+	wait "$check" || documentation=1
+done
+exit "$documentation"
