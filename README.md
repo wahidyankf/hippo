@@ -207,9 +207,9 @@ check, defined in `.github/workflows/pr-quality-gate.yml`, is required, and it i
 Git hooks.
 
 Documentation hygiene runs under [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and
-SHA-256 in `rhino.lock`, through `scripts/docs-check.sh` — one definition the quick gate and the
-pull-request gate both call. What it enforces is declared in `repo-config.yml` rather than compiled
-into the tool. The two repositories pin each other: RHINO guards its own builds with a pinned
+SHA-256 in `rhino.lock`. Every check it runs is a gate declared in `repo-config.yml` against the
+surface that runs it, so the push hook and the pull-request gate dispatch the same declaration
+rather than each calling a script. What is enforced lives in the declaration, not in the tool. The two repositories pin each other: RHINO guards its own builds with a pinned
 `./hippo`.
 
 Everything else — the coverage floor, the exemption boundaries, where a worktree may live, how a

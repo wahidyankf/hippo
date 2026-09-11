@@ -1,7 +1,7 @@
-# schema: rhino/repo-config/v1
+# Repository configuration -- ose/repo-config/v2
 #
-# What this repository enforces about its own documentation, declared rather
-# than compiled in.
+# What this repository enforces about its own documentation, and what must pass
+# before a change lands, declared rather than compiled in.
 #
 # The earlier version of this file was almost entirely inert: HIPPO kept its
 # rules in one AGENTS.md, drew in ASCII, and ran no coding-harness adapters, so
@@ -10,63 +10,34 @@
 # hierarchy to budget, Mermaid diagrams to colour, a canonical agent roster to
 # reconcile. Nothing here is aspirational; a value with no rule behind it is
 # still an empty list.
+#
+# Under v2 the schema, the visibility and the gate list are named rather than
+# implied, and every validator section is optional: a repository declares the
+# checks it wants and RHINO runs those. The sections below are unchanged; their
+# order is, because v2 fixes one canonical key order.
+#
+# RHINO ignores a section it does not own, so another tool may share this file.
 
-governance-word-budget:
-  # A word is a run of letters and digits, so a Markdown link costs one word
-  # per path segment. That is the honest count for an index: a line that is
-  # mostly links is mostly navigation, and `wc -w` understates it by about a
-  # third. The budget is a maximum, not a target -- a document that outgrows it
-  # is split, never given a larger number.
-  count: letters-and-digits
-  surfaces:
-    - glob: "AGENTS.md"
-      fail: 650
-      warn: 550
-    - glob: "README.md"
-      fail: 1600
-      warn: 1400
-    - glob: "repo-governance/**/*.md"
-      fail: 750
-      warn: 650
+schema: ose/repo-config/v2
 
-governance-directory-map:
-  # `docs/` stays excluded on purpose: its READMEs are Diátaxis landing pages
-  # that link into their sections by name, which is a different contract from
-  # naming every direct sibling exactly once. `plans/` is mapped for the
-  # opposite reason -- a stage index whose folders are not listed is a stage
-  # whose plans are found by luck. See
-  # repo-governance/conventions/directory-maps.md.
-  trees:
-    - path: plans
-    - path: specs
-    - path: repo-governance
+# Public, and treated as public rather than treated as private by oversight:
+# the repository, its releases and its pull requests are readable by anyone.
+visibility: public
 
-md-internal-link:
-  # Archived plans are excluded as link *sources* only, and stay valid link
-  # targets. A completed plan describes the repository as it was, on purpose,
-  # and may name paths that have since moved; reporting those would make
-  # finishing a plan emit findings. See plans/done/README.md.
-  exclude-sources:
-    - "plans/done/**"
-
-md-mermaid:
-  # Okabe-Ito, chosen because it stays distinguishable under the common forms
-  # of colour blindness. `#029E73` reaches only 3.42:1 against white, so it
-  # carries black text; the validator enforces the pairing rather than trusting
-  # whoever adds the next diagram to remember it.
-  node-label-graphemes: 32
-  edge-label-graphemes: 24
-  fill-colors:
-    - "#0173B2"
-    - "#DE8F05"
-    - "#029E73"
-    - "#CA9161"
-  edge-colors:
-    - "#0173B2"
-    - "#000000"
-  text-colors:
-    - "#000000"
-    - "#FFFFFF"
+scan:
+  # No `worktrees` entry, deliberately. This repository's worktrees live beside
+  # the checkout rather than inside it, because `go build` walks up out of a
+  # worktree and takes the outermost `.git` directory. An exclusion here would
+  # invite the layout that breaks it. See
+  # repo-governance/conventions/worktree-location.md.
+  exclude-directories:
+    - .git
+    - .husky
+    - node_modules
+    - dist
+    - coverage
+    - local-tmp
+    - generated-reports
 
 harness-parity:
   canonical:
@@ -108,41 +79,66 @@ harness-parity:
         route-field: body
         identity: { name: name, description: description }
         translations:
-          - { when: always, field: tools, members: [Read] }
-          - {
-              when: requires,
-              capability: repository-read,
-              field: tools,
-              members: [Glob, Grep],
-            }
-          - {
-              when: denies,
-              capability: repository-write,
-              field: tools,
-              absent-members: [Write, Edit],
-            }
-          - {
-              when: denies,
-              capability: shell,
-              field: tools,
-              absent-members: [Bash, PowerShell],
-            }
-          - {
-              when: denies,
-              capability: nested-agent,
-              field: tools,
-              absent-members: [Agent, Task],
-            }
+          - when: always
+            field: tools
+            members:
+              - Read
+          - when: requires
+            capability: repository-read
+            field: tools
+            members:
+              - Glob
+              - Grep
+          - when: requires
+            capability: repository-write
+            field: tools
+            members:
+              - Write
+              - Edit
+          - when: requires
+            capability: shell
+            field: tools
+            members:
+              - Bash
+          - when: denies
+            capability: repository-write
+            field: tools
+            absent-members:
+              - Write
+              - Edit
+          - when: denies
+            capability: shell
+            field: tools
+            absent-members:
+              - Bash
+              - PowerShell
+          - when: denies
+            capability: nested-agent
+            field: tools
+            absent-members:
+              - Agent
+              - Task
     - name: codex
       agent-adapter:
         path: ".codex/agents/{name}.toml"
         format: toml
         route-field: developer_instructions
         identity: { name: name, description: description }
-        # The sandbox is fixed rather than translated: Codex expresses the
-        # whole read-only boundary in one field, and a portable adapter may
-        # not pin a model.
-        fixed: { sandbox_mode: read-only }
+        # Codex expresses the whole boundary in one field, so the field is
+        # translated rather than pinned: a value fixed for every agent would
+        # claim read-only for one that writes. A portable adapter may not pin
+        # a model, which `absent` keeps true.
+        translations:
+          - when: denies
+            capability: repository-write
+            field: sandbox_mode
+            members:
+              - read-only
+          - when: requires
+            capability: repository-write
+            field: sandbox_mode
+            members:
+              - workspace-write
         absent: [model]
     - name: opencode
       agent-adapter:
@@ -152,31 +148,41 @@ harness-parity:
         identity: { description: description }
         fixed: { mode: subagent }
         translations:
-          - { when: always, field: permission, entries: { read: allow } }
-          - {
-              when: requires,
-              capability: repository-read,
-              field: permission,
-              entries: { glob: allow, grep: allow },
-            }
-          - {
-              when: denies,
-              capability: repository-write,
-              field: permission,
-              entries: { edit: deny },
-            }
-          - {
-              when: denies,
-              capability: shell,
-              field: permission,
-              entries: { bash: deny },
-            }
-          - {
-              when: denies,
-              capability: nested-agent,
-              field: permission,
-              entries: { task: deny },
-            }
+          - when: always
+            field: permission
+            entries:
+              read: allow
+          - when: requires
+            capability: repository-read
+            field: permission
+            entries:
+              glob: allow
+              grep: allow
+          - when: requires
+            capability: repository-write
+            field: permission
+            entries:
+              edit: allow
+          - when: requires
+            capability: shell
+            field: permission
+            entries:
+              bash: allow
+          - when: denies
+            capability: repository-write
+            field: permission
+            entries:
+              edit: deny
+          - when: denies
+            capability: shell
+            field: permission
+            entries:
+              bash: deny
+          - when: denies
+            capability: nested-agent
+            field: permission
+            entries:
+              task: deny
   # No `required-mcp` and no per-harness `capability`. This repository uses no
   # workspace task runner and needs no credential-free capability vector, and
   # the schema treats that absence as an answer rather than an omission.
@@ -210,17 +216,195 @@ harness-parity:
   constraints:
     - inline-result-only
 
-scan:
-  # No `worktrees` entry, deliberately. This repository's worktrees live beside
-  # the checkout rather than inside it, because `go build` walks up out of a
-  # worktree and takes the outermost `.git` directory. An exclusion here would
-  # invite the layout that breaks it. See
-  # repo-governance/conventions/worktree-location.md.
-  exclude-directories:
-    - .git
-    - .husky
-    - node_modules
-    - dist
-    - coverage
-    - local-tmp
-    - generated-reports
+governance-word-budget:
+  # A word is a run of letters and digits, so a Markdown link costs one word
+  # per path segment. That is the honest count for an index: a line that is
+  # mostly links is mostly navigation, and `wc -w` understates it by about a
+  # third. The budget is a maximum, not a target -- a document that outgrows it
+  # is split, never given a larger number.
+  count: letters-and-digits
+  surfaces:
+    - glob: "AGENTS.md"
+      fail: 650
+      warn: 550
+    - glob: "README.md"
+      fail: 1600
+      warn: 1400
+    - glob: "repo-governance/**/*.md"
+      fail: 750
+      warn: 650
+
+governance-directory-map:
+  # `docs/` stays excluded on purpose: its READMEs are Diátaxis landing pages
+  # that link into their sections by name, which is a different contract from
+  # naming every direct sibling exactly once. `plans/` is mapped for the
+  # opposite reason -- a stage index whose folders are not listed is a stage
+  # whose plans are found by luck. See
+  # repo-governance/conventions/directory-maps.md.
+  trees:
+    - path: plans
+    # `specs/behaviours` rather than `specs`: the mapped tree is walked whole,
+    # and `specs/fixtures/plan-structure` is a copy verified against the
+    # catalog's digest. Adding the READMEs the rule wants would change bytes
+    # that must not change, and the rule has no exclusion. The narrower tree
+    # keeps every directory this repository actually authors under the rule.
+    - path: specs/behaviours
+    - path: repo-governance
+
+md-internal-link:
+  # The shared plan-structure corpus is excluded because several of its rejected
+  # cases are documents with a deliberately broken link -- that is the defect the
+  # case exists to make a validator report -- and the tree is verified against the
+  # catalog's digest rather than edited, so a link repaired here to satisfy this
+  # rule would break the comparison the corpus is for. The catalog excludes the
+  # same path for the same reason.
+  #
+  # Archived plans are excluded as link *sources* only, and stay valid link
+  # targets. A completed plan describes the repository as it was, on purpose,
+  # and may name paths that have since moved; reporting those would make
+  # finishing a plan emit findings. See plans/done/README.md.
+  exclude-sources:
+    - "specs/fixtures/**"
+    - "plans/done/**"
+
+md-mermaid:
+  # Okabe-Ito, chosen because it stays distinguishable under the common forms
+  # of colour blindness. `#029E73` reaches only 3.42:1 against white, so it
+  # carries black text; the validator enforces the pairing rather than trusting
+  # whoever adds the next diagram to remember it.
+  node-label-graphemes: 32
+  edge-label-graphemes: 24
+  fill-colors:
+    - "#0173B2"
+    - "#DE8F05"
+    - "#029E73"
+    - "#CA9161"
+  edge-colors:
+    - "#0173B2"
+    - "#000000"
+  text-colors:
+    - "#000000"
+    - "#FFFFFF"
+
+# Ordered, and the order is the contract: gates run in declaration order and
+# stop at the first failure, which is why `public-safety` is first on every
+# surface: a repository that publishes screens what is leaving before it spends
+# time on anything else. The surfaces are RHINO's own four, so a gate is placed
+# by the moment that dispatches it rather than by what it checks.
+#
+# The six documentation checks are declared here rather than batched behind a
+# script, which is what v2 is for. They name `pre-push` as well as `ci` because
+# they used to run at a push through `scripts/test-quick.sh`; that call is gone,
+# so a surface no longer re-enters its own dispatcher.
+gates:
+  - id: public-safety
+    kind: check
+    run:
+      - bash
+      - scripts/public-safety/check.sh
+    surfaces:
+      - commit-msg
+      - pre-commit
+      - pre-push
+      - ci
+
+  - id: public-safety-tests
+    kind: check
+    run:
+      - bash
+      - scripts/public-safety/tests/run.sh
+    surfaces:
+      - ci
+
+  - id: format-staged
+    kind: mutation
+    run:
+      - npm
+      - exec
+      - --
+      - lint-staged
+    surfaces:
+      - pre-commit
+
+  - id: commit-message
+    kind: check
+    run:
+      - npm
+      - exec
+      - --
+      - commitlint
+      - --edit
+    surfaces:
+      - commit-msg
+
+  - id: quick
+    kind: check
+    run:
+      - ./scripts/test-quick.sh
+    surfaces:
+      - pre-push
+
+  - id: repo-config
+    kind: check
+    run:
+      - ./rhino
+      - repo-config
+      - validate
+    surfaces:
+      - pre-push
+      - ci
+
+  - id: word-budget
+    kind: check
+    run:
+      - ./rhino
+      - governance
+      - word-budget
+      - validate
+    surfaces:
+      - pre-push
+      - ci
+
+  - id: directory-map
+    kind: check
+    run:
+      - ./rhino
+      - governance
+      - directory-map
+      - validate
+    surfaces:
+      - pre-push
+      - ci
+
+  - id: harness-parity
+    kind: check
+    run:
+      - ./rhino
+      - harness
+      - parity
+      - validate
+    surfaces:
+      - pre-push
+      - ci
+
+  - id: internal-links
+    kind: check
+    run:
+      - ./rhino
+      - md
+      - internal-link
+      - validate
+    surfaces:
+      - pre-push
+      - ci
+
+  - id: mermaid
+    kind: check
+    run:
+      - ./rhino
+      - md
+      - mermaid
+      - validate
+    surfaces:
+      - pre-push
+      - ci

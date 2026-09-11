@@ -1,63 +1,39 @@
 # Dev Artifact Clean-Up
 
-Removing exactly the development artifacts one piece of work created, and bringing the primary checkout's `main` back level with `origin/main`. The obligation is stated in [integration path](../conventions/integration-path.md); this is the order, and the checks that make deleting safe.
+## Entry
 
-## Scope
+A task, plan, or investigation has finished, and it produced artifacts that were useful during the work and are not part
+of its result.
 
-Five things, and nothing else: the worktree this work provisioned, its local branch, that branch on `origin`, the regenerable build output this work produced, and the primary checkout's `main` ref.
+## Sequence
 
-Build output means the compiled binaries and build caches a documented command rebuilds — in the worktree, and the same regenerable output in the primary checkout. It never means a `.env*` file or any other local secret: those are not build output, exist nowhere else, and are out of scope in every location.
+1. **Enumerate what the task created.** Scratch directories, generated reports, temporary scripts, downloaded fixtures,
+   task branches, task worktrees, and any tooling installed only for this work.
+2. **Classify each one:**
 
-Everything else on the machine belongs to someone else — a worktree this work did not create, a branch it did not open, another repository's state. That holds even when they look abandoned.
+   | Class    | Disposition                                                             |
+   | -------- | ----------------------------------------------------------------------- |
+   | result   | keep; it is part of what the work delivered                             |
+   | evidence | keep, in the location the plan declared for evidence                    |
+   | scratch  | remove                                                                  |
+   | unknown  | investigate before removing; never delete something you cannot classify |
 
-## When
+3. **Remove the scratch class.** Delete files, remove worktrees, delete task branches that have served their purpose.
+4. **Preserve unrelated work.** A dirty file that this task did not create is not cleanup's business. Cleanup removes
+   what the task made; it never restores a working copy to some imagined clean state.
+5. **Prove absence.** Re-list the paths and confirm they are gone, and confirm the working tree holds only what it
+   should. A cleanup that was performed but not verified is a claim.
 
-Once every delivery unit that used the worktree has landed, or once the work is deliberately abandoned. Not between units, because the worktree is reused. Never as a periodic sweep.
+## Exit
 
-Retain the worktree of a run that failed, and say so, rather than deleting the evidence.
+Every task-created artifact is classified, the scratch class is removed, its absence is verified, and unrelated changes
+are untouched.
 
-## Before Deleting Anything
+## Deletion Is Not Reversible in the Way People Assume
 
-1. Nothing is unpushed: `git status --porcelain` is empty and `git log <branch> --not --remotes` prints nothing.
-2. Nothing is running in the worktree.
-3. The worktree is one this work provisioned — check it against `git worktree list`.
-4. The pull request reports merged, or the abandonment is deliberate.
+Version control restores what was committed. Scratch artifacts are, by definition, uncommitted — deleting one is
+permanent.
 
-## Procedure
-
-Run from the primary checkout, never from inside the directory being removed: a shell holding a deleted working directory resolves the next relative path somewhere unintended.
-
-```sh
-git fetch origin --prune
-git merge --ff-only origin/main
-git rev-list --left-right --count HEAD...origin/main
-git worktree remove ../hippo-worktrees/<name>
-git branch -d worktree/<name>
-git push origin --delete worktree/<name>
-rmdir ../hippo-worktrees
-```
-
-Purge the build output this work produced once delivery has landed and nothing is using it. Retain
-logs, traces, and any other non-regenerable evidence a failure would need.
-
-The count must read `0 0`. `--prune` drops the remote-tracking ref for a branch the forge deleted on merge; without it the branch keeps appearing in `git branch -a` after it is gone. Delete on `origin` only if merging did not, and remove the parent directory only if this work created it and it is now empty.
-
-Where a clone has no primary checkout, `git fetch origin main:main` reconciles without one — never against a branch checked out somewhere.
-
-## When `-d` Refuses
-
-`git branch -d` refuses a branch whose commits `main` does not literally contain, so after a rebase or squash merge it always refuses: the landed commits carry different hashes than the ones on the branch.
-
-Read the refusal before answering it. Where the pull request reports merged and the change is on `origin/main`, `-D` is correct, because `-d` is asking about hashes rather than about content. Where that is not established, `-D` discards work.
-
-## Verification
-
-`git worktree list` no longer names the path, `git branch --list` no longer prints the branch, the branch is gone from `origin`, the purged build output is gone, and the count above reads `0 0`.
-
-## Never
-
-Never delete a `.env*` file or any other local secret. They are gitignored and unregenerable — nothing in the repository reconstructs one — so deleting one is permanent loss of the operator's own configuration, not a reclaimed artifact. That holds inside a worktree being removed too, which is part of why removal is never forced: `git worktree remove` refuses while untracked files remain, and that refusal is a signal to stop.
-
-In the primary checkout, only regenerable build output is removable. Every other removal targets the worktree this work provisioned or the branch it opened. The primary checkout holds the only copies of gitignored secrets and local state, so a deletion there is unrecoverable. Never delete `main` itself, locally or on `origin`.
-
-Never delete an artifact another actor created. Never stash to clear a worktree before removing it — the stash stack is shared across every worktree of a clone, so a pop elsewhere takes an entry it did not create.
+That is why `unknown` exists as a class and why it routes to investigation rather than to removal. The cost of keeping
+one unrecognized file for another day is a stale file. The cost of deleting the one thing that was not reproducible is
+the work itself.

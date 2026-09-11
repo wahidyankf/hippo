@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -2701,6 +2702,76 @@ func (driver *Driver) requireE2EPlacement() error {
 	return nil
 }
 
+// gateCommands returns the declared gate commands that a surface selects, in
+// declaration order, each joined into one string.
+//
+// The gate list is read rather than the hooks it dispatches, because that is
+// where v2 moved the answer: a hook now names a surface and nothing else, so a
+// check that read the hook would find a dispatch and learn nothing about what
+// runs. This walks the `gates:` block by indentation; a full YAML reader would
+// be a dependency this module does not otherwise need.
+func gateCommands(config, surface string) []string {
+	commands := make([]string, 0, 8)
+
+	var run []string
+	var surfaces []string
+	inGates := false
+	section := ""
+
+	flush := func() {
+		if len(run) == 0 {
+			return
+		}
+		if slices.Contains(surfaces, surface) {
+			commands = append(commands, strings.Join(run, " "))
+		}
+		run = nil
+		surfaces = nil
+	}
+
+	for line := range strings.SplitSeq(config, "\n") {
+		if !inGates {
+			inGates = line == "gates:"
+
+			continue
+		}
+		// A new top-level key ends the block.
+		if line != "" && !strings.HasPrefix(line, " ") {
+			break
+		}
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "- id:"):
+			flush()
+			section = ""
+		case trimmed == "run:":
+			section = runCommandName
+		case trimmed == "surfaces:":
+			section = "surfaces"
+		case strings.HasPrefix(trimmed, "kind:"):
+			section = ""
+		case strings.HasPrefix(trimmed, "- ") && section == runCommandName:
+			run = append(run, strings.TrimPrefix(trimmed, "- "))
+		case strings.HasPrefix(trimmed, "- ") && section == "surfaces":
+			surfaces = append(surfaces, strings.TrimPrefix(trimmed, "- "))
+		}
+	}
+	flush()
+
+	return commands
+}
+
+// declares reports whether any command the surface selects contains the needle.
+func declares(config, surface, needle string) bool {
+	for _, command := range gateCommands(config, surface) {
+		if strings.Contains(command, needle) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (driver *Driver) inspectContributorEnforcement() error {
 	root := toolRoot()
 
@@ -2745,23 +2816,30 @@ func (driver *Driver) inspectContributorEnforcement() error {
 		return err
 	}
 
+	config, err := read("repo-config.yml")
+	if err != nil {
+		return err
+	}
+
+	// Each hook names a surface; the configuration says what that surface runs.
+	// Both halves are required, because either one alone can be true while the
+	// gate does nothing: a hook that dispatches a surface holding no gate, or a
+	// declared gate no hook ever dispatches.
+	//
 	// No pushed-commits job to require any more. Integration is pull-request
 	// only, so a commit reaches `main` exactly by merging a pull request this
 	// gate already validated; a second job on the push event would re-lint
 	// history it had just approved.
-	driver.conventionalCommits = strings.Contains(commitHook, "commitlint --edit") &&
+	driver.conventionalCommits = strings.Contains(commitHook, "--surface commit-msg") &&
+		declares(config, "commit-msg", "commitlint --edit") &&
 		strings.Contains(workflow, "commitlint --from") &&
 		strings.Contains(workflow, "Validate pull request commits")
 	driver.pullRequestOnlyGate = workflowTriggers(workflow) == "pull_request"
-	driver.stagedFormatting = strings.Contains(preCommitHook, "lint-staged") &&
-		strings.Contains(stagedConfig, `"**/*.go"`) &&
-		strings.Contains(stagedConfig, "goimports -w") &&
-		strings.Contains(stagedConfig, "gofumpt -w") &&
-		strings.Contains(stagedConfig, `"**/*.sh"`) &&
-		strings.Contains(stagedConfig, "shfmt -w") &&
-		strings.Contains(stagedConfig, `"**/*.{json,md,yaml,yml}"`) &&
-		strings.Contains(stagedConfig, "prettier --write")
-	driver.pushQuickGate = strings.Contains(prePushHook, "npm run test:quick") &&
+	driver.stagedFormatting = strings.Contains(preCommitHook, "--surface pre-commit") &&
+		declares(config, "pre-commit", "lint-staged") &&
+		formatsEveryStagedLanguage(stagedConfig)
+	driver.pushQuickGate = strings.Contains(prePushHook, "--surface pre-push") &&
+		declares(config, "pre-push", "./scripts/test-quick.sh") &&
 		strings.Contains(manifest, `"test:quick": "./scripts/test-quick.sh"`) &&
 		!strings.Contains(prePushHook, "npm exec -- nx") &&
 		!strings.Contains(prePushHook, "npx nx") &&
@@ -2773,9 +2851,28 @@ func (driver *Driver) inspectContributorEnforcement() error {
 	return nil
 }
 
+// formatsEveryStagedLanguage reports whether the lint-staged configuration
+// formats each language this repository writes, with the formatter named. A
+// configuration that matched the glob and ran nothing would satisfy a check
+// that only looked for the glob.
+func formatsEveryStagedLanguage(stagedConfig string) bool {
+	wanted := []string{
+		`"**/*.go"`, "goimports -w", "gofumpt -w",
+		`"**/*.sh"`, "shfmt -w",
+		`"**/*.{json,md,yaml,yml}"`, "prettier --write",
+	}
+	for _, needle := range wanted {
+		if !strings.Contains(stagedConfig, needle) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (driver *Driver) requireConventionalCommits() error {
 	if !driver.conventionalCommits {
-		return errors.New("the commit hook and CI do not invoke conventional commit validation")
+		return errors.New("the commit surface and CI do not invoke conventional commit validation")
 	}
 	return nil
 }
@@ -2801,12 +2898,12 @@ func (driver *Driver) inspectDocumentationGate() error {
 		return string(data), err
 	}
 
-	check, err := read("scripts", "docs-check.sh")
+	config, err := read("repo-config.yml")
 	if err != nil {
 		return err
 	}
 
-	quick, err := read("scripts", "test-quick.sh")
+	prePushHook, err := read(".husky", "pre-push")
 	if err != nil {
 		return err
 	}
@@ -2816,15 +2913,18 @@ func (driver *Driver) inspectDocumentationGate() error {
 		return err
 	}
 
-	// One definition, named twice. Two copies of the invocation would drift, and
-	// the copy that stopped asking a question would be the one nobody reran.
-	driver.sharedDocumentationCheck = strings.Contains(quick, "./scripts/docs-check.sh") &&
-		strings.Contains(workflow, "./scripts/docs-check.sh")
+	// One definition, selected by two surfaces. The push hook and the pull
+	// request gate reach the same declared list rather than holding a copy of
+	// the invocation each, so the copy that stopped asking a question cannot be
+	// the one nobody reran.
+	driver.sharedDocumentationCheck = strings.Contains(prePushHook, "--surface pre-push") &&
+		strings.Contains(workflow, "--surface ci")
 
-	driver.pinnedValidatorsRun = strings.Contains(check, "./rhino")
+	driver.pinnedValidatorsRun = true
 	for _, validator := range pinnedValidators {
 		driver.pinnedValidatorsRun = driver.pinnedValidatorsRun &&
-			strings.Contains(check, validator)
+			declares(config, "pre-push", "./rhino "+validator) &&
+			declares(config, "ci", "./rhino "+validator)
 	}
 
 	return nil
@@ -2832,14 +2932,14 @@ func (driver *Driver) inspectDocumentationGate() error {
 
 func (driver *Driver) requireSharedDocumentationCheck() error {
 	if !driver.sharedDocumentationCheck {
-		return errors.New("the quick gate and the pull request gate do not share one documentation check")
+		return errors.New("the push hook and the pull request gate do not dispatch declared surfaces")
 	}
 	return nil
 }
 
 func (driver *Driver) requirePinnedValidatorsRun() error {
 	if !driver.pinnedValidatorsRun {
-		return errors.New("the documentation check does not run every pinned validator")
+		return errors.New("a declared surface does not run every pinned validator")
 	}
 	return nil
 }
@@ -2879,14 +2979,14 @@ func workflowTriggers(workflow string) string {
 
 func (driver *Driver) requireStagedFormatting() error {
 	if !driver.stagedFormatting {
-		return errors.New("pre-commit does not invoke formatting for every supported staged file type")
+		return errors.New("the pre-commit surface does not invoke formatting for every supported staged file type")
 	}
 	return nil
 }
 
 func (driver *Driver) requirePushQuickGate() error {
 	if !driver.pushQuickGate {
-		return errors.New("pre-push does not invoke the direct no-Nx quick gate")
+		return errors.New("the pre-push surface does not invoke the direct no-Nx quick gate")
 	}
 	return nil
 }

@@ -31,7 +31,7 @@ Freeze: the proposed rule and its reason; its intended strength; the files, agen
 4. Run the gate:
 
    ```sh
-   ./scripts/docs-check.sh
+   ./rhino gate run --surface pre-push
    ```
 
 5. Return `PASS_NO_CHANGE` when no edit was necessary, otherwise `PASS_CHANGED`. For deterministic findings this transaction caused, freeze their exact set, repair mechanically, and rerun step 4 only while the count of failing checks and violations strictly decreases and no new failure class appears. That measure is nonnegative and decreasing, so recovery terminates. Return `BLOCKED_TOOLING` if progress stops, a new or unrelated failure appears, or no verdict can be obtained.

@@ -13,8 +13,12 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 	GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_PREFIX
 
 # The quick contract covers formatting, compilation, strict lint, unit tests,
-# 99% deterministic-core coverage, behavior adapters, repository policy, and
-# documentation hygiene before a push is allowed.
+# 99% deterministic-core coverage, behavior adapters, and repository policy.
+#
+# Documentation hygiene is not here. It is declared in repo-config.yml on the
+# same `pre-push` surface that dispatches this script, so the push runs it
+# either way; calling it from inside a gate would make this file re-enter the
+# dispatcher that invoked it.
 ./scripts/format-check.sh
 go test -run '^$' ./...
 go tool golangci-lint run
@@ -26,8 +30,3 @@ HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd
 HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd
 HIPPO_BDD_ADAPTER=e2e go test -count=1 ./tests/bdd
 ./tests/artifacts/run.sh
-
-# Documentation hygiene, against the pinned RHINO release in rhino.lock. Kept in
-# a script of its own so the pull-request gate can name it as a job without
-# holding a second copy of the invocation.
-./scripts/docs-check.sh

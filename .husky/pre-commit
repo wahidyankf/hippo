@@ -1,5 +1,5 @@
 set -e
 
-# lint-staged limits rewrites to the staged paths and restores partially staged
-# files, so formatting cannot silently absorb unrelated working-tree changes.
-npm exec -- lint-staged
+# One dispatch, one registry: the configuration says what runs before a commit,
+# and Git's own arguments are forwarded unchanged.
+exec ./rhino gate run --surface pre-commit -- "$@"
