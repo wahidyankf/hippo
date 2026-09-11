@@ -32,6 +32,7 @@ Feature: HIPPO quality gates
     When documentation gate wiring is inspected
     Then the push hook and the pull request gate dispatch declared surfaces
     And both declared surfaces run every pinned validator
+    And the push hook forwards no argument its validators cannot take
 
   Scenario: Fixture Git work ignores the repository a hook names
     Given a hook environment naming another repository

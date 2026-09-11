@@ -118,95 +118,96 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
-	mode                     string
-	samples                  []policy.Sample
-	assessment               policy.Assessment
-	admitted, accepted       bool
-	exitCode                 int
-	output, errorOutput      string
-	binary, summaryPath      string
-	temporaryPaths           []string
-	lifecycleOK              bool
-	cacheRoot                string
-	historicalCaches         []string
-	lintConfiguration        string
-	lintCommand              string
-	hookEnvironment          []string
-	ambientRepository        string
-	ambientHead              string
-	fixtureCheckout          string
-	gateScripts              map[string]string
-	strictAdapters           bool
-	unitExemptionsForbidden  bool
-	approvedExemptions       bool
-	serialCompliance         bool
-	e2ePlacement             bool
-	conventionalCommits      bool
-	pullRequestOnlyGate      bool
-	sharedDocumentationCheck bool
-	pinnedValidatorsRun      bool
-	stagedFormatting         bool
-	pushQuickGate            bool
-	coreCoverage             bool
-	resolution               policy.Resolution
-	requestedProfile         string
-	taskClass                policy.TaskClass
-	effectiveMemory          int64
-	linuxMemInfo             string
-	linuxCgroupLimit         int64
-	configPath               string
-	privateArtifacts         bool
-	exampleTracked           bool
-	applicationLayout        bool
-	leaseRoot                string
-	leaseHolder              int
-	heavySession             *guard.Session
-	serviceSessions          []*guard.Session
-	coordinationMarker       []byte
-	coordinationRequests     int
-	coordinationDeferrals    int
-	admissionUnblockAfter    int
-	admissionAttempts        int
-	admissionElapsed         time.Duration
-	deferralProbeScript      string
-	deferralProbeError       error
-	abandonedGroup           int
-	abandonedPayload         *exec.Cmd
-	abandonedIdentityLock    *os.File
-	abandonedTotals          guard.ReservationTotals
-	inheritedSessions        bool
-	forceStopElapsed         time.Duration
-	runtimeFailureOutput     string
-	runtimeFailureExit       int
-	usageErrorOutput         string
-	terminationSignals       int
-	supervisionFailure       error
-	childReaped              bool
-	evidenceRoot             string
-	evidenceIdentifier       string
-	evidenceSampleCount      int
-	evidenceWriters          []*evidence.Writer
-	excessEvidencePath       string
-	excessEvidenceError      error
-	inactiveEvidencePaths    []string
-	operandCommandsRejected  bool
-	childInput               string
-	childEnvironment         []string
-	concurrencyEnvironment   []string
-	childResolution          policy.Resolution
-	releaseMonitorRun        func() error
-	releaseMonitorError      error
-	releaseRawPath           string
-	releaseSummaryPath       string
-	releaseArguments         []string
-	releaseCollector         *sequenceCollector
-	streamCloseCalls         int
-	invalidMappingsRejected  bool
-	v04Error                 error
-	v04Session               *guard.Session
-	v04State                 []byte
-	v04Action                func(string) error
-	v04Scenario              string
+	mode                       string
+	samples                    []policy.Sample
+	assessment                 policy.Assessment
+	admitted, accepted         bool
+	exitCode                   int
+	output, errorOutput        string
+	binary, summaryPath        string
+	temporaryPaths             []string
+	lifecycleOK                bool
+	cacheRoot                  string
+	historicalCaches           []string
+	lintConfiguration          string
+	lintCommand                string
+	hookEnvironment            []string
+	ambientRepository          string
+	ambientHead                string
+	fixtureCheckout            string
+	gateScripts                map[string]string
+	strictAdapters             bool
+	unitExemptionsForbidden    bool
+	approvedExemptions         bool
+	serialCompliance           bool
+	e2ePlacement               bool
+	conventionalCommits        bool
+	pullRequestOnlyGate        bool
+	sharedDocumentationCheck   bool
+	pinnedValidatorsRun        bool
+	pushHookForwardsNoArgument bool
+	stagedFormatting           bool
+	pushQuickGate              bool
+	coreCoverage               bool
+	resolution                 policy.Resolution
+	requestedProfile           string
+	taskClass                  policy.TaskClass
+	effectiveMemory            int64
+	linuxMemInfo               string
+	linuxCgroupLimit           int64
+	configPath                 string
+	privateArtifacts           bool
+	exampleTracked             bool
+	applicationLayout          bool
+	leaseRoot                  string
+	leaseHolder                int
+	heavySession               *guard.Session
+	serviceSessions            []*guard.Session
+	coordinationMarker         []byte
+	coordinationRequests       int
+	coordinationDeferrals      int
+	admissionUnblockAfter      int
+	admissionAttempts          int
+	admissionElapsed           time.Duration
+	deferralProbeScript        string
+	deferralProbeError         error
+	abandonedGroup             int
+	abandonedPayload           *exec.Cmd
+	abandonedIdentityLock      *os.File
+	abandonedTotals            guard.ReservationTotals
+	inheritedSessions          bool
+	forceStopElapsed           time.Duration
+	runtimeFailureOutput       string
+	runtimeFailureExit         int
+	usageErrorOutput           string
+	terminationSignals         int
+	supervisionFailure         error
+	childReaped                bool
+	evidenceRoot               string
+	evidenceIdentifier         string
+	evidenceSampleCount        int
+	evidenceWriters            []*evidence.Writer
+	excessEvidencePath         string
+	excessEvidenceError        error
+	inactiveEvidencePaths      []string
+	operandCommandsRejected    bool
+	childInput                 string
+	childEnvironment           []string
+	concurrencyEnvironment     []string
+	childResolution            policy.Resolution
+	releaseMonitorRun          func() error
+	releaseMonitorError        error
+	releaseRawPath             string
+	releaseSummaryPath         string
+	releaseArguments           []string
+	releaseCollector           *sequenceCollector
+	streamCloseCalls           int
+	invalidMappingsRejected    bool
+	v04Error                   error
+	v04Session                 *guard.Session
+	v04State                   []byte
+	v04Action                  func(string) error
+	v04Scenario                string
 }
 
 type failingStream struct {
@@ -2927,6 +2928,15 @@ func (driver *Driver) inspectDocumentationGate() error {
 			declares(config, "ci", "./rhino "+validator)
 	}
 
+	// Arguments after `--` reach every gate on the surface, not just the one
+	// that wants them. Git hands the push hook a remote name and a URL; the
+	// pinned validators take neither and refuse an argument they do not know.
+	// Forwarding them would have meant every validator on this surface failed
+	// on the argument rather than on the repository -- and the hook would have
+	// looked wired while screening nothing. What the ref screen actually reads
+	// is stdin, which flows through either way.
+	driver.pushHookForwardsNoArgument = !strings.Contains(prePushHook, `-- "$@"`)
+
 	return nil
 }
 
@@ -2940,6 +2950,13 @@ func (driver *Driver) requireSharedDocumentationCheck() error {
 func (driver *Driver) requirePinnedValidatorsRun() error {
 	if !driver.pinnedValidatorsRun {
 		return errors.New("a declared surface does not run every pinned validator")
+	}
+	return nil
+}
+
+func (driver *Driver) requirePushHookForwardsNoArgument() error {
+	if !driver.pushHookForwardsNoArgument {
+		return errors.New("the push hook forwards Git's arguments to validators that cannot take them")
 	}
 	return nil
 }
