@@ -17,6 +17,7 @@ A convention chooses a path. It does not authorize anyone to walk it; see [commi
 - [Last-resort questions](last-resort-questions.md) — exhaust the repository before asking.
 - [Markdown links](markdown-links.md) — every internal link resolves.
 - [Markdown visualizations](markdown-visualizations.md) — Mermaid, legible and accessible.
+- [No destructive Git operations](no-destructive-git-operations.md) — approval for any Git command that destroys work or history.
 - [Plan lifecycle](plan-lifecycle.md) — the local rules layered on the plans convention.
 - [Plan validator contract](plan-validator-contract.md) — what the plan validator reads, reports and exits with.
 - [Plan validator contract modules](plan-validator-contract/README.md) — the ordered modules of that contract.
