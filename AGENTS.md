@@ -44,7 +44,7 @@ Only `main` persists. Work reaches it through [worktree to pull request](repo-go
 
 [Thematic commits](repo-governance/conventions/thematic-commits.md), one [delivery boundary](repo-governance/conventions/pull-request-boundaries.md) per pull request, a [body](repo-governance/conventions/pull-request-body.md) a reviewer can use, and [merge preconditions](repo-governance/conventions/pull-request-merge.md) that hold every time.
 
-Committing and pushing need [authorization](repo-governance/conventions/commit-authorization.md). Never commit what [data safety](repo-governance/conventions/public-repository-data-safety.md) prohibits. Never bypass a [push hook](repo-governance/conventions/push-hook-verification.md). Keep the [working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub [no faster than three minutes](repo-governance/conventions/github-polling.md).
+Committing and pushing need [authorization](repo-governance/conventions/commit-authorization.md). Never commit what [data safety](repo-governance/conventions/public-repository-data-safety.md) prohibits. Never bypass a [push hook](repo-governance/conventions/push-hook-verification.md). Never destroy work or history without [approval for that one command](repo-governance/conventions/no-destructive-git-operations.md). Keep the [working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub [no faster than three minutes](repo-governance/conventions/github-polling.md).
 
 Releases: [release cut](repo-governance/workflows/release-cut.md). A published tag is never replaced.
 
