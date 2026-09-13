@@ -53,5 +53,14 @@ done
 GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=${HIPPO_LOAD_TEST_TIMEOUT:-60m}"
 export GOFLAGS
 
+# With at least one busy worker per core, CPU never falls under any profile
+# ceiling, so a guarded child can never clear admission on this host. The
+# end-to-end fixtures that start one read this flag and accept only HIPPO's
+# documented deferral, which is the product working rather than a finding.
+if [ "$workers" -ge "$cores" ]; then
+	HIPPO_LOAD_SATURATED=1
+	export HIPPO_LOAD_SATURATED
+fi
+
 echo "running the release gate against $workers busy workers on $cores cores"
 ./scripts/test.sh
