@@ -196,6 +196,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Development monitor emits machine-readable transitions", Boundary: hostEvidenceBoundary, Reason: "requires deterministic repeated and changing host states that cannot be injected through the compiled binary"},
 		{Scenario: "Release raw evidence streams to standard output", Boundary: hostEvidenceBoundary, Reason: "requires injected health probes and deterministic cancellation unavailable to the compiled binary fixture"},
 		{Scenario: "Release summary streams to standard output", Boundary: hostEvidenceBoundary, Reason: "requires injected health probes and deterministic cancellation unavailable to the compiled binary fixture"},
+		{Scenario: "Release monitoring refuses missing health inputs before its deadline", Boundary: hostEvidenceBoundary, Reason: "requires a monitoring deadline that has already passed when the command starts, which cannot be injected through the compiled binary"},
 		{Scenario: "Release streaming propagates downstream failure", Boundary: "output stream", Reason: "requires an injected failing writer unavailable through the compiled binary process boundary"},
 		{Scenario: "Release builds stay outside repository history", Boundary: repositoryStateBoundary, Reason: "Git ignore policy is outside the compiled binary boundary"},
 		{Scenario: "End-to-end binaries are temporary", Boundary: testHarnessBoundary, Reason: "binary cleanup is owned by the harness outside the compiled binary boundary"},

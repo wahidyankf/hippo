@@ -201,6 +201,7 @@ type Driver struct {
 	releaseSummaryPath         string
 	releaseArguments           []string
 	releaseCollector           *sequenceCollector
+	releaseDeadlinePassed      bool
 	loadedGateScript           string
 	saturationReaders          []string
 	loadSaturationDeclared     bool
@@ -2279,10 +2280,33 @@ func (driver *Driver) requireStreamFailure() error {
 }
 
 func (driver *Driver) requestReleaseMonitoring() {
+	driver.runReleaseMonitoring(context.Background())
+}
+
+func (driver *Driver) passedReleaseDeadline() {
+	driver.releaseDeadlinePassed = true
+}
+
+// startReleaseMonitorPastDeadline starts the command with a deadline that has
+// already passed, so an input refusal can only win by being checked first.
+func (driver *Driver) startReleaseMonitorPastDeadline() error {
+	if !driver.releaseDeadlinePassed {
+		return errors.New("no passed monitoring deadline was arranged")
+	}
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	driver.runReleaseMonitoring(ctx)
+
+	return nil
+}
+
+func (driver *Driver) runReleaseMonitoring(ctx context.Context) {
 	arguments := driver.releaseArguments
 	if len(arguments) == 0 {
-		// No duration: a deadline starts before input validation, so any bound
-		// here races the refusal on a loaded host instead of testing it.
+		// No duration: this scenario checks the refusal alone, and the refusal
+		// before a passed deadline has its own scenario.
 		arguments = []string{
 			"release", "monitor",
 			outputFlag, filepath.Join(driver.leaseRoot, "samples.jsonl"),
@@ -2306,7 +2330,7 @@ func (driver *Driver) requestReleaseMonitoring() {
 		Stderr:      &bytes.Buffer{},
 		Environment: []string{},
 		Collector:   collector,
-	}).Run(context.Background(), arguments)
+	}).Run(ctx, arguments)
 
 	driver.exitCode = code
 	if err != nil {
