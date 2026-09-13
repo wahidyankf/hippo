@@ -435,13 +435,16 @@ func captureReleaseSamples(
 
 // RunMonitor records release overlap samples until its context is cancelled.
 func RunMonitor(ctx context.Context, config MonitorConfig) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
+	// Inputs are validated before the deadline is consulted: a missing health URL
+	// is the caller's answer on any host, and a short or already passed deadline
+	// must not replace it with a cancellation.
 	var err error
 	config, err = normalizeMonitorConfig(config)
 	if err != nil {
+		return err
+	}
+
+	if err = ctx.Err(); err != nil {
 		return err
 	}
 

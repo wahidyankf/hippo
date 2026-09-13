@@ -99,6 +99,13 @@ Feature: Public HIPPO CLI
     Then the command rejects a missing generic health URL
 
   @e2e-exempt
+  Scenario: Release monitoring refuses missing health inputs before its deadline
+    Given release monitor output paths without endpoint inputs
+    And a monitoring deadline that has already passed
+    When the release monitor starts
+    Then the command rejects a missing generic health URL
+
+  @e2e-exempt
   Scenario: Release raw evidence streams to standard output
     Given a bounded release monitor with raw standard output
     When release monitoring completes
