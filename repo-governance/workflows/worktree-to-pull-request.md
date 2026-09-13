@@ -23,7 +23,7 @@ One worktree per plan or task, reused for every delivery unit that work produces
 
 ## 4. Push and Open
 
-Push, then open the pull request **as a draft**, with a body that carries why, what was decided, and how it was proved — see [pull request body](../conventions/pull-request-body.md).
+Push, then open the pull request **as a draft**, with a body that carries why, what was decided, and how it was proved — see [pull request body](../conventions/pull-request-body.md). Screen the title and body before opening it — see [data safety](../conventions/public-repository-data-safety.md).
 
 ## 5. Ready, Then Wait
 

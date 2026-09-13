@@ -8,6 +8,7 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
 - The working tree is clean **including untracked files**. `scripts/build-release.sh` verifies this itself and refuses otherwise.
 - `scripts/test.sh` — the full gate — passes.
 - `CHANGELOG.md`, `README.md`, and `docs/` are true to the binary being cut.
+- The tag name and the notes the release will publish pass the screen in [data safety](../conventions/public-repository-data-safety.md). `release.yml` generates those notes from merged pull requests, so screen the text `gh api repos/<owner>/<repo>/releases/generate-notes -f tag_name=<version> --jq .body` returns before tagging.
 - The cut is [authorized](../conventions/commit-authorization.md).
 
 ## Building

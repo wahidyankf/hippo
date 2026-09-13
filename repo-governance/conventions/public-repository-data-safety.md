@@ -14,6 +14,17 @@ This repository is public. Everything committed is published, is in someone's cl
 
 Inspect the diff — not memory, not intent — and remove anything above. The check is on what this commit publishes, which includes a file added earlier and still untracked-then-staged now. [Thematic commits](thematic-commits.md) makes the diff small enough to actually read.
 
+## Before Publishing Anything Else
+
+A pull-request title and body, a comment or review body, and release notes are published the moment they are posted, and no diff inspection reads them. Screen each one first, with the same screen the hooks run:
+
+```sh
+scripts/public-safety/outbound-preflight.sh --surface pull-request --text "<title>" --file <body-file>
+scripts/public-safety/outbound-preflight.sh --surface release --text "<tag>" --file <notes-file>
+```
+
+Only exit `0` publishes. Exit `1` is a finding and exit `2` is a screen that did not run; neither publishes.
+
 ## In Fixtures and Documentation
 
 Use `example.invalid`, `fixture`, and obviously synthetic values. A realistic-looking value invites a reader to treat it as real, and a real value that looks synthetic is the failure this rule exists to prevent.
