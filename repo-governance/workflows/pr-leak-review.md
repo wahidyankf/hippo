@@ -26,8 +26,9 @@ candidate as a finding only where its shape and its context establish that the v
 
 1. Pin the head SHA. Everything below is about that SHA and no other.
 2. Read the whole diff at it — not the summary, not memory of what was written.
-3. Post one review on the pull request carrying the record below. Post it whatever the result is:
-   a pass that was never written down is indistinguishable from a review nobody ran.
+3. Screen the review body as [data safety](../conventions/public-repository-data-safety.md) requires,
+   then post one review on the pull request carrying the record below. Post it whatever the result
+   is: a pass that was never written down is indistinguishable from a review nobody ran.
 4. Read the review back through the API and confirm its `commit_id` equals the pinned SHA.
 5. Query the live head again.
 
