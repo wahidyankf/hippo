@@ -53,12 +53,9 @@ const OPENCODE_PERMISSIONS = {
     "nested-agent": [["task", "deny"]],
   },
 };
-// Codex states the whole boundary in one scalar, so it is projected from the
-// one capability that decides it rather than pinned for every agent.
-const CODEX_SANDBOX = {
-  requires: { "repository-write": "workspace-write" },
-  denies: { "repository-write": "read-only" },
-};
+// Codex gets no agent adapter. Its per-agent configuration has no control that
+// enforces the nested-agent denial every canonical agent declares, and an
+// adapter that drops a denial grants more than the canon declared.
 
 /// Front matter as written, not as a decoder would rather have it: the key
 /// order and the folded scalars are what the adapter has to carry forward.
@@ -136,20 +133,6 @@ for (const name of agents) {
       "---",
       "",
       route,
-      "",
-    ].join("\n"),
-  );
-
-  const sandbox =
-    requires.map((c) => CODEX_SANDBOX.requires[c]).find(Boolean) ??
-    denies.map((c) => CODEX_SANDBOX.denies[c]).find(Boolean);
-  write(
-    `.codex/agents/${name}.toml`,
-    [
-      `name = "${fm.name}"`,
-      `description = "${fm.description.replaceAll('"', '\\"')}"`,
-      ...(sandbox ? [`sandbox_mode = "${sandbox}"`] : []),
-      `developer_instructions = """\n${route}\n"""`,
       "",
     ].join("\n"),
   );
