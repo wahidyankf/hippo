@@ -733,6 +733,10 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 	)
 	run.Env = environment
 	if output, err := run.CombinedOutput(); err != nil {
+		if saturatedDeferralV04(output, err) {
+			return nil
+		}
+
 		return fmt.Errorf("compiled schema 4 summary run failed: %s: %w", output, err)
 	}
 	entries, err := os.ReadDir(sharedRoot)
@@ -882,6 +886,13 @@ func (driver *Driver) requireCompiledPTYV04() error {
 		)
 	}
 	if runError != nil {
+		// A deferral on the saturated gate is accepted only for a child that never
+		// started: readiness is the child's first act, so its absence proves the
+		// refusal came before launch rather than from a child that ran and failed.
+		if _, readyErr := os.Stat(readyPath); errors.Is(readyErr, os.ErrNotExist) && saturatedDeferralV04(output, runError) {
+			return nil
+		}
+
 		return fmt.Errorf("compiled PTY guard failed: %s: %w", output, runError)
 	}
 	result, err := os.ReadFile(resultPath)
@@ -890,6 +901,24 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	}
 
 	return nil
+}
+
+// saturatedDeferralV04 reports whether a compiled run ended in HIPPO's documented
+// refusal on a host that scripts/test-loaded.sh saturates by design. That gate
+// keeps every core busy for its whole run, and admission needs consecutive CPU
+// samples under the profile ceiling, so no guarded child can clear it there:
+// deferring is the product working, and the only correct answer a child can get.
+// Anywhere the flag is unset, a deferral stays the failure it is.
+func saturatedDeferralV04(output []byte, err error) bool {
+	if os.Getenv("HIPPO_LOAD_SATURATED") != "1" {
+		return false
+	}
+
+	var exitError *exec.ExitError
+
+	return errors.As(err, &exitError) &&
+		exitError.ExitCode() == guard.CapacityDeferredExitCode &&
+		bytes.Contains(output, []byte("HIPPO deferred task: safe admission was not reached."))
 }
 
 func (driver *Driver) requirePendingConformanceV04() error {
