@@ -18,7 +18,6 @@ A validator that never fails proves nothing. At least once per contract change, 
 | -------------------------------------- | ---------------------------------------- |
 | grant a tool the canon denies          | the adapter grants what the canon denies |
 | flip a permission from deny to allow   | the permission is not `deny`             |
-| widen a sandbox mode                   | the sandbox mode is not read-only        |
 | add a declaration to a closed wrapper  | beyond what a wrapper may declare        |
 | copy the canonical body into a wrapper | the body is not the canonical route      |
 

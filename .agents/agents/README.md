@@ -1,8 +1,9 @@
 # Agents
 
 Canonical agent definitions. Each declares its identity, the capabilities it requires, the ones it denies itself, and
-nothing about any particular harness. The per-harness wrappers under `.claude/`, `.codex/` and `.opencode/` are
-generated from these by `node scripts/generate-adapters.mjs` and are never edited in place.
+nothing about any particular harness. The per-harness wrappers under `.claude/` and `.opencode/` are
+generated from these by `node scripts/generate-adapters.mjs` and are never edited in place. Codex receives none; see
+the [coding harness contract](../../repo-governance/conventions/coding-harness-contract.md).
 
 ## Planning
 

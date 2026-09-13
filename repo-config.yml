@@ -118,28 +118,11 @@ harness-parity:
             absent-members:
               - Agent
               - Task
-    - name: codex
-      agent-adapter:
-        path: ".codex/agents/{name}.toml"
-        format: toml
-        route-field: developer_instructions
-        identity: { name: name, description: description }
-        # Codex expresses the whole boundary in one field, so the field is
-        # translated rather than pinned: a value fixed for every agent would
-        # claim read-only for one that writes. A portable adapter may not pin
-        # a model, which `absent` keeps true.
-        translations:
-          - when: denies
-            capability: repository-write
-            field: sandbox_mode
-            members:
-              - read-only
-          - when: requires
-            capability: repository-write
-            field: sandbox_mode
-            members:
-              - workspace-write
-        absent: [model]
+    # No `codex` entry. Codex reads `.agents/skills/` natively and would need an
+    # adapter only for the canonical agents, but its per-agent configuration has
+    # no control that enforces the nested-agent denial each of them declares. An
+    # adapter that drops a denial is a weakened denial, so the agents are not
+    # published for Codex.
     - name: opencode
       agent-adapter:
         path: ".opencode/agents/{name}.md"
