@@ -733,7 +733,7 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 	)
 	run.Env = environment
 	if output, err := run.CombinedOutput(); err != nil {
-		if saturatedDeferralV04(output, err) {
+		if saturatedDeferralV04(output, err, false) {
 			return nil
 		}
 
@@ -889,7 +889,8 @@ func (driver *Driver) requireCompiledPTYV04() error {
 		// A deferral on the saturated gate is accepted only for a child that never
 		// started: readiness is the child's first act, so its absence proves the
 		// refusal came before launch rather than from a child that ran and failed.
-		if _, readyErr := os.Stat(readyPath); errors.Is(readyErr, os.ErrNotExist) && saturatedDeferralV04(output, runError) {
+		_, readyErr := os.Stat(readyPath)
+		if saturatedDeferralV04(output, runError, !errors.Is(readyErr, os.ErrNotExist)) {
 			return nil
 		}
 
@@ -909,16 +910,15 @@ func (driver *Driver) requireCompiledPTYV04() error {
 // samples under the profile ceiling, so no guarded child can clear it there:
 // deferring is the product working, and the only correct answer a child can get.
 // Anywhere the flag is unset, a deferral stays the failure it is.
-func saturatedDeferralV04(output []byte, err error) bool {
-	if os.Getenv("HIPPO_LOAD_SATURATED") != "1" {
+func saturatedDeferralV04(output []byte, err error, childStarted bool) bool {
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) {
 		return false
 	}
 
-	var exitError *exec.ExitError
-
-	return errors.As(err, &exitError) &&
-		exitError.ExitCode() == guard.CapacityDeferredExitCode &&
-		bytes.Contains(output, []byte("HIPPO deferred task: safe admission was not reached."))
+	return acceptsSaturatedDeferralV04(
+		os.Getenv(loadSaturatedVariable) == "1", exitError.ExitCode(), output, childStarted,
+	)
 }
 
 func (driver *Driver) requirePendingConformanceV04() error {

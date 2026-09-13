@@ -650,6 +650,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^JSON development monitoring is requested$`, driver.monitorJSON),
 		step(`^one valid JSON record is emitted for each state transition$`, driver.requireJSONTransitions),
 		step(`^release monitor output paths without endpoint inputs$`, driver.releasePathsWithoutEndpoints),
+		step(`^a monitoring deadline that has already passed$`, driver.passedReleaseDeadline),
 		step(`^a bounded release monitor with raw standard output$`, driver.boundedReleaseRawOutput),
 		step(`^a bounded release monitor with summary standard output$`, driver.boundedReleaseSummaryOutput),
 		step(`^release monitoring completes$`, driver.completeReleaseMonitor),
@@ -657,6 +658,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^the final summary uses standard output and raw evidence remains a file$`, driver.requireSummaryStandardOutput),
 		step(`^release raw evidence and summary both target standard output$`, driver.mixedReleaseStandardOutput),
 		step(`^release monitoring is requested$`, driver.requestReleaseMonitoring),
+		step(`^the release monitor starts$`, driver.startReleaseMonitorPastDeadline),
 		step(`^the command rejects mixed standard output before collecting evidence$`, driver.requireMixedOutputRejected),
 		step(`^a release raw stream whose downstream writer fails$`, driver.failingReleaseRawOutput),
 		step(`^release monitoring writes its first sample$`, driver.completeReleaseMonitor),
@@ -804,6 +806,16 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^the named repository is unchanged$`, driver.requireNamedRepositoryUnchanged),
 		step(`^gate script Git isolation is inspected$`, driver.inspectGateScriptIsolation),
 		step(`^every gate script unsets the redirecting Git variables$`, driver.requireGateScriptsUnsetGitEnvironment),
+		step(`^loaded gate wiring is inspected$`, driver.inspectLoadedGate),
+		step(`^the loaded gate declares the host saturated only when its busy workers cover every core$`, driver.requireSaturationCoversEveryCore),
+		step(`^product code never reads the saturation declaration$`, driver.requireProductIgnoresSaturation),
+		step(`^the loaded gate has declared the host saturated$`, driver.declareLoadSaturation),
+		step(`^no loaded gate saturation declaration$`, driver.undeclaredLoadSaturation),
+		step(`^the guarded child signalled readiness$`, driver.markGuardedChildStarted),
+		step(`^a compiled guarded run ends in the documented capacity deferral$`, driver.documentedCapacityDeferral),
+		step(`^a compiled guarded run ends in another exit or without the deferral message$`, driver.otherRefusals),
+		step(`^the fixture accepts the deferral$`, driver.requireDeferralAccepted),
+		step(`^the fixture refuses the run$`, driver.requireRunRefused),
 	}
 }
 
