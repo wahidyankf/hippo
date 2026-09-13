@@ -44,3 +44,34 @@ Feature: HIPPO quality gates
   Scenario: Gate scripts clear the redirecting Git environment
     When gate script Git isolation is inspected
     Then every gate script unsets the redirecting Git variables
+
+  @e2e-exempt
+  Scenario: The loaded gate declares saturation only when every core is busy
+    When loaded gate wiring is inspected
+    Then the loaded gate declares the host saturated only when its busy workers cover every core
+    And product code never reads the saturation declaration
+
+  @e2e-exempt
+  Scenario: A saturated host deferral is accepted only as documented
+    Given the loaded gate has declared the host saturated
+    When a compiled guarded run ends in the documented capacity deferral
+    Then the fixture accepts the deferral
+
+  @e2e-exempt
+  Scenario: A deferral stays a failure where saturation is undeclared
+    Given no loaded gate saturation declaration
+    When a compiled guarded run ends in the documented capacity deferral
+    Then the fixture refuses the run
+
+  @e2e-exempt
+  Scenario: A saturated host accepts no other refusal
+    Given the loaded gate has declared the host saturated
+    When a compiled guarded run ends in another exit or without the deferral message
+    Then the fixture refuses the run
+
+  @e2e-exempt
+  Scenario: A saturated deferral is refused once the guarded child started
+    Given the loaded gate has declared the host saturated
+    And the guarded child signalled readiness
+    When a compiled guarded run ends in the documented capacity deferral
+    Then the fixture refuses the run

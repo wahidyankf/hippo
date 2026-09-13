@@ -37,6 +37,7 @@ const (
 	repositoryConfigBoundary    = "repository configuration"
 	releaseArtifactsBoundary    = "release artifacts"
 	releaseWorkflowBoundary     = "release workflow"
+	testHarnessBoundary         = "test harness"
 )
 
 // StepBinding keeps one canonical Godog expression adjacent to its handler.
@@ -68,7 +69,10 @@ const (
 	probeVerdictReason = "drives the conformance harness in process so the probe verdict itself can be inspected"
 	// abandonedOwnerReason documents scenarios that need a guard to be gone while
 	// the payload it launched is still running.
-	abandonedOwnerReason = "requires a reservation whose guard liveness is controlled independently of its process group, which cannot be staged through the compiled binary"
+	// saturatedDeferralReason documents the loaded-gate deferral scenarios, which
+	// assert on the end-to-end fixtures' own acceptance decision.
+	saturatedDeferralReason = "the deferral decision belongs to the end-to-end fixtures outside the compiled binary boundary"
+	abandonedOwnerReason    = "requires a reservation whose guard liveness is controlled independently of its process group, which cannot be staged through the compiled binary"
 )
 
 // ApprovedExemptions is the reviewed, exact adapter exemption inventory.
@@ -194,13 +198,18 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release summary streams to standard output", Boundary: hostEvidenceBoundary, Reason: "requires injected health probes and deterministic cancellation unavailable to the compiled binary fixture"},
 		{Scenario: "Release streaming propagates downstream failure", Boundary: "output stream", Reason: "requires an injected failing writer unavailable through the compiled binary process boundary"},
 		{Scenario: "Release builds stay outside repository history", Boundary: repositoryStateBoundary, Reason: "Git ignore policy is outside the compiled binary boundary"},
-		{Scenario: "End-to-end binaries are temporary", Boundary: "test harness", Reason: "binary cleanup is owned by the harness outside the compiled binary boundary"},
+		{Scenario: "End-to-end binaries are temporary", Boundary: testHarnessBoundary, Reason: "binary cleanup is owned by the harness outside the compiled binary boundary"},
 		{Scenario: "Bootstrap cache retention is bounded", Boundary: "bootstrap wrapper", Reason: "cache retention is owned by the wrapper outside the compiled binary boundary"},
 		{Scenario: "Lint gate wiring is exhaustive and module scoped", Boundary: repositoryConfigBoundary, Reason: "lint configuration is outside the compiled binary boundary"},
-		{Scenario: "Behavior adapter wiring is complete", Boundary: "test harness", Reason: "adapter registration is outside the compiled binary boundary"},
+		{Scenario: "Behavior adapter wiring is complete", Boundary: testHarnessBoundary, Reason: "adapter registration is outside the compiled binary boundary"},
 		{Scenario: "Contributor gate wiring is complete", Boundary: repositoryConfigBoundary, Reason: "hooks and CI configuration are outside the compiled binary boundary"},
 		{Scenario: "Documentation hygiene wiring is complete", Boundary: repositoryConfigBoundary, Reason: "gate script and workflow text are outside the compiled binary boundary"},
 		{Scenario: "Gate scripts clear the redirecting Git environment", Boundary: repositoryConfigBoundary, Reason: "gate script text is outside the compiled binary boundary"},
+		{Scenario: "The loaded gate declares saturation only when every core is busy", Boundary: repositoryConfigBoundary, Reason: "gate script and product source text are outside the compiled binary boundary"},
+		{Scenario: "A saturated host deferral is accepted only as documented", Boundary: testHarnessBoundary, Reason: saturatedDeferralReason},
+		{Scenario: "A deferral stays a failure where saturation is undeclared", Boundary: testHarnessBoundary, Reason: saturatedDeferralReason},
+		{Scenario: "A saturated host accepts no other refusal", Boundary: testHarnessBoundary, Reason: saturatedDeferralReason},
+		{Scenario: "A saturated deferral is refused once the guarded child started", Boundary: testHarnessBoundary, Reason: saturatedDeferralReason},
 		{Scenario: "Machine-local configuration and binaries stay private", Boundary: repositoryStateBoundary, Reason: "Git index and ignore policy are outside the compiled binary boundary"},
 		{Scenario: "Release versions use exact semantic syntax", Boundary: repositoryStateBoundary, Reason: "requires isolated clean Git history and pre-output release builder inspection"},
 		{Scenario: "Release commits are full lowercase real commits", Boundary: repositoryStateBoundary, Reason: "requires isolated valid and invalid Git object identities"},
