@@ -2276,12 +2276,13 @@ func (driver *Driver) requireStreamFailure() error {
 func (driver *Driver) requestReleaseMonitoring() {
 	arguments := driver.releaseArguments
 	if len(arguments) == 0 {
+		// No duration: a deadline starts before input validation, so any bound
+		// here races the refusal on a loaded host instead of testing it.
 		arguments = []string{
 			"release", "monitor",
 			outputFlag, filepath.Join(driver.leaseRoot, "samples.jsonl"),
 			summaryFlag, filepath.Join(driver.leaseRoot, "summary.json"),
 			deploymentRootFlag, driver.leaseRoot,
-			"--duration-ms", "1",
 		}
 	}
 	if driver.mode == contract.E2E {
