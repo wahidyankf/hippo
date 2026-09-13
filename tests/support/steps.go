@@ -804,6 +804,16 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^the named repository is unchanged$`, driver.requireNamedRepositoryUnchanged),
 		step(`^gate script Git isolation is inspected$`, driver.inspectGateScriptIsolation),
 		step(`^every gate script unsets the redirecting Git variables$`, driver.requireGateScriptsUnsetGitEnvironment),
+		step(`^loaded gate wiring is inspected$`, driver.inspectLoadedGate),
+		step(`^the loaded gate declares the host saturated only when its busy workers cover every core$`, driver.requireSaturationCoversEveryCore),
+		step(`^product code never reads the saturation declaration$`, driver.requireProductIgnoresSaturation),
+		step(`^the loaded gate has declared the host saturated$`, driver.declareLoadSaturation),
+		step(`^no loaded gate saturation declaration$`, driver.undeclaredLoadSaturation),
+		step(`^the guarded child signalled readiness$`, driver.markGuardedChildStarted),
+		step(`^a compiled guarded run ends in the documented capacity deferral$`, driver.documentedCapacityDeferral),
+		step(`^a compiled guarded run ends in another exit or without the deferral message$`, driver.otherRefusals),
+		step(`^the fixture accepts the deferral$`, driver.requireDeferralAccepted),
+		step(`^the fixture refuses the run$`, driver.requireRunRefused),
 	}
 }
 

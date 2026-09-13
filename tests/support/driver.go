@@ -201,6 +201,11 @@ type Driver struct {
 	releaseSummaryPath         string
 	releaseArguments           []string
 	releaseCollector           *sequenceCollector
+	loadedGateScript           string
+	saturationReaders          []string
+	loadSaturationDeclared     bool
+	guardedChildStarted        bool
+	deferralAccepted           bool
 	streamCloseCalls           int
 	invalidMappingsRejected    bool
 	v04Error                   error
