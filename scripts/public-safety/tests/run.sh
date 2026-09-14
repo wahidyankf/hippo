@@ -21,8 +21,8 @@ while IFS= read -r variable; do
 	unset "$variable"
 done < <(git rev-parse --local-env-vars 2>/dev/null)
 
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$here/../../.." && pwd)
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH='' cd -- "$here/../../.." && pwd)
 export PUBLIC_SAFETY_ROOT="$root"
 export PREFLIGHT="$root/scripts/public-safety/outbound-preflight.sh"
 
@@ -62,13 +62,12 @@ assert_absent() {
 # file or into this repository's test output.
 write_synthetic_terms() {
 	local path=$1
-	# Written with printf rather than a heredoc: the fields are tab-separated
-	# data, and a shell formatter is free to re-align whitespace inside a
-	# heredoc. A separator a formatter may rewrite is not a separator.
+	# printf rather than a tab-aligned heredoc: a formatter re-indenting heredoc
+	# bodies would turn the tab separators into spaces and break the term set.
 	{
-		printf '# synthetic term set, generated per test run\n'
-		printf 'maintainer-path\tliteral\t%s\n' "$SYNTHETIC_TERM"
-		printf 'internal-hostname\tregex\t%s\n' '\bsynthetic-host-[0-9]{4}\.invalid\b'
+		printf '%s\n' '# synthetic term set, generated per test run'
+		printf '%s\t%s\t%s\n' maintainer-path literal "$SYNTHETIC_TERM"
+		printf '%s\t%s\t%s\n' internal-hostname regex '\bsynthetic-host-[0-9]{4}\.invalid\b'
 	} >"$path"
 }
 
