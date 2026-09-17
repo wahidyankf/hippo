@@ -14,10 +14,10 @@ unrelated one-core build for no reason.
 alike — claims a fixed CPU-and-memory _vector_ from a shared ledger. Several owners run concurrently
 as long as their vectors fit together.
 
-The two cannot be mixed within one state root. A reservation client that meets a live exclusive epoch
-defers with exit `75`, and so does a compatibility client that meets a live reservation epoch. Both
-preserve the existing state and start no child. This is what lets a host migrate: old sessions drain,
-and only then does the new mode take over. HIPPO never creates a mixed epoch.
+The two cannot be mixed within one state root. A v1 client that meets a live incompatible epoch exits
+`76`. It preserves the existing state and starts no child. This is what lets a host migrate: old
+sessions drain, and only then does the new mode take over. HIPPO never creates a mixed epoch and
+never describes protocol incompatibility as transient capacity.
 
 ## Why a vector rather than a count
 
@@ -83,7 +83,10 @@ Two failures that look similar to a caller are treated as fundamentally differen
 - A vector that **cannot ever** fit the host returns `78` immediately. Waiting would accomplish
   nothing; the request itself has to change.
 - A vector that **does not currently** fit returns `75` after the bounded wait. Retrying is the
-  correct response, because capacity genuinely frees up.
+  correct response only when the receipt proves `never-started`, because capacity genuinely frees
+  up.
+- A live incompatible peer protocol returns `76`. Capacity changes cannot fix it; the epoch must
+  drain or the peer must upgrade.
 
 Collapsing these into one code would force every caller to either retry forever on an impossible
 request, or give up on a recoverable one.

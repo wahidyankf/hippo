@@ -2,14 +2,15 @@
 
 HIPPO's exit codes are a stable contract. A caller can branch on them without parsing diagnostics.
 
-| Code    | Name             | Meaning                                                                       | Retry?                  |
-| ------- | ---------------- | ----------------------------------------------------------------------------- | ----------------------- |
-| `0`     | Success          | The command completed, or the guarded child exited `0`                        | n/a                     |
-| `1`     | Usage            | Arguments or flags were rejected before any work started                      | No — fix the invocation |
-| `73`    | Cleanup required | Storage is below the immutable floor; free space before retrying              | No — free disk first    |
-| `75`    | Deferred/stopped | Admission expired, release rejected, or a supervised child was safety-stopped | Inspect receipt first   |
-| `78`    | Replan required  | Configuration, impossible reservation, invalid mapping, or strict profile     | No — change the request |
-| _other_ | Child exit code  | A guarded child's own exit code is passed through unchanged                   | Depends on the child    |
+| Code    | Name              | Meaning                                                                 | Retry?                    |
+| ------- | ----------------- | ----------------------------------------------------------------------- | ------------------------- |
+| `0`     | Success           | The command completed, or the guarded child exited `0`                  | n/a                       |
+| `1`     | Failure           | Invalid invocation, corrupt state, or HIPPO-owned post-launch failure   | No — inspect the evidence |
+| `73`    | Cleanup required  | Storage is below the immutable floor; free space before retrying        | No — free disk first      |
+| `75`    | Deferred/stopped  | Capacity was unavailable, or a supervised child was safety-stopped      | Only with `never-started` |
+| `76`    | Protocol mismatch | A live peer or valid shared document uses an incompatible protocol      | No — drain or upgrade     |
+| `78`    | Replan required   | Local configuration, reservation, mapping, or strict profile is invalid | No — change the request   |
+| _other_ | Child exit code   | A guarded child's own exit code is passed through unchanged             | Depends on the child      |
 
 Any exit code other than the five above came from the guarded command itself, not from HIPPO.
 
@@ -25,15 +26,17 @@ $ echo $?
 42
 ```
 
-Because arbitrary child codes pass through, a child that itself exits `73`, `75`, or `78` is
-indistinguishable by code alone from a HIPPO decision. HIPPO writes its own diagnostics to stderr
-and never mixes them into the child's streams, so a caller that must tell the two apart should read
-stderr rather than infer from the code.
+Because arbitrary child codes pass through, a child can itself exit `1`, `73`, `75`, `76`, or `78`.
+The number alone cannot identify its owner. A HIPPO refusal or safety stop writes its own diagnostic
+and receipt; a child-owned reserved code produces `task-failed` evidence and no never-started
+receipt.
 
-## `1` — usage
+## `1` — failure
 
-The invocation was rejected before anything ran. Usage errors print the command usage next to the
-diagnostic.
+Exit `1` is a non-retryable HIPPO failure. The evidence tells you whether a payload started. Usage
+errors happen before launch and print command usage next to the diagnostic. Corrupt or inaccessible
+shared state also fails before launch without mutation. Activation failure happens after launch,
+stops the owned payload, records `task-failed`, and writes `state: "started-activation-failure"`.
 
 Known causes:
 
@@ -44,6 +47,8 @@ Known causes:
   protocol variables.
 - `release monitor` without `--health-url` or without `--routed-origin`.
 - `release monitor` with both `--output -` and `--summary -`.
+- Malformed or inaccessible shared coordination state.
+- A post-launch activation transaction that cannot record the supervised process group.
 
 ```console
 $ hippo run --disk-path . --concurrency-env HIPPO_CONCURRENCY -- true
@@ -85,13 +90,11 @@ Known causes:
 
 - Reservation capacity is temporarily exhausted, and the bounded FIFO wait expired.
 - A coordination lock was held by a peer repository through the bounded window.
-- The shared root is in the other coordination mode: a reservation client meets a live exclusive
-  epoch, or a compatibility client meets a live reservation epoch.
 - `release assess` rejected the summary as outside the release envelope.
 
 ```console
 $ hippo run --config reservation.json --disk-path . -- echo never-runs
-HIPPO deferred task: shared coordination deferred admission: exclusive mode has a live or unverifiable owner.
+HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.
 $ echo $?
 75
 ```
@@ -112,6 +115,31 @@ No payload is launched while queued, and HIPPO never auto-retries one. Receipts 
 `never-started` admission deadline/cancellation from `started-safety-stop` emergency pressure. An
 ordinary `pressure-shed` outcome likewise means the payload started and must not be blindly retried.
 
+## `76` — protocol mismatch
+
+A live peer coordination epoch or a valid shared protocol document is newer or incompatible with
+this client. HIPPO preserves the existing bytes, starts no payload, and tells the caller to drain or
+upgrade instead of pretending the host is merely busy.
+
+Known causes:
+
+- A reservation client meets a live exclusive epoch, or an exclusive client meets a live
+  reservation epoch.
+- A coordination marker, reservation ledger, compatibility owner, or session uses a supported
+  document shape with an unsupported positive schema version.
+- Schema 3 sees live schema-2 owners or waiters without v1 metadata.
+
+```console
+$ hippo run --config hippo.local.json --resource-tier light --disk-path . -- true
+Error: verify schema-3 activation: schema 3 activation requires legacy owners and waiters to drain (remaining=1)
+$ echo $?
+76
+```
+
+**Response:** do not retry in a capacity loop. Run `hippo status --json`, let the incompatible epoch
+drain, and upgrade every client that shares the root to the same v1 protocol. Do not delete shared
+state while an owner may still be live.
+
 ## `78` — replan required
 
 The request cannot be satisfied as written. No amount of retrying changes the answer.
@@ -121,7 +149,6 @@ Known causes:
 - The requested reservation vector exceeds safe host capacity.
 - The requested reservation is below the one-CPU or 256 MiB floor.
 - Schema 3 lacks `--resource-tier`, uses an unknown tier, or receives a vector outside that tier.
-- Schema 3 sees legacy schema-2 owners or waiters that have not drained.
 - The identity document or invocation labels are missing or invalid under schema 3.
 - A mapped `--concurrency-env` variable already holds a zero, negative, or malformed value.
 - A strict profile (`transactional` or `release` class) has no usable fallback under current pressure.

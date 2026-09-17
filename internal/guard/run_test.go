@@ -46,6 +46,64 @@ type emergencyRunCollector struct {
 	calls int
 }
 
+type blockedAdmissionCollector struct{}
+
+func (*blockedAdmissionCollector) Collect(ctx context.Context, previous policy.CPUState, diskPath string) (policy.Reading, error) {
+	reading, err := (&controlledRunCollector{}).Collect(ctx, previous, diskPath)
+	reading.Sample.CPUUtilizationPercent = new(100.0)
+
+	return reading, err
+}
+
+func TestRunHostAdmissionDeferralWritesNeverStartedReceipt(t *testing.T) {
+	root := t.TempDir()
+	settings := policy.DefaultPolicy()
+	settings.AdmissionWindow = 0
+	settings.LeaseWait = 100 * time.Millisecond
+	settings.SampleInterval = time.Millisecond
+	plan := ReservationPlan{
+		Capacity:  ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Requested: ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Allocated: ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Minimum:   ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Maximum:   ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Tier:      "light",
+	}
+	starts := 0
+	code, err := Run(context.Background(), RunConfig{
+		Command: "true", TaskClass: policy.TaskEphemeral, EvidenceRoot: root,
+		Collector: &blockedAdmissionCollector{}, Policy: settings,
+		Resolution: policy.Resolution{
+			RequestedProfile: "balanced", ResolvedProfile: "balanced", Concurrency: 1,
+		},
+		ReservationPolicy: ReservationPolicy{
+			Enabled: true, MaxCPU: 1, MaxMemoryBytes: policy.GiB, MaxActiveOwners: 1,
+		},
+		ReservationPlan: plan,
+		ReservationMetadata: ReservationMetadata{
+			Source: "hippo", Tags: map[string]string{"plan": "admission-test"}, Tier: "light",
+		},
+		EvidenceLimits: evidence.DefaultLimits(), Now: time.Now, Stderr: &bytes.Buffer{},
+		startLifetime: func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error) {
+			starts++
+
+			return nil, errors.New("payload must not start")
+		},
+	})
+	if err != nil || code != CapacityDeferredExitCode || starts != 0 {
+		t.Fatalf("host-admission result: code=%d starts=%d error=%v", code, starts, err)
+	}
+	receipts, err := os.ReadDir(filepath.Join(root, "receipts"))
+	if err != nil || len(receipts) != 1 {
+		t.Fatalf("host-admission receipts=%d error=%v", len(receipts), err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "receipts", receipts[0].Name()))
+	if err != nil || !strings.Contains(string(data), `"state":"never-started"`) ||
+		!strings.Contains(string(data), `"reason":"host-admission"`) {
+		t.Fatalf("host-admission receipt=%s error=%v", data, err)
+	}
+}
+
 func (collector *emergencyRunCollector) Collect(ctx context.Context, previous policy.CPUState, diskPath string) (policy.Reading, error) {
 	reading, err := (&controlledRunCollector{}).Collect(ctx, previous, diskPath)
 	collector.calls++
@@ -771,7 +829,7 @@ func TestLegacySchemaOnePIDOnlyOwnershipCompatibility(t *testing.T) { //nolint:c
 				_ = ReleaseReservation(liveRoot, reservation)
 			}
 			after, readError := os.ReadFile(livePath)
-			if reservation != nil || !IsCoordinationDeferred(takeoverError) || readError != nil || !bytes.Equal(before, after) {
+			if reservation != nil || !IsCoordinationProtocolMismatch(takeoverError) || readError != nil || !bytes.Equal(before, after) {
 				t.Fatalf("live legacy %s ownership was not retained: session=%v takeover=%v read=%v", class, reservation != nil, takeoverError, readError)
 			}
 			if class == "heavy" {
@@ -1701,25 +1759,18 @@ func TestSchemaOneOwnershipSurvivesSupervisorDeath(t *testing.T) { //nolint:goco
 			if err = command.Wait(); err == nil {
 				t.Fatal("schema-one supervisor did not report SIGKILL")
 			}
-			var premature bool
 			plan := ReservationPlan{
 				Capacity:  ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 				Requested: ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 			}
-			if class == "heavy" {
-				competitor, acquireError := AcquireSession(context.Background(), sharedRoot, "", policy.TaskEphemeral, 0)
-				premature = acquireError == nil && competitor != nil
-				if competitor != nil {
-					_ = ReleaseSession(sharedRoot, competitor)
-				}
-			} else {
-				competitor, acquireError := AcquireReservation(
-					context.Background(), sharedRoot, "", policy.TaskEphemeral, "minimal", "competitor", plan, 1, 0,
-				)
-				premature = acquireError == nil && competitor != nil
-				if competitor != nil {
-					_ = ReleaseReservation(sharedRoot, competitor)
-				}
+			competitor, acquireError := AcquireReservation(
+				context.Background(), sharedRoot, "", policy.TaskEphemeral, "minimal", "competitor", plan, 1, 0,
+			)
+			if competitor != nil {
+				_ = ReleaseReservation(sharedRoot, competitor)
+			}
+			if competitor != nil || !IsCoordinationProtocolMismatch(acquireError) {
+				t.Fatalf("live schema-one %s owner returned session=%v error=%v, want protocol mismatch", class, competitor != nil, acquireError)
 			}
 			if err = syscall.Kill(-childPID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 				t.Fatal(err)
@@ -1728,22 +1779,13 @@ func TestSchemaOneOwnershipSurvivesSupervisorDeath(t *testing.T) { //nolint:goco
 			var lastAcquireError error
 			for {
 				var reclaimed bool
-				if class == "heavy" {
-					competitor, acquireError := AcquireSession(context.Background(), sharedRoot, "", policy.TaskEphemeral, 0)
-					reclaimed = acquireError == nil && competitor != nil
-					lastAcquireError = acquireError
-					if competitor != nil {
-						_ = ReleaseSession(sharedRoot, competitor)
-					}
-				} else {
-					competitor, acquireError := AcquireReservation(
-						context.Background(), sharedRoot, "", policy.TaskEphemeral, "minimal", "competitor", plan, 1, 0,
-					)
-					reclaimed = acquireError == nil && competitor != nil
-					lastAcquireError = acquireError
-					if competitor != nil {
-						_ = ReleaseReservation(sharedRoot, competitor)
-					}
+				competitor, acquireError = AcquireReservation(
+					context.Background(), sharedRoot, "", policy.TaskEphemeral, "minimal", "competitor", plan, 1, 0,
+				)
+				reclaimed = acquireError == nil && competitor != nil
+				lastAcquireError = acquireError
+				if competitor != nil {
+					_ = ReleaseReservation(sharedRoot, competitor)
 				}
 				if reclaimed {
 					break
@@ -1760,9 +1802,6 @@ func TestSchemaOneOwnershipSurvivesSupervisorDeath(t *testing.T) { //nolint:goco
 					)
 				}
 				time.Sleep(10 * time.Millisecond)
-			}
-			if premature {
-				t.Fatal("supervisor death released live schema-one child ownership")
 			}
 		})
 	}
@@ -2206,22 +2245,46 @@ func holdCoordinationLock(t *testing.T, root string, after, duration time.Durati
 	}
 }
 
-func TestActivationContentionDefersInsteadOfFailing(t *testing.T) {
+func TestActivationContentionFailsAfterOwnedCleanup(t *testing.T) {
 	// Several repositories share one coordination root, so a peer holding the
 	// shared lock while this guard activates its reservation is ordinary
-	// contention, not a supervision failure. It must return the retryable
-	// deferral exit rather than a generic failure the caller cannot classify.
+	// contention before launch. Once the child started, the guard must never
+	// claim the invocation is a retryable never-started deferral.
 	root := contendedRoot(t)
 	config := contendedReservationConfig(t, root, func(sharedRoot string) {
 		holdCoordinationLock(t, sharedRoot, 0, 400*time.Millisecond)
 	})
+	config.ReservationMetadata = ReservationMetadata{Source: "activation-test"}
 
 	code, err := Run(context.Background(), config)
 	if err != nil {
 		t.Fatalf("contended activation exited %d and reported %v", code, err)
 	}
-	if code != CapacityDeferredExitCode {
-		t.Fatalf("contended activation exited %d, want %d", code, CapacityDeferredExitCode)
+	if code != 1 {
+		t.Fatalf("contended activation exited %d, want 1", code)
+	}
+	summaryPaths, globError := filepath.Glob(filepath.Join(root, "*.summary.json"))
+	if globError != nil || len(summaryPaths) != 1 {
+		t.Fatalf("activation contention summary paths=%v error=%v", summaryPaths, globError)
+	}
+	summaryData, readError := os.ReadFile(summaryPaths[0])
+	if readError != nil {
+		t.Fatal(readError)
+	}
+	var summary evidence.Summary
+	if err = json.Unmarshal(summaryData, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Outcome != outcomeTaskFailed {
+		t.Fatalf("activation contention summary=%+v", summary)
+	}
+	receipts, readError := os.ReadDir(filepath.Join(root, "receipts"))
+	if readError != nil || len(receipts) != 1 {
+		t.Fatalf("activation contention receipts=%d error=%v", len(receipts), readError)
+	}
+	receiptData, readError := os.ReadFile(filepath.Join(root, "receipts", receipts[0].Name()))
+	if readError != nil || !bytes.Contains(receiptData, []byte(`"state":"started-activation-failure"`)) {
+		t.Fatalf("activation contention receipt=%s error=%v", receiptData, readError)
 	}
 }
 

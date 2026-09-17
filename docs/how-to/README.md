@@ -17,8 +17,8 @@ If you are still learning what HIPPO does, start with the
 
 - [How to map concurrency into your build tool](./map-concurrency-into-your-build-tool.md) — wire
   HIPPO's allocation into the variable your build tool already reads.
-- [How to respond to a HIPPO exit code](./respond-to-exit-codes.md) — handle `73`, `75`, and `78`
-  correctly in scripts.
+- [How to respond to a HIPPO exit code](./respond-to-exit-codes.md) — handle `73`, `75`, `76`, and
+  `78` correctly in scripts.
 
 ## Operate
 

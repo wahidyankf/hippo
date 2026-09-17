@@ -8,10 +8,10 @@ Feature: Guarded process execution
     Then the shared root advertises exclusive coordination
     And releasing its final session removes the coordination marker
 
-  Scenario: Reservation coordination defers every compatibility class
+  Scenario: Reservation coordination rejects every compatibility class as a protocol mismatch
     Given the shared root advertises reservation coordination
     When every compatibility task class requests a guarded session
-    Then every compatibility owner is deferred with exit 75
+    Then every compatibility owner is rejected with exit 76
     And the reservation coordination marker remains unchanged
 
   @e2e-exempt
@@ -44,6 +44,16 @@ Feature: Guarded process execution
     Given an admitted guarded command
     When the guarded child exits with code 17
     Then the guard exits with code 17
+
+  Scenario Outline: A child-owned reserved exit stays a child failure
+    Given an admitted guarded command
+    When the guarded child exits with reserved code <code>
+    Then the guard preserves code <code> with task-failed evidence and no never-started receipt
+
+    Examples:
+      | code |
+      | 75   |
+      | 76   |
 
   @e2e-exempt
   Scenario: Canonical concurrency remains ecosystem neutral

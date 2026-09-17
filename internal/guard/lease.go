@@ -171,8 +171,8 @@ func compatibilityOwnerAlive(root string, owner *leaseOwner) (bool, error) {
 	return reservationIdentityAlive(root, owner.Token, owner.IdentityDevice, owner.IdentityInode)
 }
 
-func compatibilityStateDeferred(reason string) error {
-	return fmt.Errorf("%w: %s; inspect the shared HIPPO state before retrying", errCoordinationDeferred, reason)
+func compatibilityStateError(reason string) error {
+	return fmt.Errorf("shared coordination state is unverifiable: %s; inspect the private HIPPO state", reason)
 }
 
 // pruneSessionRecords removes only structurally valid records whose owning process is gone.
@@ -184,7 +184,7 @@ func pruneSessionRecords(root string) error {
 		return nil
 	}
 	if err != nil {
-		return compatibilityStateDeferred("exclusive compatibility session inventory cannot be enumerated")
+		return compatibilityStateError("exclusive compatibility session inventory cannot be enumerated")
 	}
 
 	for _, entry := range entries {
@@ -195,23 +195,23 @@ func pruneSessionRecords(root string) error {
 		}
 		alive, aliveError := compatibilityOwnerAlive(root, owner)
 		if aliveError != nil {
-			return compatibilityStateDeferred("exclusive compatibility session identity is unverifiable")
+			return compatibilityStateError("exclusive compatibility session identity is unverifiable")
 		}
 		if !alive { //nolint:nestif // Stale session cleanup must retain heavy/session/identity ordering in one pass.
 			heavyPath := filepath.Join(root, "heavy.lock")
 			heavyOwner, heavyError := readLeaseOwner(heavyPath)
 			if heavyError == nil && heavyOwner.Token == owner.Token {
 				if err = os.RemoveAll(heavyPath); err != nil {
-					return compatibilityStateDeferred("stale compatibility heavy ownership cannot be removed")
+					return compatibilityStateError("stale compatibility heavy ownership cannot be removed")
 				}
 			} else if heavyError != nil && !errors.Is(heavyError, os.ErrNotExist) {
-				return compatibilityStateDeferred("exclusive compatibility heavy ownership is unverifiable")
+				return compatibilityStateError("exclusive compatibility heavy ownership is unverifiable")
 			}
 			if err = os.Remove(filepath.Join(directory, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return compatibilityStateDeferred("a stale compatibility session record cannot be removed")
+				return compatibilityStateError("a stale compatibility session record cannot be removed")
 			}
 			if err = removeReservationIdentity(root, owner.Token); err != nil {
-				return compatibilityStateDeferred("a stale compatibility session identity cannot be removed")
+				return compatibilityStateError("a stale compatibility session identity cannot be removed")
 			}
 		}
 	}
@@ -225,18 +225,29 @@ func hasLiveSessionRecords(root string) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, compatibilityStateDeferred("exclusive compatibility session inventory cannot be enumerated")
+		return false, compatibilityStateError("exclusive compatibility session inventory cannot be enumerated")
 	}
 
 	for _, entry := range entries {
 		recordToken := strings.TrimSuffix(entry.Name(), ".json")
 		owner, readError := readSessionRecord(root, recordToken)
-		if readError != nil || !validSessionRecord(owner, recordToken) {
-			return true, nil //nolint:nilerr // Unreadable records are deliberately retained as live fail-closed evidence.
+		if readError != nil {
+			return false, compatibilityStateError("exclusive compatibility session record cannot be decoded")
+		}
+		if owner.SchemaVersion != 1 {
+			return false, coordinationProtocolMismatch(
+				fmt.Sprintf("unsupported compatibility session schema %d", owner.SchemaVersion),
+			)
+		}
+		if !validSessionRecord(owner, recordToken) {
+			return false, compatibilityStateError("exclusive compatibility session record is invalid")
 		}
 		alive, aliveError := compatibilityOwnerAlive(root, owner)
-		if aliveError != nil || alive {
-			return true, nil //nolint:nilerr // Unverifiable identities are deliberately retained as live fail-closed evidence.
+		if aliveError != nil {
+			return false, compatibilityStateError("exclusive compatibility session identity is unverifiable")
+		}
+		if alive {
+			return true, nil
 		}
 	}
 
@@ -316,15 +327,27 @@ func DescribeHeavyLease(root string) string {
 	return fmt.Sprintf("the heavy-work lease is held by pid %d (class %s)", owner.PID, class)
 }
 
-func heavyLeaseHeld(lockPath string) bool {
+func heavyLeaseHeld(lockPath string) (bool, error) {
 	owner, err := readLeaseOwner(lockPath)
-	if err != nil || owner.SchemaVersion != 1 {
-		return true
+	if err != nil {
+		return false, compatibilityStateError("exclusive compatibility heavy owner cannot be decoded")
+	}
+	if owner.SchemaVersion != 1 {
+		if owner.SchemaVersion > 0 {
+			return false, coordinationProtocolMismatch(
+				fmt.Sprintf("unsupported compatibility heavy-owner schema %d", owner.SchemaVersion),
+			)
+		}
+
+		return false, compatibilityStateError("exclusive compatibility heavy owner schema is missing")
 	}
 	root := filepath.Dir(lockPath)
 	alive, aliveError := compatibilityOwnerAlive(root, owner)
+	if aliveError != nil {
+		return false, compatibilityStateError("exclusive compatibility heavy owner identity is unverifiable")
+	}
 
-	return aliveError != nil || alive
+	return alive, nil
 }
 
 func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, bool, error) {
@@ -345,7 +368,11 @@ func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, b
 			return nil, false, err
 		}
 
-		if heavyLeaseHeld(lockPath) {
+		held, heldError := heavyLeaseHeld(lockPath)
+		if heldError != nil {
+			return nil, false, heldError
+		}
+		if held {
 			return nil, true, nil
 		}
 		if err := os.RemoveAll(lockPath); err != nil {
@@ -358,6 +385,17 @@ func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, b
 
 func acquireSessionLocked(root, inheritedToken string, class policy.TaskClass) (*Session, bool, error) {
 	if err := pruneSessionRecords(root); err != nil {
+		return nil, false, err
+	}
+	// Validate any pre-marker heavy state before advertising exclusive mode.
+	// Corrupt or future state must fail without making this client look like an
+	// owner of a protocol it never successfully joined.
+	heavyPath := filepath.Join(root, "heavy.lock")
+	if _, err := os.Stat(heavyPath); err == nil {
+		if _, heldError := heavyLeaseHeld(heavyPath); heldError != nil {
+			return nil, false, heldError
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, false, err
 	}
 	if err := ensureExclusiveCoordination(root); err != nil {

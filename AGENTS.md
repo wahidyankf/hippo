@@ -8,7 +8,7 @@ Start with [the vision](repo-governance/vision/README.md) if you have not worked
 
 HIPPO holds no defaults about the work it guards: [repository independence](repo-governance/principles/repository-independence.md).
 
-Exit codes `73`, `75`, and `78`, the evidence readers, and configuration compatibility are the [public contract](repo-governance/development/public-contract.md); none moves without authorization.
+Exit codes `73`, `75`, `76`, and `78`, the evidence readers, and configuration compatibility are the [public contract](repo-governance/development/public-contract.md); none moves without authorization.
 
 ## Plans
 

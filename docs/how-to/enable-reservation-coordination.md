@@ -33,14 +33,14 @@ If you are invoking a release binary rather than the bootstrap, point at the fil
 
 ## Migrate a host that is still in exclusive mode
 
-The two modes cannot be mixed within one state root. While any exclusive session is live, a
-reservation client defers instead of taking over:
+The two modes cannot be mixed within one state root. While any exclusive session is live, a v1
+reservation client reports protocol mismatch instead of taking over:
 
 ```console
 $ hippo run --config hippo.local.json --disk-path . -- echo never-runs
-HIPPO deferred task: shared coordination deferred admission: exclusive mode has a live or unverifiable owner.
+HIPPO protocol mismatch: shared coordination protocol mismatch: exclusive mode has a live owner; drain or upgrade the incompatible client before retrying.
 $ echo $?
-75
+76
 ```
 
 This is not an error to work around. **Let the old sessions drain**, then retry. HIPPO refuses to
@@ -58,9 +58,10 @@ class.
 
 ## Upgrade to adaptive schema 3
 
-Upgrade every consumer binary and wrapper before changing the machine-local configuration. Keep
-schema 2 active until `hippo status --json` reports no owners or waiters with `legacy: true`, then
-atomically install the schema-3 policy. A schema-3 launch refuses to mix with legacy ledger entries.
+Upgrade every consumer binary and wrapper to v1.0.0 or later before changing the machine-local
+configuration. Keep schema 2 active until `hippo status --json` reports no owners or waiters with
+`legacy: true`, then atomically install the schema-3 policy. A schema-3 launch returns `76` before
+enqueue or child launch when legacy ledger entries remain.
 
 Schema 3 requires an identity and a resource tier:
 

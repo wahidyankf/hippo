@@ -541,13 +541,16 @@ func TestCompiledConformanceCapacitySkipDoesNotHideIntegrity(t *testing.T) {
 	}{
 		{
 			name: "pinned_binary_tamper",
-			command: `directory=$(dirname "$HIPPO_BIN"); chmod 700 "$directory" "$HIPPO_BIN"; ` +
-				`printf '#!/bin/sh\nexit 9\n' > "$HIPPO_BIN"; exit 75`,
+			command: `mkdir -p "$HIPPO_ROOT/receipts"; printf '%s\n' '{"schemaVersion":1,"state":"never-started"}' > "$HIPPO_ROOT/receipts/integrity.json"; ` +
+				`directory=$(dirname "$HIPPO_BIN"); chmod 700 "$directory" "$HIPPO_BIN"; ` +
+				`printf '#!/bin/sh\nexit 9\n' > "$HIPPO_BIN"; printf 'HIPPO deferred task: safe admission was not reached.\n' >&2; exit 75`,
 		},
 		{
 			name: "verified_cleanup_failure", requiredOutput: "verified HIPPO binary cleanup failed",
-			command: `directory=$(dirname "$HIPPO_BIN"); chmod 700 "$directory"; rm -f "$HIPPO_BIN"; ` +
-				`rmdir "$directory"; ln -s "$1-missing-target" "$directory"; exit 75`,
+			command: `mkdir -p "$HIPPO_ROOT/receipts"; printf '%s\n' '{"schemaVersion":1,"state":"never-started"}' > "$HIPPO_ROOT/receipts/integrity.json"; ` +
+				`directory=$(dirname "$HIPPO_BIN"); chmod 700 "$directory"; rm -f "$HIPPO_BIN"; ` +
+				`rmdir "$directory"; ln -s "$1-missing-target" "$directory"; ` +
+				`printf 'HIPPO deferred task: safe admission was not reached.\n' >&2; exit 75`,
 		},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -574,6 +577,70 @@ func TestCompiledConformanceCapacitySkipDoesNotHideIntegrity(t *testing.T) {
 			}
 			if strings.Contains(string(output), root) || strings.Contains(string(output), privateSentinel) {
 				t.Fatalf("capacity-skip integrity error exposed a private path: %s", output)
+			}
+		})
+	}
+}
+
+func TestCompiledConformanceProtocolMismatchIsNotCapacitySkip(t *testing.T) {
+	root := t.TempDir()
+	runner := buildConformanceBinary(t, root)
+	hippoBinary := filepath.Join(root, "hippo-source")
+	if err := os.WriteFile(hippoBinary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest, manifestPath := compiledConformanceManifest(t, root, hippoBinary)
+	gateMarker := filepath.Join(root, "later-gate-started")
+	manifest.CoordinationChecks = []conformance.Check{{
+		Consumer: manifest.Consumers[0].Name, AllowCapacitySkip: true,
+		Command: conformance.Command{Arguments: []string{"/bin/sh", "-c", "exit 76"}},
+	}}
+	manifest.Consumers[0].Gates = []conformance.Command{{Arguments: []string{
+		"/bin/sh", "-c", `printf started > "$1"`, "conformance", gateMarker,
+	}}}
+	writeCompiledConformanceManifest(t, manifestPath, manifest)
+	command := exec.Command(runner, manifestPath)
+	output, runError := command.CombinedOutput()
+	if runError == nil || strings.Contains(string(output), "skipped") {
+		t.Fatalf("protocol mismatch passed as a capacity skip: %s: %v", output, runError)
+	}
+	if _, statError := os.Stat(gateMarker); !errors.Is(statError, os.ErrNotExist) {
+		t.Fatalf("later gate ran after protocol mismatch: %v", statError)
+	}
+}
+
+func TestCompiledConformanceCapacitySkipRequiresNewNeverStartedReceipt(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		writeReceipt bool
+		wantAccepted bool
+	}{
+		{name: "verified", writeReceipt: true, wantAccepted: true},
+		{name: "missing_receipt", wantAccepted: false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := t.TempDir()
+			runner := buildConformanceBinary(t, root)
+			hippoBinary := filepath.Join(root, "hippo-source")
+			if err := os.WriteFile(hippoBinary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			manifest, manifestPath := compiledConformanceManifest(t, root, hippoBinary)
+			script := `printf 'HIPPO deferred task: safe admission was not reached.\n' >&2; exit 75`
+			if testCase.writeReceipt {
+				script = `mkdir -p "$HIPPO_ROOT/receipts"; printf '%s\n' '{"schemaVersion":1,"state":"never-started"}' > "$HIPPO_ROOT/receipts/conformance.json"; ` + script
+			}
+			manifest.CoordinationChecks = []conformance.Check{{
+				Consumer: manifest.Consumers[0].Name, AllowCapacitySkip: true,
+				Command: conformance.Command{Arguments: []string{"/bin/sh", "-c", script}},
+			}}
+			writeCompiledConformanceManifest(t, manifestPath, manifest)
+
+			command := exec.Command(runner, manifestPath)
+			output, runError := command.CombinedOutput()
+			accepted := runError == nil && strings.Contains(string(output), "skipped")
+			if accepted != testCase.wantAccepted {
+				t.Fatalf("capacity skip accepted=%t, want %t: %s: %v", accepted, testCase.wantAccepted, output, runError)
 			}
 		})
 	}

@@ -113,7 +113,8 @@ streams are gzip-compressed under `raw/`; use `gzip -dc`. Prior-day summaries ar
 
 Safety receipts under `receipts/` answer the operationally important question after exit `75`:
 `never-started` means no payload launched; `started-safety-stop` means emergency pressure stopped a
-running payload. Never blindly retry the latter.
+running payload. `started-activation-failure` accompanies exit `1` when ledger activation failed
+after launch. Never blindly retry either started state.
 
 ## Investigate an abandoned process group
 
@@ -171,14 +172,16 @@ payload that will never exit on its own.
 
 ## When the root will not admit anything
 
-If admission fails with `75` and the ledger looks empty, the shared state is probably unverifiable
-rather than busy. HIPPO deliberately preserves bytes it cannot decode instead of clearing them.
+If admission fails with `1` and the ledger looks empty, shared state may be corrupt or inaccessible.
+Exit `76` instead means the state is valid but uses an incompatible peer protocol. HIPPO preserves
+both kinds of bytes instead of clearing them; exit `75` remains a capacity or safety result.
 
 Recovery is manual and deliberate:
 
 1. Inspect the state root.
 2. Confirm that no owner remains — check every PID and process group it names.
-3. Correct whatever made the files inaccessible (permissions, ownership, a full volume).
+3. For exit `1`, correct whatever made the files inaccessible or malformed. For exit `76`, drain
+   the live epoch or upgrade every client that shares the root.
 4. Retry.
 
 Clearing state to "unstick" a root is how a live owner's record disappears and every waiting task

@@ -27,10 +27,10 @@ $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make tes
   run prints nothing extra.
 - **Safe by construction.** A guard signals only the process group it started. Pressure shedding
   works by marking a victim and waiting for that victim's own guard to act.
-- **Fails closed.** Unreadable shared state defers admission and preserves bytes rather than guessing
-  and rewriting.
-- **A stable exit contract.** `73` cleanup, `75` inspect receipt/outcome, `78` replan — everything
-  else is your command's own exit code.
+- **Fails closed.** Unreadable shared state returns a non-retryable failure and preserves bytes
+  rather than guessing and rewriting.
+- **A stable exit contract.** `73` cleanup, `75` inspect receipt/outcome, `76` drain or upgrade an
+  incompatible peer, and `78` replan. Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters,
   promotion state, and bounded run outcomes without exposing commands or paths.
 - **No daemon.** One short-lived process per guarded command, plus files in a shared state root.
@@ -53,7 +53,7 @@ release `checksums.txt`. **Pin both the tag and the expected SHA-256; never foll
 runtime.**
 
 ```sh
-VERSION=v0.6.1
+VERSION=v1.0.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -69,10 +69,8 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ./hippo version --json
 ```
 
-```console
-hippo_v0.6.1_darwin_arm64.tar.gz: OK
-{"schemaVersion":1,"version":"v0.6.1","commit":"b72e728c5bdf4604eec352ba514ed8455f4faae7"}
-```
+The checksum command prints `hippo_v1.0.0_<os>_<arch>.tar.gz: OK`; `version --json` reports
+`v1.0.0` and the exact release commit.
 
 Working from a source checkout instead? The tracked `./hippo` bootstrap compiles the CLI once and
 caches it. Full details: [How to install a pinned release](./docs/how-to/install-a-pinned-release.md).
@@ -136,10 +134,11 @@ last only at the configured emergency floor. A remote guard **never** signals an
 group; it marks and waits for that owner to stop its own child. A live unresponsive victim blocks any
 further selection, so pressure cannot cascade into emptying the ledger.
 
-**Failure.** Exit `73` needs storage cleanup. Exit `75` requires its receipt/outcome: `never-started`
-may be requeued, while a pressure-shed or `started-safety-stop` payload must not be blindly retried.
-Exit `78` needs a changed request. Corrupt or unreadable shared state returns an error and preserves
-the bytes rather than reporting a synthetic zero that would let everyone in at once.
+**Failure.** Exit `73` needs storage cleanup. Exit `75` may be requeued only when its receipt says
+`never-started`; a pressure shed or started safety stop needs payload-specific recovery. Exit `76`
+means a live peer uses an incompatible coordination protocol, so drain the epoch or upgrade the
+client. Exit `78` needs a changed local request. Corrupt state and HIPPO-owned failures after launch
+return `1`; evidence records that the payload started.
 
 | Mode                     | Behavior                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------ |
@@ -147,8 +146,8 @@ the bytes rather than reporting a synthetic zero that would let everyone in at o
 | Schema 2 — `reservation` | Concurrent owners against a shared vector budget. Opt in per repository.                         |
 | Schema 3 — `adaptive`    | Tiered FIFO admission, labeled status/history, and evidence-gated burst capacity.                |
 
-The two never mix within one state root; a client meeting the other mode defers with `75` until the
-old sessions drain.
+The modes never mix within one state root. A v1 client meeting the other live protocol exits `76`
+without changing state; drain the old epoch before retrying.
 
 ## 📚 Documentation
 
@@ -168,8 +167,8 @@ that every test adapter runs.
 
 ## 📋 Project status
 
-HIPPO is in active development. Its behavior is pinned by an executable specification, but versions
-below `1.0.0` may still make breaking changes — see the [changelog](./CHANGELOG.md).
+HIPPO's v1 behavior is pinned by an executable specification. Future public-contract changes follow
+semantic versioning; see the [changelog](./CHANGELOG.md).
 
 Released tags are immutable. A published release is never rebuilt or replaced.
 

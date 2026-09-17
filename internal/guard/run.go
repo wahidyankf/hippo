@@ -347,6 +347,33 @@ func stopConfiguredLifetime(config RunConfig, lifetime *supervisedLifetime) (err
 	return terminateAndWait(lifetime, config.Policy.TerminationGrace)
 }
 
+func resolveActivationFailure(
+	config RunConfig,
+	runID string,
+	activationError error,
+	stopLifetime func() (error, error),
+) (int, error) {
+	_, stopError := stopLifetime()
+	receiptReason := "coordination-activation-failure"
+	if errors.Is(activationError, errCoordinationDeferred) {
+		receiptReason = "coordination-contention"
+	}
+	receiptError := writeSafetyReceipt(
+		config.EvidenceRoot, runID, "started-activation-failure", receiptReason,
+		config.ReservationMetadata, config.TaskClass, config.Now(),
+	)
+	// The payload already started, so lock contention is not a retryable
+	// admission deferral. Owned cleanup completes before a stable failure
+	// is returned and the receipt records that launch occurred.
+	if errors.Is(activationError, errCoordinationDeferred) && stopError == nil {
+		_, _ = fmt.Fprintf(config.Stderr, "HIPPO failed task after launch: %s.\n", activationError)
+
+		return 1, receiptError
+	}
+
+	return 1, errors.Join(activationError, stopError, receiptError)
+}
+
 // noteDeferralf reports why admission was deferred. The run returns after this
 // notice; callers use the recorded receipt to decide whether a later retry is
 // safe instead of blindly replaying exit 75.
@@ -469,6 +496,11 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	if err != nil {
 		if errors.Is(err, ErrReservationReplan) {
 			return policy.ReplanRequiredExitCode, nil
+		}
+		if errors.Is(err, ErrCoordinationProtocolMismatch) {
+			config.noteDeferralf("HIPPO protocol mismatch: %s.\n", err)
+
+			return policy.ProtocolMismatchExitCode, nil
 		}
 		if errors.Is(err, ErrReservationDeferred) {
 			config.noteDeferralf("HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.\n")
@@ -719,6 +751,12 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 	if !admitted {
 		config.noteDeferralf("HIPPO deferred task: safe admission was not reached.\n")
+		if receiptError := writeSafetyReceipt(
+			config.EvidenceRoot, writer.summary.RunID, "never-started", "host-admission",
+			config.ReservationMetadata, config.TaskClass, config.Now(),
+		); receiptError != nil {
+			return 1, receiptError
+		}
 
 		return CapacityDeferredExitCode, nil
 	}
@@ -740,18 +778,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 	if config.ReservationPolicy.Enabled {
 		if activationError := ActivateReservation(config.EvidenceRoot, session, lifetime.processGroup); activationError != nil { //nolint:contextcheck // Activation owns a bounded atomic coordination transaction.
-			_, stopError := stopLifetime()
-			// Every repository on the host shares one coordination root, so a
-			// peer holding its lock through this bounded window is ordinary
-			// contention. The caller receives a classified exit 75 instead of a
-			// generic failure; the receipt says that the child did start.
-			if errors.Is(activationError, errCoordinationDeferred) && stopError == nil {
-				config.noteDeferralf("HIPPO deferred task: %s.\n", activationError)
+			outcome = outcomeTaskFailed
 
-				return CapacityDeferredExitCode, nil
-			}
-
-			return 1, errors.Join(activationError, stopError)
+			return resolveActivationFailure(config, writer.summary.RunID, activationError, stopLifetime)
 		}
 	}
 

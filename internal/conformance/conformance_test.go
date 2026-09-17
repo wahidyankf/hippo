@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -31,6 +32,55 @@ func TestExecuteDoesNotStartWithPreCancelledContext(t *testing.T) {
 	err := executeWithRuntime(ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
 	if err == nil || starts.Load() != 0 {
 		t.Fatalf("pre-cancelled execution started %d commands with error %v", starts.Load(), err)
+	}
+}
+
+func TestCleanCapacitySkipRequiresNeverStartedDiagnostic(t *testing.T) {
+	exit := &commandError{category: "exited", exitCode: 75}
+	if cleanCapacitySkip(exit, nil, true) {
+		t.Fatal("bare exit 75 was accepted as a capacity skip")
+	}
+	if cleanCapacitySkip(exit, []byte(capacityDeferralDiagnostic+"\n"), false) {
+		t.Fatal("capacity diagnostic without a never-started receipt was accepted")
+	}
+	if !cleanCapacitySkip(exit, []byte(capacityDeferralDiagnostic+"\n"), true) {
+		t.Fatal("documented never-started capacity deferral was rejected")
+	}
+	if cleanCapacitySkip(&commandError{category: "exited", exitCode: 76}, []byte(capacityDeferralDiagnostic+"\n"), true) {
+		t.Fatal("protocol mismatch was accepted as a capacity skip")
+	}
+	if cleanCapacitySkip(errors.Join(exit, errors.New("integrity failure")), []byte(capacityDeferralDiagnostic+"\n"), true) {
+		t.Fatal("joined capacity and integrity failure was accepted as a clean skip")
+	}
+}
+
+func TestNewNeverStartedReceiptRequiresANewValidReceipt(t *testing.T) {
+	root := t.TempDir()
+	receipts := filepath.Join(root, "receipts")
+	if err := os.Mkdir(receipts, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(receipts, "old.json"), []byte(`{"schemaVersion":1,"state":"never-started"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := receiptSnapshot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verified, verifyError := newNeverStartedReceipt(root, before); verifyError != nil || verified {
+		t.Fatalf("old receipt verified=%t error=%v", verified, verifyError)
+	}
+	if err = os.WriteFile(filepath.Join(receipts, "new.json"), []byte(`{"schemaVersion":1,"state":"never-started"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if verified, verifyError := newNeverStartedReceipt(root, before); verifyError != nil || !verified {
+		t.Fatalf("new receipt verified=%t error=%v", verified, verifyError)
+	}
+	if err = os.WriteFile(filepath.Join(receipts, "started.json"), []byte(`{"schemaVersion":1,"state":"started-safety-stop"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if verified, verifyError := newNeverStartedReceipt(root, before); verifyError == nil || verified {
+		t.Fatalf("mixed started receipt verified=%t error=%v", verified, verifyError)
 	}
 }
 

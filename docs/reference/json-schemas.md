@@ -21,15 +21,9 @@ omitted according to that field's compatibility contract. Field _order_ is not p
 
 ## `version --json`
 
-The smallest public document.
-
-```json
-{
-  "schemaVersion": 1,
-  "version": "v0.5.3",
-  "commit": "b13567145a86942c76a32ea3371d5f75a817e3d9"
-}
-```
+The smallest public document has three required fields: integer `schemaVersion` `1`, the release
+string in `version`, and the exact source commit in `commit`. Release builds currently report
+`v1.0.0`; source builds report `dev` and `unknown`.
 
 ## `monitor --json`
 
@@ -301,8 +295,9 @@ for owner promotion.
 ```
 
 `state` distinguishes `never-started` queue expiry/cancellation from `started-safety-stop`
-emergency pressure. Receipts contain no command or path and are retained for 30 days under a
-128 MiB cap.
+emergency pressure and `started-activation-failure` after a launched child could not be activated in
+the ledger. Only `never-started` authorizes automatic requeue. Receipts contain no command or path
+and are retained for 30 days under a 128 MiB cap.
 
 ## Release raw record
 

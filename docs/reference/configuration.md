@@ -81,7 +81,8 @@ immediately for new admissions; it does not kill an already admitted owner.
 
 Every schema-3 `run` must select `--resource-tier`. Queue deadlines come from the tier, so combining
 schema 3 with `--wait-for-admission` is rejected. Upgrade every consumer first and let schema-2
-owners and waiters drain before activating schema 3; a schema-3 launch refuses a mixed legacy ledger.
+owners and waiters drain before activating schema 3; a schema-3 launch returns protocol-mismatch
+exit `76` before enqueue or child launch when a mixed legacy ledger remains.
 
 ## Minimal reservation configuration
 
