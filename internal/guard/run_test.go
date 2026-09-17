@@ -42,6 +42,78 @@ func (*controlledRunCollector) Collect(context.Context, policy.CPUState, string)
 	}}, nil
 }
 
+type emergencyRunCollector struct {
+	calls int
+}
+
+func (collector *emergencyRunCollector) Collect(ctx context.Context, previous policy.CPUState, diskPath string) (policy.Reading, error) {
+	reading, err := (&controlledRunCollector{}).Collect(ctx, previous, diskPath)
+	collector.calls++
+	if collector.calls > 1 {
+		reading.Sample.AvailableMemoryBytes = new(policy.GiB)
+		reading.Sample.AvailableNonCompressedEstimateBytes = new(policy.GiB)
+		reading.Sample.MemoryPressureLevel = new(4)
+	}
+
+	return reading, err
+}
+
+func TestRunEmergencyTransactionalStopWritesReceiptWithoutRetry(t *testing.T) {
+	root := t.TempDir()
+	settings := policy.DefaultPolicy()
+	settings.AdmissionWindow = 100 * time.Millisecond
+	settings.LeaseWait = 100 * time.Millisecond
+	settings.SampleInterval = time.Millisecond
+	settings.TerminationGrace = time.Millisecond
+	settings.ConsecutiveCPUSamples = 1
+	plan := ReservationPlan{
+		Capacity:  ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Requested: ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Allocated: ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Minimum:   ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Maximum:   ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+		Tier:      "light",
+	}
+	starts := 0
+	code, err := Run(context.Background(), RunConfig{
+		Command: "true", TaskClass: policy.TaskTransactional, EvidenceRoot: root,
+		Collector: &emergencyRunCollector{}, Policy: settings,
+		Resolution: policy.Resolution{
+			RequestedProfile: "balanced", ResolvedProfile: "balanced", Concurrency: 1,
+		},
+		ReservationPolicy: ReservationPolicy{
+			Enabled: true, MaxCPU: 1, MaxMemoryBytes: policy.GiB, MaxActiveOwners: 1,
+		},
+		ReservationPlan: plan,
+		ReservationMetadata: ReservationMetadata{
+			Source: "hippo", Tags: map[string]string{"plan": "emergency-test"}, Tier: "light",
+		},
+		EmergencyAvailableMemoryBytes: 6 * policy.GiB,
+		EvidenceLimits:                evidence.DefaultLimits(),
+		Now:                           time.Now,
+		Stderr:                        &bytes.Buffer{},
+		startLifetime: func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error) {
+			starts++
+
+			return &supervisedLifetime{processGroup: syscall.Getpgrp(), exited: make(chan error)}, nil
+		},
+		//nolint:nilnil // Two nil results explicitly model a successfully reaped child and supervisor.
+		stopLifetime: func(*supervisedLifetime, time.Duration) (error, error) { return nil, nil },
+	})
+	if err != nil || code != CapacityDeferredExitCode || starts != 1 {
+		t.Fatalf("emergency result: code=%d starts=%d error=%v", code, starts, err)
+	}
+	receipts, err := os.ReadDir(filepath.Join(root, "receipts"))
+	if err != nil || len(receipts) != 1 {
+		t.Fatalf("emergency receipts=%d error=%v", len(receipts), err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "receipts", receipts[0].Name()))
+	if err != nil || !strings.Contains(string(data), `"state":"started-safety-stop"`) ||
+		!strings.Contains(string(data), `"reason":"emergency-pressure"`) {
+		t.Fatalf("emergency receipt=%s error=%v", data, err)
+	}
+}
+
 func TestCoordinationLockSerializesSameProcessByRoot(t *testing.T) {
 	root := t.TempDir()
 	first, err := acquireCoordinationLock(context.Background(), root, time.Second)

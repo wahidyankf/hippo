@@ -6,15 +6,64 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
+	resourceconfig "github.com/wahidyankf/hippo/internal/config"
+	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/identity"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 const reservationCoordinationMode = "reservation"
+
+type promotionStatus struct {
+	evidence.PromotionEvaluation
+
+	BaseOwners      int `json:"baseOwners"`
+	MaximumOwners   int `json:"maximumOwners"`
+	EffectiveOwners int `json:"effectiveOwners"`
+}
+
+func evaluatePromotion(
+	root string,
+	coordination resourceconfig.Coordination,
+	assessment policy.Assessment,
+	now time.Time,
+) (promotionStatus, error) {
+	status := promotionStatus{
+		BaseOwners: coordination.MaxActiveOwners, MaximumOwners: coordination.MaxActiveOwners,
+		EffectiveOwners: coordination.MaxActiveOwners,
+	}
+	if coordination.SchemaVersion < 3 {
+		status.Reason = "not-configured"
+
+		return status, nil
+	}
+	status.BaseOwners = coordination.BaseActiveOwners
+	status.EffectiveOwners = coordination.BaseActiveOwners
+	criteria := evidence.PromotionCriteria{
+		CompletedRuns:               coordination.Promotion.CompletedRuns,
+		MinimumSources:              coordination.Promotion.MinimumSources,
+		MinimumAvailableMemoryBytes: coordination.Promotion.MinimumAvailableMemoryBytes,
+		MaximumCPUP95Percent:        coordination.Promotion.MaximumCPUP95Percent,
+	}
+	evaluation, err := evidence.EvaluatePromotion(root, criteria, now)
+	if err != nil {
+		return promotionStatus{}, err
+	}
+	status.PromotionEvaluation = evaluation
+	if assessment.State == policy.StateNormal && evaluation.Eligible {
+		status.EffectiveOwners = coordination.MaxActiveOwners
+	} else if assessment.State != policy.StateNormal {
+		status.Reason = "live-pressure-" + string(assessment.State)
+	}
+
+	return status, nil
+}
 
 func (application Application) version(options versionOptions) (int, error) {
 	if options.jsonOutput {
@@ -56,7 +105,7 @@ func withAssessmentDecision(resolution policy.Resolution, assessment policy.Asse
 }
 
 func statusCoordination(ctx context.Context, root, configuredMode string) (guard.ReservationTotals, error) {
-	totals := guard.ReservationTotals{SchemaVersion: 4, Mode: configuredMode}
+	totals := guard.ReservationTotals{SchemaVersion: 5, Mode: configuredMode}
 	if root == "" {
 		return totals, nil
 	}
@@ -76,12 +125,46 @@ func statusCoordination(ctx context.Context, root, configuredMode string) (guard
 	return guard.ReservationStatus(ctx, root)
 }
 
+func tagsMatch(actual, expected map[string]string) bool {
+	for key, value := range expected {
+		if actual[key] != value {
+			return false
+		}
+	}
+
+	return true
+}
+
+func filterCoordinationRows(totals guard.ReservationTotals, source string, tags map[string]string) guard.ReservationTotals {
+	if source == "" && len(tags) == 0 {
+		return totals
+	}
+	filter := func(entries []guard.ReservationEntry) []guard.ReservationEntry {
+		result := make([]guard.ReservationEntry, 0, len(entries))
+		for _, entry := range entries {
+			if source != "" && entry.Source != source || !tagsMatch(entry.Tags, tags) {
+				continue
+			}
+			result = append(result, entry)
+		}
+
+		return result
+	}
+	totals.Owners = filter(totals.Owners)
+	totals.Waiters = filter(totals.Waiters)
+
+	return totals
+}
+
 func (application Application) status(ctx context.Context, options statusOptions) (int, error) {
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
 		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
 	}
-
+	filterTags, filterError := identity.ParseTags(options.tags)
+	if filterError != nil {
+		return policy.ReplanRequiredExitCode, filterError
+	}
 	first, err := application.Collector.Collect(ctx, nil, options.diskPath)
 	if err != nil {
 		return 1, err
@@ -103,9 +186,13 @@ func (application Application) status(ctx context.Context, options statusOptions
 
 	assessment := policy.ResourceAssessment([]policy.Sample{first.Sample, second.Sample}, resolution.Policy)
 	resolution = withAssessmentDecision(resolution, assessment)
+	root := host.DefaultEvidenceRoot(environmentMap(application.Environment))
+	promotion, promotionError := evaluatePromotion(root, configuration.Coordination, assessment, application.Now())
+	if promotionError != nil {
+		return 1, fmt.Errorf("evaluate owner promotion: %w", promotionError)
+	}
 
 	if options.jsonOutput {
-		root := host.DefaultEvidenceRoot(environmentMap(application.Environment))
 		coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
 		if coordinationError != nil {
 			return 1, fmt.Errorf("read coordination status: %w", coordinationError)
@@ -117,8 +204,9 @@ func (application Application) status(ctx context.Context, options statusOptions
 			Resource      policy.Assessment       `json:"resource"`
 			Profile       policy.Resolution       `json:"profile"`
 			Coordination  guard.ReservationTotals `json:"coordination"`
+			Promotion     promotionStatus         `json:"promotion"`
 			ConfigHash    string                  `json:"configHash,omitempty"`
-		}{second.Sample, 4, assessment, resolution, coordination, configuration.Hash}
+		}{second.Sample, 5, assessment, resolution, filterCoordinationRows(coordination, options.source, filterTags), promotion, configuration.Hash}
 		encoded, marshalError := json.Marshal(payload)
 		if marshalError != nil {
 			return 1, fmt.Errorf("encode status JSON: %w", marshalError)
@@ -145,9 +233,14 @@ func (application Application) status(ctx context.Context, options statusOptions
 		cpu = fmt.Sprintf("%.1f%%", *second.Sample.CPUUtilizationPercent)
 	}
 
+	coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
+	if coordinationError != nil {
+		return 1, fmt.Errorf("read coordination status: %w", coordinationError)
+	}
+	coordination = filterCoordinationRows(coordination, options.source, filterTags)
 	_, err = fmt.Fprintf(
 		application.Stdout,
-		"state=%s reason=%s profile=%s concurrency=%d swap=%s availableGiB=%s diskFreeGiB=%s cpu=%s\n",
+		"state=%s reason=%s profile=%s concurrency=%d swap=%s availableGiB=%s diskFreeGiB=%s cpu=%s owners=%d waiters=%d ownerLimit=%d promotion=%s\n",
 		assessment.State,
 		assessment.Reason,
 		resolution.ResolvedProfile,
@@ -156,9 +249,28 @@ func (application Application) status(ctx context.Context, options statusOptions
 		available,
 		disk,
 		cpu,
+		coordination.ActiveOwners,
+		coordination.WaitingOwners,
+		promotion.EffectiveOwners,
+		promotion.Reason,
 	)
+	if err != nil {
+		return 1, err
+	}
+	for _, entry := range append(coordination.Owners, coordination.Waiters...) {
+		if _, err = fmt.Fprintf(
+			application.Stdout,
+			"%s run=%s position=%d source=%s class=%s tier=%s cpu=%d memoryMiB=%d deadline=%s\n",
+			entry.State, entry.RunID, entry.Position, entry.Source, entry.Class, entry.Tier,
+			max(entry.Allocated.CPU, entry.Requested.CPU),
+			max(entry.Allocated.MemoryBytes, entry.Requested.MemoryBytes)/policy.MiB,
+			entry.Deadline,
+		); err != nil {
+			return 1, err
+		}
+	}
 
-	return 0, err
+	return 0, nil
 }
 
 func waitForContext(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
@@ -293,7 +405,7 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 	}
 }
 
-func (application Application) run(ctx context.Context, options runOptions) (int, error) {
+func (application Application) run(ctx context.Context, options runOptions) (int, error) { //nolint:cyclop,funlen,gocognit,gocyclo // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
 	if options.workingDir != "" {
 		absolute, err := filepath.Abs(options.workingDir)
 		if err != nil {
@@ -311,6 +423,20 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
 		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+	}
+	environment := environmentMap(application.Environment)
+	identityPath := identity.Path(environment, options.workingDir)
+	runIdentity := identity.Value{
+		SchemaVersion: identity.SchemaVersion, Source: "unlabeled", Tags: map[string]string{},
+	}
+	_, identityStatError := os.Stat(identityPath)
+	identityRequired := configuration.Coordination.SchemaVersion >= 3 || options.source != "" || len(options.tags) > 0 ||
+		identityStatError == nil
+	if identityRequired {
+		runIdentity, configError = identity.Load(identityPath, options.source, options.tags)
+		if configError != nil {
+			return policy.ReplanRequiredExitCode, fmt.Errorf("run identity: %w", configError)
+		}
 	}
 
 	probeDiskPath := options.diskPath
@@ -342,13 +468,34 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 
 		return resolution.ExitCode, nil
 	}
+	liveAssessment := policy.ResourceAssessment([]policy.Sample{probe.Sample}, resolution.Policy)
+	promotion, promotionError := evaluatePromotion(root, configuration.Coordination, liveAssessment, application.Now())
+	if promotionError != nil {
+		return 1, fmt.Errorf("evaluate owner promotion: %w", promotionError)
+	}
+	if configuration.Coordination.SchemaVersion >= 3 {
+		coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
+		if coordinationError != nil {
+			return 1, fmt.Errorf("verify schema-3 activation: %w", coordinationError)
+		}
+		if coordination.LegacyEntries > 0 {
+			return policy.ReplanRequiredExitCode, fmt.Errorf(
+				"schema 3 activation requires legacy owners and waiters to drain (remaining=%d)",
+				coordination.LegacyEntries,
+			)
+		}
+	}
 
 	reservationPolicy := guard.ReservationPolicy{
 		Enabled:         configuration.Coordination.Mode == reservationCoordinationMode,
 		MaxCPU:          configuration.Coordination.MaxCPU,
 		MaxMemoryBytes:  configuration.Coordination.MaxMemoryBytes,
-		MaxActiveOwners: configuration.Coordination.MaxActiveOwners,
+		MaxActiveOwners: promotion.EffectiveOwners,
 		OwnerShares:     configuration.Coordination.OwnerShares,
+		Tiers:           configuration.Coordination.Tiers,
+	}
+	if reservationPolicy.Enabled && len(reservationPolicy.Tiers) == 0 {
+		reservationPolicy.Tiers = guard.DefaultResourceTiers()
 	}
 	if options.reserveCPU < 0 || options.reserveMemoryMiB < 0 {
 		return policy.ReplanRequiredExitCode, errors.New("reservation flags must be nonnegative")
@@ -357,22 +504,44 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		return policy.ReplanRequiredExitCode, errors.New("explicit reservations require schema 2 coordination")
 	}
 	reservationPlan := guard.ReservationPlan{}
-	if reservationPolicy.Enabled {
+	admissionWait := resolution.Policy.LeaseWait
+	if reservationPolicy.Enabled { //nolint:nestif // Tier and legacy reservation paths deliberately converge before guarded launch.
 		reservationMemoryBytes, conversionError := policy.MiBToBytes(options.reserveMemoryMiB)
 		if conversionError != nil {
 			return policy.ReplanRequiredExitCode, conversionError
 		}
-		reservationPlan, resolveError = guard.PlanReservation(
-			probe.Sample,
-			resolution,
-			reservationPolicy,
-			options.reserveCPU,
-			reservationMemoryBytes,
-		)
+		if configuration.Coordination.SchemaVersion >= 3 && options.resourceTier == "" {
+			return policy.ReplanRequiredExitCode, errors.New("schema 3 requires --resource-tier")
+		}
+		if configuration.Coordination.SchemaVersion >= 3 && options.waitForAdmission != 0 {
+			return policy.ReplanRequiredExitCode, errors.New("schema 3 queue deadlines come from --resource-tier")
+		}
+		if options.resourceTier != "" {
+			reservationPlan, admissionWait, resolveError = guard.PlanTierReservation(
+				probe.Sample,
+				resolution,
+				reservationPolicy,
+				options.resourceTier,
+				options.reserveCPU,
+				reservationMemoryBytes,
+			)
+		} else {
+			reservationPlan, resolveError = guard.PlanReservation(
+				probe.Sample,
+				resolution,
+				reservationPolicy,
+				options.reserveCPU,
+				reservationMemoryBytes,
+			)
+			if options.waitForAdmission > 0 {
+				admissionWait = options.waitForAdmission
+			}
+		}
 		if resolveError != nil {
 			return policy.ReplanRequiredExitCode, resolveError
 		}
 	}
+	resolution.Policy.LeaseWait = admissionWait
 
 	config := guard.RunConfig{
 		Command:                options.command[0],
@@ -392,105 +561,17 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		Resolution:             resolution,
 		ReservationPolicy:      reservationPolicy,
 		ReservationPlan:        reservationPlan,
-		ConfigHash:             configuration.Hash,
-		Sleep:                  application.Sleep,
-		Now:                    application.Now,
-		ChildStdin:             application.Stdin,
-		ChildStdout:            application.Stdout,
-		ChildStderr:            application.Stderr,
-		Stderr:                 application.Stderr,
+		ReservationMetadata: guard.ReservationMetadata{
+			Source: runIdentity.Source, Tags: runIdentity.Tags, Tier: options.resourceTier,
+		},
+		EmergencyAvailableMemoryBytes: configuration.Coordination.EmergencyAvailableMemoryBytes,
+		ConfigHash:                    configuration.Hash,
+		Sleep:                         application.Sleep,
+		Now:                           application.Now,
+		ChildStdin:                    application.Stdin,
+		ChildStdout:                   application.Stdout,
+		ChildStderr:                   application.Stderr,
+		Stderr:                        application.Stderr,
 	}
-	if options.waitForAdmission <= 0 {
-		return guard.Run(ctx, config)
-	}
-
-	return application.runAwaitingAdmission(ctx, config, options.waitForAdmission)
-}
-
-// admissionRetryFloor and admissionRetryCeiling bound how often a deferred owner
-// asks again: the floor keeps a brief deferral cheap to ride out, and the ceiling
-// stops a long one from becoming a busy wait against the shared root.
-const (
-	admissionRetryFloor   = 100 * time.Millisecond
-	admissionRetryCeiling = 2 * time.Second
-)
-
-// runAwaitingAdmission retries a capacity deferral until the caller's budget is
-// spent. Exit 75 means this owner holds no reservation at all, so asking again is
-// the documented response to it and not a way to override the decision: HIPPO
-// deferred because admitting would have oversubscribed the host, and only waiting
-// changes that.
-//
-// A retry can re-run a payload that already started, because activation records
-// the supervised process group after the child exists and gives the shared root
-// back when it is contended. That is the same exposure a caller hand-writing this
-// loop already has, and it is safe for the idempotent build and test commands
-// this guards. A caller whose payload is not idempotent should leave the budget
-// at zero and decide for itself.
-func (application Application) runAwaitingAdmission(
-	ctx context.Context,
-	config guard.RunConfig,
-	budget time.Duration,
-) (int, error) {
-	deadline := application.Now().Add(budget)
-	backoff := admissionRetryFloor
-	for attempt := 1; ; attempt++ {
-		code, runError := guard.Run(ctx, config)
-		// The first attempt says why this owner is waiting. Every later one would
-		// repeat that sentence verbatim, so the notice is quieted from here on and
-		// the surrender below reports the total instead. Quieting is scoped to the
-		// deferral itself: a storage refusal or a shedding notice on a later
-		// attempt is still reported.
-		config.QuietDeferralNotice = true
-		if runError != nil || code != guard.CapacityDeferredExitCode {
-			return code, runError
-		}
-
-		remaining := deadline.Sub(application.Now())
-		if remaining <= 0 {
-			_, _ = fmt.Fprintf(
-				application.Stderr,
-				"HIPPO stayed deferred across %d attempts in %s.\n",
-				attempt,
-				budget,
-			)
-
-			return code, nil
-		}
-
-		if backoff > remaining {
-			backoff = remaining
-		}
-		if !waitForAdmissionRetry(ctx, backoff, application.Sleep) {
-			return code, nil
-		}
-
-		backoff *= 2
-		if backoff > admissionRetryCeiling {
-			backoff = admissionRetryCeiling
-		}
-	}
-}
-
-// waitForAdmissionRetry pauses between attempts and reports whether the pause
-// finished, preferring an injected sleep so the wait stays deterministic under
-// test. A cancelled pause ends the retry loop rather than raising: the owner was
-// deferred and never admitted, which is precisely what exit 75 already reports,
-// so there is no second failure to describe.
-func waitForAdmissionRetry(ctx context.Context, duration time.Duration, pause func(time.Duration)) bool {
-	if pause != nil {
-		pause(duration)
-
-		return ctx.Err() == nil
-	}
-
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
+	return guard.Run(ctx, config)
 }

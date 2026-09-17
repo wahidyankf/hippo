@@ -32,8 +32,10 @@ wrong shape for your question, the other section probably has the right one.
 - **What it does** — reads host evidence, resolves a safe profile, claims a CPU-and-memory
   reservation from a ledger shared by every repository on the machine, then runs your command in its
   own process group with the allocated concurrency in its environment.
-- **How you use it** — `hippo run -- <your command>`, plus one environment variable your build tool
-  already reads.
+- **How you use it** — under adaptive schema 3, `hippo run --resource-tier <tier> -- <command>`, plus
+  one environment variable your build tool already reads.
+- **How you observe it** — `hippo status`, `hippo watch`, and `hippo history` show labeled admission
+  and bounded outcomes without recording commands or paths.
 - **What it will not do** — signal a process group it did not start, or guess when shared state is
   unreadable.
 

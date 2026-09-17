@@ -8,10 +8,10 @@ Exact, information-oriented facts about HIPPO. Look things up here; learn elsewh
 - [Exit codes](./exit-codes.md) — the stable `0` / `1` / `73` / `75` / `78` contract.
 - [Environment variables](./environment-variables.md) — what HIPPO reads, what it exports, and the
   rules for caller-selected concurrency mappings.
-- [Configuration](./configuration.md) — schema 1 and schema 2, coordination caps, profile overrides.
-- [Resource policy](./resource-policy.md) — profiles, task classes, thresholds, reservation capacity.
+- [Configuration](./configuration.md) — schemas 1–3, tiers, promotion, coordination caps, and profiles.
+- [Resource policy](./resource-policy.md) — profiles, task classes, resource tiers, and safe capacity.
 - [Shared state root](./state-root.md) — where runtime state lives and what each file is for.
-- [JSON and evidence formats](./json-schemas.md) — every schema HIPPO emits.
+- [JSON and evidence formats](./json-schemas.md) — status, identity, history, receipt, and evidence schemas.
 
 ## Also canonical
 

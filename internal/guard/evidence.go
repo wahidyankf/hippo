@@ -37,11 +37,22 @@ func NewEvidenceWriter(root, identifier string, limits evidence.Limits) (*Eviden
 		output:      output,
 		summaryPath: filepath.Join(root, identifier+".summary.json"),
 		summary: EvidenceSummary{
-			SchemaVersion:          4,
+			SchemaVersion:          5,
+			RunID:                  identifier,
 			CompressorAvailableAll: true,
 		},
 		cpu: evidence.NewHistogram(100, 0.01),
 	}, nil
+}
+
+// SetIdentity attaches validated privacy-safe labels to the completed summary.
+func (writer *EvidenceWriter) SetIdentity(metadata ReservationMetadata) {
+	if writer == nil {
+		return
+	}
+	writer.summary.Source = metadata.Source
+	writer.summary.Tags = metadata.Tags
+	writer.summary.ResourceTier = metadata.Tier
 }
 
 // SetReservationContext attaches only aggregate resource allocation metadata.
@@ -141,11 +152,13 @@ func (writer *EvidenceWriter) Append(sample policy.Sample) error {
 		writer.summary.AvailableParallelism = sample.AvailableParallelism
 		writer.summary.Platform = sample.Platform
 		writer.summary.Capabilities = append([]string(nil), sample.Capabilities...)
+		writer.summary.StartedAt = sample.MeasuredAt
 	}
 
 	last := sample
 	writer.last = &last
 	writer.summary.SampleCount++
+	writer.summary.FinishedAt = sample.MeasuredAt
 
 	available := sample.AvailableMemoryBytes
 	if available == nil {
@@ -170,35 +183,41 @@ func (writer *EvidenceWriter) Append(sample policy.Sample) error {
 
 // EvidenceSummary captures bounded aggregate evidence for one guarded task.
 type EvidenceSummary struct {
-	SchemaVersion                          int      `json:"schemaVersion"`
-	SampleCount                            int      `json:"sampleCount"`
-	TaskClass                              string   `json:"taskClass"`
-	Outcome                                string   `json:"outcome"`
-	AvailableParallelism                   int      `json:"availableParallelism"`
-	AvailableNonCompressedEstimateMinBytes *int64   `json:"availableNonCompressedEstimateMinBytes"`
-	MemoryPressureLevelMax                 *int     `json:"memoryPressureLevelMax"`
-	CompressorAvailableAll                 bool     `json:"compressorAvailableAll"`
-	CompressorPayloadPeakBytes             *int64   `json:"compressorPayloadPeakBytes"`
-	CPUUtilizationP95Percent               float64  `json:"cpuUtilizationP95Percent"`
-	DiskFreeMinBytes                       *int64   `json:"diskFreeMinBytes"`
-	SwapInsDelta                           int64    `json:"swapInsDelta"`
-	SwapOutsDelta                          int64    `json:"swapOutsDelta"`
-	SwapFreeMinBytes                       *int64   `json:"swapFreeMinBytes"`
-	HealthFailures                         int      `json:"healthFailures"`
-	Platform                               string   `json:"platform,omitempty"`
-	Capabilities                           []string `json:"capabilities,omitempty"`
-	RequestedProfile                       string   `json:"requestedProfile,omitempty"`
-	ResolvedProfile                        string   `json:"resolvedProfile,omitempty"`
-	FallbackChain                          []string `json:"fallbackChain,omitempty"`
-	Concurrency                            int      `json:"concurrency,omitempty"`
-	ConfigHash                             string   `json:"configHash,omitempty"`
-	RequestedCPU                           int      `json:"requestedCpu,omitempty"`
-	RequestedMemoryBytes                   int64    `json:"requestedMemoryBytes,omitempty"`
-	AllocatedCPU                           int      `json:"allocatedCpu,omitempty"`
-	AllocatedMemoryBytes                   int64    `json:"allocatedMemoryBytes,omitempty"`
-	ReservationWaitMilliseconds            int64    `json:"reservationWaitMilliseconds,omitempty"`
-	PeakOwnerCount                         int      `json:"peakOwnerCount,omitempty"`
-	BudgetOutcome                          string   `json:"budgetOutcome,omitempty"`
+	SchemaVersion                          int               `json:"schemaVersion"`
+	RunID                                  string            `json:"runId,omitempty"`
+	StartedAt                              string            `json:"startedAt,omitempty"`
+	FinishedAt                             string            `json:"finishedAt,omitempty"`
+	Source                                 string            `json:"source,omitempty"`
+	Tags                                   map[string]string `json:"tags,omitempty"`
+	ResourceTier                           string            `json:"resourceTier,omitempty"`
+	SampleCount                            int               `json:"sampleCount"`
+	TaskClass                              string            `json:"taskClass"`
+	Outcome                                string            `json:"outcome"`
+	AvailableParallelism                   int               `json:"availableParallelism"`
+	AvailableNonCompressedEstimateMinBytes *int64            `json:"availableNonCompressedEstimateMinBytes"`
+	MemoryPressureLevelMax                 *int              `json:"memoryPressureLevelMax"`
+	CompressorAvailableAll                 bool              `json:"compressorAvailableAll"`
+	CompressorPayloadPeakBytes             *int64            `json:"compressorPayloadPeakBytes"`
+	CPUUtilizationP95Percent               float64           `json:"cpuUtilizationP95Percent"`
+	DiskFreeMinBytes                       *int64            `json:"diskFreeMinBytes"`
+	SwapInsDelta                           int64             `json:"swapInsDelta"`
+	SwapOutsDelta                          int64             `json:"swapOutsDelta"`
+	SwapFreeMinBytes                       *int64            `json:"swapFreeMinBytes"`
+	HealthFailures                         int               `json:"healthFailures"`
+	Platform                               string            `json:"platform,omitempty"`
+	Capabilities                           []string          `json:"capabilities,omitempty"`
+	RequestedProfile                       string            `json:"requestedProfile,omitempty"`
+	ResolvedProfile                        string            `json:"resolvedProfile,omitempty"`
+	FallbackChain                          []string          `json:"fallbackChain,omitempty"`
+	Concurrency                            int               `json:"concurrency,omitempty"`
+	ConfigHash                             string            `json:"configHash,omitempty"`
+	RequestedCPU                           int               `json:"requestedCpu,omitempty"`
+	RequestedMemoryBytes                   int64             `json:"requestedMemoryBytes,omitempty"`
+	AllocatedCPU                           int               `json:"allocatedCpu,omitempty"`
+	AllocatedMemoryBytes                   int64             `json:"allocatedMemoryBytes,omitempty"`
+	ReservationWaitMilliseconds            int64             `json:"reservationWaitMilliseconds,omitempty"`
+	PeakOwnerCount                         int               `json:"peakOwnerCount,omitempty"`
+	BudgetOutcome                          string            `json:"budgetOutcome,omitempty"`
 }
 
 func delta(first, last *int64) int64 {
@@ -242,17 +261,28 @@ func (writer *EvidenceWriter) Finalize(taskClass policy.TaskClass, outcome strin
 		return EvidenceSummary{}, err
 	}
 
-	file, err := os.OpenFile(writer.summaryPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := os.CreateTemp(filepath.Dir(writer.summaryPath), ".summary-*.tmp")
 	if err != nil {
+		return EvidenceSummary{}, err
+	}
+	temporaryPath := file.Name()
+	defer func() { _ = os.Remove(temporaryPath) }()
+	if err = file.Chmod(0o600); err != nil {
+		_ = file.Close()
+
 		return EvidenceSummary{}, err
 	}
 
 	buffer := bufio.NewWriter(file)
 	_, writeError := buffer.Write(append(encoded, '\n'))
 	flushError := buffer.Flush()
+	syncError := file.Sync()
 	closeError := file.Close()
 
-	if err := errors.Join(writeError, flushError, closeError); err != nil {
+	if err := errors.Join(writeError, flushError, syncError, closeError); err != nil {
+		return EvidenceSummary{}, err
+	}
+	if err = os.Link(temporaryPath, writer.summaryPath); err != nil {
 		return EvidenceSummary{}, err
 	}
 

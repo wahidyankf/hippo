@@ -139,11 +139,12 @@ Error: reservation requires replanning: requested vector exceeds safe host capac
 ```
 
 Exit `78` means _replan_. HIPPO is not saying "busy, try later" — it is saying this request can never
-succeed on this host, so waiting would be pointless. A temporarily full budget is a different
-situation and gets exit `75`, which **is** worth retrying.
+succeed on this host, so waiting would be pointless. A FIFO deadline before launch is a different
+situation: it gets exit `75` plus a `never-started` receipt and may be requeued.
 
-That distinction matters when you script around HIPPO: `75` deserves a retry loop, `78` deserves a
-smaller request.
+That distinction matters when you script around HIPPO: retry `75` only when its receipt says the
+payload never started. A pressure-shed or emergency safety-stopped payload also uses `75` and needs
+operator or payload-specific recovery. Exit `78` deserves a smaller request.
 
 ## Step 7: watch the budget come back
 

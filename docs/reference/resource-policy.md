@@ -19,12 +19,12 @@ alongside the `fallbackChain` that produced it.
 
 ## Task classes
 
-| Class           | Strict? | Shed under critical pressure?                 |
-| --------------- | ------- | --------------------------------------------- |
-| `ephemeral`     | No      | Yes — selected first, newest owner first      |
-| `service`       | No      | Yes — only when no eligible ephemeral remains |
-| `transactional` | Yes     | **Never** after admission                     |
-| `release`       | Yes     | Not applicable — release commands only        |
+| Class           | Strict? | Shed under pressure?                                    |
+| --------------- | ------- | ------------------------------------------------------- |
+| `ephemeral`     | No      | Yes — selected first, newest owner first                |
+| `service`       | No      | Yes — only when no eligible ephemeral remains           |
+| `transactional` | Yes     | Only as the last resort at the schema-3 emergency floor |
+| `release`       | Yes     | Not applicable — release commands only                  |
 
 `transactional` and `release` are strict: they do not fall back to a safer profile. A misfit replans
 with exit `78` instead.
@@ -59,6 +59,24 @@ with exit `78` instead.
 The 5-minute lease wait is why a deferred owner can sit at the FIFO head for a long time before
 returning `75`. It is not a hang.
 
+## Schema-3 resource tiers
+
+| Tier       | Launch-time CPU | Launch-time memory | FIFO deadline |
+| ---------- | --------------- | ------------------ | ------------- |
+| `light`    | 1–2             | 1–2 GiB            | 30 minutes    |
+| `standard` | 2–4             | 3–6 GiB            | 90 minutes    |
+| `heavy`    | 4–8             | 8–16 GiB           | 4 hours       |
+
+The minimum is the admission floor. When the FIFO head fits, HIPPO grants the largest vector up to
+the tier maximum that is safe at that instant. The allocation is fixed for the payload lifetime, so
+a lighter period cannot silently enlarge an existing job and a pressured period cannot resize it
+underneath the build tool.
+
+The recommended workstation pool is 8 CPU and 16 GiB, with two base owners. A third owner is a burst
+slot, not guaranteed capacity: it opens only after the configured healthy-evidence gate and closes to
+new work whenever live pressure is not normal. All repositories may enqueue one plan at once; the
+pool deliberately admits only the safe subset and keeps the rest visible in FIFO order.
+
 ## Reservation capacity
 
 Reservation capacity in each dimension is:
@@ -66,7 +84,8 @@ Reservation capacity in each dimension is:
 - **CPU** — the host's available parallelism, minus one safety unit
 - **Memory** — effective memory, minus the resolved profile's memory reserve
 
-Optional schema-2 `maxCpu` and `maxMemoryMiB` caps tighten either dimension further.
+Optional schema-2, or required schema-3, `maxCpu` and `maxMemoryMiB` caps tighten either dimension
+further.
 
 Both dimensions must fit _together_, using checked subtraction, so integer overflow cannot turn an
 exhausted vector into an admission.
@@ -91,11 +110,19 @@ cpu=3 mem=7516192768
 An explicit `--reserve-cpu` / `--reserve-memory-mib` may be smaller than the automatic share but
 never below one CPU or 256 MiB.
 
+Under schema 3, explicit values must remain inside the chosen tier. Prefer the tier defaults unless a
+known tool needs a narrower fixed vector.
+
 ## Host pressure remains authoritative
 
 Fitting the reservation vector is necessary but not sufficient. After a vector fits, host pressure
 thresholds still govern. A host under critical pressure can shed an owner that was admitted
 legitimately.
+
+The recommended schema-3 emergency floor is 6 GiB available memory. Ordinary shedding protects
+transactional work. At the emergency floor, or equivalent critical non-storage pressure,
+transactional work becomes the last eligible victim after ephemeral and service work. HIPPO records
+an `emergency-safety-stop` receipt and never auto-retries that payload.
 
 ## Degraded admission on macOS
 

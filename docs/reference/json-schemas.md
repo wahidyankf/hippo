@@ -4,15 +4,18 @@ Every JSON document HIPPO emits carries a `schemaVersion`. Byte values are integ
 are UTC RFC 3339 with optional fractional seconds, and an unavailable optional reading is `null` or
 omitted according to that field's compatibility contract. Field _order_ is not part of any contract.
 
-| Document                     | Schema | Produced by                 |
-| ---------------------------- | ------ | --------------------------- |
-| Version                      | 1      | `version --json`            |
-| Monitor transition           | 1      | `monitor --json`            |
-| Status                       | 4      | `status --json`             |
-| Host sample (development)    | 3      | raw development evidence    |
-| Host sample (release)        | 3      | `release monitor --output`  |
-| Development lifetime summary | 4      | `<stream>.summary.json`     |
-| Release summary              | 5      | `release monitor --summary` |
+| Document                     | Schema | Produced by                     |
+| ---------------------------- | ------ | ------------------------------- |
+| Version                      | 1      | `version --json`                |
+| Monitor transition           | 1      | `monitor --json`                |
+| Status                       | 5      | `status --json`, `watch --json` |
+| History envelope             | 1      | `history --json`                |
+| Run identity                 | 1      | `hippo.identity.json`           |
+| Safety receipt               | 1      | `receipts/*.json`               |
+| Host sample (development)    | 3      | raw development evidence        |
+| Host sample (release)        | 3      | `release monitor --output`      |
+| Development lifetime summary | 5      | `<stream>.summary.json`         |
+| Release summary              | 5      | `release monitor --summary`     |
 
 `release assess` accepts retained schema 2–5 release summaries.
 
@@ -45,8 +48,8 @@ One object per line, one line per state or profile transition.
 
 ## `status --json`
 
-Schema 4. The latest host sample at the top level, plus the current assessment, the resolved
-profile, privacy-safe `coordination` totals, and the `configHash`.
+Schema 5. The latest host sample at the top level, plus the current assessment, resolved profile,
+privacy-safe `coordination` rows and totals, owner-promotion decision, and `configHash`.
 
 ```json
 {
@@ -73,7 +76,7 @@ profile, privacy-safe `coordination` totals, and the `configHash`.
   "swapUsedBytes": 9621859205,
   "swapFreeBytes": 1115559034,
   "swapState": "active",
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "resource": {
     "compressorGrowthWindowBytes": 0,
     "swapOutWindowBytes": 0,
@@ -95,7 +98,7 @@ profile, privacy-safe `coordination` totals, and the `configHash`.
     "retryable": false
   },
   "coordination": {
-    "schemaVersion": 4,
+    "schemaVersion": 5,
     "mode": "reservation",
     "capacity": { "cpu": 11, "memoryBytes": 30064771072 },
     "allocated": { "cpu": 2, "memoryBytes": 1073741824 },
@@ -104,7 +107,34 @@ profile, privacy-safe `coordination` totals, and the `configHash`.
     "waitingOwners": 0,
     "ephemeral": 1,
     "service": 0,
-    "transactional": 0
+    "transactional": 0,
+    "owners": [
+      {
+        "runId": "21e8b2...",
+        "state": "owner",
+        "class": "ephemeral",
+        "profile": "balanced",
+        "source": "hippo",
+        "tags": { "checkout": "worktree", "plan": "maximize-hippo" },
+        "tier": "standard",
+        "requested": { "cpu": 2, "memoryBytes": 3221225472 },
+        "allocated": { "cpu": 4, "memoryBytes": 6442450944 },
+        "minimum": { "cpu": 2, "memoryBytes": 3221225472 },
+        "maximum": { "cpu": 4, "memoryBytes": 6442450944 },
+        "registeredAt": "2026-09-17T04:01:00Z",
+        "deadline": "2026-09-17T05:31:00Z"
+      }
+    ],
+    "waiters": []
+  },
+  "promotion": {
+    "eligible": false,
+    "qualifyingRuns": 12,
+    "sources": 3,
+    "reason": "insufficient-overlap-runs",
+    "baseOwners": 2,
+    "maximumOwners": 3,
+    "effectiveOwners": 2
   },
   "configHash": "3e8ef8adada2d85bbb2750b80e25de0828f35bc4d032a58dd263522e02cf020b"
 }
@@ -116,6 +146,11 @@ not a corrupt one.
 **Coordination corruption is an error, never a synthetic zero-total success.** If the reservation
 marker, lock, or ledger cannot be decoded, `status --json` returns an error rather than reporting
 totals it cannot substantiate.
+
+`owners` and `waiters` are safe operational rows. They contain opaque run IDs, labels, class,
+profile, tier, requested/allocated vectors, tier minimum/maximum, registration time, and deadline—never commands, arguments, working
+directories, or repository paths. `legacyEntries` counts live schema-2 records without metadata;
+schema-3 launches refuse to mix with them until they drain.
 
 ### `coordination.abandonedProcessGroups`
 
@@ -151,14 +186,36 @@ raw record. Schema 3.
 
 The Linux pressure group appears only where the host supplies it.
 
+## Run identity
+
+A repository may track this small, customizable document:
+
+```json
+{
+  "schemaVersion": 1,
+  "source": "hippo",
+  "tags": { "group": "ose-projects" }
+}
+```
+
+`source` is a lowercase safe token. There may be at most eight tag pairs and the encoded document
+may not exceed 512 bytes. Unknown fields, duplicate JSON fields, path-like values, and invalid
+labels are rejected. Invocation `--source`/`--tag` overrides use the same validation.
+
 ## Development lifetime summary
 
-Schema 4. The aggregate covers **every** sample taken during the session, even after older raw chunks
+Schema 5. The aggregate covers **every** sample taken during the session, even after older raw chunks
 have rotated away.
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
+  "runId": "development-transactional-1788757259105-13633",
+  "startedAt": "2026-09-17T04:01:00Z",
+  "finishedAt": "2026-09-17T04:03:20Z",
+  "source": "hippo",
+  "tags": { "checkout": "worktree", "plan": "maximize-hippo" },
+  "resourceTier": "standard",
   "sampleCount": 3,
   "taskClass": "transactional",
   "outcome": "passed",
@@ -192,15 +249,60 @@ have rotated away.
 
 | Summary group       | Fields                                                                                                                                                                                                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity and result | `schemaVersion`, `sampleCount`, `taskClass`, `outcome`                                                                                                                                                                                                                    |
+| Identity and result | `schemaVersion`, `runId`, `startedAt`, `finishedAt`, `source`, `tags`, `resourceTier`, `sampleCount`, `taskClass`, `outcome`                                                                                                                                              |
 | Capacity aggregate  | `availableParallelism`, `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `compressorAvailableAll`, `compressorPayloadPeakBytes`, `cpuUtilizationP95Percent`, `diskFreeMinBytes`, `swapInsDelta`, `swapOutsDelta`, `swapFreeMinBytes`, `healthFailures` |
 | Source platform     | `platform`, `capabilities`                                                                                                                                                                                                                                                |
 | Resolved policy     | `requestedProfile`, `resolvedProfile`, `fallbackChain`, `concurrency`, `configHash`                                                                                                                                                                                       |
 | Reservation         | `requestedCpu`, `requestedMemoryBytes`, `allocatedCpu`, `allocatedMemoryBytes`, `reservationWaitMilliseconds`, `peakOwnerCount`, `budgetOutcome`                                                                                                                          |
 
-Schema-3 fields keep their meanings; the reservation group is the schema-4 addition.
+Schema-4 fields keep their meanings; labels and timestamps are the schema-5 addition.
 `peakOwnerCount` is raised atomically by every admission event during the child's lifetime, so an
 owner that was admitted and released between host-sampling ticks is still counted.
+
+## `history --json`
+
+```json
+{
+  "schemaVersion": 1,
+  "since": "30d",
+  "rows": [
+    {
+      "schemaVersion": 5,
+      "runId": "development-transactional-1788757259105-13633",
+      "finishedAt": "2026-09-17T04:03:20Z",
+      "source": "hippo",
+      "resourceTier": "standard",
+      "taskClass": "transactional",
+      "outcome": "passed"
+    }
+  ]
+}
+```
+
+History rows are the queryable safe subset of lifetime summaries. Under the 128 MiB history cap,
+the oldest daily archive is first aggregated by source, exact tags, class, tier, and outcome;
+`aggregateCount` then reports how many original runs the row represents. Aggregates never qualify
+for owner promotion.
+
+## Safety receipt
+
+```json
+{
+  "schemaVersion": 1,
+  "runId": "21e8b2...",
+  "recordedAt": "2026-09-17T04:03:20Z",
+  "state": "never-started",
+  "reason": "admission-deadline",
+  "source": "hippo",
+  "tags": { "plan": "maximize-hippo" },
+  "resourceTier": "standard",
+  "taskClass": "ephemeral"
+}
+```
+
+`state` distinguishes `never-started` queue expiry/cancellation from `started-safety-stop`
+emergency pressure. Receipts contain no command or path and are retained for 30 days under a
+128 MiB cap.
 
 ## Release raw record
 

@@ -25,11 +25,6 @@ schema: ose/repo-config/v2
 visibility: public
 
 scan:
-  # No `worktrees` entry, deliberately. This repository's worktrees live beside
-  # the checkout rather than inside it, because `go build` walks up out of a
-  # worktree and takes the outermost `.git` directory. An exclusion here would
-  # invite the layout that breaks it. See
-  # repo-governance/conventions/worktree-location.md.
   exclude-directories:
     - .git
     - .husky
@@ -38,6 +33,7 @@ scan:
     - coverage
     - local-tmp
     - generated-reports
+    - worktrees
 
 harness-parity:
   canonical:

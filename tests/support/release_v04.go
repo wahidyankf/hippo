@@ -913,7 +913,7 @@ func writeUnsafeReleaseArchiveV04(path string, typeFlag byte, linkName string) (
 	defer func() { returnError = errors.Join(returnError, archive.Close()) }()
 
 	return archive.WriteHeader(&tar.Header{
-		Name: "hippo", Mode: 0o755, Typeflag: typeFlag, Linkname: linkName, Format: tar.FormatPAX,
+		Name: hippoFixtureName, Mode: 0o755, Typeflag: typeFlag, Linkname: linkName, Format: tar.FormatPAX,
 	})
 }
 

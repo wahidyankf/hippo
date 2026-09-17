@@ -6,11 +6,11 @@ find out why.
 ## Look at the ledger first
 
 ```sh
-hippo status --json --disk-path . | grep -o '"coordination":.*'
+hippo status --json --disk-path . | jq '{coordination, promotion}'
 ```
 
 ```console
-"coordination":{"schemaVersion":4,"mode":"reservation","capacity":{"cpu":11,"memoryBytes":30064771072},"allocated":{"cpu":2,"memoryBytes":1073741824},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":1,"waitingOwners":0,"ephemeral":1,"service":0,"transactional":0}
+{"coordination":{"schemaVersion":5,"mode":"reservation","activeOwners":1,"waitingOwners":7,"owners":[{"runId":"21e8...","source":"hippo","tier":"standard"}],"waiters":[{"runId":"31ad...","position":1,"source":"rhino","tier":"heavy"}]},"promotion":{"baseOwners":2,"maximumOwners":3,"effectiveOwners":2,"reason":"insufficient-overlap-runs"}}
 ```
 
 Three questions this answers:
@@ -18,6 +18,8 @@ Three questions this answers:
 - **Is anything holding capacity?** `activeOwners` and `allocated`.
 - **Is anything queued behind it?** `waitingOwners` and `waiting`.
 - **Which mode is in force?** `mode`.
+- **Why is owner three closed?** `promotion.reason` and `effectiveOwners`.
+- **Which repository is next?** Privacy-safe `waiters[].source` and `position`.
 
 All zeroes means an idle epoch, not a broken one.
 
@@ -44,13 +46,25 @@ development-service-1788757256450-12687.summary.json
 development-transactional-1788757259105-13633.jsonl
 development-transactional-1788757259105-13633.summary.json
 reservation-identities
+owner-metadata
+raw
+history
+receipts
 ```
 
 Streams are named `development-<class>-<epochMillis>-<pid>`.
 
 ## Read a lifetime summary
 
-The summary is the useful file. It covers the whole session even after older raw chunks rotated away.
+Prefer the public history command. It covers current summaries and daily gzip archives without
+requiring knowledge of state-root filenames:
+
+```sh
+hippo history --since 7d --source hippo --tag checkout=worktree
+hippo history --since 30d --resource-tier heavy --outcome pressure-shed --json
+```
+
+For a same-day run, the summary file covers the whole session even after older raw chunks rotated.
 
 ```sh
 cat "$ROOT/development-transactional-1788757259105-13633.summary.json"
@@ -58,7 +72,11 @@ cat "$ROOT/development-transactional-1788757259105-13633.summary.json"
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
+  "runId": "development-transactional-1788757259105-13633",
+  "source": "hippo",
+  "tags": { "checkout": "worktree" },
+  "resourceTier": "standard",
   "sampleCount": 3,
   "taskClass": "transactional",
   "outcome": "passed",
@@ -89,8 +107,13 @@ What to look at:
   the host could not support the profile you requested.
 - **`outcome`** and **`budgetOutcome`** — how the session ended.
 
-Raw `.jsonl` chunks hold one host sample per line for finer-grained analysis; the summary is complete
-without them.
+Same-day raw `.jsonl` chunks hold one host sample per line for finer-grained analysis. Prior-day raw
+streams are gzip-compressed under `raw/`; use `gzip -dc`. Prior-day summaries are under
+`history/YYYY-MM-DD.jsonl.gz`. The summary/history view is complete without raw samples.
+
+Safety receipts under `receipts/` answer the operationally important question after exit `75`:
+`never-started` means no payload launched; `started-safety-stop` means emergency pressure stopped a
+running payload. Never blindly retry the latter.
 
 ## Investigate an abandoned process group
 

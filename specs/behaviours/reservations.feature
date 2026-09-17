@@ -167,7 +167,7 @@ Feature: Shared vector reservations
   Scenario: Shared-root contention defers instead of failing admitted work
     Given a peer holding the shared coordination lock while a guard activates and supervises its child
     When the guard activates its reservation and then samples through the held lock
-    Then activation returns the retryable deferral exit and supervision keeps its healthy child
+    Then activation returns exit 75 after owned cleanup and later observation contention keeps healthy work running
 
   @e2e-exempt
   Scenario: Owner cancellation remains bounded when release coordination is held
@@ -335,10 +335,17 @@ Feature: Shared vector reservations
     Then the child is reaped and the guard returns storage-blocked exit 73 before release
 
   @e2e-exempt
-  Scenario: Transactional owners are never shed after admission
+  Scenario: Transactional owners are protected during ordinary shedding
     Given only transactional owners remain under critical pressure
     When a pressure victim is elected atomically
     Then no victim is selected and new admission remains blocked
+
+  @e2e-exempt
+  Scenario: Transactional owners are the final emergency victim
+    Given transactional service and ephemeral owners at the emergency memory floor
+    When emergency pressure victims are elected atomically
+    Then ephemeral and service owners are selected before transactional work
+    And the transactional stop records a started safety receipt without automatic retry
 
   Scenario: Schema two configuration preserves schema one compatibility
     Given valid schema one and schema two local configurations
@@ -428,28 +435,28 @@ Feature: Shared vector reservations
     When status and another admission inspect that root
     Then both fail closed without recreating or overbooking accounting
 
-  Scenario: Status and development summaries expose schema four reservation totals
+  Scenario: Status and development summaries expose schema five reservation totals
     Given privacy-safe reservation and development evidence
     When status and the lifetime summary are encoded
-    Then schema four reports requested allocated waited and peak totals without private inputs
+    Then schema five reports requested allocated waited and peak totals without private inputs
 
   @e2e-exempt
   Scenario: Status rejects overflowing aggregate waiter demand
     Given individually valid waiters whose CPU or memory demand overflows aggregate arithmetic
-    When schema four reservation status aggregates the queued demand
+    When schema five reservation status aggregates the queued demand
     Then status fails closed with a privacy-safe coordination error
 
   @e2e-exempt
   Scenario: Development summaries retain the lifetime peak owner count
     Given a guarded child whose concurrent owner count rises after admission
     When reservation totals are sampled throughout supervision
-    Then the schema four summary reports the highest observed owner count
+    Then the schema five summary reports the highest observed owner count
 
   @e2e-exempt
   Scenario: Development summaries retain owners between host samples
     Given a guarded child with an overlapping owner shorter than one host sampling interval
     When the overlapping reservation is admitted and released during supervision
-    Then the schema four summary includes that complete short-lived overlap
+    Then the schema five summary includes that complete short-lived overlap
 
   @e2e-exempt
   Scenario: Reservation protocol files survive evidence retention

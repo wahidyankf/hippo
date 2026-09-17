@@ -19,6 +19,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 # same `pre-push` surface that dispatches this script, so the push runs it
 # either way; calling it from inside a gate would make this file re-enter the
 # dispatcher that invoked it.
+./scripts/check-worktree-layout.sh
 ./scripts/format-check.sh
 go test -run '^$' ./...
 go tool golangci-lint run

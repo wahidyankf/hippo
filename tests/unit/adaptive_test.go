@@ -113,7 +113,7 @@ func writeConfig(t *testing.T, content string) string {
 	return path
 }
 
-func TestStrictLocalConfiguration(t *testing.T) { //nolint:cyclop,gocyclo // The strict table intentionally keeps all schema and precedence cases together.
+func TestStrictLocalConfiguration(t *testing.T) { //nolint:cyclop,gocyclo,funlen // The strict table intentionally keeps all schema and precedence cases together.
 	valid := writeConfig(t, `{"schemaVersion":1,"defaultProfile":"local","profiles":{"local":{"extends":"constrained","fallback":"minimal","strict":true,"maxConcurrency":1,"maxCpuUtilizationPercent":90}}}`)
 	loaded, err := resourceconfig.Load(valid, true)
 	if err != nil ||
@@ -137,6 +137,35 @@ func TestStrictLocalConfiguration(t *testing.T) { //nolint:cyclop,gocyclo // The
 	if err != nil || reservationDefaults.Coordination.Mode != "reservation" || reservationDefaults.Coordination.MaxActiveOwners != 20 {
 		t.Fatalf("schema 2 reservation defaults failed: %+v %v", reservationDefaults, err)
 	}
+	schemaThree, err := resourceconfig.Load(writeConfig(t, `{
+  "schemaVersion": 3,
+  "coordination": {
+    "mode": "reservation",
+    "maxCpu": 8,
+    "maxMemoryMiB": 16384,
+    "baseActiveOwners": 2,
+    "maxActiveOwners": 3,
+    "promotion": {
+      "completedRuns": 25,
+      "minimumSources": 3,
+      "minimumAvailableMemoryMiB": 10240,
+      "maximumCpuP95Percent": 75
+    },
+    "emergencyAvailableMemoryMiB": 6144,
+    "tiers": {
+      "light": {"minimumCpu": 1, "maximumCpu": 2, "minimumMemoryMiB": 1024, "maximumMemoryMiB": 2048, "queueDeadline": "30m"},
+      "standard": {"minimumCpu": 2, "maximumCpu": 4, "minimumMemoryMiB": 3072, "maximumMemoryMiB": 6144, "queueDeadline": "90m"},
+      "heavy": {"minimumCpu": 4, "maximumCpu": 8, "minimumMemoryMiB": 8192, "maximumMemoryMiB": 16384, "queueDeadline": "4h"}
+    }
+  }
+}`), true)
+	if err != nil || schemaThree.Coordination.SchemaVersion != 3 || schemaThree.Coordination.BaseActiveOwners != 2 ||
+		schemaThree.Coordination.MaxActiveOwners != 3 || schemaThree.Coordination.Promotion.CompletedRuns != 25 ||
+		schemaThree.Coordination.Tiers["heavy"].Maximum.CPU != 8 ||
+		schemaThree.Coordination.Tiers["standard"].QueueDeadline != 90*time.Minute ||
+		schemaThree.Coordination.EmergencyAvailableMemoryBytes != 6*policy.GiB {
+		t.Fatalf("schema 3 adaptive config failed: %+v %v", schemaThree, err)
+	}
 
 	sharedParent := writeConfig(t, `{"schemaVersion":1,"profiles":{"one":{"extends":"constrained"},"two":{"extends":"constrained"}}}`)
 	if _, err := resourceconfig.Load(sharedParent, true); err != nil {
@@ -159,12 +188,26 @@ func TestStrictLocalConfiguration(t *testing.T) { //nolint:cyclop,gocyclo // The
 		`{"schemaVersion":1,]}`,
 		`{"schemaVersion":1,"unknown":[{"value":]}`,
 		`{"schemaVersion":3}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":3,"maxActiveOwners":2}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":9223372036854775807,"maximumCpuP95Percent":75}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":1}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":9223372036854775807}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":6144,"tiers":{}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":6144,"tiers":{"light":{"minimumCpu":1,"maximumCpu":2,"minimumMemoryMiB":9223372036854775807,"maximumMemoryMiB":2048,"queueDeadline":"30m"}}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":6144,"tiers":{"light":{"minimumCpu":1,"maximumCpu":2,"minimumMemoryMiB":1024,"maximumMemoryMiB":9223372036854775807,"queueDeadline":"30m"}}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":6144,"tiers":{"light":{"minimumCpu":1,"maximumCpu":2,"minimumMemoryMiB":1024,"maximumMemoryMiB":2048,"queueDeadline":"never"}}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":2,"maxActiveOwners":3,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":6144,"tiers":{"light":{"minimumCpu":1,"maximumCpu":9,"minimumMemoryMiB":1024,"maximumMemoryMiB":2048,"queueDeadline":"30m"}}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"baseActiveOwners":1,"maxActiveOwners":1,"promotion":{"completedRuns":1,"minimumSources":1,"minimumAvailableMemoryMiB":10240,"maximumCpuP95Percent":75},"emergencyAvailableMemoryMiB":6144,"tiers":{"light":{"minimumCpu":1,"maximumCpu":1,"minimumMemoryMiB":256,"maximumMemoryMiB":256,"queueDeadline":"1s"},"standard":{"minimumCpu":1,"maximumCpu":1,"minimumMemoryMiB":256,"maximumMemoryMiB":256,"queueDeadline":"1s"},"heavy":{"minimumCpu":1,"maximumCpu":1,"minimumMemoryMiB":256,"maximumMemoryMiB":256,"queueDeadline":"1s"},"extra":{"minimumCpu":1,"maximumCpu":1,"minimumMemoryMiB":256,"maximumMemoryMiB":256,"queueDeadline":"1s"}}}}`,
+		`{"schemaVersion":3,"coordination":{"maxCpu":8,"maxMemoryMiB":16384,"tiers":{"heavy":{"minimumCpu":8,"maximumCpu":4,"minimumMemoryMiB":8192,"maximumMemoryMiB":16384,"queueDeadline":"4h"}}}}`,
 		`{"schemaVersion":1,"coordination":{"mode":"reservation"}}`,
 		`{"schemaVersion":2,"coordination":{"mode":"exclusive"}}`,
 		`{"schemaVersion":2,"coordination":{"maxCpu":-1}}`,
 		`{"schemaVersion":2,"coordination":{"maxMemoryMiB":-1}}`,
 		`{"schemaVersion":2,"coordination":{"maxActiveOwners":-1}}`,
 		`{"schemaVersion":2,"coordination":{"maxMemoryMiB":255}}`,
+		`{"schemaVersion":2,"coordination":{"maxMemoryMiB":9223372036854775807}}`,
 		`{"schemaVersion":2,"coordination":{"maxActiveOwners":21}}`,
 		`{"schemaVersion":2,"coordination":{"automaticOwnerShares":{"unknown":2}}}`,
 		`{"schemaVersion":2,"coordination":{"automaticOwnerShares":{"balanced":0}}}`,

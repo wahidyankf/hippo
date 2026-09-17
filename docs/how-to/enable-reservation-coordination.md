@@ -56,6 +56,29 @@ hippo status --json --disk-path . | grep -o '"coordination":.*'
 Exclusive heavy work reports its holder directly in the deferral message, including the PID and task
 class.
 
+## Upgrade to adaptive schema 3
+
+Upgrade every consumer binary and wrapper before changing the machine-local configuration. Keep
+schema 2 active until `hippo status --json` reports no owners or waiters with `legacy: true`, then
+atomically install the schema-3 policy. A schema-3 launch refuses to mix with legacy ledger entries.
+
+Schema 3 requires an identity and a resource tier:
+
+```json
+{
+  "schemaVersion": 1,
+  "source": "my-repository",
+  "tags": { "group": "my-projects" }
+}
+```
+
+```sh
+hippo run --resource-tier standard --tag checkout=worktree -- make test
+```
+
+The complete recommended 8-CPU/16-GiB configuration, promotion gate, emergency floor, and tier
+vectors are in [Configuration](../reference/configuration.md#adaptive-schema-3).
+
 ## Tighten the budget
 
 The defaults give `balanced`, `constrained`, and `minimal` profiles four, two, and one automatic
@@ -110,15 +133,15 @@ Asking for more than the host can safely provide returns `78` immediately rather
 
 ## Handle a full budget
 
-A temporarily exhausted budget returns `75` after a bounded FIFO wait of five minutes. To retry
-automatically instead:
+A temporarily exhausted schema-2 budget returns `75` after its bounded FIFO wait. To wait longer
+before the single payload launch:
 
 ```sh
 hippo run --wait-for-admission 10m -- make test
 ```
 
-This suits idempotent build and test commands. A retry can re-run a payload that had already started,
-so keep the default of `0` for anything that is not safe to repeat.
+This creates one FIFO waiter and launches the payload at most once. Schema 3 rejects this flag and
+uses the selected tier's 30-minute, 90-minute, or four-hour deadline instead.
 
 ## Related
 

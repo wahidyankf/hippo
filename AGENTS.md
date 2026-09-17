@@ -40,7 +40,7 @@ Workflow storage stays inside the free allowance: [GitHub Actions storage](repo-
 
 ## Version Control
 
-Only `main` persists. Work reaches it through [worktree to pull request](repo-governance/workflows/worktree-to-pull-request.md), under the [integration path](repo-governance/conventions/integration-path.md), from a worktree beside this checkout rather than inside it — [worktree location](repo-governance/conventions/worktree-location.md).
+Only `main` persists. Work reaches it through [worktree to pull request](repo-governance/workflows/worktree-to-pull-request.md), under the [integration path](repo-governance/conventions/integration-path.md), from `{repository location}/worktrees/<task>`—never a sibling `*-worktrees/` path—per [worktree location](repo-governance/conventions/worktree-location.md).
 
 [Thematic commits](repo-governance/conventions/thematic-commits.md), one [delivery boundary](repo-governance/conventions/pull-request-boundaries.md) per pull request, a [body](repo-governance/conventions/pull-request-body.md) a reviewer can use, and [merge preconditions](repo-governance/conventions/pull-request-merge.md) that hold every time.
 

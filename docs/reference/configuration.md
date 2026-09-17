@@ -17,13 +17,71 @@ path `hippo.local.json`.
 
 ## Schema versions
 
-| `schemaVersion` | Coordination mode | Notes                                                         |
-| --------------- | ----------------- | ------------------------------------------------------------- |
-| `1`             | `exclusive`       | Retains v0.3.1 semantics. This is also the no-config default. |
-| `2`             | `reservation`     | Shared CPU-and-memory reservation ledger                      |
+| `schemaVersion` | Coordination mode | Notes                                                                  |
+| --------------- | ----------------- | ---------------------------------------------------------------------- |
+| `1`             | `exclusive`       | Retains v0.3.1 semantics. This is also the no-config default.          |
+| `2`             | `reservation`     | Shared CPU-and-memory reservation ledger                               |
+| `3`             | `reservation`     | Adaptive tiers, labeled FIFO admission, and evidence-gated owner burst |
 
 Retaining a schema-1 file is a deliberate choice of the older mode, not an oversight. Any other
 `schemaVersion` is rejected.
+
+## Adaptive schema 3
+
+Schema 3 is intentionally explicit. All pool, owner, promotion, emergency, and tier fields are
+required so a partially copied machine policy fails closed.
+
+```json
+{
+  "schemaVersion": 3,
+  "coordination": {
+    "mode": "reservation",
+    "maxCpu": 8,
+    "maxMemoryMiB": 16384,
+    "baseActiveOwners": 2,
+    "maxActiveOwners": 3,
+    "emergencyAvailableMemoryMiB": 6144,
+    "promotion": {
+      "completedRuns": 25,
+      "minimumSources": 3,
+      "minimumAvailableMemoryMiB": 10240,
+      "maximumCpuP95Percent": 75
+    },
+    "tiers": {
+      "light": {
+        "minimumCpu": 1,
+        "maximumCpu": 2,
+        "minimumMemoryMiB": 1024,
+        "maximumMemoryMiB": 2048,
+        "queueDeadline": "30m"
+      },
+      "standard": {
+        "minimumCpu": 2,
+        "maximumCpu": 4,
+        "minimumMemoryMiB": 3072,
+        "maximumMemoryMiB": 6144,
+        "queueDeadline": "90m"
+      },
+      "heavy": {
+        "minimumCpu": 4,
+        "maximumCpu": 8,
+        "minimumMemoryMiB": 8192,
+        "maximumMemoryMiB": 16384,
+        "queueDeadline": "4h"
+      }
+    }
+  }
+}
+```
+
+The third owner opens only when the newest 25 overlapping completed runs include at least three
+sources and every run stayed at or above 10 GiB available memory, at or below 75% CPU p95, at normal
+memory pressure, without swap-out or shedding. Current non-normal pressure closes that optional slot
+immediately for new admissions; it does not kill an already admitted owner.
+
+Every schema-3 `run` must select `--resource-tier`. Queue deadlines come from the tier, so combining
+schema 3 with `--wait-for-admission` is rejected. Upgrade every consumer first and let schema-2
+owners and waiters drain before activating schema 3; a schema-3 launch refuses a mixed legacy ledger.
 
 ## Minimal reservation configuration
 
@@ -48,6 +106,10 @@ Retaining a schema-1 file is a deliberate choice of the older mode, not an overs
 
 These fields may only _tighten_ safety. `maxMemoryMiB` below 256 and `maxActiveOwners` above 20 are
 rejected at load time with exit `78`, so a local file cannot weaken the compiled floors.
+
+Schema 3 additionally requires positive `maxCpu`, `maxMemoryMiB`, `baseActiveOwners`, and
+`maxActiveOwners`; exactly the `light`, `standard`, and `heavy` tiers; a positive deadline per tier;
+and minimum/maximum vectors that fit inside the pool.
 
 ```console
 $ hippo status --config weakened.json --disk-path .

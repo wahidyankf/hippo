@@ -18,7 +18,10 @@ const (
 
 func atomicWriteTemporary(name string) bool {
 	return strings.HasPrefix(name, ".coordination-mode-") && strings.HasSuffix(name, ".tmp") ||
-		strings.HasPrefix(name, ".reservations-") && strings.HasSuffix(name, ".tmp")
+		strings.HasPrefix(name, ".reservations-") && strings.HasSuffix(name, ".tmp") ||
+		strings.HasPrefix(name, ".summary-") && strings.HasSuffix(name, ".tmp") ||
+		strings.HasPrefix(name, ".history-") && strings.HasSuffix(name, ".tmp") ||
+		strings.HasPrefix(name, ".owner-metadata-") && strings.HasSuffix(name, ".tmp")
 }
 
 func runtimeInternalFile(name string) bool {
@@ -101,6 +104,13 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error { //nol
 	preserved := map[string]bool{}
 	for _, path := range preserve {
 		preserved[path] = true
+	}
+	if err = compactLocked(root, now, active, preserved); err != nil {
+		return err
+	}
+	entries, err = os.ReadDir(root)
+	if err != nil {
+		return err
 	}
 
 	retained := []retainedFile{}

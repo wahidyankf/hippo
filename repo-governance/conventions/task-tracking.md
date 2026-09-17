@@ -4,7 +4,8 @@ Task state lives in the repository, not in a session. A list held only in a conv
 
 ## Requirements
 
-- Break work into items small enough that each has one visible outcome. "Fix the guard" is not an item; "prove the exit-75 retry path in the integration adapter" is.
+- Break work into items small enough that each has one visible outcome. "Fix the guard" is not an
+  item; "prove the never-started exit-75 receipt in the integration adapter" is.
 - Mark an item complete only when it is fully done and verified. A partially done item left ticked is worse than one left open, because it removes the reason anyone would look again.
 - When an item turns out to be blocked, leave it open and record what blocks it. A blocked item that is quietly closed is a decision nobody made.
 - Keep the list current as the work proceeds rather than at the end. The value is in the state during the work, not in the record afterwards.

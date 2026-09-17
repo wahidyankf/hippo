@@ -11,10 +11,8 @@ What stays out of history, and why each entry is there.
 - **`local-tmp/`.** Scratch. Nothing here is authoritative and nothing here is a plan.
 - **`generated-reports/`.** Requested audits and reports. Useful, dated, and not a specification — a report is never cited as the reason a rule exists.
 - **`node_modules/`.** Locked by `package-lock.json`, restored by `npm ci`.
-
-## Not Ignored, Deliberately
-
-`worktrees/` is **not** an ignore entry here, and adding one would be a defect. This repository's worktrees live beside the checkout, and an ignore entry inside it would invite the layout that breaks `go build` — see [worktree location](worktree-location.md).
+- **`worktrees/`.** Every registered task checkout is contained here and remains outside the primary checkout's Git
+  status and repository scans. See [worktree location](worktree-location.md).
 
 ## Verifying
 

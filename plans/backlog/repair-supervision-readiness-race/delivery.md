@@ -7,7 +7,7 @@
 
 Repository path: `~/ose-projects/hippo/`
 
-Worktree path: `~/ose-projects/hippo-worktrees/repair-supervision-readiness-race/`
+Worktree path: `~/ose-projects/hippo/worktrees/repair-supervision-readiness-race/`
 
 Delivery mode: `worktree-to-pr`
 
@@ -21,9 +21,9 @@ test "$(git branch --show-current)" = main
 test -z "$(git status --porcelain)"
 git fetch origin --prune
 git merge --ff-only origin/main
-git worktree add ../hippo-worktrees/repair-supervision-readiness-race \
+git worktree add worktrees/repair-supervision-readiness-race \
   -b worktree/repair-supervision-readiness-race origin/main
-cd ../hippo-worktrees/repair-supervision-readiness-race
+cd worktrees/repair-supervision-readiness-race
 npm ci
 ```
 

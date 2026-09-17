@@ -112,28 +112,28 @@ Feature: Guarded process execution
     Then the degraded child starts and is terminated with exit 75
 
   @e2e-exempt
-  Scenario: A caller that waits for admission rides out a deferral
+  Scenario: A single registered waiter rides out exhausted capacity
     Given a shared root that defers one owner before capacity frees
     When that owner runs with a budget to wait for admission
-    Then it retries the deferral and reports the admitted child's own exit code
+    Then it stays registered once and reports the admitted child's own exit code
 
   @e2e-exempt
   Scenario: Waiting for admission still surrenders when the budget is spent
     Given a shared root whose capacity never frees
     When an owner waits for admission within a bounded budget
-    Then it stops retrying and reports the deferral as exit 75
+    Then it stops waiting before launch and reports the deferral as exit 75
 
   @e2e-exempt
-  Scenario: A caller waiting for admission reports the deferral once
+  Scenario: A caller waiting for admission reports one queue and deferral receipt
     Given a shared root whose capacity never frees
-    When an owner waits for admission across many attempts
-    Then the deferral is reported once and the surrender names every attempt
+    When an owner waits for admission across many polls
+    Then the queue and final deferral are each reported once without launching
 
   @e2e-exempt
-  Scenario: Quieting the deferral leaves every other notice audible
+  Scenario: Admission waiting leaves every later safety notice audible
     Given a shared root that frees capacity onto exhausted storage
-    When an owner waits for admission across many attempts
-    Then the storage notice is still reported and the deferral only once
+    When an owner waits for admission across many polls
+    Then the storage notice is reported after admission without a deferral
 
   @e2e-exempt
   Scenario: Waiting for admission never retries a decision that is not a deferral

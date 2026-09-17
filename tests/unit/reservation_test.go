@@ -129,6 +129,74 @@ func TestAutomaticAndExplicitReservationPlanning(t *testing.T) {
 	}
 }
 
+func TestTierReservationPlanningAndIdleBurst(t *testing.T) {
+	tiers := guard.DefaultResourceTiers()
+	settings := reservationPolicy()
+	settings.MaxCPU = 8
+	settings.MaxMemoryBytes = 16 * policy.GiB
+	settings.Tiers = tiers
+	sample := reservationSample()
+	resolution := reservationResolution("balanced")
+
+	for name, expected := range map[string]struct {
+		minimum guard.ReservationVector
+		maximum guard.ReservationVector
+		wait    time.Duration
+	}{
+		"light": {
+			minimum: guard.ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+			maximum: guard.ReservationVector{CPU: 2, MemoryBytes: 2 * policy.GiB},
+			wait:    30 * time.Minute,
+		},
+		"standard": {
+			minimum: guard.ReservationVector{CPU: 2, MemoryBytes: 3 * policy.GiB},
+			maximum: guard.ReservationVector{CPU: 4, MemoryBytes: 6 * policy.GiB},
+			wait:    90 * time.Minute,
+		},
+		"heavy": {
+			minimum: guard.ReservationVector{CPU: 4, MemoryBytes: 8 * policy.GiB},
+			maximum: guard.ReservationVector{CPU: 8, MemoryBytes: 16 * policy.GiB},
+			wait:    4 * time.Hour,
+		},
+	} {
+		plan, wait, err := guard.PlanTierReservation(sample, resolution, settings, name, 0, 0)
+		if err != nil || plan.Minimum != expected.minimum || plan.Maximum != expected.maximum || wait != expected.wait {
+			t.Fatalf("%s plan = %+v wait=%s error=%v", name, plan, wait, err)
+		}
+	}
+
+	plan, _, err := guard.PlanTierReservation(sample, resolution, settings, "heavy", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	session, err := guard.AcquireReservation(context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, 2, 0)
+	if err != nil || session.Allocation != (guard.ReservationVector{CPU: 8, MemoryBytes: 16 * policy.GiB}) ||
+		session.Requested != (guard.ReservationVector{CPU: 4, MemoryBytes: 8 * policy.GiB}) {
+		t.Fatalf("idle heavy allocation = %+v error=%v", session, err)
+	}
+	// Metadata-backed status preserves both the tier bounds and the actual
+	// immutable ledger allocation.
+	if err = guard.ReleaseReservation(root, session); err != nil {
+		t.Fatal(err)
+	}
+	session, err = guard.AcquireReservationWithOptions(
+		context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, 2, 0,
+		guard.ReservationAdmissionOptions{Metadata: guard.ReservationMetadata{Source: "hippo", Tier: "heavy"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	totals, err := guard.ReservationStatus(context.Background(), root)
+	if err != nil || len(totals.Owners) != 1 || totals.Owners[0].Minimum != session.Requested ||
+		totals.Owners[0].Maximum != plan.Maximum || totals.Owners[0].Allocated != session.Allocation {
+		t.Fatalf("idle heavy status = %+v error=%v", totals, err)
+	}
+	if err = guard.ReleaseReservation(root, session); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func fixedPlan(cpu int, memory int64, capacityCPU int, capacityMemory int64) guard.ReservationPlan {
 	vector := guard.ReservationVector{CPU: cpu, MemoryBytes: memory}
 
@@ -176,6 +244,74 @@ func TestReservationLedgerCountsEveryClassAndReusesInheritance(t *testing.T) {
 	after, err := guard.ReservationStatus(context.Background(), root)
 	if err != nil || after.ActiveOwners != 3 || after.Allocated != totals.Allocated {
 		t.Fatalf("inheritance double-reserved: before=%+v after=%+v error=%v", totals, after, err)
+	}
+}
+
+func TestSchemaThreeMetadataSurvivesSchemaTwoLedgerRewrite(t *testing.T) {
+	root := t.TempDir()
+	plan := guard.ReservationPlan{
+		Capacity:  guard.ReservationVector{CPU: 8, MemoryBytes: 16 * policy.GiB},
+		Requested: guard.ReservationVector{CPU: 2, MemoryBytes: 3 * policy.GiB},
+		Allocated: guard.ReservationVector{CPU: 2, MemoryBytes: 3 * policy.GiB},
+		Minimum:   guard.ReservationVector{CPU: 2, MemoryBytes: 3 * policy.GiB},
+		Maximum:   guard.ReservationVector{CPU: 4, MemoryBytes: 6 * policy.GiB},
+		Tier:      "standard",
+	}
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	session, err := guard.AcquireReservationWithOptions(
+		context.Background(), root, "", policy.TaskEphemeral, "balanced", "hash", plan, 2, 90*time.Minute,
+		guard.ReservationAdmissionOptions{
+			Metadata: guard.ReservationMetadata{
+				Source: "ose-public", Tags: map[string]string{"checkout": "worktree"}, Tier: "standard",
+			},
+			Now: func() time.Time { return now },
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = guard.ReleaseReservation(root, session) }()
+
+	ledgerPath := filepath.Join(root, "reservations.json")
+	ledger, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//nolint:gosec // The path is rooted in t.TempDir and never includes caller input.
+	if err = os.WriteFile(ledgerPath, ledger, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	totals, err := guard.ReservationStatus(context.Background(), root)
+	if err != nil || totals.LegacyEntries != 0 || len(totals.Owners) != 1 ||
+		totals.Owners[0].Source != "ose-public" || totals.Owners[0].Tier != "standard" ||
+		totals.Owners[0].Tags["checkout"] != "worktree" {
+		t.Fatalf("metadata after schema-2 rewrite: %+v error=%v", totals, err)
+	}
+}
+
+func TestAdmissionDeadlineWritesNeverStartedReceipt(t *testing.T) {
+	root := t.TempDir()
+	plan := fixedPlan(1, 256*policy.MiB, 1, 256*policy.MiB)
+	owner := acquireReservation(t, root, policy.TaskEphemeral, plan)
+	defer func() { _ = guard.ReleaseReservation(root, owner) }()
+	_, err := guard.AcquireReservationWithOptions(
+		context.Background(), root, "", policy.TaskTransactional, "balanced", "", plan, 2, 0,
+		guard.ReservationAdmissionOptions{Metadata: guard.ReservationMetadata{
+			Source: "hippo", Tags: map[string]string{"checkout": "worktree"}, Tier: "light",
+		}},
+	)
+	if !errors.Is(err, guard.ErrReservationDeferred) {
+		t.Fatalf("deadline error=%v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("receipt entries=%d error=%v", len(entries), err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "receipts", entries[0].Name()))
+	if err != nil || !strings.Contains(string(data), `"state":"never-started"`) ||
+		!strings.Contains(string(data), `"reason":"admission-deadline"`) {
+		t.Fatalf("receipt=%s error=%v", data, err)
 	}
 }
 
@@ -367,6 +503,24 @@ func TestPressureVictimOrderingNeverSelectsTransactional(t *testing.T) {
 	}
 	if _, selected, err = guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); err != nil || selected {
 		t.Fatalf("transactional owner was selected: selected=%v error=%v", selected, err)
+	}
+}
+
+func TestEmergencyPressureSelectsTransactionalLast(t *testing.T) {
+	root := t.TempDir()
+	transactional := acquireReservation(
+		t, root, policy.TaskTransactional, fixedPlan(1, 256*policy.MiB, 4, policy.GiB),
+	)
+	defer func() { _ = guard.ReleaseReservation(root, transactional) }()
+	if err := guard.ActivateReservation(root, transactional, 12_345); err != nil {
+		t.Fatal(err)
+	}
+	if _, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); err != nil || selected {
+		t.Fatalf("ordinary pressure selected transactional: selected=%v error=%v", selected, err)
+	}
+	victim, selected, err := guard.SelectEmergencyPressureVictim(root, guard.CapacityDeferredExitCode)
+	if err != nil || !selected || victim.Token != transactional.Token || victim.Class != policy.TaskTransactional {
+		t.Fatalf("emergency victim=%+v selected=%v error=%v", victim, selected, err)
 	}
 }
 

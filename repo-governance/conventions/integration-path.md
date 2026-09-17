@@ -6,7 +6,8 @@ Local `main` has no executable path to `origin/main`: the `main` ruleset refuses
 
 ## Requirements
 
-- Work on a branch dedicated to it, in a Git worktree at `hippo-worktrees/<name>/` beside this checkout. Never inside it — see [worktree location](worktree-location.md) for the reason, which is the Go toolchain rather than taste.
+- Work on a branch dedicated to it, in a Git worktree at `{repository location}/worktrees/<name>`. Sibling
+  `*-worktrees/` directories are forbidden; see [worktree location](worktree-location.md).
 - Initialize a new worktree from its own root, before any Git mutation or gate run, with `npm ci`. That activates its hooks; a worktree whose hooks never ran pushes unverified work.
 - Sync before starting and before resuming: `git fetch origin`, then `git rebase origin/main`. Never auto-stash, discard, or auto-resolve — an unclean tree or a conflict stops the work and goes to the user. When the sync brings in commits the branch lacked, read the whole incoming diff and reconcile the current task against it before continuing. A rebase of a branch already pushed needs a force push, which follows [no destructive Git operations](no-destructive-git-operations.md).
 - Provision at most one worktree per plan or task and reuse it for every delivery unit that work produces. A second `git worktree add` for the same work is a defect. Units land serially: land one, sync from `origin/main`, branch the next in the same directory.

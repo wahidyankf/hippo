@@ -5,19 +5,26 @@ Both sets are fixed: HIPPO compiles in no build-tool or product-specific names.
 
 ## Read by HIPPO
 
-| Variable               | Purpose                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `HIPPO_ROOT`           | Shared coordination, lease, and evidence root. See [State root](./state-root.md).                                              |
-| `HIPPO_CONFIG`         | Configuration path. Overridden by `--config`; overrides the bootstrap default.                                                 |
-| `HIPPO_DEFAULT_CONFIG` | Bootstrap-only fallback set by the `./hippo` script to the repository-local `hippo.local.json`. Lowest precedence.             |
-| `HIPPO_BUILD_CACHE`    | Overrides the `./hippo` bootstrap's compiled-binary cache directory.                                                           |
-| `HIPPO_SESSION`        | Inherited session token. A child that inherits one reuses the existing fixed allocation and never creates or expands an owner. |
-| `HIPPO_BIN`            | Path to the HIPPO executable, for nested invocations.                                                                          |
-| `HIPPO_HEALTH_URL`     | Default for `release monitor --health-url`.                                                                                    |
-| `HIPPO_ROUTED_ORIGIN`  | Default for `release monitor --routed-origin`.                                                                                 |
+| Variable                 | Purpose                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `HIPPO_ROOT`             | Shared coordination, lease, and evidence root. See [State root](./state-root.md).                                              |
+| `HIPPO_CONFIG`           | Configuration path. Overridden by `--config`; overrides the bootstrap default.                                                 |
+| `HIPPO_DEFAULT_CONFIG`   | Bootstrap-only fallback set by the `./hippo` script to the repository-local `hippo.local.json`. Lowest precedence.             |
+| `HIPPO_IDENTITY`         | Explicit schema-1 run identity path. Stronger than discovery and the bootstrap default.                                        |
+| `HIPPO_DEFAULT_IDENTITY` | Bootstrap-only fallback identity path after upward `hippo.identity.json` discovery.                                            |
+| `HIPPO_BUILD_CACHE`      | Overrides the `./hippo` bootstrap's compiled-binary cache directory.                                                           |
+| `HIPPO_SESSION`          | Inherited session token. A child that inherits one reuses the existing fixed allocation and never creates or expands an owner. |
+| `HIPPO_BIN`              | Path to the HIPPO executable, for nested invocations.                                                                          |
+| `HIPPO_HEALTH_URL`       | Default for `release monitor --health-url`.                                                                                    |
+| `HIPPO_ROUTED_ORIGIN`    | Default for `release monitor --routed-origin`.                                                                                 |
 
 Configuration precedence, strongest first: `--config`, then `HIPPO_CONFIG`, then
 `HIPPO_DEFAULT_CONFIG`.
+
+Identity precedence is `HIPPO_IDENTITY`, then the nearest `hippo.identity.json` found by walking
+upward from `--cwd` or the current directory, then `HIPPO_DEFAULT_IDENTITY`. Upward discovery lets a
+contained repository worktree use its own tracked identity while sharing the same machine root and
+configuration. `--source` and repeatable `--tag` values override the loaded identity for one run.
 
 Where an environment carries the same variable twice, the **last** occurrence wins. That matches what
 the child observes, because Go's `os/exec` deduplicates its environment keeping the last entry. It

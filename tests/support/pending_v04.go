@@ -179,9 +179,9 @@ func requireV04AllClasses(root string) error {
 	}()
 
 	totals, err := guard.ReservationStatus(context.Background(), root)
-	if err != nil || totals.SchemaVersion != 4 || totals.ActiveOwners != 3 ||
+	if err != nil || totals.SchemaVersion != 5 || totals.ActiveOwners != 3 ||
 		totals.Service != 1 || totals.Ephemeral != 1 || totals.Transactional != 1 || totals.Allocated.CPU != 3 {
-		return fmt.Errorf("all-class schema 4 totals: %+v: %w", totals, err)
+		return fmt.Errorf("all-class schema 5 totals: %+v: %w", totals, err)
 	}
 
 	return nil
@@ -571,8 +571,8 @@ func requireV04SummaryAndRetention(root string) error {
 	}
 	defer func() { _ = guard.ReleaseReservation(root, session) }()
 	totals, err := guard.ReservationStatus(context.Background(), root)
-	if err != nil || totals.SchemaVersion != 4 || totals.ActiveOwners != 1 || totals.Allocated != session.Allocation {
-		return fmt.Errorf("schema 4 reservation status: %+v: %w", totals, err)
+	if err != nil || totals.SchemaVersion != 5 || totals.ActiveOwners != 1 || totals.Allocated != session.Allocation {
+		return fmt.Errorf("schema 5 reservation status: %+v: %w", totals, err)
 	}
 	writer, err := guard.NewEvidenceWriter(root, "reservation-summary", evidence.Limits{})
 	if err != nil {
@@ -584,15 +584,15 @@ func requireV04SummaryAndRetention(root string) error {
 		return err
 	}
 	summary, err := writer.Finalize(policy.TaskEphemeral, "passed", 0)
-	if err != nil || summary.SchemaVersion != 4 || summary.AllocatedCPU != 2 || summary.PeakOwnerCount != 1 {
-		return fmt.Errorf("schema 4 development summary: %+v: %w", summary, err)
+	if err != nil || summary.SchemaVersion != 5 || summary.AllocatedCPU != 2 || summary.PeakOwnerCount != 1 {
+		return fmt.Errorf("schema 5 development summary: %+v: %w", summary, err)
 	}
 	encoded, err := json.Marshal(struct {
 		Status  guard.ReservationTotals `json:"status"`
 		Summary guard.EvidenceSummary   `json:"summary"`
 	}{totals, summary})
 	if err != nil || bytes.Contains(encoded, []byte("command")) || bytes.Contains(encoded, []byte("repository")) || bytes.Contains(encoded, []byte(root)) {
-		return fmt.Errorf("schema 4 reservation evidence exposed private inputs: %s: %w", encoded, err)
+		return fmt.Errorf("schema 5 reservation evidence exposed private inputs: %s: %w", encoded, err)
 	}
 
 	return nil
@@ -694,8 +694,8 @@ func (driver *Driver) requireCompiledConfigurationV04(root string) error {
 				Mode          string `json:"mode"`
 			} `json:"coordination"`
 		}
-		if err = json.Unmarshal(statusOutput, &payload); err != nil || payload.SchemaVersion != 4 ||
-			payload.Coordination.SchemaVersion != 4 || payload.Coordination.Mode != testCase.mode {
+		if err = json.Unmarshal(statusOutput, &payload); err != nil || payload.SchemaVersion != 5 ||
+			payload.Coordination.SchemaVersion != 5 || payload.Coordination.Mode != testCase.mode {
 			return fmt.Errorf("compiled %s compatibility status: %s: %w", testCase.name, statusOutput, err)
 		}
 	}
@@ -737,7 +737,7 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 			return nil
 		}
 
-		return fmt.Errorf("compiled schema 4 summary run failed: %s: %w", output, err)
+		return fmt.Errorf("compiled schema 5 summary run failed: %s: %w", output, err)
 	}
 	entries, err := os.ReadDir(sharedRoot)
 	if err != nil {
@@ -755,15 +755,15 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 		if decodeError := json.Unmarshal(data, &summary); decodeError != nil {
 			return decodeError
 		}
-		if summary.SchemaVersion != 4 || summary.RequestedCPU != 1 || summary.AllocatedCPU != 1 ||
+		if summary.SchemaVersion != 5 || summary.RequestedCPU != 1 || summary.AllocatedCPU != 1 ||
 			summary.RequestedMemoryBytes != 256*policy.MiB || summary.AllocatedMemoryBytes != 256*policy.MiB {
-			return fmt.Errorf("compiled schema 4 reservation summary: %+v", summary)
+			return fmt.Errorf("compiled schema 5 reservation summary: %+v", summary)
 		}
 
 		return nil
 	}
 
-	return errors.New("compiled schema 4 reservation summary was not written")
+	return errors.New("compiled schema 5 reservation summary was not written")
 }
 
 func (driver *Driver) requirePendingTerminalV04() error {

@@ -33,4 +33,4 @@ A convention chooses a path. It does not authorize anyone to walk it; see [commi
 - [Task tracking](task-tracking.md) — task state lives in the repository.
 - [Thematic commits](thematic-commits.md) — one theme per commit.
 - [Working tree](working-tree.md) — what stays ignored.
-- [Worktree location](worktree-location.md) — worktrees live beside this checkout, not inside it.
+- [Worktree location](worktree-location.md) — worktrees live at `{repository location}/worktrees/<task>`.
