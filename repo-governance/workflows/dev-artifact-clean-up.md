@@ -9,6 +9,11 @@ of its result.
 
 1. **Enumerate what the task created.** Scratch directories, generated reports, temporary scripts, downloaded fixtures,
    task branches, task worktrees, and any tooling installed only for this work.
+
+   Never delete a secret-bearing file or directory from the primary `main` checkout. An exact ignored, nonshared cache
+   such as `.fvm-cache/` is scratch after recorded regeneration, non-use, and secret-free evidence, regardless of
+   origin.
+
 2. **Classify each one:**
 
    | Class    | Disposition                                                             |
