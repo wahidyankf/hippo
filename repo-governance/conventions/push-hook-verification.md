@@ -12,7 +12,10 @@ The hooks are `commit-msg` (Conventional Commits), `pre-commit` (staged formatti
 
 Read the output. The hook prints the failing command and its diagnostic; that is the whole of the investigation in most cases.
 
-A `pre-push` failure carrying HIPPO's exit `75` means the workstation was busy, not that the change is wrong. Retry the same invocation once the condition clears — see [resource-aware development](../development/resource-aware-development.md). Exit `73` means clean storage first; exit `78` means the request cannot be satisfied as stated and needs replanning.
+A `pre-push` failure carrying HIPPO's exit `75` may be retried only when its receipt says
+`never-started`; a started safety stop needs task-specific recovery. Exit `73` means clean storage
+first, exit `76` means drain or upgrade an incompatible peer, and exit `78` means replan the local
+request. See [resource-aware development](../development/resource-aware-development.md).
 
 ## When a Hook Is Wrong
 

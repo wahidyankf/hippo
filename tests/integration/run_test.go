@@ -114,7 +114,7 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 	}
 }
 
-func TestReservationCoordinationDefersBeforeChildExecution(t *testing.T) {
+func TestReservationCoordinationReturnsProtocolMismatchBeforeChildExecution(t *testing.T) {
 	root := t.TempDir()
 	marker := []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
 	if err := os.WriteFile(filepath.Join(root, "coordination-mode.json"), marker, 0o600); err != nil {
@@ -137,7 +137,7 @@ func TestReservationCoordinationDefersBeforeChildExecution(t *testing.T) {
 		Stderr:       stderr,
 	})
 
-	if err != nil || code != guard.CapacityDeferredExitCode {
+	if err != nil || code != policy.ProtocolMismatchExitCode {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
 	if !strings.Contains(stderr.String(), "reservation mode is active") {

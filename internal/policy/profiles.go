@@ -11,10 +11,12 @@ const (
 	HardDiskFloorBytes = 256 * MiB
 	// ReplanRequiredExitCode is used when strict capacity or configuration is incompatible.
 	ReplanRequiredExitCode = 78
-	profileBalanced        = "balanced"
-	profileConstrained     = "constrained"
-	profileMinimal         = "minimal"
-	swapUnavailable        = "unavailable"
+	// ProtocolMismatchExitCode identifies live peer coordination state this client cannot safely join.
+	ProtocolMismatchExitCode = 76
+	profileBalanced          = "balanced"
+	profileConstrained       = "constrained"
+	profileMinimal           = "minimal"
+	swapUnavailable          = "unavailable"
 )
 
 // TaskClass identifies the guarded workload category used for admission.

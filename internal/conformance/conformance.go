@@ -27,11 +27,13 @@ const (
 	// and reaping the group, including descendants it reparents first. That
 	// latency belongs to the host, not to the grace a cooperating child is
 	// given, so it gets its own window.
-	commandReapGrace    = 2 * time.Second
-	commandGroupPoll    = 5 * time.Millisecond
-	reconciliationLimit = 5 * time.Second
-	commandCancelled    = "cancelled"
-	commandReapTimedOut = "force-stop reap timed out"
+	commandReapGrace           = 2 * time.Second
+	commandGroupPoll           = 5 * time.Millisecond
+	reconciliationLimit        = 5 * time.Second
+	commandCancelled           = "cancelled"
+	commandReapTimedOut        = "force-stop reap timed out"
+	capacityDeferralDiagnostic = "HIPPO deferred task: safe admission was not reached."
+	maximumReceiptBytes        = 64 * 1024
 )
 
 // Command describes an argv-safe command; no shell interpolation is performed.
@@ -646,14 +648,84 @@ func commandResult(waitError error) error {
 	return &commandError{category: "wait failed", exitCode: -1}
 }
 
-func cleanCapacitySkip(err error) bool {
+func cleanCapacitySkip(err error, output []byte, verifiedNeverStartedReceipt bool) bool {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		children := joined.Unwrap()
-		return len(children) == 1 && cleanCapacitySkip(children[0])
+		return len(children) == 1 && cleanCapacitySkip(children[0], output, verifiedNeverStartedReceipt)
 	}
 	failure, ok := err.(*commandError) //nolint:errorlint // Capacity skip intentionally rejects wrapped or joined errors.
 
-	return ok && failure.category == "exited" && failure.exitCode == 75 && failure.cause == nil
+	return ok && failure.category == "exited" && failure.exitCode == 75 && failure.cause == nil &&
+		bytes.Contains(output, []byte(capacityDeferralDiagnostic)) && verifiedNeverStartedReceipt
+}
+
+func receiptSnapshot(root string) (map[string]struct{}, error) {
+	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]struct{}{}, nil
+	}
+	if err != nil {
+		return nil, errors.New("capacity receipt inventory is unavailable")
+	}
+
+	names := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".json") {
+			names[entry.Name()] = struct{}{}
+		}
+	}
+
+	return names, nil
+}
+
+func newNeverStartedReceipt(root string, before map[string]struct{}) (bool, error) {
+	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errors.New("capacity receipt inventory is unavailable")
+	}
+
+	found := false
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		if _, existed := before[entry.Name()]; existed {
+			continue
+		}
+		path := filepath.Join(root, "receipts", entry.Name())
+		pathInfo, lstatError := os.Lstat(path)
+		if lstatError != nil || !pathInfo.Mode().IsRegular() {
+			return false, errors.New("new capacity receipt is invalid")
+		}
+		file, openError := os.Open(path)
+		if openError != nil {
+			return false, errors.New("new capacity receipt is unavailable")
+		}
+		info, statError := file.Stat()
+		if statError != nil || !info.Mode().IsRegular() || info.Size() > maximumReceiptBytes {
+			_ = file.Close()
+			return false, errors.New("new capacity receipt is invalid")
+		}
+		var receipt struct {
+			SchemaVersion int    `json:"schemaVersion"`
+			State         string `json:"state"`
+		}
+		decoder := json.NewDecoder(io.LimitReader(file, maximumReceiptBytes+1))
+		decodeError := decoder.Decode(&receipt)
+		var trailing any
+		trailingError := decoder.Decode(&trailing)
+		closeError := file.Close()
+		if decodeError != nil || !errors.Is(trailingError, io.EOF) || closeError != nil ||
+			receipt.SchemaVersion != 1 || receipt.State != "never-started" {
+			return false, errors.New("new capacity receipt does not prove a never-started run")
+		}
+		found = true
+	}
+
+	return found, nil
 }
 
 func execute(ctx context.Context, directory string, command Command, environment []string, output io.Writer) error {
@@ -813,16 +885,16 @@ func reconcileCheckouts(ctx context.Context, consumers []Consumer, identities ma
 	return result
 }
 
-// reservationMarkerName and reservationMarkerDocument saturate a probe root.
-// A schema-1 client defers every compatibility class while reservation mode is
-// advertised, so writing this marker is a deterministic way to produce the exit
-// 75 a consumer must be able to survive, using only documented behaviour.
+// The private hold and receipt fixtures model a verified never-started capacity
+// deferral without writing a live HIPPO coordination protocol document. Protocol
+// mismatches are fatal in v1 and must never be used to synthesize capacity.
 const (
-	reservationMarkerName = "coordination-mode.json"
-	deferralProbeHold     = 2 * time.Second
+	capacityHoldName        = "conformance-capacity-held"
+	neverStartedReceiptName = "conformance-never-started-receipt.json"
+	deferralProbeHold       = 2 * time.Second
 )
 
-var reservationMarkerDocument = []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
+var neverStartedReceiptDocument = []byte("{\"schemaVersion\":1,\"state\":\"never-started\",\"reason\":\"capacity\"}\n")
 
 // verifyDeferralRetry proves a consumer retries a capacity deferral rather than
 // reading it as an admission. That mistake is not cosmetic: two owners that both
@@ -852,8 +924,11 @@ func verifyDeferralRetry(
 
 	defer func() { _ = os.RemoveAll(root) }()
 
-	if err = os.WriteFile(filepath.Join(root, reservationMarkerName), reservationMarkerDocument, 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(root, capacityHoldName), []byte("held\n"), 0o600); err != nil {
 		return errors.New("deferral retry probe root could not be saturated")
+	}
+	if err = os.WriteFile(filepath.Join(root, neverStartedReceiptName), neverStartedReceiptDocument, 0o600); err != nil {
+		return errors.New("deferral retry probe receipt is unavailable")
 	}
 
 	freed := make(chan struct{})
@@ -869,7 +944,7 @@ func verifyDeferralRetry(
 		case <-timer.C:
 		}
 
-		_ = os.Remove(filepath.Join(root, reservationMarkerName))
+		_ = os.Remove(filepath.Join(root, capacityHoldName))
 	}()
 
 	started := time.Now()
@@ -952,6 +1027,61 @@ func executeConsumerPhase(
 	return errors.Join(errorsByConsumer...)
 }
 
+func executeCoordinationCheck(
+	ctx context.Context,
+	check Check,
+	consumer Consumer,
+	environment []string,
+	output io.Writer,
+	identity binaryIdentity,
+	checkoutIdentity checkoutIdentity,
+	sharedRoot string,
+	sharedRootIdentity checkoutIdentity,
+) error {
+	receiptsBefore := map[string]struct{}{}
+	if check.AllowCapacitySkip {
+		var receiptError error
+		receiptsBefore, receiptError = receiptSnapshot(sharedRoot)
+		if receiptError != nil {
+			return fmt.Errorf("coordination check for consumer %q failed: %w", consumer.Name, receiptError)
+		}
+	}
+	if err := errors.Join(
+		verifyCheckoutIdentity(consumer, checkoutIdentity),
+		verifySharedRootIdentity(sharedRoot, sharedRootIdentity),
+	); err != nil {
+		return fmt.Errorf("coordination check for consumer %q failed: %w", consumer.Name, err)
+	}
+	if err := identity.verify(); err != nil {
+		return err
+	}
+	commandOutput := &bytes.Buffer{}
+	commandDestination := io.Writer(commandOutput)
+	if output != nil {
+		commandDestination = io.MultiWriter(output, commandOutput)
+	}
+	executeError := executeVerifiedCommand(ctx, consumer.Path, check.Command, environment, commandDestination, identity)
+	checkoutError := verifyCheckoutIdentity(consumer, checkoutIdentity)
+	sharedRootError := verifySharedRootIdentity(sharedRoot, sharedRootIdentity)
+	joinedError := errors.Join(executeError, checkoutError, sharedRootError)
+	if joinedError == nil {
+		return nil
+	}
+	if check.AllowCapacitySkip {
+		verifiedReceipt, receiptError := newNeverStartedReceipt(sharedRoot, receiptsBefore)
+		if receiptError != nil {
+			return fmt.Errorf("coordination check for consumer %q failed: %w", consumer.Name, receiptError)
+		}
+		if cleanCapacitySkip(joinedError, commandOutput.Bytes(), verifiedReceipt) {
+			_, _ = fmt.Fprintf(output, "coordination check for consumer %q skipped: live host capacity is unsuitable\n", consumer.Name)
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("coordination check for consumer %q failed: %w", consumer.Name, joinedError)
+}
+
 func executeManifestCommands(
 	ctx context.Context,
 	manifest Manifest,
@@ -979,26 +1109,11 @@ func executeManifestCommands(
 	}
 	for _, check := range manifest.CoordinationChecks {
 		consumer := consumerByName(manifest, check.Consumer)
-		if err := errors.Join(
-			verifyCheckoutIdentity(consumer, checkoutIdentities[consumer.Name]),
-			verifySharedRootIdentity(manifest.SharedRoot, sharedRootIdentity),
+		if err := executeCoordinationCheck(
+			ctx, check, consumer, environment, output, identity, checkoutIdentities[consumer.Name],
+			manifest.SharedRoot, sharedRootIdentity,
 		); err != nil {
-			return fmt.Errorf("coordination check for consumer %q failed: %w", consumer.Name, err)
-		}
-		if err := identity.verify(); err != nil {
 			return err
-		}
-		executeError := executeVerifiedCommand(ctx, consumer.Path, check.Command, environment, output, identity)
-		checkoutError := verifyCheckoutIdentity(consumer, checkoutIdentities[consumer.Name])
-		sharedRootError := verifySharedRootIdentity(manifest.SharedRoot, sharedRootIdentity)
-		if err := errors.Join(executeError, checkoutError, sharedRootError); err != nil {
-			if check.AllowCapacitySkip && cleanCapacitySkip(err) {
-				_, _ = fmt.Fprintf(output, "coordination check for consumer %q skipped: live host capacity is unsuitable\n", consumer.Name)
-
-				continue
-			}
-
-			return fmt.Errorf("coordination check for consumer %q failed: %w", consumer.Name, err)
 		}
 	}
 

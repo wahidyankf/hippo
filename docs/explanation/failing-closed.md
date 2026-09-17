@@ -31,7 +31,7 @@ waiting task to start. An error is loud, and loud is correct.
 
 If compatibility session inventory cannot be enumerated, a heavy owner or service session cannot be
 decoded, or positively stale heavy state cannot be removed, HIPPO leaves the existing bytes exactly
-where they are and defers.
+where they are and returns a non-retryable state error.
 
 The temptation is to delete what cannot be parsed. But "I cannot read this" and "this is not
 meaningful" are different claims, and only the first one is actually established. Deleting on the
@@ -77,21 +77,17 @@ a bounded transaction. That contention is never a supervision failure — but it
 depending on when it happens:
 
 - **Before admission**, it returns `75` and no child has run.
-- **At activation**, it returns `75` and stops a child that has already started. Activation records
-  the supervised process group, and critical-pressure shedding can only select an owner whose group
-  was recorded. A child that could not be recorded would be unsheddable, so HIPPO refuses to
-  supervise it.
+- **At activation**, it returns `1` and stops the child it already started. The lifetime summary says
+  `task-failed`, and a `started-activation-failure` receipt proves the payload ran. Activation
+  records the supervised process group, and critical-pressure shedding can only select an owner
+  whose group was recorded. A child that could not be recorded would be unsheddable, so HIPPO
+  refuses to supervise it.
 - **After activation**, the contended observation is simply skipped and the healthy child keeps
   running. `status --json` waits the contention out before reporting.
 
-The middle case is the surprising one: a caller can watch its payload begin and still receive `75`.
-The invariant that makes this safe to handle is unconditional — **an owner that receives `75` holds
-no reservation, whatever its payload did.** So a caller retries rather than reading the deferral as a
-partial admission.
-
-This is also the reason `--wait-for-admission` carries a caveat. A retry can re-run a payload that
-had already started, which suits the idempotent build and test commands HIPPO is designed to guard.
-A caller whose payload is not idempotent should keep the default and decide for itself.
+The middle case must not resemble capacity. A caller can watch its payload begin, so HIPPO records a
+started failure and never returns retryable `75`. `--wait-for-admission` therefore requeues only a
+verified never-started waiter and never repeats a payload after activation.
 
 ## Cleanup that cannot take the lock is not an error
 

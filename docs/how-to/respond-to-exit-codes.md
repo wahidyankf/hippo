@@ -1,18 +1,19 @@
 # How to respond to a HIPPO exit code
 
-HIPPO reserves five exit codes. Everything else came from your guarded command. This guide covers
-what to actually do about each one.
+HIPPO has five stable nonzero operational codes. A guarded child may also return any numeric code,
+including a reserved one, so evidence—not the number alone—identifies who produced it.
 
 For the full definitions see the [exit code reference](../reference/exit-codes.md).
 
 ## Decide quickly
 
-| Code | Do this                                                                |
-| ---- | ---------------------------------------------------------------------- |
-| `1`  | Fix the command line. Nothing ran.                                     |
-| `73` | Free disk space on the measured path, then retry.                      |
-| `75` | Inspect the receipt/outcome; retry only if it says `never-started`.    |
-| `78` | Change the request — smaller reservation, corrected value, or profile. |
+| Code | Do this                                                                     |
+| ---- | --------------------------------------------------------------------------- |
+| `1`  | Inspect the diagnostic and evidence; do not assume that nothing ran.        |
+| `73` | Free disk space on the measured path, then retry.                           |
+| `75` | Inspect the receipt/outcome; retry only if it says `never-started`.         |
+| `76` | Drain the incompatible epoch or upgrade the peer; never capacity-retry.     |
+| `78` | Change the local request — reservation, configuration, mapping, or profile. |
 
 Never respond to any of them by bypassing the guard or by changing `--class` to get admitted.
 Changing a task to `transactional` so it cannot be shed does not make the host any bigger; it makes
@@ -36,14 +37,12 @@ most. HIPPO never runs a payload retry loop.
 Or handle it yourself when the payload is not safe to repeat:
 
 ```sh
-if ! hippo run --disk-path . -- ./deploy.sh; then
-  status=$?
-  if [ "$status" -eq 75 ]; then
-    echo "host is busy; not retrying a non-idempotent payload" >&2
-    exit 75
-  fi
-  exit "$status"
+hippo run --disk-path . -- ./deploy.sh
+status=$?
+if [ "$status" -eq 75 ]; then
+  echo "inspect the safety receipt before requeueing this payload" >&2
 fi
+exit "$status"
 ```
 
 ### Tell never-started from started
@@ -57,16 +56,6 @@ Queue expiry/cancellation writes `state: "never-started"`. Emergency termination
 `state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
 `pressure-shed` or `storage-shed`.
 
-### When `75` means a mode conflict
-
-```console
-HIPPO deferred task: shared coordination deferred admission: exclusive mode has a live or unverifiable owner.
-```
-
-The shared root is in the other coordination mode. Do not delete state to force it. Let the existing
-sessions drain and retry — see
-[How to enable reservation coordination](./enable-reservation-coordination.md).
-
 ### When `75` means a heavy-work lease
 
 In exclusive mode, the deferral names the holder:
@@ -76,6 +65,20 @@ HIPPO deferred task: the heavy-work lease is held by pid 33413 (class transactio
 ```
 
 That is another repository's guarded work. Wait for it.
+
+## Handle `76`
+
+```console
+HIPPO protocol mismatch: shared coordination protocol mismatch: reservation mode is active; drain or upgrade the incompatible client before retrying.
+```
+
+The shared root contains a live incompatible coordination epoch. Do not send this through a capacity
+retry loop and do not delete state to force takeover. Upgrade clients that share the root, let the
+existing sessions drain, and retry once — see
+[How to enable reservation coordination](./enable-reservation-coordination.md).
+
+During a rolling migration, a pre-v1 client can still report this conflict as `75`. Treat the old
+diagnostic as protocol mismatch even though its number is ambiguous, then finish the v1 upgrade.
 
 ## Handle `73`
 
@@ -120,17 +123,14 @@ Retrying any of these produces the same answer. The request has to change.
 
 ## Tell HIPPO's codes from your command's
 
-A guarded command that itself exits `75` is indistinguishable by code alone from a HIPPO deferral.
-HIPPO writes its own diagnostics to stderr and never mixes them into the child's streams, so read
-stderr when the distinction matters:
+A guarded command can itself exit `75` or `76`. HIPPO preserves that value, writes `task-failed`
+summary evidence, and writes no never-started receipt. Use the receipt and summary together:
 
 ```sh
-stderr=$(hippo run --disk-path . -- ./task.sh 2>&1 >/dev/null)
+hippo run --disk-path . -- ./task.sh
 status=$?
-case "$stderr" in
-  HIPPO*) echo "HIPPO decision: $stderr" >&2 ;;
-  *)      echo "task exited $status" >&2 ;;
-esac
+hippo history --since 1d --source my-repo --outcome task-failed
+printf 'task or HIPPO exited %s; inspect the matching receipt before retrying\n' "$status" >&2
 ```
 
 ## Related

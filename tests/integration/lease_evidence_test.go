@@ -132,11 +132,12 @@ func TestCoordinationModeLifecycleAcrossConcurrentServices(t *testing.T) {
 
 func TestCoordinationMarkerRejectsIncompatibleOrMalformedState(t *testing.T) {
 	testCases := []struct {
-		name   string
-		marker string
+		name             string
+		marker           string
+		protocolMismatch bool
 	}{
-		{name: "future schema", marker: `{"schemaVersion":2,"mode":"exclusive"}`},
-		{name: "unknown mode", marker: `{"schemaVersion":1,"mode":"unknown"}`},
+		{name: "future schema", marker: `{"schemaVersion":2,"mode":"exclusive"}`, protocolMismatch: true},
+		{name: "unknown mode", marker: `{"schemaVersion":1,"mode":"unknown"}`, protocolMismatch: true},
 		{name: "unknown field", marker: `{"schemaVersion":1,"mode":"exclusive","extra":true}`},
 		{name: "duplicate mode", marker: `{"schemaVersion":1,"mode":"reservation","mode":"exclusive"}`},
 		{name: "multiple values", marker: `{"schemaVersion":1,"mode":"exclusive"} {}`},
@@ -155,6 +156,9 @@ func TestCoordinationMarkerRejectsIncompatibleOrMalformedState(t *testing.T) {
 			if err == nil || session != nil {
 				t.Fatalf("incompatible marker was accepted: session=%+v error=%v", session, err)
 			}
+			if guard.IsCoordinationProtocolMismatch(err) != testCase.protocolMismatch {
+				t.Fatalf("protocol mismatch classification=%t, want %t: %v", guard.IsCoordinationProtocolMismatch(err), testCase.protocolMismatch, err)
+			}
 
 			data, readError := os.ReadFile(markerPath)
 			if readError != nil {
@@ -167,7 +171,7 @@ func TestCoordinationMarkerRejectsIncompatibleOrMalformedState(t *testing.T) {
 	}
 }
 
-func TestReservationCoordinationDefersEveryCompatibilityClass(t *testing.T) {
+func TestReservationCoordinationRejectsEveryCompatibilityClassAsProtocolMismatch(t *testing.T) {
 	root := t.TempDir()
 	marker := []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
 	markerPath := filepath.Join(root, "coordination-mode.json")
@@ -180,6 +184,9 @@ func TestReservationCoordinationDefersEveryCompatibilityClass(t *testing.T) {
 			session, err := guard.AcquireSession(context.Background(), root, "", class, 0)
 			if err == nil || session != nil {
 				t.Fatalf("reservation coordination admitted %s: session=%+v error=%v", class, session, err)
+			}
+			if !guard.IsCoordinationProtocolMismatch(err) {
+				t.Fatalf("%s returned a non-protocol error: %v", class, err)
 			}
 			if !strings.Contains(err.Error(), "reservation mode is active") {
 				t.Fatalf("%s deferral was not actionable: %v", class, err)
@@ -198,11 +205,12 @@ func TestReservationCoordinationDefersEveryCompatibilityClass(t *testing.T) {
 
 func TestMalformedHeavyLeaseRemainsFailClosed(t *testing.T) {
 	testCases := []struct {
-		name  string
-		owner string
+		name             string
+		owner            string
+		protocolMismatch bool
 	}{
 		{name: "invalid JSON", owner: `{`},
-		{name: "unsupported schema", owner: `{"schemaVersion":2,"pid":2147483647}`},
+		{name: "unsupported schema", owner: `{"schemaVersion":2,"pid":2147483647}`, protocolMismatch: true},
 	}
 
 	for _, testCase := range testCases {
@@ -218,8 +226,11 @@ func TestMalformedHeavyLeaseRemainsFailClosed(t *testing.T) {
 			}
 
 			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, 0)
-			if err != nil || session != nil {
-				t.Fatalf("unverifiable heavy lease did not defer safely: session=%+v error=%v", session, err)
+			if err == nil || session != nil {
+				t.Fatalf("unverifiable heavy lease did not fail closed: session=%+v error=%v", session, err)
+			}
+			if guard.IsCoordinationProtocolMismatch(err) != testCase.protocolMismatch {
+				t.Fatalf("protocol mismatch classification=%t, want %t: %v", guard.IsCoordinationProtocolMismatch(err), testCase.protocolMismatch, err)
 			}
 			if description := guard.DescribeHeavyLease(root); !strings.Contains(description, "cannot be verified") {
 				t.Fatalf("unverifiable owner diagnostic was not actionable: %q", description)
@@ -232,12 +243,8 @@ func TestMalformedHeavyLeaseRemainsFailClosed(t *testing.T) {
 			if string(data) != testCase.owner {
 				t.Fatalf("unverifiable heavy owner changed from %q to %q", testCase.owner, data)
 			}
-			mode, readError := os.ReadFile(filepath.Join(root, "coordination-mode.json"))
-			if readError != nil {
-				t.Fatal(readError)
-			}
-			if !strings.Contains(string(mode), `"mode":"exclusive"`) {
-				t.Fatalf("fail-closed coordination marker missing: %q", mode)
+			if _, readError := os.Stat(filepath.Join(root, "coordination-mode.json")); !errors.Is(readError, os.ErrNotExist) {
+				t.Fatalf("failed acquisition mutated the coordination marker: %v", readError)
 			}
 		})
 	}

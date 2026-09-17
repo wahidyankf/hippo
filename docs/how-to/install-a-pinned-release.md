@@ -20,7 +20,7 @@ checksums.txt
 ## Download, verify, extract
 
 ```sh
-VERSION=v0.5.3
+VERSION=v1.0.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 [ "$ARCH" = x86_64 ] && ARCH=amd64
@@ -42,7 +42,7 @@ tar -xzf "$ASSET"
 ```
 
 ```console
-hippo_v0.5.3_darwin_arm64.tar.gz: OK
+hippo_v1.0.0_darwin_arm64.tar.gz: OK
 ```
 
 Each archive contains exactly one regular mode-755 member named `hippo`.
@@ -50,11 +50,11 @@ Each archive contains exactly one regular mode-755 member named `hippo`.
 ## Confirm what you got
 
 ```sh
-./hippo version --json
-```
-
-```console
-{"schemaVersion":1,"version":"v0.5.3","commit":"b13567145a86942c76a32ea3371d5f75a817e3d9"}
+./hippo version --json | jq -e '
+  .schemaVersion == 1 and
+  .version == "v1.0.0" and
+  (.commit | type == "string" and length > 0 and . != "unknown")
+'
 ```
 
 The reported `version` and `commit` are baked in at link time, so this is a positive identification

@@ -110,11 +110,13 @@ A live coordination check can legitimately fail on a host too small to reproduce
 }
 ```
 
-Exit `75` from that check is then recorded as an explicit capacity skip and deterministic integrity
-gates continue. **Every other exit code, and every consumer-gate failure, remains a failure.**
+Exit `75` is recorded as an explicit capacity skip only when the command emits the documented
+`HIPPO deferred task: safe admission was not reached.` diagnostic and creates a new schema-1 safety
+receipt whose state is `never-started`. Bare `75`, a diagnostic without that receipt, protocol
+mismatch `76`, every other exit code, and every consumer-gate failure remain failures.
 
-Cleanup and integrity failures stay fatal even beside an otherwise skippable capacity exit — they are
-joined with, rather than masked by, execution and reconciliation failures.
+Cleanup and integrity failures stay fatal even beside an otherwise skippable capacity exit. The
+harness joins them with execution and reconciliation failures instead of masking them.
 
 ## Related
 

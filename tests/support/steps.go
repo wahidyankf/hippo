@@ -80,21 +80,30 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		step(`^only a matching live process identity retains capacity or inheritance$`, assert("stale identity")),
 		step(`^a live schema one exclusive compatibility session$`, prepare("exclusive bridge", requireV04Bridge)),
 		step(`^reservation-mode admission is requested$`, driver.exerciseReservationScenarioV04),
-		step(`^it defers with exit 75 without changing compatibility state$`, assert("exclusive bridge")),
+		step(`^it rejects with exit 76 without changing compatibility state$`, assert("exclusive bridge")),
 		step(`^malformed compatibility heavy state without a mode marker$`, driver.malformedCompatibilityV04),
 		step(`^reservation-mode admission inspects that state$`, driver.inspectMalformedCompatibilityV04),
-		step(`^it defers with exit 75 and leaves the malformed state unchanged$`, driver.requireMalformedCompatibilityDeferredV04),
+		step(`^it fails with exit 1 and leaves the malformed state unchanged$`, driver.requireMalformedCompatibilityDeferredV04),
 		step(`^compatibility heavy state with an unsupported owner schema$`, driver.unsupportedCompatibilityV04),
 		step(`^exclusive admission and the heavy-lease diagnostic inspect that state$`, driver.inspectUnsupportedCompatibilityV04),
-		step(`^admission defers without mutation and the diagnostic reports private recovery guidance$`, driver.requireUnsupportedCompatibilityV04),
+		step(`^admission reports protocol mismatch exit 76 without mutation and the diagnostic reports private recovery guidance$`, driver.requireUnsupportedCompatibilityV04),
 		step(`^an unverifiable compatibility service session record without a mode marker$`, driver.malformedServiceCompatibilityV04),
 		step(`^reservation-mode admission inspects the service session$`, driver.inspectMalformedServiceCompatibilityV04),
-		step(`^it defers with exit 75 and leaves the service record unchanged$`, driver.requireMalformedServiceCompatibilityV04),
+		step(`^it fails with exit 1 and leaves the service record unchanged$`, driver.requireMalformedServiceCompatibilityV04),
 		step(`^compatibility session inventory cannot be enumerated$`, prepare("unreadable compatibility inventory", requireV04UnreadableSessionInventory)),
 		step(`^reservation admission attempts to take over the shared root$`, driver.exerciseReservationScenarioV04),
-		step(`^admission defers and preserves the session inventory with private recovery guidance$`, assert("unreadable compatibility inventory")),
+		step(`^admission fails with exit 1 and preserves the session inventory with private recovery guidance$`, assert("unreadable compatibility inventory")),
 		step(`^positively stale compatibility heavy state cannot be removed$`, prepare("failed stale heavy cleanup", requireV04FailedStaleHeavyCleanup)),
-		step(`^admission defers without writing a reservation marker or changing heavy state$`, assert("failed stale heavy cleanup")),
+		step(`^admission fails with exit 1 without writing a reservation marker or changing heavy state$`, assert("failed stale heavy cleanup")),
+		step(`^a shared root with a valid future coordination marker schema$`, prepare("future coordination marker", requireV10FutureCoordinationMarker)),
+		step(`^compatibility and reservation clients inspect that root$`, driver.exerciseReservationScenarioV04),
+		step(`^both reject with exit 76 without changing the marker$`, assert("future coordination marker")),
+		step(`^reservation coordination with a valid future ledger schema$`, prepare("future reservation ledger", requireV10FutureReservationLedger)),
+		step(`^status and reservation admission inspect that ledger$`, driver.exerciseReservationScenarioV04),
+		step(`^both report exit 76 without changing the ledger$`, assert("future reservation ledger")),
+		step(`^schema three observes a live schema two owner without metadata$`, prepare("schema three legacy owner", requireV10SchemaThreeLegacyOwner)),
+		step(`^adaptive admission is requested$`, driver.exerciseReservationScenarioV04),
+		step(`^it exits 76 before enqueue or child launch$`, assert("schema three legacy owner")),
 		step(`^vector capacity fits under a threshold-blocked host sample$`, prepare("threshold authority", requireV04ThresholdAuthority)),
 		step(`^reservation admission evaluates that sample$`, driver.exerciseReservationScenarioV04),
 		step(`^threshold pressure defers work without changing the ledger$`, assert("threshold authority")),
@@ -118,7 +127,7 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		step(`^a peer holding the shared coordination lock while a guard activates and supervises its child$`,
 			prepare("shared-root contention", requireV04ContentionDefersInsteadOfFailing)),
 		step(`^the guard activates its reservation and then samples through the held lock$`, driver.exerciseReservationScenarioV04),
-		step(`^activation returns exit 75 after owned cleanup and later observation contention keeps healthy work running$`, assert("shared-root contention")),
+		step(`^activation returns exit 1 after owned cleanup and later observation contention keeps healthy work running$`, assert("shared-root contention")),
 		step(`^a running reserved owner and a coordination mutation lock held by another goroutine in the same process$`, prepare("bounded owner cancellation", requireV04BoundedOwnerCancellation)),
 		step(`^its owning guard is cancelled and reaps the child$`, driver.exerciseReservationScenarioV04),
 		step(`^cleanup defers boundedly without a caller failure, with exact ledger bytes and an externally locked identity until a later atomic retry after lock release$`, assert("bounded owner cancellation")),
@@ -200,7 +209,7 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 			})
 		}),
 		step(`^only the compatibility supervisor is killed and ownership is reconciled$`, driver.exerciseReservationScenarioV04),
-		step(`^reservation takeover remains deferred until the compatibility child group retires$`, assert("schema one supervisor lifetime")),
+		step(`^reservation takeover reports exit 76 until the compatibility child group retires$`, assert("schema one supervisor lifetime")),
 		step(`^a long-lived schema-one caller whose guarded group retirement is initially unconfirmed$`, prepare("schema one embedded retirement", requireV04SchemaOneEmbeddedRetirement)),
 		step(`^its launcher and group later retire without the caller exiting$`, driver.exerciseReservationScenarioV04),
 		step(`^compatibility ownership becomes reclaimable without treating the live caller PID as the owner$`, assert("schema one embedded retirement")),
@@ -210,7 +219,7 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 			})
 		}),
 		step(`^compatibility liveness and reservation takeover reconcile each shared root$`, driver.exerciseReservationScenarioV04),
-		step(`^the live PID record is retained and defers takeover while only the positively stale record is reclaimed$`, assert("legacy schema one ownership")),
+		step(`^the live PID record is retained and rejects takeover with exit 76 while only the positively stale record is reclaimed$`, assert("legacy schema one ownership")),
 		step(`^a reserved owner selected for storage shedding$`, driver.storageSheddingOwnerV04),
 		step(`^its own guard observes the mark and terminates its child$`, driver.exerciseStorageOwnerSheddingV04),
 		step(`^the child is reaped and the guard returns storage-blocked exit 73 before release$`, driver.requireStorageOwnerSheddingV04),
@@ -411,7 +420,7 @@ func (driver *Driver) conformanceBindings() []contract.StepBinding { //nolint:fu
 		step(`^one gate pauses after verification while another gate overwrites their provided HIPPO binary$`, prepare("parallel pinned conformance binary", requireV04ParallelPinnedBinary)),
 		step(`^the paused gate invokes its already-verified binary path$`, driver.exerciseReservationScenarioV04),
 		step(`^only verified bytes execute and the replacement attempt remains observable$`, assert("parallel pinned conformance binary")),
-		step(`^an allow-capacity-skip coordination check that exits 75 after (pinned binary tamper|verified cleanup failure)$`, func(failure string) error {
+		step(`^an allow-capacity-skip coordination check that returns exit 75 with a new never-started receipt after (pinned binary tamper|verified cleanup failure)$`, func(failure string) error {
 			return driver.prepareReservationScenarioV04("capacity skip integrity", func(string) error {
 				return requireV04CapacitySkipIntegrity(failure)
 			})
@@ -421,9 +430,12 @@ func (driver *Driver) conformanceBindings() []contract.StepBinding { //nolint:fu
 		step(`^a consumer whose declared probe waits for capacity to free$`, func() error {
 			return driver.declareDeferralProbe(probeWaitsForCapacity)
 		}),
-		step(`^a consumer whose declared probe treats exit 75 as final$`, func() error {
+		step(`^a consumer whose declared probe treats a verified never-started exit 75 as final$`, func() error {
 			return driver.declareDeferralProbe(probeTreatsDeferralAsFinal)
 		}),
+		step(`^an allow-capacity-skip consumer whose coordination check exits 76$`, prepare("conformance protocol mismatch", requireV10ConformanceProtocolMismatch)),
+		step(`^conformance classifies the protocol mismatch$`, driver.exerciseReservationScenarioV04),
+		step(`^conformance keeps the mismatch fatal and does not run later gates$`, assert("conformance protocol mismatch")),
 		step(`^a consumer whose declared probe never consults HIPPO$`, func() error {
 			return driver.declareDeferralProbe(probeNeverConsultsHIPPO)
 		}),
@@ -495,7 +507,7 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^releasing its final session removes the coordination marker$`, driver.releaseFinalCoordinationSession),
 		step(`^the shared root advertises reservation coordination$`, driver.reservationCoordination),
 		step(`^every compatibility task class requests a guarded session$`, driver.requestEveryCompatibilityClass),
-		step(`^every compatibility owner is deferred with exit 75$`, driver.requireEveryCoordinationOwnerDeferred),
+		step(`^every compatibility owner is rejected with exit 76$`, driver.requireEveryCoordinationOwnerDeferred),
 		step(`^the reservation coordination marker remains unchanged$`, driver.requireReservationCoordinationUnchanged),
 		step(`^a reservation whose guard is gone while its process group still runs$`, func() error {
 			return driver.abandonOwner(true)
@@ -544,6 +556,8 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^an admitted guarded command$`, driver.givenAdmitted),
 		step(`^the guarded child exits with code 17$`, driver.child17),
 		step(`^the guard exits with code 17$`, driver.require17),
+		step(`^the guarded child exits with reserved code (75|76)$`, driver.childReservedCode),
+		step(`^the guard preserves code (75|76) with task-failed evidence and no never-started receipt$`, driver.requireReservedChildFailure),
 		step(`^an admitted command without consumer concurrency mappings$`, driver.admittedWithoutConcurrencyMappings),
 		step(`^an admitted command with explicit consumer concurrency mappings$`, driver.admittedWithConcurrencyMappings),
 		step(`^the guarded child inspects its environment$`, driver.inspectGuardedEnvironment),
@@ -825,10 +839,12 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^the loaded gate has declared the host saturated$`, driver.declareLoadSaturation),
 		step(`^no loaded gate saturation declaration$`, driver.undeclaredLoadSaturation),
 		step(`^the guarded child signalled readiness$`, driver.markGuardedChildStarted),
-		step(`^a compiled guarded run ends in the documented capacity deferral$`, driver.documentedCapacityDeferral),
-		step(`^a compiled guarded run ends in another exit or without the deferral message$`, driver.otherRefusals),
+		step(`^a compiled guarded run ends in the documented capacity deferral with a never-started receipt$`, driver.documentedCapacityDeferral),
+		step(`^a compiled guarded run ends in another exit or without the deferral message or receipt$`, driver.otherRefusals),
+		step(`^a compiled guarded run ends in protocol mismatch exit 76$`, driver.protocolMismatchRefusal),
 		step(`^the fixture accepts the deferral$`, driver.requireDeferralAccepted),
 		step(`^the fixture refuses the run$`, driver.requireRunRefused),
+		step(`^the fixture refuses the run as a non-capacity failure$`, driver.requireRunRefused),
 	}
 }
 

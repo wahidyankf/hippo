@@ -77,6 +77,7 @@ const (
 	tokenField                    = "token"
 	requestedField                = "requested"
 	childStartedArgScript         = `printf started > "$1"`
+	hippoRootEnvironment          = "HIPPO_ROOT"
 )
 
 // interruptReadinessWait bounds how long a fixture waits for a guarded child to
@@ -779,7 +780,7 @@ func (driver *Driver) requestEveryCompatibilityClass() error {
 		}
 	}
 	if driver.coordinationDeferrals == driver.coordinationRequests {
-		driver.exitCode = guard.CapacityDeferredExitCode
+		driver.exitCode = policy.ProtocolMismatchExitCode
 	}
 
 	return nil
@@ -792,7 +793,7 @@ func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskCla
 		}
 	}
 	if driver.coordinationDeferrals == driver.coordinationRequests {
-		driver.exitCode = guard.CapacityDeferredExitCode
+		driver.exitCode = policy.ProtocolMismatchExitCode
 	}
 
 	return nil
@@ -800,12 +801,9 @@ func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskCla
 
 // requestCompatibilityClassE2E asks until the answer is about coordination.
 //
-// A saturated host defers on capacity before the compatibility check is ever
-// reached, and both refusals are exit 75. Both are correct, but only the
-// coordination one is what this scenario is about, so a capacity deferral is
-// retried rather than counted or treated as a failure. The loaded gate found
-// exactly this: two classes reported the coordination verdict and the third
-// never got that far.
+// A saturated host can defer with exit 75 before the compatibility check is
+// reached. This scenario needs the later exit-76 protocol verdict, so a verified
+// capacity deferral is retried rather than counted as the terminal answer.
 func (driver *Driver) requestCompatibilityClassE2E(class policy.TaskClass) error {
 	for attempt := range compatibilityDeferralAttempts {
 		stderr := &bytes.Buffer{}
@@ -816,7 +814,7 @@ func (driver *Driver) requestCompatibilityClassE2E(class policy.TaskClass) error
 			diskPathFlag, ".",
 			"--", shellPath, "-c", "exit 99",
 		)
-		command.Env = environmentWith(map[string]string{"HIPPO_ROOT": driver.leaseRoot})
+		command.Env = environmentWith(map[string]string{hippoRootEnvironment: driver.leaseRoot})
 		command.Stderr = stderr
 
 		err := command.Run()
@@ -831,7 +829,7 @@ func (driver *Driver) requestCompatibilityClassE2E(class policy.TaskClass) error
 			driver.coordinationDeferrals++
 			driver.supervisionFailure = errors.Join(
 				driver.supervisionFailure,
-				fmt.Errorf("%s compatibility deferral: %w", class, err),
+				fmt.Errorf("%s compatibility mismatch: %w", class, err),
 			)
 
 			return nil
@@ -859,7 +857,7 @@ func (driver *Driver) requestCompatibilityClassE2E(class policy.TaskClass) error
 }
 
 func (driver *Driver) requireEveryCoordinationOwnerDeferred() error {
-	if driver.exitCode != guard.CapacityDeferredExitCode ||
+	if driver.exitCode != policy.ProtocolMismatchExitCode ||
 		driver.coordinationRequests != 3 ||
 		driver.coordinationDeferrals != driver.coordinationRequests ||
 		driver.supervisionFailure == nil {
@@ -1075,6 +1073,81 @@ func (driver *Driver) require17() error {
 	if driver.exitCode != 17 {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
+	return nil
+}
+
+func (driver *Driver) childReservedCode(value string) error {
+	code, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	if driver.mode == contract.E2E {
+		return driver.childReservedCodeE2E(code)
+	}
+
+	return driver.runGuardedShell(fmt.Sprintf("exit %d", code), nil)
+}
+
+func (driver *Driver) childReservedCodeE2E(code int) error {
+	for attempt := range compatibilityDeferralAttempts {
+		root, err := os.MkdirTemp("", fmt.Sprintf("hippo-child-reserved-%d-", attempt))
+		if err != nil {
+			return err
+		}
+		driver.temporaryPaths = append(driver.temporaryPaths, root)
+		stderr := &bytes.Buffer{}
+		command := exec.Command(
+			driver.binary, "run", "--profile", profileMinimal, "--class", string(taskClassEphemeral),
+			diskPathFlag, ".", "--", shellPath, "-c", fmt.Sprintf("exit %d", code),
+		)
+		command.Env = environmentWith(map[string]string{hippoRootEnvironment: root})
+		command.Stderr = stderr
+		runError := command.Run()
+		exit := exitCode(runError)
+		summaries, globError := filepath.Glob(filepath.Join(root, "*.summary.json"))
+		if globError != nil {
+			return globError
+		}
+		if exit == code && len(summaries) == 1 {
+			data, readError := os.ReadFile(summaries[0])
+			if readError != nil {
+				return readError
+			}
+			if bytes.Contains(data, []byte(`"outcome": "task-failed"`)) {
+				driver.leaseRoot = root
+				driver.exitCode = exit
+				driver.errorOutput = stderr.String()
+
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("compiled child exit %d was not admitted after %d attempts", code, compatibilityDeferralAttempts)
+}
+
+func (driver *Driver) requireReservedChildFailure(value string) error {
+	code, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	if driver.exitCode != code {
+		return fmt.Errorf("guard exit=%d, want child code %d", driver.exitCode, code)
+	}
+	summaries, err := filepath.Glob(filepath.Join(driver.leaseRoot, "*.summary.json"))
+	if err != nil || len(summaries) != 1 {
+		return fmt.Errorf("summary count=%d: %w", len(summaries), err)
+	}
+	data, err := os.ReadFile(summaries[0])
+	if err != nil || !bytes.Contains(data, []byte(`"outcome": "task-failed"`)) {
+		return fmt.Errorf("child failure summary=%s: %w", data, err)
+	}
+	if receipts, readError := os.ReadDir(filepath.Join(driver.leaseRoot, "receipts")); readError == nil && len(receipts) > 0 {
+		return fmt.Errorf("child-owned exit wrote %d safety receipts", len(receipts))
+	} else if readError != nil && !errors.Is(readError, os.ErrNotExist) {
+		return readError
+	}
+
 	return nil
 }
 

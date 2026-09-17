@@ -48,7 +48,8 @@ func (driver *Driver) inspectMalformedServiceCompatibilityV04() error {
 }
 
 func (driver *Driver) requireMalformedServiceCompatibilityV04() error {
-	if driver.v04Session != nil || !guard.IsCoordinationDeferred(driver.v04Error) {
+	if driver.v04Session != nil || driver.v04Error == nil ||
+		guard.IsCoordinationDeferred(driver.v04Error) || guard.IsCoordinationProtocolMismatch(driver.v04Error) {
 		return fmt.Errorf("malformed service compatibility state did not fail closed: session=%+v error=%w", driver.v04Session, driver.v04Error)
 	}
 	data, err := os.ReadFile(driver.configPath)

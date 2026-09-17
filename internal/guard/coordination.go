@@ -31,6 +31,10 @@ const (
 
 var errCoordinationDeferred = errors.New("shared coordination deferred admission")
 
+// ErrCoordinationProtocolMismatch identifies valid peer coordination state
+// whose protocol this client cannot safely join.
+var ErrCoordinationProtocolMismatch = errors.New("shared coordination protocol mismatch")
+
 // ErrCoordinationCleanupDeferred reports that ownership cleanup could not take
 // the shared lock but left a reconcilable owner mark behind. The work itself
 // succeeded, so callers surface this as a note rather than a failure.
@@ -60,6 +64,16 @@ var coordinationProcessGates = struct { //nolint:gochecknoglobals // Process-loc
 // IsCoordinationDeferred reports whether another compatible owner should be retried with exit 75.
 func IsCoordinationDeferred(err error) bool {
 	return errors.Is(err, errCoordinationDeferred)
+}
+
+// IsCoordinationProtocolMismatch reports whether valid peer state requires a
+// client upgrade or epoch drain rather than a capacity retry.
+func IsCoordinationProtocolMismatch(err error) bool {
+	return errors.Is(err, ErrCoordinationProtocolMismatch)
+}
+
+func coordinationProtocolMismatch(reason string) error {
+	return fmt.Errorf("%w: %s; drain or upgrade the incompatible client before retrying", ErrCoordinationProtocolMismatch, reason)
 }
 
 type coordinationMarker struct {
@@ -280,10 +294,22 @@ func readCoordinationMarker(root string) (coordinationMarker, bool, error) {
 		return coordinationMarker{}, false, errors.New("coordination marker must contain one JSON value")
 	}
 	if marker.SchemaVersion != coordinationSchemaVersion {
-		return coordinationMarker{}, false, fmt.Errorf("unsupported coordination marker schema %d", marker.SchemaVersion)
+		if marker.SchemaVersion > 0 {
+			return coordinationMarker{}, false, coordinationProtocolMismatch(
+				fmt.Sprintf("unsupported coordination marker schema %d", marker.SchemaVersion),
+			)
+		}
+
+		return coordinationMarker{}, false, errors.New("coordination marker schema must be positive")
 	}
 	if marker.Mode != coordinationModeExclusive && marker.Mode != coordinationModeReservation {
-		return coordinationMarker{}, false, fmt.Errorf("unsupported coordination mode %q", marker.Mode)
+		if marker.Mode != "" {
+			return coordinationMarker{}, false, coordinationProtocolMismatch(
+				fmt.Sprintf("unsupported coordination mode %q", marker.Mode),
+			)
+		}
+
+		return coordinationMarker{}, false, errors.New("coordination marker mode is missing")
 	}
 
 	return marker, true, nil
@@ -339,7 +365,7 @@ func ensureExclusiveCoordination(root string) error {
 		})
 	}
 	if marker.Mode == coordinationModeReservation {
-		return fmt.Errorf("%w: reservation mode is active", errCoordinationDeferred)
+		return coordinationProtocolMismatch("reservation mode is active")
 	}
 
 	return nil

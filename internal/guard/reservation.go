@@ -555,7 +555,11 @@ func validateReservationVector(name string, vector, capacity ReservationVector) 
 
 func validateReservationLedger(ledger reservationLedger) error { //nolint:cyclop,gocognit,gocyclo // Validation intentionally enumerates every persisted trust-boundary invariant.
 	if ledger.SchemaVersion != reservationLedgerSchemaVersion {
-		return fmt.Errorf("unsupported reservation ledger schema %d", ledger.SchemaVersion)
+		if ledger.SchemaVersion > 0 {
+			return coordinationProtocolMismatch(fmt.Sprintf("unsupported reservation ledger schema %d", ledger.SchemaVersion))
+		}
+
+		return errors.New("reservation ledger schema must be positive")
 	}
 	if ledger.Capacity.CPU < 0 || ledger.Capacity.MemoryBytes < 0 {
 		return errors.New("reservation ledger capacity must be nonnegative")
@@ -933,7 +937,13 @@ func ensureReservationCoordination(root string) error {
 	}
 	heavyPath := filepath.Join(root, "heavy.lock")
 	_, heavyError := os.Stat(heavyPath)
-	heavyActive := heavyError == nil && heavyLeaseHeld(heavyPath)
+	heavyActive := false
+	if heavyError == nil {
+		heavyActive, err = heavyLeaseHeld(heavyPath)
+		if err != nil {
+			return err
+		}
+	}
 	if heavyError != nil && !errors.Is(heavyError, os.ErrNotExist) {
 		return heavyError
 	}
@@ -942,10 +952,10 @@ func ensureReservationCoordination(root string) error {
 		return sessionError
 	}
 	if liveSessions || heavyActive {
-		return fmt.Errorf("%w: exclusive mode has a live or unverifiable owner", errCoordinationDeferred)
+		return coordinationProtocolMismatch("exclusive mode has a live owner")
 	}
 	if err = os.RemoveAll(heavyPath); err != nil {
-		return compatibilityStateDeferred("stale compatibility heavy state cannot be removed")
+		return compatibilityStateError("stale compatibility heavy state cannot be removed")
 	}
 
 	return writeCoordinationMarker(root, coordinationMarker{
