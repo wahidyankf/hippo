@@ -23,7 +23,7 @@ omitted according to that field's compatibility contract. Field _order_ is not p
 
 The smallest public document has three required fields: integer `schemaVersion` `1`, the release
 string in `version`, and the exact source commit in `commit`. Release builds currently report
-`v0.7.0`; source builds report `dev` and `unknown`.
+`v0.7.1`; source builds report `dev` and `unknown`.
 
 ## `monitor --json`
 
@@ -134,8 +134,10 @@ privacy-safe `coordination` rows and totals, owner-promotion decision, and `conf
 }
 ```
 
-An idle ledger reports zeroes for `capacity`, `allocated`, and every count. That is an empty epoch,
-not a corrupt one.
+An idle coordination epoch reports zeroes for `capacity`, `allocated`, and every count. In exclusive
+mode, each live compatibility session appears as an `active` owner with `legacy: true`; the heavy
+lease and its matching session are one owner, not two. Exclusive mode has no registered waiter rows
+and does not invent reservation vectors.
 
 **Coordination corruption is an error, never a synthetic zero-total success.** If the reservation
 marker, lock, or ledger cannot be decoded, `status --json` returns an error rather than reporting
@@ -143,8 +145,8 @@ totals it cannot substantiate.
 
 `owners` and `waiters` are safe operational rows. They contain opaque run IDs, labels, class,
 profile, tier, requested/allocated vectors, tier minimum/maximum, registration time, and deadline—never commands, arguments, working
-directories, or repository paths. `legacyEntries` counts live schema-2 records without metadata;
-schema-3 launches refuse to mix with them until they drain.
+directories, or repository paths. `legacyEntries` counts live compatibility owners and live schema-2
+records without metadata; schema-3 launches refuse to mix with them until they drain.
 
 ### `coordination.abandonedProcessGroups`
 

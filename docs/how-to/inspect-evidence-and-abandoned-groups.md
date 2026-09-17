@@ -21,7 +21,8 @@ Three questions this answers:
 - **Why is owner three closed?** `promotion.reason` and `effectiveOwners`.
 - **Which repository is next?** Privacy-safe `waiters[].source` and `position`.
 
-All zeroes means an idle epoch, not a broken one.
+All zeroes means an idle epoch, not a broken one. A live exclusive compatibility session appears as a
+legacy owner even though it has no reservation vector or queue position.
 
 If `status --json` returns an **error** instead of totals, the coordination state is corrupt. HIPPO
 reports that rather than fabricating zero totals, because a zero total would silently license every
