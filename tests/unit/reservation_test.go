@@ -32,12 +32,34 @@ func TestMalformedCompatibilitySessionFailsClosedWithoutMutation(t *testing.T) {
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, 0,
 	)
-	if session != nil || !guard.IsCoordinationDeferred(err) {
-		t.Fatalf("malformed compatibility session did not defer: session=%+v error=%v", session, err)
+	if session != nil || err == nil || guard.IsCoordinationDeferred(err) || guard.IsCoordinationProtocolMismatch(err) {
+		t.Fatalf("malformed compatibility session did not fail as corrupt state: session=%+v error=%v", session, err)
 	}
 	after, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(after, state) {
 		t.Fatalf("malformed compatibility session changed: %q error=%v", after, err)
+	}
+}
+
+func TestUnsupportedReservationLedgerSchemaIsProtocolMismatchWithoutMutation(t *testing.T) {
+	root := t.TempDir()
+	marker := []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
+	ledger := []byte("{\"schemaVersion\":3,\"capacity\":{\"cpu\":0,\"memoryBytes\":0},\"nextSequence\":0,\"owners\":[],\"waiters\":[]}\n")
+	if err := os.WriteFile(filepath.Join(root, "coordination-mode.json"), marker, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "reservations.json")
+	if err := os.WriteFile(path, ledger, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := guard.ReservationStatus(context.Background(), root)
+	if !guard.IsCoordinationProtocolMismatch(err) {
+		t.Fatalf("future ledger schema returned %v, want protocol mismatch", err)
+	}
+	after, readError := os.ReadFile(path)
+	if readError != nil || !bytes.Equal(after, ledger) {
+		t.Fatalf("future ledger changed: %q error=%v", after, readError)
 	}
 }
 

@@ -54,24 +54,30 @@ Feature: HIPPO quality gates
   @e2e-exempt
   Scenario: A saturated host deferral is accepted only as documented
     Given the loaded gate has declared the host saturated
-    When a compiled guarded run ends in the documented capacity deferral
+    When a compiled guarded run ends in the documented capacity deferral with a never-started receipt
     Then the fixture accepts the deferral
 
   @e2e-exempt
   Scenario: A deferral stays a failure where saturation is undeclared
     Given no loaded gate saturation declaration
-    When a compiled guarded run ends in the documented capacity deferral
+    When a compiled guarded run ends in the documented capacity deferral with a never-started receipt
     Then the fixture refuses the run
 
   @e2e-exempt
   Scenario: A saturated host accepts no other refusal
     Given the loaded gate has declared the host saturated
-    When a compiled guarded run ends in another exit or without the deferral message
+    When a compiled guarded run ends in another exit or without the deferral message or receipt
     Then the fixture refuses the run
+
+  @e2e-exempt
+  Scenario: A protocol mismatch is never accepted as a capacity skip
+    Given the loaded gate has declared the host saturated
+    When a compiled guarded run ends in protocol mismatch exit 76
+    Then the fixture refuses the run as a non-capacity failure
 
   @e2e-exempt
   Scenario: A saturated deferral is refused once the guarded child started
     Given the loaded gate has declared the host saturated
     And the guarded child signalled readiness
-    When a compiled guarded run ends in the documented capacity deferral
+    When a compiled guarded run ends in the documented capacity deferral with a never-started receipt
     Then the fixture refuses the run

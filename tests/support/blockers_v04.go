@@ -155,7 +155,8 @@ func requireV04UnreadableSessionInventory(root string) error {
 		_ = guard.ReleaseReservation(root, session)
 	}
 	after, readError := os.ReadFile(inventoryPath)
-	if session != nil || !guard.IsCoordinationDeferred(admissionError) || markerPresent || readError != nil || !bytes.Equal(before, after) {
+	if session != nil || admissionError == nil || guard.IsCoordinationDeferred(admissionError) ||
+		guard.IsCoordinationProtocolMismatch(admissionError) || markerPresent || readError != nil || !bytes.Equal(before, after) {
 		//nolint:errorlint // The diagnostic intentionally reports several independent fixture outcomes.
 		return fmt.Errorf("unreadable compatibility inventory did not fail closed: session=%v marker=%v admission=%v read=%v", session != nil, markerPresent, admissionError, readError)
 	}
@@ -193,7 +194,8 @@ func requireV04FailedStaleHeavyCleanup(root string) error {
 		_ = guard.ReleaseReservation(root, session)
 	}
 	after, readError := os.ReadFile(ownerPath)
-	if session != nil || !guard.IsCoordinationDeferred(admissionError) || markerPresent || readError != nil || !bytes.Equal(before, after) {
+	if session != nil || admissionError == nil || guard.IsCoordinationDeferred(admissionError) ||
+		guard.IsCoordinationProtocolMismatch(admissionError) || markerPresent || readError != nil || !bytes.Equal(before, after) {
 		//nolint:errorlint // The diagnostic intentionally reports several independent fixture outcomes.
 		return fmt.Errorf("failed stale-heavy cleanup did not fail closed: session=%v marker=%v admission=%v read=%v", session != nil, markerPresent, admissionError, readError)
 	}
@@ -1048,6 +1050,40 @@ func runInternalGuardRegressionV04(name string) error {
 	return nil
 }
 
+func runGoRegressionV10(packagePath, name string) error {
+	moduleRoot, err := moduleRootV04()
+	if err != nil {
+		return err
+	}
+	command := exec.Command("go", "test", packagePath, "-run", "^"+name+"$", "-count=1", "-v")
+	command.Dir = moduleRoot
+	output, runError := command.CombinedOutput()
+	if runError != nil {
+		return fmt.Errorf("go regression %s %s: %s: %w", packagePath, name, bytes.TrimSpace(output), runError)
+	}
+	if !bytes.Contains(output, []byte("=== RUN   "+strings.Split(name, "/")[0])) {
+		return fmt.Errorf("go regression %s %s is not implemented", packagePath, name)
+	}
+
+	return nil
+}
+
+func requireV10FutureCoordinationMarker(string) error {
+	return runGoRegressionV10("./tests/integration", "TestCoordinationMarkerRejectsIncompatibleOrMalformedState/future_schema")
+}
+
+func requireV10FutureReservationLedger(string) error {
+	return runGoRegressionV10("./tests/unit", "TestUnsupportedReservationLedgerSchemaIsProtocolMismatchWithoutMutation")
+}
+
+func requireV10SchemaThreeLegacyOwner(string) error {
+	return runGoRegressionV10("./internal/cli", "TestSchemaThreeRefusesLiveLegacyOwnerWithProtocolMismatch")
+}
+
+func requireV10ConformanceProtocolMismatch(string) error {
+	return runIntegrationConformanceRegressionV04("TestCompiledConformanceProtocolMismatchIsNotCapacitySkip")
+}
+
 func requireV04PayloadIdentityIsolation(mode string) error {
 	return runInternalGuardRegressionV04("TestPayloadCannotInheritLifetimeIdentityDescriptors/" + mode)
 }
@@ -1086,7 +1122,7 @@ func requireV04StatusWaitsOutContention(string) error {
 
 func requireV04ContentionDefersInsteadOfFailing(string) error {
 	return errors.Join(
-		runInternalGuardRegressionV04("TestActivationContentionDefersInsteadOfFailing"),
+		runInternalGuardRegressionV04("TestActivationContentionFailsAfterOwnedCleanup"),
 		runInternalGuardRegressionV04("TestSupervisionContentionDoesNotStopHealthyWork"),
 	)
 }
@@ -1604,7 +1640,7 @@ func requireV04OrphanedAtomicTempRetention(root string) error {
 }
 
 func requireV04ReservedHIPPOEnvironmentMappings(root string) error {
-	for _, name := range []string{"HIPPO_ROOT", "HIPPO_RESERVED_MEMORY_BYTES", "HIPPO_CONFIG", "HIPPO_DEFAULT_CONFIG"} {
+	for _, name := range []string{hippoRootEnvironment, "HIPPO_RESERVED_MEMORY_BYTES", "HIPPO_CONFIG", "HIPPO_DEFAULT_CONFIG"} {
 		caseRoot := filepath.Join(root, strings.ToLower(strings.TrimPrefix(name, "HIPPO_")))
 		marker := filepath.Join(caseRoot, "child-started")
 		code, runError := guard.Run(context.Background(), guard.RunConfig{
@@ -1857,9 +1893,9 @@ func requireV04CanonicalConformanceInputs(root string) error { //nolint:gocognit
 		return err
 	}
 	previousBinary, hadBinary := os.LookupEnv("HIPPO_BIN")
-	previousRoot, hadRoot := os.LookupEnv("HIPPO_ROOT")
+	previousRoot, hadRoot := os.LookupEnv(hippoRootEnvironment)
 	_ = os.Setenv("HIPPO_BIN", "inherited-wrong-binary")
-	_ = os.Setenv("HIPPO_ROOT", "inherited-wrong-root")
+	_ = os.Setenv(hippoRootEnvironment, "inherited-wrong-root")
 	defer func() {
 		if hadBinary {
 			_ = os.Setenv("HIPPO_BIN", previousBinary)
@@ -1867,9 +1903,9 @@ func requireV04CanonicalConformanceInputs(root string) error { //nolint:gocognit
 			_ = os.Unsetenv("HIPPO_BIN")
 		}
 		if hadRoot {
-			_ = os.Setenv("HIPPO_ROOT", previousRoot)
+			_ = os.Setenv(hippoRootEnvironment, previousRoot)
 		} else {
-			_ = os.Unsetenv("HIPPO_ROOT")
+			_ = os.Unsetenv(hippoRootEnvironment)
 		}
 	}()
 	if err = conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}); err != nil {

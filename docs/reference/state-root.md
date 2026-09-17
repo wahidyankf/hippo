@@ -48,7 +48,7 @@ Development streams are named `development-<class>-<epochMillis>-<pid>`.
 | `.writers.lock`                         | Cross-process lock protecting writer admission and cleanup |
 | `raw/*.jsonl.gz`                        | Daily-compacted completed raw streams                      |
 | `history/YYYY-MM-DD.jsonl.gz`           | Daily-compacted queryable summary rows                     |
-| `receipts/*.json`                       | Never-started and emergency safety-stop receipts           |
+| `receipts/*.json`                       | Never-started and started safety/failure receipts          |
 
 An idle root after a few guarded runs looks like this:
 

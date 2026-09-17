@@ -21,9 +21,10 @@ import (
 // for capacity, one reads the deferral as final, and one never consults HIPPO at
 // all and would otherwise pass by finishing before the question was asked.
 const (
-	probeWaitsForCapacity      = `while [ -f "$HIPPO_ROOT/coordination-mode.json" ]; do sleep 0.05; done`
-	probeTreatsDeferralAsFinal = `if [ -f "$HIPPO_ROOT/coordination-mode.json" ]; then exit 75; fi`
-	probeNeverConsultsHIPPO    = `exit 0`
+	probeWaitsForCapacity      = `while [ -f "$HIPPO_ROOT/conformance-capacity-held" ]; do sleep 0.05; done`
+	probeTreatsDeferralAsFinal = `if [ -f "$HIPPO_ROOT/conformance-capacity-held" ] && ` +
+		`grep -q '"state":"never-started"' "$HIPPO_ROOT/conformance-never-started-receipt.json"; then exit 75; fi`
+	probeNeverConsultsHIPPO = `exit 0`
 )
 
 func (driver *Driver) declareDeferralProbe(script string) error {

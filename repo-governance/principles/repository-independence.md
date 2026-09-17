@@ -20,4 +20,8 @@ Generic mechanisms that a caller parameterizes: environment variables that recei
 
 ## Consequences Elsewhere
 
-This is why the [public contract](../development/public-contract.md) is three exit codes and a command surface rather than a configuration schema for other people's builds; why [dependency selection](../development/dependency-selection.md) treats anything reaching the filesystem or process table as significant; and why HIPPO must never become load-bearing for the work it guards.
+This is why the [public contract](../development/public-contract.md) is four stable operational exit
+codes and a command surface rather than a configuration schema for other people's builds; why
+[dependency selection](../development/dependency-selection.md) treats anything reaching the
+filesystem or process table as significant; and why HIPPO must never become load-bearing for the
+work it guards.

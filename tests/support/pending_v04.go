@@ -482,8 +482,8 @@ func requireV04Bridge(root string) error {
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
-	if reserved != nil || reserveError == nil {
-		return errors.New("reservation mode took over a live exclusive compatibility owner")
+	if reserved != nil || !guard.IsCoordinationProtocolMismatch(reserveError) {
+		return fmt.Errorf("reservation mode did not report a protocol mismatch for a live exclusive compatibility owner: %w", reserveError)
 	}
 
 	return nil
@@ -512,7 +512,8 @@ func (driver *Driver) inspectMalformedCompatibilityV04() error {
 }
 
 func (driver *Driver) requireMalformedCompatibilityDeferredV04() error {
-	if driver.v04Session != nil || !guard.IsCoordinationDeferred(driver.v04Error) {
+	if driver.v04Session != nil || driver.v04Error == nil ||
+		guard.IsCoordinationDeferred(driver.v04Error) || guard.IsCoordinationProtocolMismatch(driver.v04Error) {
 		return fmt.Errorf("malformed compatibility state did not fail closed: session=%+v error=%w", driver.v04Session, driver.v04Error)
 	}
 	data, err := os.ReadFile(filepath.Join(driver.evidenceRoot, "heavy.lock", "owner.json"))
@@ -546,8 +547,8 @@ func (driver *Driver) inspectUnsupportedCompatibilityV04() error {
 }
 
 func (driver *Driver) requireUnsupportedCompatibilityV04() error {
-	if driver.v04Session != nil || driver.v04Error != nil {
-		return fmt.Errorf("unsupported compatibility state did not defer: session=%+v error=%w", driver.v04Session, driver.v04Error)
+	if driver.v04Session != nil || !guard.IsCoordinationProtocolMismatch(driver.v04Error) {
+		return fmt.Errorf("unsupported compatibility state did not report protocol mismatch: session=%+v error=%w", driver.v04Session, driver.v04Error)
 	}
 	data, err := os.ReadFile(filepath.Join(driver.evidenceRoot, "heavy.lock", "owner.json"))
 	if err != nil || !bytes.Equal(data, driver.v04State) {
@@ -733,7 +734,7 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 	)
 	run.Env = environment
 	if output, err := run.CombinedOutput(); err != nil {
-		if saturatedDeferralV04(output, err, false) {
+		if saturatedDeferralV04(sharedRoot, output, err, false) {
 			return nil
 		}
 
@@ -890,7 +891,7 @@ func (driver *Driver) requireCompiledPTYV04() error {
 		// started: readiness is the child's first act, so its absence proves the
 		// refusal came before launch rather than from a child that ran and failed.
 		_, readyErr := os.Stat(readyPath)
-		if saturatedDeferralV04(output, runError, !errors.Is(readyErr, os.ErrNotExist)) {
+		if saturatedDeferralV04(root, output, runError, !errors.Is(readyErr, os.ErrNotExist)) {
 			return nil
 		}
 
@@ -910,7 +911,7 @@ func (driver *Driver) requireCompiledPTYV04() error {
 // samples under the profile ceiling, so no guarded child can clear it there:
 // deferring is the product working, and the only correct answer a child can get.
 // Anywhere the flag is unset, a deferral stays the failure it is.
-func saturatedDeferralV04(output []byte, err error, childStarted bool) bool {
+func saturatedDeferralV04(root string, output []byte, err error, childStarted bool) bool {
 	var exitError *exec.ExitError
 	if !errors.As(err, &exitError) {
 		return false
@@ -918,7 +919,27 @@ func saturatedDeferralV04(output []byte, err error, childStarted bool) bool {
 
 	return acceptsSaturatedDeferralV04(
 		os.Getenv(loadSaturatedVariable) == "1", exitError.ExitCode(), output, childStarted,
+		hasNeverStartedReceiptV10(root),
 	)
+}
+
+func hasNeverStartedReceiptV10(root string) bool {
+	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		data, readError := os.ReadFile(filepath.Join(root, "receipts", entry.Name()))
+		if readError != nil {
+			continue
+		}
+		var receipt guard.SafetyReceipt
+		if json.Unmarshal(data, &receipt) == nil && receipt.SchemaVersion == 1 && receipt.State == "never-started" {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (driver *Driver) requirePendingConformanceV04() error {
@@ -964,8 +985,10 @@ func (driver *Driver) requirePendingConformanceV04() error {
 			Command:  conformance.Command{Arguments: []string{shellPath, "-c", "test -x \"$HIPPO_BIN\""}},
 		},
 		{
-			Consumer:          manifest.Consumers[1].Name,
-			Command:           conformance.Command{Arguments: []string{shellPath, "-c", "exit 75"}},
+			Consumer: manifest.Consumers[1].Name,
+			Command: conformance.Command{Arguments: []string{
+				shellPath, "-c", "mkdir -p \"$HIPPO_ROOT/receipts\"; printf '%s\\n' '{\"schemaVersion\":1,\"state\":\"never-started\"}' > \"$HIPPO_ROOT/receipts/conformance.json\"; printf 'HIPPO deferred task: safe admission was not reached.\\n' >&2; exit 75",
+			}},
 			AllowCapacitySkip: true,
 		},
 	}

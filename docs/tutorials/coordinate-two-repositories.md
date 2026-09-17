@@ -3,8 +3,8 @@
 One guarded command is not very interesting. In this tutorial we will run two at once, watch them
 share a single host budget, and see HIPPO refuse a request that could never fit.
 
-It takes about ten minutes. We will use a throwaway state root so nothing here can collide with real
-work already running on your machine.
+We will use a throwaway state root so nothing here can collide with real work already running on
+your machine.
 
 You should have finished [Guard your first command](./guard-your-first-command.md) first.
 
@@ -191,5 +191,5 @@ budget without knowing about each other.
   the queue is strict FIFO.
 - [How to enable reservation coordination](../how-to/enable-reservation-coordination.md) — do this
   permanently for a real repository.
-- [How to respond to a HIPPO exit code](../how-to/respond-to-exit-codes.md) — handle `73`, `75`, and
-  `78` in scripts.
+- [How to respond to a HIPPO exit code](../how-to/respond-to-exit-codes.md) — handle `73`, `75`,
+  `76`, and `78` in scripts.

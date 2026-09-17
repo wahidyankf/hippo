@@ -3,8 +3,8 @@
 In this tutorial we will run a command under HIPPO's supervision, see what HIPPO tells that command
 about the machine, and confirm that guarding changes nothing about how the command behaves.
 
-It takes about five minutes. By the end you will have run five commands and seen HIPPO admit work,
-pass through an exit code, and leave your shell pipeline intact.
+By the end you will have run five commands and seen HIPPO admit work, pass through an exit code, and
+leave your shell pipeline intact.
 
 ## Before we start
 
@@ -95,9 +95,10 @@ echo $?
 3
 ```
 
-HIPPO passed the child's own exit status straight through. It reserves only five codes for itself —
-`0`, `1`, `73`, `75`, and `78` — and every other code you see came from your command. The
-[exit code reference](../reference/exit-codes.md) covers the five.
+HIPPO passed the child's own exit status straight through. Its stable operational codes are `1`,
+`73`, `75`, `76`, and `78`; `0` is success. A child can also return any of those numbers, so use
+HIPPO's receipt and task-failed evidence when the distinction matters. The
+[exit code reference](../reference/exit-codes.md) covers the contract.
 
 ## Step 5: confirm your pipeline survives
 

@@ -72,14 +72,13 @@ graph LR
 
 ```console
 $ hippo version
-v0.5.3 (b13567145a86942c76a32ea3371d5f75a817e3d9)
 
 $ hippo version --json
-{"schemaVersion":1,"version":"v0.5.3","commit":"b13567145a86942c76a32ea3371d5f75a817e3d9"}
 ```
 
-A binary built from source outside the release script reports `dev (unknown)`, because the version
-and commit are injected by `scripts/build-release.sh` at link time.
+The text form reports the release followed by its exact source commit. The JSON form carries the
+same values in `version` and `commit`. A binary built from source outside the release script reports
+`dev (unknown)`, because both values are injected by `scripts/build-release.sh` at link time.
 
 ## `hippo status`
 

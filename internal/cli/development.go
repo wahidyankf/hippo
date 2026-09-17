@@ -125,6 +125,14 @@ func statusCoordination(ctx context.Context, root, configuredMode string) (guard
 	return guard.ReservationStatus(ctx, root)
 }
 
+func coordinationStatusExitCode(err error) int {
+	if guard.IsCoordinationProtocolMismatch(err) {
+		return policy.ProtocolMismatchExitCode
+	}
+
+	return 1
+}
+
 func tagsMatch(actual, expected map[string]string) bool {
 	for key, value := range expected {
 		if actual[key] != value {
@@ -195,7 +203,7 @@ func (application Application) status(ctx context.Context, options statusOptions
 	if options.jsonOutput {
 		coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
 		if coordinationError != nil {
-			return 1, fmt.Errorf("read coordination status: %w", coordinationError)
+			return coordinationStatusExitCode(coordinationError), fmt.Errorf("read coordination status: %w", coordinationError)
 		}
 		payload := struct {
 			policy.Sample
@@ -235,7 +243,7 @@ func (application Application) status(ctx context.Context, options statusOptions
 
 	coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
 	if coordinationError != nil {
-		return 1, fmt.Errorf("read coordination status: %w", coordinationError)
+		return coordinationStatusExitCode(coordinationError), fmt.Errorf("read coordination status: %w", coordinationError)
 	}
 	coordination = filterCoordinationRows(coordination, options.source, filterTags)
 	_, err = fmt.Fprintf(
@@ -476,10 +484,14 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	if configuration.Coordination.SchemaVersion >= 3 {
 		coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
 		if coordinationError != nil {
+			if guard.IsCoordinationProtocolMismatch(coordinationError) {
+				return policy.ProtocolMismatchExitCode, fmt.Errorf("verify schema-3 activation: %w", coordinationError)
+			}
+
 			return 1, fmt.Errorf("verify schema-3 activation: %w", coordinationError)
 		}
 		if coordination.LegacyEntries > 0 {
-			return policy.ReplanRequiredExitCode, fmt.Errorf(
+			return policy.ProtocolMismatchExitCode, fmt.Errorf(
 				"schema 3 activation requires legacy owners and waiters to drain (remaining=%d)",
 				coordination.LegacyEntries,
 			)

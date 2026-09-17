@@ -18,7 +18,11 @@ Consumers depend on these meanings, so contributors must hold them exactly:
   `never-started`; a started pressure/safety stop requires payload-specific recovery. Never create a
   second waiter, duplicate a payload, change the task class to get in sooner, or weaken a gate.
 - **Exit `73`** — clean storage, then proceed.
+- **Exit `76`** — drain the incompatible live epoch or upgrade every client sharing the root; never
+  send it through a capacity retry loop.
 - **Exit `78`** — the request cannot be satisfied as stated; replan it.
+- **Exit `1`** — inspect the diagnostic and evidence. Corrupt state and post-launch HIPPO failures
+  are not safe capacity retries.
 - Recovery and status commands stay direct, never guarded. A guard that had to be admitted before it could report on admission would deadlock on itself.
 
 Never bypass the guard in a repository that uses it, and never abandon a deferred invocation rather than waiting. See [public contract](public-contract.md).
