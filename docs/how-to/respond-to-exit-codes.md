@@ -77,8 +77,8 @@ retry loop and do not delete state to force takeover. Upgrade clients that share
 existing sessions drain, and retry once — see
 [How to enable reservation coordination](./enable-reservation-coordination.md).
 
-During a rolling migration, a pre-v1 client can still report this conflict as `75`. Treat the old
-diagnostic as protocol mismatch even though its number is ambiguous, then finish the v1 upgrade.
+During a rolling migration, a pre-v0.7 client can still report this conflict as `75`. Treat the old
+diagnostic as protocol mismatch even though its number is ambiguous, then finish the v0.7 upgrade.
 
 ## Handle `73`
 

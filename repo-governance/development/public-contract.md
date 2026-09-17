@@ -1,6 +1,7 @@
 # Public Contract
 
-What consumers depend on, and what may therefore not move without a major version.
+What consumers depend on, and what may therefore not move without an explicitly authorized
+pre-stable minor release or, after stability, a major release.
 
 ## The Contract
 
@@ -17,9 +18,11 @@ What consumers depend on, and what may therefore not move without a major versio
 ## Why These Four Stable Codes and No More
 
 A new meaning wedged into an existing code costs every consumer its ability to branch on that code.
-HIPPO v1.0.0 therefore adds `76` instead of continuing to report peer protocol mismatch as capacity
-exit `75` or local replan exit `78`. Any future new condition must fit one stable meaning or ship in
-another major version. See [minimal sufficiency](../principles/minimal-sufficiency.md).
+HIPPO v0.7.0 therefore adds `76` instead of continuing to report peer protocol mismatch as capacity
+exit `75` or local replan exit `78`. While HIPPO remains pre-stable, an explicitly authorized
+breaking contract change advances the minor version. After a stable release, any new condition must
+fit one stable meaning or ship in another major version. See
+[minimal sufficiency](../principles/minimal-sufficiency.md).
 
 `75` in particular is load-bearing beyond this repository. `state: never-started` means the FIFO
 deadline or cancellation happened before launch and the same invocation may be requeued once.

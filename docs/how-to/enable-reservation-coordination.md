@@ -33,7 +33,7 @@ If you are invoking a release binary rather than the bootstrap, point at the fil
 
 ## Migrate a host that is still in exclusive mode
 
-The two modes cannot be mixed within one state root. While any exclusive session is live, a v1
+The two modes cannot be mixed within one state root. While any exclusive session is live, a v0.7
 reservation client reports protocol mismatch instead of taking over:
 
 ```console
@@ -58,7 +58,7 @@ class.
 
 ## Upgrade to adaptive schema 3
 
-Upgrade every consumer binary and wrapper to v1.0.0 or later before changing the machine-local
+Upgrade every consumer binary and wrapper to v0.7.0 or later before changing the machine-local
 configuration. Keep schema 2 active until `hippo status --json` reports no owners or waiters with
 `legacy: true`, then atomically install the schema-3 policy. A schema-3 launch returns `76` before
 enqueue or child launch when legacy ledger entries remain.

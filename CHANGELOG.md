@@ -7,7 +7,7 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
-## [v1.0.0] — 2026-09-17
+## [v0.7.0] — 2026-09-17
 
 ### Added
 
@@ -16,7 +16,7 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 
 ### Changed
 
-- **BREAKING:** coordination mode conflicts and live schema-2 entries seen by schema 3 now return
+- **BREAKING (pre-stable):** coordination mode conflicts and live schema-2 entries seen by schema 3 now return
   `76`, not `75` or `78`. Consumers must drain or upgrade and must not retry `76` as capacity.
 - Capacity exit `75` is skippable only with the documented diagnostic plus a new schema-1
   `never-started` receipt. Consumer conformance no longer uses a coordination mode conflict to
@@ -189,7 +189,7 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 
 - First standalone release, published as Resource Guard.
 
-[v1.0.0]: https://github.com/wahidyankf/hippo/releases/tag/v1.0.0
+[v0.7.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.0
 [v0.6.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.6.1
 [v0.6.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.6.0
 [v0.5.3]: https://github.com/wahidyankf/hippo/releases/tag/v0.5.3
