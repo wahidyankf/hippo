@@ -7,6 +7,30 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.6.0] — 2026-09-17
+
+### Added
+
+- Schema-3 adaptive reservation policy with light, standard, and heavy launch-time resource tiers,
+  per-tier FIFO deadlines, a two-owner base, and an evidence-gated third-owner burst.
+- Privacy-safe repository identities and customizable run tags across live owner/waiter rows,
+  lifetime summaries, history queries, and safety receipts.
+- `status` schema 5 owner/waiter rows, `watch` changed-snapshot streaming, and `history` filters over
+  current plus compacted summaries.
+- Atomic daily gzip compaction with 7-day/512-MiB raw and 30-day/128-MiB summary windows, plus bounded
+  never-started and emergency safety-stop receipts.
+
+### Changed
+
+- Admission now keeps one stable FIFO waiter until admission or deadline. The payload launches at
+  most once; HIPPO no longer implements an outer payload retry loop.
+- Tiered admission grants the largest vector that safely fits between the chosen minimum and maximum
+  at launch time and never resizes a running payload.
+- Transactional work remains protected during ordinary shedding but becomes the final eligible
+  victim at the configured emergency memory floor. Emergency stops are explicit and never retried.
+- Worktrees must live below `{repository location}/worktrees/`; the repository test gate rejects
+  active instructions that prescribe sibling `*-worktrees` layouts.
+
 ## [v0.5.3] — 2026-09-09
 
 ### Fixed

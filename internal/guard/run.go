@@ -24,6 +24,7 @@ const (
 	CapacityDeferredExitCode = 75
 	outcomeTaskFailed        = "task-failed"
 	outcomeSupervisionFailed = "supervision-failed"
+	outcomeEmergencyStop     = "emergency-safety-stop"
 )
 
 // RunConfig describes one guarded child process and its resource policy.
@@ -44,6 +45,8 @@ type RunConfig struct {
 	Resolution                            policy.Resolution
 	ReservationPolicy                     ReservationPolicy
 	ReservationPlan                       ReservationPlan
+	ReservationMetadata                   ReservationMetadata
+	EmergencyAvailableMemoryBytes         int64
 	EvidenceLimits                        evidence.Limits
 	ConfigHash                            string
 	Now                                   func() time.Time
@@ -51,14 +54,8 @@ type RunConfig struct {
 	ChildStdin                            io.Reader
 	ChildStdout, ChildStderr              io.Writer
 	Stderr                                io.Writer
-	// QuietDeferralNotice suppresses the notice that accompanies a retryable
-	// deferral, and nothing else. A caller retrying a deferral sets it after its
-	// first attempt: the notice reads the same every time, and a long budget
-	// would otherwise bury the surrender, the storage refusal, and every
-	// shedding notice under hundreds of identical copies.
-	QuietDeferralNotice bool
-	startLifetime       func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error)
-	stopLifetime        func(*supervisedLifetime, time.Duration) (error, error)
+	startLifetime                         func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error)
+	stopLifetime                          func(*supervisedLifetime, time.Duration) (error, error)
 }
 
 // environmentValue resolves name against the duplicate-key semantics the child
@@ -350,14 +347,10 @@ func stopConfiguredLifetime(config RunConfig, lifetime *supervisedLifetime) (err
 	return terminateAndWait(lifetime, config.Policy.TerminationGrace)
 }
 
-// noteDeferral reports why admission was deferred. Only the notices that
-// accompany a retryable deferral go through here, so quieting a waiting caller
-// can never silence a refusal it has to act on.
+// noteDeferralf reports why admission was deferred. The run returns after this
+// notice; callers use the recorded receipt to decide whether a later retry is
+// safe instead of blindly replaying exit 75.
 func (config RunConfig) noteDeferralf(format string, arguments ...any) {
-	if config.QuietDeferralNotice {
-		return
-	}
-
 	_, _ = fmt.Fprintf(config.Stderr, format, arguments...)
 }
 
@@ -433,7 +426,15 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	var session *Session
 	var err error
 	if config.ReservationPolicy.Enabled {
-		session, err = AcquireReservation(
+		pause := func(ctx context.Context, duration time.Duration) error {
+			if config.Sleep == nil {
+				return waitForContext(ctx, duration, nil)
+			}
+			config.Sleep(duration)
+
+			return ctx.Err()
+		}
+		session, err = AcquireReservationWithOptions(
 			ctx,
 			config.EvidenceRoot,
 			environmentValue(config.Environment, "HIPPO_SESSION"),
@@ -443,6 +444,18 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			config.ReservationPlan,
 			config.ReservationPolicy.MaxActiveOwners,
 			config.Policy.LeaseWait,
+			ReservationAdmissionOptions{
+				Metadata: config.ReservationMetadata,
+				Now:      config.Now,
+				Pause:    pause,
+				Heartbeat: func(status ReservationWaitStatus) {
+					_, _ = fmt.Fprintf(
+						config.Stderr,
+						"HIPPO queued run=%s position=%d remaining=%s.\n",
+						status.RunID, status.Position, status.Remaining.Round(time.Second),
+					)
+				},
+			},
 		)
 	} else {
 		session, err = AcquireSession(
@@ -600,11 +613,12 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		return 1, err
 	}
 
+	writer.SetIdentity(config.ReservationMetadata)
 	writer.SetContext(config.Resolution, config.ConfigHash)
 	if config.ReservationPolicy.Enabled {
 		totals, statusError := ReservationStatus(ctx, config.EvidenceRoot)
 		// A peer holding the shared lock here is contention, and no child has
-		// started yet, so the caller receives the retryable deferral exit.
+		// started yet. The caller receives exit 75 with a never-started receipt.
 		if errors.Is(statusError, errCoordinationDeferred) {
 			config.noteDeferralf("HIPPO deferred task: %s.\n", statusError)
 
@@ -729,8 +743,8 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			_, stopError := stopLifetime()
 			// Every repository on the host shares one coordination root, so a
 			// peer holding its lock through this bounded window is ordinary
-			// contention. The caller must receive the retryable deferral exit
-			// instead of a generic failure it cannot classify.
+			// contention. The caller receives a classified exit 75 instead of a
+			// generic failure; the receipt says that the child did start.
 			if errors.Is(activationError, errCoordinationDeferred) && stopError == nil {
 				config.noteDeferralf("HIPPO deferred task: %s.\n", activationError)
 
@@ -767,7 +781,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			return waitStatusCode(waitError), nil
 
 		case <-ticker.C:
-			if config.ReservationPolicy.Enabled {
+			if config.ReservationPolicy.Enabled { //nolint:nestif // Owner-side marked shedding must remain ahead of fresh pressure collection.
 				selected, selectedExit, selectionError := ReservationSheddingSelection(config.EvidenceRoot, session) //nolint:contextcheck // Owner mark observation remains bounded independently of sampling cancellation.
 				// A contended shared root defers this observation to the next
 				// sample instead of costing the caller a healthy child.
@@ -779,11 +793,20 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				}
 				if selectionError == nil && selected {
 					outcome = "pressure-shed"
+					if config.TaskClass == policy.TaskTransactional {
+						outcome = outcomeEmergencyStop
+					}
 					if selectedExit == StorageBlockedExitCode {
 						outcome = "storage-shed"
 					}
 					_, _ = fmt.Fprintln(config.Stderr, "HIPPO shedding this selected child from its owning guard.")
 					_, stopError := stopLifetime()
+					if outcome == outcomeEmergencyStop {
+						stopError = errors.Join(stopError, writeSafetyReceipt(
+							config.EvidenceRoot, session.Token, "started-safety-stop", "emergency-pressure",
+							config.ReservationMetadata, config.TaskClass, config.Now(),
+						))
+					}
 
 					return selectedExit, stopError
 				}
@@ -862,7 +885,27 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				}
 
 				if config.ReservationPolicy.Enabled {
-					victim, selected, selectionError := SelectPressureVictim(config.EvidenceRoot, shedCode) //nolint:contextcheck // Selection is one bounded locked evaluation.
+					emergency := false
+					available := reading.Sample.AvailableMemoryBytes
+					if available == nil {
+						available = reading.Sample.AvailableNonCompressedEstimateBytes
+					}
+					if config.EmergencyAvailableMemoryBytes > 0 && available != nil &&
+						*available < config.EmergencyAvailableMemoryBytes {
+						emergency = true
+					}
+					if config.EmergencyAvailableMemoryBytes > 0 && assessment.State == policy.StateCritical &&
+						!assessment.StorageBlocked {
+						emergency = true
+					}
+					var victim ReservationOwner
+					var selected bool
+					var selectionError error
+					if emergency {
+						victim, selected, selectionError = SelectEmergencyPressureVictim(config.EvidenceRoot, shedCode) //nolint:contextcheck // Selection is one bounded locked evaluation.
+					} else {
+						victim, selected, selectionError = SelectPressureVictim(config.EvidenceRoot, shedCode) //nolint:contextcheck // Selection is one bounded locked evaluation.
+					}
 					// Pressure persists across samples, so a contended shared
 					// root re-elects on the next one rather than shedding work
 					// no one has been selected for.
@@ -878,6 +921,10 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 						continue
 					}
 					_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding selected %s child after %s.\n", victim.Class, assessment.Reason)
+					if victim.Class == policy.TaskTransactional {
+						outcome = outcomeEmergencyStop
+						_, _ = fmt.Fprintln(config.Stderr, "HIPPO emergency safety stop selected transactional work; it will not retry automatically.")
+					}
 					if victim.Token != session.Token {
 						observation := 2*config.Policy.SampleInterval + 2*config.Policy.TerminationGrace
 						if remoteError := WaitPressureVictimRelease(config.EvidenceRoot, victim, observation); remoteError != nil { //nolint:contextcheck // Remote observation has its own bounded deadline.
@@ -892,6 +939,12 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
 				}
 				_, stopError := stopLifetime()
+				if outcome == outcomeEmergencyStop {
+					stopError = errors.Join(stopError, writeSafetyReceipt(
+						config.EvidenceRoot, session.Token, "started-safety-stop", "emergency-pressure",
+						config.ReservationMetadata, config.TaskClass, config.Now(),
+					))
+				}
 
 				return shedCode, stopError
 			}

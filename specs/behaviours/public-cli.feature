@@ -9,12 +9,30 @@ Feature: Public HIPPO CLI
   Scenario: JSON status exposes the stable evidence schema
     Given the compiled HIPPO binary
     When JSON status is requested for an existing path
-    Then status returns schema version 4 with profile capability and coordination evidence
+    Then status returns schema version 5 with profile capability and coordination evidence
+
+  @e2e-exempt
+  Scenario: Status exposes privacy-safe labeled owner rows
+    Given a labeled reservation owner in the shared queue
+    When JSON status is filtered by its source and worktree tag
+    Then the matching owner row exposes tier and labels without private paths
+
+  @e2e-exempt
+  Scenario: History filters current labeled summaries
+    Given current summaries from two labeled sources
+    When JSON history is filtered to one source for thirty days
+    Then only the matching privacy-safe summary is returned
+
+  @e2e-exempt
+  Scenario: Watch emits only changed admission snapshots
+    Given stable host and queue state for watch
+    When JSON watch observes two unchanged snapshots
+    Then only one schema five status snapshot is emitted
 
   Scenario: JSON status fails closed on corrupt coordination state
     Given the compiled HIPPO binary with corrupt reservation coordination state
     When JSON status is requested for that coordination root
-    Then status reports the coordination error instead of schema four zero totals
+    Then status reports the coordination error instead of schema five zero totals
 
   @e2e-exempt
   Scenario: JSON status waits out a busy coordination root

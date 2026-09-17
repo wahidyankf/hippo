@@ -431,7 +431,7 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary.SchemaVersion != 4 ||
+	if summary.SchemaVersion != 5 ||
 		summary.SampleCount != 2 ||
 		summary.CompressorAvailableAll ||
 		summary.SwapInsDelta != 1 ||

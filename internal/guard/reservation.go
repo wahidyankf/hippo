@@ -33,6 +33,21 @@ var ErrReservationReplan = errors.New("reservation requires replanning")
 // ErrReservationDeferred identifies bounded FIFO exhaustion that maps to exit 75.
 var ErrReservationDeferred = errors.New("reservation capacity remained exhausted")
 
+// ReservationWaitStatus describes one bounded queue heartbeat.
+type ReservationWaitStatus struct {
+	RunID     string
+	Position  int
+	Remaining time.Duration
+}
+
+// ReservationAdmissionOptions supplies schema-3 metadata and deterministic wait seams.
+type ReservationAdmissionOptions struct {
+	Metadata  ReservationMetadata
+	Now       func() time.Time
+	Pause     func(context.Context, time.Duration) error
+	Heartbeat func(ReservationWaitStatus)
+}
+
 // ReservationPolicy configures shared vector admission without naming a consumer repository.
 type ReservationPolicy struct {
 	Enabled         bool
@@ -40,6 +55,7 @@ type ReservationPolicy struct {
 	MaxMemoryBytes  int64
 	MaxActiveOwners int
 	OwnerShares     map[string]int
+	Tiers           map[string]ResourceTierPolicy
 }
 
 // ReservationVector is an atomic CPU-and-memory allocation.
@@ -53,6 +69,37 @@ type ReservationPlan struct {
 	Capacity  ReservationVector `json:"capacity"`
 	Requested ReservationVector `json:"requested"`
 	Allocated ReservationVector `json:"allocated"`
+	Minimum   ReservationVector `json:"minimum,omitzero"`
+	Maximum   ReservationVector `json:"maximum,omitzero"`
+	Tier      string            `json:"tier,omitempty"`
+}
+
+// ResourceTierPolicy bounds one launch-time allocation and its queue wait.
+type ResourceTierPolicy struct {
+	Minimum       ReservationVector
+	Maximum       ReservationVector
+	QueueDeadline time.Duration
+}
+
+// DefaultResourceTiers returns the schema-3 light, standard, and heavy contract.
+func DefaultResourceTiers() map[string]ResourceTierPolicy {
+	return map[string]ResourceTierPolicy{
+		"light": {
+			Minimum:       ReservationVector{CPU: 1, MemoryBytes: policy.GiB},
+			Maximum:       ReservationVector{CPU: 2, MemoryBytes: 2 * policy.GiB},
+			QueueDeadline: 30 * time.Minute,
+		},
+		"standard": {
+			Minimum:       ReservationVector{CPU: 2, MemoryBytes: 3 * policy.GiB},
+			Maximum:       ReservationVector{CPU: 4, MemoryBytes: 6 * policy.GiB},
+			QueueDeadline: 90 * time.Minute,
+		},
+		"heavy": {
+			Minimum:       ReservationVector{CPU: 4, MemoryBytes: 8 * policy.GiB},
+			Maximum:       ReservationVector{CPU: 8, MemoryBytes: 16 * policy.GiB},
+			QueueDeadline: 4 * time.Hour,
+		},
+	}
 }
 
 // ReservationOwner is a privacy-safe shared owner record. PID is diagnostic only;
@@ -98,16 +145,19 @@ type reservationLedger struct {
 
 // ReservationTotals is the schema-stable coordination view exposed by status.
 type ReservationTotals struct {
-	SchemaVersion int               `json:"schemaVersion"`
-	Mode          string            `json:"mode"`
-	Capacity      ReservationVector `json:"capacity"`
-	Allocated     ReservationVector `json:"allocated"`
-	Waiting       ReservationVector `json:"waiting"`
-	ActiveOwners  int               `json:"activeOwners"`
-	WaitingOwners int               `json:"waitingOwners"`
-	Ephemeral     int               `json:"ephemeral"`
-	Service       int               `json:"service"`
-	Transactional int               `json:"transactional"`
+	SchemaVersion int                `json:"schemaVersion"`
+	Mode          string             `json:"mode"`
+	Capacity      ReservationVector  `json:"capacity"`
+	Allocated     ReservationVector  `json:"allocated"`
+	Waiting       ReservationVector  `json:"waiting"`
+	ActiveOwners  int                `json:"activeOwners"`
+	WaitingOwners int                `json:"waitingOwners"`
+	Ephemeral     int                `json:"ephemeral"`
+	Service       int                `json:"service"`
+	Transactional int                `json:"transactional"`
+	Owners        []ReservationEntry `json:"owners,omitempty"`
+	Waiters       []ReservationEntry `json:"waiters,omitempty"`
+	LegacyEntries int                `json:"legacyEntries,omitempty"`
 	// AbandonedProcessGroups names payloads still running under a guard that died.
 	AbandonedProcessGroups []int `json:"abandonedProcessGroups,omitempty"`
 }
@@ -240,6 +290,55 @@ func PlanReservation(
 	}
 
 	return ReservationPlan{Capacity: capacity, Requested: requested, Allocated: requested}, nil
+}
+
+// PlanTierReservation prepares a minimum-safe request that may burst once, at
+// admission, to the largest vector still available within the selected tier.
+func PlanTierReservation(
+	sample policy.Sample,
+	resolution policy.Resolution,
+	settings ReservationPolicy,
+	tier string,
+	explicitCPU int,
+	explicitMemoryBytes int64,
+) (ReservationPlan, time.Duration, error) {
+	configured, exists := settings.Tiers[tier]
+	if !exists {
+		return ReservationPlan{}, 0, fmt.Errorf("%w: unknown resource tier %q", ErrReservationReplan, tier)
+	}
+	base, err := PlanReservation(sample, resolution, settings, 0, 0)
+	if err != nil {
+		return ReservationPlan{}, 0, err
+	}
+	minimum, maximum := configured.Minimum, configured.Maximum
+	if explicitCPU < 0 || explicitMemoryBytes < 0 {
+		return ReservationPlan{}, 0, fmt.Errorf("%w: explicit reservations must be nonnegative", ErrReservationReplan)
+	}
+	if explicitCPU != 0 {
+		if explicitCPU < minimum.CPU || explicitCPU > maximum.CPU {
+			return ReservationPlan{}, 0, fmt.Errorf("%w: explicit CPU is outside the %s tier", ErrReservationReplan, tier)
+		}
+		minimum.CPU, maximum.CPU = explicitCPU, explicitCPU
+	}
+	if explicitMemoryBytes != 0 {
+		if explicitMemoryBytes < minimum.MemoryBytes || explicitMemoryBytes > maximum.MemoryBytes {
+			return ReservationPlan{}, 0, fmt.Errorf("%w: explicit memory is outside the %s tier", ErrReservationReplan, tier)
+		}
+		minimum.MemoryBytes, maximum.MemoryBytes = explicitMemoryBytes, explicitMemoryBytes
+	}
+	maximum.CPU = min(maximum.CPU, base.Capacity.CPU)
+	maximum.MemoryBytes = min(maximum.MemoryBytes, base.Capacity.MemoryBytes)
+	if configured.QueueDeadline <= 0 || minimum.CPU < MinimumReservationCPU ||
+		minimum.MemoryBytes < MinimumReservationMemoryBytes || maximum.CPU < minimum.CPU ||
+		maximum.MemoryBytes < minimum.MemoryBytes || maximum.CPU > base.Capacity.CPU ||
+		maximum.MemoryBytes > base.Capacity.MemoryBytes {
+		return ReservationPlan{}, 0, fmt.Errorf("%w: %s tier exceeds safe host capacity", ErrReservationReplan, tier)
+	}
+
+	return ReservationPlan{
+		Capacity: base.Capacity, Requested: minimum, Allocated: minimum,
+		Minimum: minimum, Maximum: maximum, Tier: tier,
+	}, configured.QueueDeadline, nil
 }
 
 func reservationLedgerPath(root string) string {
@@ -683,6 +782,7 @@ func removeReservationIdentity(root, value string) error {
 			returnError = errors.Join(returnError, removeError)
 		}
 	}
+	returnError = errors.Join(returnError, removeReservationMetadata(root, value))
 
 	return returnError
 }
@@ -766,6 +866,38 @@ func vectorFits(used, requested, capacity ReservationVector) bool {
 
 	return used.CPU <= capacity.CPU-requested.CPU &&
 		used.MemoryBytes <= capacity.MemoryBytes-requested.MemoryBytes
+}
+
+func reservationPlanBounds(plan ReservationPlan) (ReservationVector, ReservationVector, error) {
+	minimum, maximum := plan.Minimum, plan.Maximum
+	if minimum == (ReservationVector{}) {
+		minimum = plan.Requested
+	}
+	if maximum == (ReservationVector{}) {
+		maximum = plan.Requested
+	}
+	if minimum.CPU < MinimumReservationCPU || minimum.MemoryBytes < MinimumReservationMemoryBytes ||
+		maximum.CPU < minimum.CPU || maximum.MemoryBytes < minimum.MemoryBytes ||
+		maximum.CPU > plan.Capacity.CPU || maximum.MemoryBytes > plan.Capacity.MemoryBytes {
+		return ReservationVector{}, ReservationVector{}, ErrReservationReplan
+	}
+
+	return minimum, maximum, nil
+}
+
+func largestAvailableAllocation(used, minimum, maximum, capacity ReservationVector) (ReservationVector, bool) {
+	if !vectorFits(used, minimum, capacity) {
+		return ReservationVector{}, false
+	}
+	available := ReservationVector{
+		CPU:         capacity.CPU - used.CPU,
+		MemoryBytes: capacity.MemoryBytes - used.MemoryBytes,
+	}
+
+	return ReservationVector{
+		CPU:         min(maximum.CPU, available.CPU),
+		MemoryBytes: min(maximum.MemoryBytes, available.MemoryBytes),
+	}, true
 }
 
 func normalizedOwnerLimit(limit int) int {
@@ -871,10 +1003,18 @@ func inheritedReservation(root, candidate string, ledger reservationLedger) (*Se
 	return nil, nil //nolint:nilnil // A live candidate not present in this ledger is an expected non-error state.
 }
 
-func waitForReservationRetry(ctx context.Context, deadline time.Time) error {
-	delay := min(coordinationPollInterval, time.Until(deadline))
+func waitForReservationRetry(
+	ctx context.Context,
+	deadline time.Time,
+	now func() time.Time,
+	pause func(context.Context, time.Duration) error,
+) error {
+	delay := min(coordinationPollInterval, deadline.Sub(now()))
 	if delay <= 0 {
 		return nil
+	}
+	if pause != nil {
+		return pause(ctx, delay)
 	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
@@ -887,7 +1027,7 @@ func waitForReservationRetry(ctx context.Context, deadline time.Time) error {
 }
 
 // AcquireReservation atomically joins the FIFO queue and acquires both vector dimensions.
-func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One transaction owns FIFO enqueue, reconcile, admission, and bounded cleanup.
+func AcquireReservation(
 	ctx context.Context,
 	root, inheritedToken string,
 	class policy.TaskClass,
@@ -896,17 +1036,38 @@ func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One
 	maxActiveOwners int,
 	wait time.Duration,
 ) (*Session, error) {
+	return AcquireReservationWithOptions(
+		ctx, root, inheritedToken, class, profile, configHash, plan, maxActiveOwners, wait,
+		ReservationAdmissionOptions{},
+	)
+}
+
+// AcquireReservationWithOptions performs one single-launch queue transaction.
+func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One transaction owns FIFO enqueue, reconcile, admission, and bounded cleanup.
+	ctx context.Context,
+	root, inheritedToken string,
+	class policy.TaskClass,
+	profile, configHash string,
+	plan ReservationPlan,
+	maxActiveOwners int,
+	wait time.Duration,
+	options ReservationAdmissionOptions,
+) (*Session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if wait < 0 {
 		return nil, errors.New("reservation wait must be nonnegative")
 	}
-	if plan.Requested.CPU < MinimumReservationCPU || plan.Requested.MemoryBytes < MinimumReservationMemoryBytes ||
-		plan.Requested.CPU > plan.Capacity.CPU || plan.Requested.MemoryBytes > plan.Capacity.MemoryBytes {
-		return nil, ErrReservationReplan
+	minimum, maximum, planError := reservationPlanBounds(plan)
+	if planError != nil {
+		return nil, planError
 	}
 	maxActiveOwners = normalizedOwnerLimit(maxActiveOwners)
+	now := options.Now
+	if now == nil {
+		now = time.Now
+	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
@@ -950,10 +1111,11 @@ func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One
 		}
 	}()
 
-	deadline := time.Now().Add(wait)
-	started := time.Now()
+	started := now()
+	deadline := started.Add(wait)
+	lastHeartbeat := time.Time{}
 	for {
-		remaining := max(time.Until(deadline), 0)
+		remaining := max(deadline.Sub(now()), 0)
 		coordinationLock, lockError := acquireCoordinationLock(ctx, root, remaining)
 		if lockError != nil {
 			return nil, lockError
@@ -993,7 +1155,16 @@ func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One
 
 			return nil, ErrReservationDeferred
 		}
-		if !queued {
+		if !queued { //nolint:nestif // First registration atomically binds identity metadata and the FIFO ledger entry.
+			if options.Metadata.Source != "" {
+				if lockError = writeReservationMetadata(
+					root, value, options.Metadata, minimum, maximum, started, deadline,
+				); lockError != nil {
+					_ = releaseCoordinationLock(coordinationLock)
+
+					return nil, lockError
+				}
+			}
 			if ledger.NextSequence == ^uint64(0) {
 				if len(ledger.Owners) != 0 || len(ledger.Waiters) != 0 {
 					_ = releaseCoordinationLock(coordinationLock)
@@ -1005,7 +1176,7 @@ func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One
 			ledger.NextSequence++
 			ledger.Waiters = append(ledger.Waiters, reservationWaiter{
 				Token: value, PID: os.Getpid(), Class: class, Profile: profile,
-				Requested: plan.Requested, Sequence: ledger.NextSequence, ConfigHash: configHash,
+				Requested: minimum, Sequence: ledger.NextSequence, ConfigHash: configHash,
 				MaxOwners: maxActiveOwners, IdentityDevice: identityDevice, IdentityInode: identityInode,
 			})
 			queued = true
@@ -1019,8 +1190,9 @@ func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One
 
 			return nil, sumError
 		}
+		allocation, fits := largestAvailableAllocation(used, minimum, maximum, ledger.Capacity)
 		if len(ledger.Waiters) > 0 && ledger.Waiters[0].Token == value &&
-			len(ledger.Owners) < sharedOwnerLimit(ledger, maxActiveOwners) && vectorFits(used, plan.Requested, ledger.Capacity) {
+			len(ledger.Owners) < sharedOwnerLimit(ledger, maxActiveOwners) && fits {
 			admittedWaiter := ledger.Waiters[0]
 			sequence = admittedWaiter.Sequence
 			ledger.Waiters = ledger.Waiters[1:]
@@ -1030,7 +1202,7 @@ func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One
 			}
 			ledger.Owners = append(ledger.Owners, ReservationOwner{
 				Token: value, PID: os.Getpid(), Class: class, Profile: profile,
-				Requested: plan.Requested, Allocated: plan.Requested,
+				Requested: allocation, Allocated: allocation,
 				Sequence: sequence, ConfigHash: configHash, MaxOwners: maxActiveOwners, PeakOwners: activeOwners,
 				IdentityDevice: admittedWaiter.IdentityDevice, IdentityInode: admittedWaiter.IdentityInode,
 			})
@@ -1044,17 +1216,41 @@ func AcquireReservation( //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // One
 		if admitted {
 			queued = false
 			session := &Session{
-				Token: value, Allocation: plan.Requested, Requested: plan.Requested,
-				WaitDuration: time.Since(started), identityLock: identity,
+				Token: value, Allocation: allocation, Requested: minimum,
+				WaitDuration: now().Sub(started), identityLock: identity,
 			}
 			identity = nil
 
 			return session, nil
 		}
-		if wait == 0 || !time.Now().Before(deadline) {
+		current := now()
+		if wait == 0 || !current.Before(deadline) {
+			if receiptError := writeSafetyReceipt(
+				root, value, "never-started", "admission-deadline", options.Metadata, class, current,
+			); receiptError != nil {
+				return nil, receiptError
+			}
 			return nil, ErrReservationDeferred
 		}
-		if err = waitForReservationRetry(ctx, deadline); err != nil {
+		if options.Heartbeat != nil && (lastHeartbeat.IsZero() || current.Sub(lastHeartbeat) >= 30*time.Second) {
+			position := 0
+			for index, waiter := range ledger.Waiters {
+				if waiter.Token == value {
+					position = index + 1
+					break
+				}
+			}
+			options.Heartbeat(ReservationWaitStatus{
+				RunID: value, Position: position, Remaining: max(deadline.Sub(current), 0),
+			})
+			lastHeartbeat = current
+		}
+		if err = waitForReservationRetry(ctx, deadline, now, options.Pause); err != nil {
+			if receiptError := writeSafetyReceipt(
+				root, value, "never-started", "admission-cancelled", options.Metadata, class, now(),
+			); receiptError != nil {
+				return nil, errors.Join(err, receiptError)
+			}
 			return nil, err
 		}
 	}
@@ -1244,7 +1440,7 @@ func retainReservationOwnerUntilRelease(root string, session *Session) error {
 
 // ReservationStatus reads a reconciled, privacy-safe shared-root summary.
 func ReservationStatus(ctx context.Context, root string) (ReservationTotals, error) {
-	totals := ReservationTotals{SchemaVersion: 4, Mode: "exclusive"}
+	totals := ReservationTotals{SchemaVersion: 5, Mode: "exclusive"}
 	marker, present, err := readCoordinationMarker(root)
 	if err != nil || !present || marker.Mode != coordinationModeReservation {
 		return totals, err
@@ -1266,6 +1462,9 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 	if err = reconcileReservationLedger(root, &ledger); err != nil {
 		return ReservationTotals{}, err
 	}
+	if err = pruneReservationMetadata(root, ledger); err != nil {
+		return ReservationTotals{}, err
+	}
 	totals.AbandonedProcessGroups = abandoned
 	totals.Capacity = ledger.Capacity
 	totals.ActiveOwners = len(ledger.Owners)
@@ -1284,11 +1483,32 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 		case policy.TaskRelease:
 			// Release workloads use the separate strict release guard.
 		}
+		entry, entryError := reservationEntry(
+			root, owner.Token, "active", 0, owner.Class, owner.Profile, owner.Requested, owner.Allocated,
+		)
+		if entryError != nil {
+			return ReservationTotals{}, entryError
+		}
+		if entry.Legacy {
+			totals.LegacyEntries++
+		}
+		totals.Owners = append(totals.Owners, entry)
 	}
-	for _, waiter := range ledger.Waiters {
+	for index, waiter := range ledger.Waiters {
 		if err = checkedAddReservationVector(&totals.Waiting, waiter.Requested); err != nil {
 			return ReservationTotals{}, err
 		}
+		entry, entryError := reservationEntry(
+			root, waiter.Token, "waiting", index+1, waiter.Class, waiter.Profile,
+			waiter.Requested, ReservationVector{},
+		)
+		if entryError != nil {
+			return ReservationTotals{}, entryError
+		}
+		if entry.Legacy {
+			totals.LegacyEntries++
+		}
+		totals.Waiters = append(totals.Waiters, entry)
 	}
 
 	return totals, nil
@@ -1387,6 +1607,16 @@ func ReservationSheddingSelection(root string, session *Session) (bool, int, err
 
 // SelectPressureVictim atomically selects at most one newest revocable owner.
 func SelectPressureVictim(root string, exitCode int) (ReservationOwner, bool, error) {
+	return selectPressureVictim(root, exitCode, false)
+}
+
+// SelectEmergencyPressureVictim permits transactional work only after all
+// revocable classes have been considered at the configured emergency floor.
+func SelectEmergencyPressureVictim(root string, exitCode int) (ReservationOwner, bool, error) {
+	return selectPressureVictim(root, exitCode, true)
+}
+
+func selectPressureVictim(root string, exitCode int, includeTransactional bool) (ReservationOwner, bool, error) {
 	if !validSheddingExitCode(exitCode) {
 		return ReservationOwner{}, false, errors.New("reservation shedding exit code is invalid")
 	}
@@ -1407,7 +1637,11 @@ func SelectPressureVictim(root string, exitCode int) (ReservationOwner, bool, er
 		return ReservationOwner{}, false, nil
 	}
 	selected := -1
-	for _, class := range []policy.TaskClass{policy.TaskEphemeral, policy.TaskService} {
+	classes := []policy.TaskClass{policy.TaskEphemeral, policy.TaskService}
+	if includeTransactional {
+		classes = append(classes, policy.TaskTransactional)
+	}
+	for _, class := range classes {
 		for index := range ledger.Owners {
 			owner := ledger.Owners[index]
 			if owner.Class == class && !owner.Shedding && owner.ProcessGroup > 0 &&

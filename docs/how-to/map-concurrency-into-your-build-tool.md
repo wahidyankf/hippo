@@ -9,7 +9,7 @@ HIPPO does not know about any build tool. You supply the name.
 ## Map one variable
 
 ```sh
-hippo run --concurrency-env BUILD_WORKERS -- ./build.sh
+hippo run --resource-tier standard --concurrency-env BUILD_WORKERS -- ./build.sh
 ```
 
 Inside `build.sh`, `BUILD_WORKERS` now holds the resolved concurrency.
@@ -20,6 +20,7 @@ Inside `build.sh`, `BUILD_WORKERS` now holds the resolved concurrency.
 
 ```sh
 hippo run \
+  --resource-tier standard \
   --concurrency-env BUILD_WORKERS \
   --concurrency-env TEST_JOBS \
   -- make test
@@ -58,7 +59,8 @@ allocation; exclusive mode passes it through untouched.
 ### Reservation mode reconciles it
 
 Under a fixed reservation allocation the existing value is read as a request and reconciled against
-the allocation.
+the allocation. In schema 3, the selected tier supplies a minimum and maximum; HIPPO grants the
+largest vector that fits when the FIFO head is admitted and exports that fixed CPU allocation.
 
 | Your value                   | Result                            |
 | ---------------------------- | --------------------------------- |
@@ -77,6 +79,10 @@ BUILD_WORKERS=2 HIPPO_CONCURRENCY=2
 
 A deliberately low value is respected; an optimistic one is capped. This means you can keep an
 existing `BUILD_WORKERS=2` in a `.env` and HIPPO will not raise it.
+
+Choose `light` for formatting and small checks, `standard` for ordinary build/test plans, and `heavy`
+only for measured memory- or CPU-intensive work. The tier lets an idle machine grant heavier work up
+to its safe maximum while protecting the UI and queued peers.
 
 ### Exclusive mode leaves it alone
 

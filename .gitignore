@@ -9,6 +9,7 @@
 # Local development and agent artifacts
 /local-tmp/
 /generated-reports/
+/worktrees/
 *.log
 /node_modules/
 /.husky/_/

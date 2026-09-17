@@ -11,7 +11,7 @@ For the full definitions see the [exit code reference](../reference/exit-codes.m
 | ---- | ---------------------------------------------------------------------- |
 | `1`  | Fix the command line. Nothing ran.                                     |
 | `73` | Free disk space on the measured path, then retry.                      |
-| `75` | **Retry.** Nothing was admitted.                                       |
+| `75` | Inspect the receipt/outcome; retry only if it says `never-started`.    |
 | `78` | Change the request — smaller reservation, corrected value, or profile. |
 
 Never respond to any of them by bypassing the guard or by changing `--class` to get admitted.
@@ -20,17 +20,18 @@ the eventual failure worse.
 
 ## Handle `75` in a script
 
-`75` is the only retryable code, and the invariant is unconditional: **an owner that receives `75`
-holds no reservation**, whatever its payload printed before the deferral.
+`75` can mean a queue deadline before launch or a safety stop after launch. Use `hippo history` and
+the receipt under the shared root to decide which happened. A `never-started` receipt is safe to
+requeue; `started-safety-stop`, `pressure-shed`, and a child-owned `75` are not automatically safe.
 
-Let HIPPO do the retrying:
+Let HIPPO wait before launch. Schema 3 takes the deadline from the tier; schema 2 can set one:
 
 ```sh
 hippo run --wait-for-admission 10m -- make test
 ```
 
-It re-attempts a deferred owner until the budget is spent, backing off from 100 ms to a 2 s ceiling,
-and still reports `75` if capacity never frees.
+It creates one stable FIFO waiter, reports position every 30 seconds, and starts the payload once at
+most. HIPPO never runs a payload retry loop.
 
 Or handle it yourself when the payload is not safe to repeat:
 
@@ -45,14 +46,16 @@ if ! hippo run --disk-path . -- ./deploy.sh; then
 fi
 ```
 
-### Why `75` can arrive after your payload started
+### Tell never-started from started
 
-Activation records the supervised process group under the coordination lock, and it happens _after_
-the child starts. A child that could not be recorded would be unsheddable under pressure, so HIPPO
-stops it and reports `75` rather than supervising an untracked group.
+```sh
+hippo history --since 1d --source my-repo --outcome emergency-safety-stop
+ls "${HIPPO_ROOT}/receipts"
+```
 
-This is why `--wait-for-admission` suits idempotent build and test commands, and why anything with
-side effects should keep the default of `0`.
+Queue expiry/cancellation writes `state: "never-started"`. Emergency termination writes
+`state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
+`pressure-shed` or `storage-shed`.
 
 ### When `75` means a mode conflict
 

@@ -2,14 +2,14 @@
 
 HIPPO's exit codes are a stable contract. A caller can branch on them without parsing diagnostics.
 
-| Code    | Name             | Meaning                                                                   | Retry?                  |
-| ------- | ---------------- | ------------------------------------------------------------------------- | ----------------------- |
-| `0`     | Success          | The command completed, or the guarded child exited `0`                    | n/a                     |
-| `1`     | Usage            | Arguments or flags were rejected before any work started                  | No — fix the invocation |
-| `73`    | Cleanup required | Storage is below the immutable floor; free space before retrying          | No — free disk first    |
-| `75`    | Deferred         | Capacity, lease, or coordination pressure. Nothing was admitted           | **Yes**                 |
-| `78`    | Replan required  | Configuration, impossible reservation, invalid mapping, or strict profile | No — change the request |
-| _other_ | Child exit code  | A guarded child's own exit code is passed through unchanged               | Depends on the child    |
+| Code    | Name             | Meaning                                                                       | Retry?                  |
+| ------- | ---------------- | ----------------------------------------------------------------------------- | ----------------------- |
+| `0`     | Success          | The command completed, or the guarded child exited `0`                        | n/a                     |
+| `1`     | Usage            | Arguments or flags were rejected before any work started                      | No — fix the invocation |
+| `73`    | Cleanup required | Storage is below the immutable floor; free space before retrying              | No — free disk first    |
+| `75`    | Deferred/stopped | Admission expired, release rejected, or a supervised child was safety-stopped | Inspect receipt first   |
+| `78`    | Replan required  | Configuration, impossible reservation, invalid mapping, or strict profile     | No — change the request |
+| _other_ | Child exit code  | A guarded child's own exit code is passed through unchanged                   | Depends on the child    |
 
 Any exit code other than the five above came from the guarded command itself, not from HIPPO.
 
@@ -75,10 +75,11 @@ $ echo $?
 **Response:** free storage on the measured path, then retry. Do not point `--disk-path` somewhere
 roomier to get past the gate — the gate is measuring the volume the work will actually write to.
 
-## `75` — deferred
+## `75` — deferred or safety-stopped
 
-Retryable pressure. **Nothing was admitted and no reservation is held**, whatever the payload may
-have already printed. This is the only exit code where retrying is the correct response.
+Exit `75` is transient only when HIPPO records `state: "never-started"`. A supervised payload may
+also return `75` after ordinary pressure shedding or an emergency safety stop. Never infer retry
+safety from the number alone; inspect stderr and the bounded receipt/history record.
 
 Known causes:
 
@@ -95,31 +96,21 @@ $ echo $?
 75
 ```
 
-**Response:** retry. `hippo run --wait-for-admission <duration>` will do it for you — it re-attempts
-a deferred owner until that budget is spent, backing off from 100 ms to a 2 s ceiling, and still
-reports `75` if capacity never frees.
-
-Only the first attempt prints the deferral notice. The sentence reads the same every attempt, and a
-long budget is hundreds of attempts, so repeating it would bury the surrender line and every other
-notice under identical copies. The surrender reports the total instead:
+**Response:** schema 3 already waits with one FIFO identity until the chosen tier deadline. Schema 2
+can opt into the same single-waiter behavior with `--wait-for-admission`. A 30-second heartbeat shows
+the run ID, current position, and remaining time:
 
 ```console
 $ hippo run --wait-for-admission 10m --disk-path . -- make test
-HIPPO deferred task: shared coordination deferred admission: reservation mode is active.
-HIPPO stayed deferred across 317 attempts in 10m0s.
+HIPPO waiting for admission run=6f... position=3 remaining=9m29s
+HIPPO admission deadline expired before payload start.
 $ echo $?
 75
 ```
 
-Quieting is scoped to the deferral alone. A storage refusal, a warning-pressure admission, or a
-shedding notice on any later attempt is still printed, because those describe something new the
-caller has to act on.
-
-A deferral can arrive _after_ a child has already started. Activation records the supervised process
-group under the coordination lock, and a child that could not be recorded would be unsheddable, so
-HIPPO stops it and reports `75` rather than supervising an untracked group. This is why
-`--wait-for-admission` suits idempotent build and test commands; a caller whose payload is not
-idempotent should keep the default of `0` and decide for itself.
+No payload is launched while queued, and HIPPO never auto-retries one. Receipts distinguish
+`never-started` admission deadline/cancellation from `started-safety-stop` emergency pressure. An
+ordinary `pressure-shed` outcome likewise means the payload started and must not be blindly retried.
 
 ## `78` — replan required
 
@@ -129,6 +120,9 @@ Known causes:
 
 - The requested reservation vector exceeds safe host capacity.
 - The requested reservation is below the one-CPU or 256 MiB floor.
+- Schema 3 lacks `--resource-tier`, uses an unknown tier, or receives a vector outside that tier.
+- Schema 3 sees legacy schema-2 owners or waiters that have not drained.
+- The identity document or invocation labels are missing or invalid under schema 3.
 - A mapped `--concurrency-env` variable already holds a zero, negative, or malformed value.
 - A strict profile (`transactional` or `release` class) has no usable fallback under current pressure.
 

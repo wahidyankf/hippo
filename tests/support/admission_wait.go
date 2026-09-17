@@ -30,13 +30,34 @@ func (driver *Driver) healthyAdmissionSamples() {
 
 const coordinationModeMarker = "coordination-mode.json"
 
-// deferringRootFreeingCapacity advertises reservation coordination, which defers
-// every compatibility class deterministically, and arranges for that marker to be
-// removed once the owner has been deferred exactly once. Freeing capacity from
-// the retry pause is what makes the scenario deterministic: no wall-clock race
-// decides whether the second attempt finds room.
+func (driver *Driver) capacityBlockedRoot() error {
+	if err := driver.emptyCoordinationRoot(); err != nil {
+		return err
+	}
+	driver.configPath = filepath.Join(driver.leaseRoot, "hippo.json")
+	if err := os.WriteFile(driver.configPath, []byte(`{"schemaVersion":2,"coordination":{"maxCpu":1,"maxMemoryMiB":256,"maxActiveOwners":2}}`), 0o600); err != nil {
+		return err
+	}
+	plan := guard.ReservationPlan{
+		Capacity:  guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
+		Requested: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
+		Allocated: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
+	}
+	session, err := guard.AcquireReservation(
+		context.Background(), driver.leaseRoot, "", policy.TaskEphemeral, "balanced", "", plan, 2, 0,
+	)
+	if err != nil {
+		return err
+	}
+	driver.admissionSession = session
+
+	return nil
+}
+
+// deferringRootFreeingCapacity fills the reservation pool, then arranges for
+// the one registered waiter to receive capacity from its deterministic pause.
 func (driver *Driver) deferringRootFreeingCapacity() error {
-	if err := driver.reservationCoordination(); err != nil {
+	if err := driver.capacityBlockedRoot(); err != nil {
 		return err
 	}
 
@@ -49,7 +70,7 @@ func (driver *Driver) deferringRootFreeingCapacity() error {
 // permanentlyDeferringRoot never frees capacity, so the only thing that ends the
 // retry loop is the caller's own budget.
 func (driver *Driver) permanentlyDeferringRoot() error {
-	if err := driver.reservationCoordination(); err != nil {
+	if err := driver.capacityBlockedRoot(); err != nil {
 		return err
 	}
 
@@ -62,9 +83,13 @@ func (driver *Driver) permanentlyDeferringRoot() error {
 // admittingRootWithFailingChild leaves the root free, so the owner is admitted on
 // its first attempt and the child's own failure is the only outcome to report.
 func (driver *Driver) admittingRootWithFailingChild() error {
-	if err := driver.emptyCoordinationRoot(); err != nil {
+	if err := driver.capacityBlockedRoot(); err != nil {
 		return err
 	}
+	if err := guard.ReleaseReservation(driver.leaseRoot, driver.admissionSession); err != nil {
+		return err
+	}
+	driver.admissionSession = nil
 
 	driver.healthyAdmissionSamples()
 	driver.admissionUnblockAfter = 0
@@ -82,7 +107,7 @@ const deferralNoticePrefix = "HIPPO deferred task:"
 // is the point: by then the caller has asked for the deferral notice to be quiet,
 // and the storage notice still has to be said out loud.
 func (driver *Driver) deferringRootFreeingCapacityOntoExhaustedStorage() error {
-	if err := driver.reservationCoordination(); err != nil {
+	if err := driver.capacityBlockedRoot(); err != nil {
 		return err
 	}
 
@@ -111,7 +136,7 @@ func (driver *Driver) deferringRootFreeingCapacityOntoExhaustedStorage() error {
 func (driver *Driver) requireDeferralReportedOnce() error {
 	if driver.admissionAttempts < 3 {
 		return fmt.Errorf(
-			"only %d attempts were made, too few to tell one notice from one per attempt",
+			"only %d queue polls were made, too few to prove a bounded wait",
 			driver.admissionAttempts,
 		)
 	}
@@ -123,8 +148,11 @@ func (driver *Driver) requireDeferralReportedOnce() error {
 		)
 	}
 
-	if !strings.Contains(driver.errorOutput, "stayed deferred across") {
-		return fmt.Errorf("the surrender was never reported: %s", driver.errorOutput)
+	if heartbeats := strings.Count(driver.errorOutput, "HIPPO queued run="); heartbeats != 1 {
+		return fmt.Errorf("queue heartbeats=%d, want one change report: %s", heartbeats, driver.errorOutput)
+	}
+	if runs := driver.childRunCount(); runs != 0 {
+		return fmt.Errorf("deferred waiter launched %d payloads, want zero", runs)
 	}
 
 	return nil
@@ -145,9 +173,9 @@ func (driver *Driver) requireBlockedNoticeSurvivesQuieting() error {
 		return fmt.Errorf("quieting the deferral also silenced the storage notice: %s", driver.errorOutput)
 	}
 
-	if notices := strings.Count(driver.errorOutput, deferralNoticePrefix); notices != 1 {
+	if notices := strings.Count(driver.errorOutput, deferralNoticePrefix); notices != 0 {
 		return fmt.Errorf(
-			"the deferral was reported %d times, want only the first: %s",
+			"the admitted waiter reported %d deferrals, want none: %s",
 			notices, driver.errorOutput,
 		)
 	}
@@ -156,9 +184,9 @@ func (driver *Driver) requireBlockedNoticeSurvivesQuieting() error {
 }
 
 // runWaitingForAdmission drives the public CLI with a wait budget. The injected
-// sleep is the scenario's clock: it counts attempts, advances the budget by
-// exactly what the retry asked to wait, and frees capacity at the arranged
-// attempt, so the outcome never depends on how fast the host happens to be.
+// sleep is the scenario's clock: it counts queue polls, advances the budget by
+// exactly what admission asked to wait, and frees capacity at the arranged
+// poll, so the outcome never depends on how fast the host happens to be.
 func (driver *Driver) runWaitingForAdmission(budget time.Duration, childExit int) error {
 	root := driver.leaseRoot
 	runs := filepath.Join(root, "child-runs")
@@ -177,22 +205,26 @@ func (driver *Driver) runWaitingForAdmission(budget time.Duration, childExit int
 		Collector:   &sequenceCollector{samples: driver.samples},
 		Now:         func() time.Time { return base.Add(time.Duration(elapsed.Load())) },
 	}
-	// This sleep serves the retry pause and the guard's own sampling alike, so it
-	// cannot be used to count retries. It advances the scenario clock and frees
+	// This sleep serves the queue pause and the guard's own sampling alike. It
+	// advances the scenario clock and frees
 	// capacity at the arranged point; the assertions below read behaviour instead.
 	application.Sleep = func(duration time.Duration) {
 		driver.admissionAttempts++
 		elapsed.Add(int64(duration))
-		if driver.admissionUnblockAfter > 0 && driver.admissionAttempts >= driver.admissionUnblockAfter {
-			_ = os.Remove(filepath.Join(root, coordinationModeMarker))
+		if driver.admissionUnblockAfter > 0 && driver.admissionAttempts >= driver.admissionUnblockAfter &&
+			driver.admissionSession != nil {
+			_ = guard.ReleaseReservation(root, driver.admissionSession)
+			driver.admissionSession = nil
 		}
 	}
 
 	code, err := application.Run(context.Background(), []string{
 		runCommandName,
 		taskClassFlag, taskClassEphemeral,
+		configFlag, driver.configPath,
 		diskPathFlag, ".",
 		"--wait-for-admission", budget.String(),
+		"--reserve-cpu", "1", "--reserve-memory-mib", "256",
 		"--", shellPath, "-c",
 		fmt.Sprintf(`printf x >> "$HIPPO_CHILD_RUNS"; exit %d`, childExit),
 	})
@@ -216,10 +248,8 @@ func (driver *Driver) childRunCount() int {
 }
 
 func (driver *Driver) requireRetriedThenAdmitted() error {
-	// The root deferred every request until capacity was freed from the retry
-	// pause, so an admitted child's own exit code can only be reached by retrying.
-	if _, err := os.Stat(filepath.Join(driver.leaseRoot, coordinationModeMarker)); err == nil {
-		return errors.New("capacity was never freed, so this proves nothing about retrying")
+	if driver.admissionSession != nil {
+		return errors.New("capacity was never freed, so this proves nothing about queueing")
 	}
 	if driver.exitCode != 3 {
 		return fmt.Errorf("exit=%d want the admitted child's own code 3: stderr=%s", driver.exitCode, driver.errorOutput)

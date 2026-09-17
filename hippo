@@ -162,5 +162,6 @@ prune_cache
 # A consumer may override configuration explicitly; otherwise the optional
 # repository-local file is discovered without making it authoritative.
 HIPPO_DEFAULT_CONFIG=${HIPPO_DEFAULT_CONFIG:-"$tool_dir/hippo.local.json"}
-export HIPPO_DEFAULT_CONFIG
+HIPPO_DEFAULT_IDENTITY=${HIPPO_DEFAULT_IDENTITY:-"$tool_dir/hippo.identity.json"}
+export HIPPO_DEFAULT_CONFIG HIPPO_DEFAULT_IDENTITY
 exec "$binary" "$@"

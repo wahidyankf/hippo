@@ -14,12 +14,12 @@ the host can actually spare. It coordinates concurrent repositories through a sh
 reservation ledger, and only the guard that owns a child may signal that child's process group.
 
 ```console
-$ hippo run --class ephemeral --disk-path . -- make test
+$ hippo run --class ephemeral --resource-tier standard --disk-path . -- make test
 ```
 
 ## ✨ Highlights
 
-- **Cross-repository coordination.** Four checkouts on one laptop share one CPU-and-memory budget
+- **Cross-repository coordination.** Every checkout on one laptop shares one CPU-and-memory budget
   instead of each assuming it owns the machine.
 - **Works with any build tool.** `--concurrency-env BUILD_WORKERS` writes HIPPO's allocation into the
   variable your tool already reads. No build system is compiled into HIPPO.
@@ -29,25 +29,20 @@ $ hippo run --class ephemeral --disk-path . -- make test
   works by marking a victim and waiting for that victim's own guard to act.
 - **Fails closed.** Unreadable shared state defers admission and preserves bytes rather than guessing
   and rewriting.
-- **A stable exit contract.** `73` cleanup, `75` retry, `78` replan — everything else is your
-  command's own exit code.
+- **A stable exit contract.** `73` cleanup, `75` inspect receipt/outcome, `78` replan — everything
+  else is your command's own exit code.
+- **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters,
+  promotion state, and bounded run outcomes without exposing commands or paths.
 - **No daemon.** One short-lived process per guarded command, plus files in a shared state root.
 
 ## 🤔 Why
 
-Run a build in one checkout, a test suite in another, and a dev server in a third, and each one sizes
-itself to the machine: `make -j$(nproc)`, one test worker per core, a bundler that assumes it owns the
-box. Individually reasonable, collectively ruinous. The machine starts swapping and everything slows
-down together — including the editor you are actually looking at.
+Build tools commonly size themselves as if they own the host. Concurrent repositories then swap and
+slow the editor too. Fixed low parallelism wastes an idle machine; high parallelism restores the
+contention. `nice` and cgroups shape work already running but do not decide whether it should start.
 
-Turning parallelism down everywhere is wrong in both directions: too low wastes an idle machine, too
-high brings the contention straight back. `nice` and cgroups shape work that is already running; they
-do not decide whether it should start. And your bundler will never know about your Gradle daemon.
-
-HIPPO puts a small, generic arbiter in front of the work. Before a heavy command runs, it reads host
-evidence, claims a fixed share from a ledger every repository on the machine can see, and tells the
-command how much of the host it may actually use. The command does not change — it reads a number out
-of an environment variable it already understands.
+HIPPO admits work against one shared ledger and exports its allocation through ordinary environment
+variables, so build tools need no HIPPO-specific integration.
 
 Longer version: [Why HIPPO exists](./docs/explanation/why-hippo-exists.md).
 
@@ -91,10 +86,11 @@ $ hippo status --disk-path .
 state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
 ```
 
-Guard a command. Everything after `--` belongs to the child, so its flags are never parsed as HIPPO's:
+Guard a command. Schema 3 requires a resource tier. Everything after `--` belongs to the child, so
+its flags are never parsed as HIPPO's:
 
 ```console
-$ hippo run --class ephemeral --disk-path . -- sh -c 'echo build-started; echo build-finished'
+$ hippo run --class ephemeral --resource-tier light --disk-path . -- sh -c 'echo build-started; echo build-finished'
 build-started
 build-finished
 ```
@@ -105,17 +101,17 @@ degraded admission, a deferral, a storage block, or a pressure shed.
 Your exit code and your pipeline both survive:
 
 ```console
-$ hippo run --disk-path . -- sh -c 'exit 3'; echo $?
+$ hippo run --resource-tier light --disk-path . -- sh -c 'exit 3'; echo $?
 3
 
-$ printf 'hello\n' | hippo run --disk-path . -- sh -c 'read v; printf "%s-world\n" "$v"' | tr a-z A-Z
+$ printf 'hello\n' | hippo run --resource-tier light --disk-path . -- sh -c 'read v; printf "%s-world\n" "$v"' | tr a-z A-Z
 HELLO-WORLD
 ```
 
 Hand the allocation to your build tool:
 
 ```console
-$ hippo run --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS"'
+$ hippo run --resource-tier standard --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS"'
 BUILD_WORKERS=11 TEST_JOBS=11
 ```
 
@@ -124,10 +120,10 @@ Walk through it properly: [Guard your first command](./docs/tutorials/guard-your
 ## ⚙️ How it works
 
 **Admission.** HIPPO samples memory, disk, CPU, swap, the macOS compressor, and Linux PSI, then
-resolves `balanced` → `constrained` → `minimal` from that evidence. It claims a fixed CPU-and-memory
-vector from a ledger shared by every repository using the same state root. Capacity is the host's
-available parallelism minus one safety unit, and effective memory minus the profile's reserve — never
-the whole machine.
+resolves `balanced` → `constrained` → `minimal` from that evidence. Schema 3 registers one stable FIFO
+waiter before launch and grants the largest safe launch-time vector between the chosen tier's minimum
+and maximum. It never starts a hidden retry loop or resizes a running child. Every repository using
+the same state root competes against the same pool.
 
 **Supervision.** The admitted command runs as its own process group, holding `HIPPO_PROFILE`,
 `HIPPO_CONCURRENCY`, and any variables you mapped. A private launcher holds the reservation identity
@@ -135,18 +131,21 @@ through complete group retirement, so a leader exiting early or forking a backgr
 cannot release capacity while the work is still running.
 
 **Shedding.** Under critical pressure one locked evaluation marks a single victim — newest ephemeral
-first, then newest service, never a transactional owner. A remote guard **never** signals another
-guard's process group; it marks and waits for that owner to stop its own child. A live unresponsive
-victim blocks any further selection, so pressure cannot cascade into emptying the ledger.
+first, then newest service. Transactional work is protected during ordinary shedding and is eligible
+last only at the configured emergency floor. A remote guard **never** signals another guard's process
+group; it marks and waits for that owner to stop its own child. A live unresponsive victim blocks any
+further selection, so pressure cannot cascade into emptying the ledger.
 
-**Failure.** Exit `73` needs storage cleanup, `75` is retryable pressure and holds no reservation,
-`78` needs a changed request. Corrupt or unreadable shared state returns an error and preserves the
-bytes rather than reporting a synthetic zero that would let everyone in at once.
+**Failure.** Exit `73` needs storage cleanup. Exit `75` requires its receipt/outcome: `never-started`
+may be requeued, while a pressure-shed or `started-safety-stop` payload must not be blindly retried.
+Exit `78` needs a changed request. Corrupt or unreadable shared state returns an error and preserves
+the bytes rather than reporting a synthetic zero that would let everyone in at once.
 
 | Mode                     | Behavior                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------ |
 | Schema 1 — `exclusive`   | One heavy task host-wide; services keep independent sessions. The default without configuration. |
 | Schema 2 — `reservation` | Concurrent owners against a shared vector budget. Opt in per repository.                         |
+| Schema 3 — `adaptive`    | Tiered FIFO admission, labeled status/history, and evidence-gated burst capacity.                |
 
 The two never mix within one state root; a client meeting the other mode defers with `75` until the
 old sessions drain.
@@ -174,9 +173,8 @@ below `1.0.0` may still make breaking changes — see the [changelog](./CHANGELO
 
 Released tags are immutable. A published release is never rebuilt or replaced.
 
-**External contributions are currently closed.** Issues and pull requests from outside the project
-are not being accepted while the engineering patterns stabilize. You are welcome to fork the
-repository under the MIT license and use it however you like.
+**External contributions are currently closed** while the engineering patterns stabilize. Forks
+remain welcome under the MIT license.
 
 Contributor rules live in [`repo-governance/`](./repo-governance/README.md), one document each with
 the reason it exists. `AGENTS.md` indexes them and states none itself, and `CLAUDE.md` holds one
@@ -202,16 +200,15 @@ npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact a
 npm test           # the full release gate, including race detection and vulnerability scan
 ```
 
-Only `main` persists. Work reaches it through a pull request from a branch in a worktree beside this
-checkout; direct pushes are refused for every actor, with no bypass. One aggregate `Quality gate`
+Only `main` persists. Work reaches it through a pull request from a branch at
+`{repository location}/worktrees/<task>`; sibling `*-worktrees` directories are forbidden. Direct
+pushes are refused for every actor, with no bypass. One aggregate `Quality gate`
 check, defined in `.github/workflows/pr-quality-gate.yml`, is required, and it is a superset of the
 Git hooks.
 
-Documentation hygiene runs under [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and
-SHA-256 in `rhino.lock`. Every check it runs is a gate declared in `repo-config.yml` against the
-surface that runs it, so the push hook and the pull-request gate dispatch the same declaration
-rather than each calling a script. What is enforced lives in the declaration, not in the tool. The two repositories pin each other: RHINO guards its own builds with a pinned
-`./hippo`.
+Documentation gates run under [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and SHA-256
+in `rhino.lock`; `repo-config.yml` supplies the shared hook and CI declarations. RHINO guards its own
+builds with a pinned `./hippo`.
 
 Everything else — the coverage floor, the exemption boundaries, where a worktree may live, how a
 release is cut — is in `repo-governance/`.

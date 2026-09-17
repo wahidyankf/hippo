@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "source": "my-repository",
+  "tags": {
+    "group": "my-projects"
+  }
+}

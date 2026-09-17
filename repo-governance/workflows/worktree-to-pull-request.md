@@ -5,11 +5,13 @@ The integration procedure, start to finish. The rules it enforces live in [integ
 ## 1. Provision
 
 ```sh
-git worktree add ../hippo-worktrees/<name> -b worktree/<name> origin/main
-cd ../hippo-worktrees/<name> && npm ci
+git worktree add worktrees/<name> -b worktree/<name> origin/main
+cd worktrees/<name> && npm ci
 ```
 
-Beside the checkout, never inside it — see [worktree location](../conventions/worktree-location.md). `npm ci` activates the hooks; skip it and the branch pushes unverified.
+Below the repository location, never in a sibling `*-worktrees/` directory — see
+[worktree location](../conventions/worktree-location.md). `npm ci` activates the hooks; skip it and the branch pushes
+unverified.
 
 One worktree per plan or task, reused for every delivery unit that work produces.
 

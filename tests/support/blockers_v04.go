@@ -334,7 +334,7 @@ func requireV04WaiterAggregateOverflow(root string) error {
 	<-results
 	<-results
 	if statusError == nil {
-		return errors.New("schema four status accepted overflowing waiter totals")
+		return errors.New("schema five status accepted overflowing waiter totals")
 	}
 	if strings.Contains(statusError.Error(), owner.Token) || strings.Contains(statusError.Error(), root) {
 		return errors.New("waiter aggregation error exposed private identity")
@@ -1926,7 +1926,7 @@ func requireV04ConformanceCallerSessionIsolation(root string) error {
 	for index := range manifest.Consumers {
 		manifest.Consumers[index].Gates = []conformance.Command{{Arguments: []string{
 			shellPath, "-c",
-			`test -z "${HIPPO_SESSION+x}" && test -z "${HIPPO_PROFILE+x}" && test -z "${HIPPO_CONCURRENCY+x}" && test -z "${HIPPO_RESERVED_MEMORY_BYTES+x}" && test -z "${HIPPO_DEFAULT_CONFIG+x}" && test "$HIPPO_CONFIG" = "$1"`,
+			`test -z "${HIPPO_SESSION+x}" && test -z "${HIPPO_PROFILE+x}" && test -z "${HIPPO_CONCURRENCY+x}" && test -z "${HIPPO_RESERVED_MEMORY_BYTES+x}" && test -z "${HIPPO_DEFAULT_CONFIG+x}" && test -z "${HIPPO_DEFAULT_IDENTITY+x}" && test "$HIPPO_CONFIG" = "$1"`,
 			conformanceLabel, explicitConfig,
 		}}}
 	}
@@ -1937,8 +1937,9 @@ func requireV04ConformanceCallerSessionIsolation(root string) error {
 	protocolEnvironment := map[string]string{
 		"HIPPO_SESSION": caller.Token, "HIPPO_PROFILE": profileBalanced,
 		"HIPPO_CONCURRENCY": "1", "HIPPO_RESERVED_MEMORY_BYTES": strconv.FormatInt(256*policy.MiB, 10),
-		"HIPPO_DEFAULT_CONFIG": filepath.Join(caseRoot, "caller-repository-default.json"),
-		"HIPPO_CONFIG":         explicitConfig,
+		"HIPPO_DEFAULT_CONFIG":   filepath.Join(caseRoot, "caller-repository-default.json"),
+		"HIPPO_DEFAULT_IDENTITY": filepath.Join(caseRoot, "caller-repository-identity.json"),
+		"HIPPO_CONFIG":           explicitConfig,
 	}
 	previous := make(map[string]string, len(protocolEnvironment))
 	present := make(map[string]bool, len(protocolEnvironment))

@@ -1,7 +1,23 @@
 # How to watch host pressure
 
-Use `hippo monitor` when you want to know _why_ work is being deferred or shed, rather than what a
-single sample said.
+Use `hippo watch` for the complete operator view of host pressure, current owners, FIFO waiters,
+deadlines, and burst promotion. Use `hippo monitor` when a resource-only transition stream is enough.
+
+## Watch admission and queue transitions
+
+```sh
+hippo watch --interval 5s --disk-path .
+```
+
+`watch` prints the initial schema-5 status and then only changed snapshots. Each owner or waiter row
+shows its opaque run ID, position, source, task class, resource tier, vector, and deadline. Filter a
+busy machine without hiding global totals:
+
+```sh
+hippo watch --source ose-public --tag checkout=worktree --disk-path .
+```
+
+For a machine consumer, `--json` emits one complete schema-5 object per changed snapshot.
 
 ## Watch transitions in a terminal
 
@@ -60,7 +76,7 @@ hippo status --json --disk-path . | jq -r '.resource.state'
 
 ## Keep a long-running pane
 
-`monitor` writes plain text, so any terminal multiplexer can capture it without special tooling:
+Both commands write plain text, so any terminal multiplexer can capture it without special tooling:
 
 ```sh
 tmux capture-pane -p -t hippo:0.0 -S -200

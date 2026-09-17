@@ -162,6 +162,7 @@ type Driver struct {
 	leaseRoot                  string
 	leaseHolder                int
 	heavySession               *guard.Session
+	admissionSession           *guard.Session
 	serviceSessions            []*guard.Session
 	coordinationMarker         []byte
 	coordinationRequests       int
@@ -273,6 +274,10 @@ func (driver *Driver) Reset() {
 }
 
 func (driver *Driver) cleanup() {
+	if driver.admissionSession != nil && driver.leaseRoot != "" {
+		_ = guard.ReleaseReservation(driver.leaseRoot, driver.admissionSession)
+		driver.admissionSession = nil
+	}
 	for _, writer := range driver.evidenceWriters {
 		_ = writer.Close()
 	}
@@ -1673,10 +1678,10 @@ func (driver *Driver) requireStatus() error {
 		return err
 	}
 	if driver.exitCode != 0 ||
-		payload.SchemaVersion != 4 ||
+		payload.SchemaVersion != 5 ||
 		payload.Resource == nil ||
 		payload.Profile == nil ||
-		payload.Coordination == nil || payload.Coordination.SchemaVersion != 4 ||
+		payload.Coordination == nil || payload.Coordination.SchemaVersion != 5 ||
 		len(payload.Capabilities) == 0 {
 		return fmt.Errorf("invalid status: exit=%d payload=%+v", driver.exitCode, payload)
 	}
@@ -1738,7 +1743,7 @@ func (driver *Driver) rootHelp() error {
 }
 
 func (driver *Driver) requireHelp() error {
-	commands := []string{"completion", monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName}
+	commands := []string{"completion", "history", monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName, "watch"}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}

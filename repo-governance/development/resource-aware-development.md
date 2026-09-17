@@ -14,7 +14,9 @@ CI is unguarded for a second, independent reason: a GitHub runner is dedicated a
 
 Consumers depend on these meanings, so contributors must hold them exactly:
 
-- **Exit `75`** — retryable pressure. Retry that same FIFO invocation once the condition clears. Never duplicate the retry, never change the task class to get in sooner, never weaken a gate to avoid the wait.
+- **Exit `75`** — inspect the receipt or history outcome. Requeue the same invocation only for
+  `never-started`; a started pressure/safety stop requires payload-specific recovery. Never create a
+  second waiter, duplicate a payload, change the task class to get in sooner, or weaken a gate.
 - **Exit `73`** — clean storage, then proceed.
 - **Exit `78`** — the request cannot be satisfied as stated; replan it.
 - Recovery and status commands stay direct, never guarded. A guard that had to be admitted before it could report on admission would deadlock on itself.

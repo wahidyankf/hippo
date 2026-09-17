@@ -11,7 +11,7 @@ If you are still learning what HIPPO does, start with the
 - [How to install a pinned release](./install-a-pinned-release.md) — download, verify a checksum, and
   put a tagged binary on PATH.
 - [How to enable reservation coordination](./enable-reservation-coordination.md) — turn on the shared
-  CPU-and-memory budget, cap it, and migrate a host that is still in exclusive mode.
+  budget, adopt adaptive schema 3, and migrate without a mixed-version epoch.
 
 ## Integrate
 
@@ -22,10 +22,10 @@ If you are still learning what HIPPO does, start with the
 
 ## Operate
 
-- [How to watch host pressure](./watch-host-pressure.md) — see state transitions as they happen and
-  identify what is saturated.
+- [How to watch host pressure](./watch-host-pressure.md) — see resource, owner, queue, deadline, and
+  promotion transitions as they happen.
 - [How to inspect evidence and abandoned process groups](./inspect-evidence-and-abandoned-groups.md)
-  — read the ledger, read a lifetime summary, and safely investigate an orphaned payload.
+  — query bounded labeled history, inspect receipts, and safely investigate an orphaned payload.
 - [How to monitor a release](./monitor-a-release.md) — capture and assess deployment-window evidence.
 
 ## Verify

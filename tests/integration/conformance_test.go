@@ -196,7 +196,7 @@ func TestCompiledConformanceScrubsCallerReservationEnvironment(t *testing.T) {
 	for index := range manifest.Consumers {
 		manifest.Consumers[index].Gates = []conformance.Command{{Arguments: []string{
 			"/bin/sh", "-c",
-			`test -z "${HIPPO_SESSION+x}" && test -z "${HIPPO_PROFILE+x}" && test -z "${HIPPO_CONCURRENCY+x}" && test -z "${HIPPO_RESERVED_MEMORY_BYTES+x}" && test -z "${HIPPO_DEFAULT_CONFIG+x}" && test "$HIPPO_CONFIG" = "$1"`,
+			`test -z "${HIPPO_SESSION+x}" && test -z "${HIPPO_PROFILE+x}" && test -z "${HIPPO_CONCURRENCY+x}" && test -z "${HIPPO_RESERVED_MEMORY_BYTES+x}" && test -z "${HIPPO_DEFAULT_CONFIG+x}" && test -z "${HIPPO_DEFAULT_IDENTITY+x}" && test "$HIPPO_CONFIG" = "$1"`,
 			"conformance", explicitConfig,
 		}}}
 	}
@@ -209,6 +209,7 @@ func TestCompiledConformanceScrubsCallerReservationEnvironment(t *testing.T) {
 		"HIPPO_CONCURRENCY=1",
 		fmt.Sprintf("HIPPO_RESERVED_MEMORY_BYTES=%d", 256*policy.MiB),
 		"HIPPO_DEFAULT_CONFIG="+filepath.Join(root, "caller-repository-default.json"),
+		"HIPPO_DEFAULT_IDENTITY="+filepath.Join(root, "caller-repository-identity.json"),
 		"HIPPO_CONFIG="+explicitConfig,
 	)
 	if output, runError := command.CombinedOutput(); runError != nil {

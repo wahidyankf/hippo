@@ -11,23 +11,39 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
+	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 const (
 	schemaVersionExclusive   = 1
 	schemaVersionReservation = 2
+	schemaVersionAdaptive    = 3
 	defaultMaxActiveOwners   = 20
 )
 
+// Promotion is the completed-evidence gate for temporarily opening owner three.
+type Promotion struct {
+	CompletedRuns               int
+	MinimumSources              int
+	MinimumAvailableMemoryBytes int64
+	MaximumCPUP95Percent        float64
+}
+
 // Coordination is the validated, privacy-safe shared-root coordination policy.
 type Coordination struct {
-	Mode            string
-	MaxCPU          int
-	MaxMemoryBytes  int64
-	MaxActiveOwners int
-	OwnerShares     map[string]int
+	SchemaVersion                 int
+	Mode                          string
+	MaxCPU                        int
+	MaxMemoryBytes                int64
+	BaseActiveOwners              int
+	MaxActiveOwners               int
+	OwnerShares                   map[string]int
+	Promotion                     Promotion
+	EmergencyAvailableMemoryBytes int64
+	Tiers                         map[string]guard.ResourceTierPolicy
 }
 
 // Result contains the validated catalog without retaining local file contents.
@@ -39,11 +55,30 @@ type Result struct {
 }
 
 type coordinationFile struct {
-	Mode                 string         `json:"mode,omitempty"`
-	MaxCPU               int            `json:"maxCpu,omitempty"`
-	MaxMemoryMiB         int64          `json:"maxMemoryMiB,omitempty"`
-	MaxActiveOwners      int            `json:"maxActiveOwners,omitempty"`
-	AutomaticOwnerShares map[string]int `json:"automaticOwnerShares,omitempty"`
+	Mode                 string              `json:"mode,omitempty"`
+	MaxCPU               int                 `json:"maxCpu,omitempty"`
+	MaxMemoryMiB         int64               `json:"maxMemoryMiB,omitempty"`
+	MaxActiveOwners      int                 `json:"maxActiveOwners,omitempty"`
+	BaseActiveOwners     int                 `json:"baseActiveOwners,omitempty"`
+	AutomaticOwnerShares map[string]int      `json:"automaticOwnerShares,omitempty"`
+	Promotion            *promotionFile      `json:"promotion,omitempty"`
+	EmergencyMemoryMiB   int64               `json:"emergencyAvailableMemoryMiB,omitempty"`
+	Tiers                map[string]tierFile `json:"tiers,omitempty"`
+}
+
+type promotionFile struct {
+	CompletedRuns             int     `json:"completedRuns"`
+	MinimumSources            int     `json:"minimumSources"`
+	MinimumAvailableMemoryMiB int64   `json:"minimumAvailableMemoryMiB"`
+	MaximumCPUP95Percent      float64 `json:"maximumCpuP95Percent"`
+}
+
+type tierFile struct {
+	MinimumCPU       int    `json:"minimumCpu"`
+	MaximumCPU       int    `json:"maximumCpu"`
+	MinimumMemoryMiB int64  `json:"minimumMemoryMiB"`
+	MaximumMemoryMiB int64  `json:"maximumMemoryMiB"`
+	QueueDeadline    string `json:"queueDeadline"`
 }
 
 type profileOverride struct {
@@ -71,11 +106,12 @@ type file struct {
 }
 
 func exclusiveCoordination() Coordination {
-	return Coordination{Mode: "exclusive"}
+	return Coordination{SchemaVersion: schemaVersionExclusive, Mode: "exclusive"}
 }
 
 func reservationCoordination() Coordination {
 	return Coordination{
+		SchemaVersion:   schemaVersionReservation,
 		Mode:            "reservation",
 		MaxActiveOwners: defaultMaxActiveOwners,
 		OwnerShares: map[string]int{
@@ -86,6 +122,85 @@ func reservationCoordination() Coordination {
 	}
 }
 
+func adaptiveCoordination(decoded file, result Coordination, configured *coordinationFile) (Coordination, error) { //nolint:cyclop,gocyclo // Every required adaptive field and bound is validated explicitly.
+	if decoded.SchemaVersion != schemaVersionAdaptive {
+		return result, nil
+	}
+	if decoded.Coordination == nil {
+		return Coordination{}, errors.New("schema 3 requires adaptive coordination")
+	}
+	result.SchemaVersion = schemaVersionAdaptive
+	if configured.MaxCPU <= 0 || configured.MaxMemoryMiB <= 0 || configured.BaseActiveOwners <= 0 ||
+		configured.MaxActiveOwners <= 0 {
+		return Coordination{}, errors.New("schema 3 requires positive pool and owner limits")
+	}
+	if configured.BaseActiveOwners > configured.MaxActiveOwners {
+		return Coordination{}, errors.New("baseActiveOwners cannot exceed maxActiveOwners")
+	}
+	result.BaseActiveOwners = configured.BaseActiveOwners
+	if configured.Promotion == nil {
+		return Coordination{}, errors.New("schema 3 requires a promotion gate")
+	}
+	promotion := configured.Promotion
+	if promotion.CompletedRuns < 1 || promotion.MinimumSources < 1 ||
+		promotion.MinimumSources > promotion.CompletedRuns || promotion.MinimumAvailableMemoryMiB < 256 ||
+		promotion.MaximumCPUP95Percent <= 0 || promotion.MaximumCPUP95Percent > 98 {
+		return Coordination{}, errors.New("schema 3 promotion gate is invalid")
+	}
+	minimumAvailable, err := policy.MiBToBytes(promotion.MinimumAvailableMemoryMiB)
+	if err != nil {
+		return Coordination{}, err
+	}
+	result.Promotion = Promotion{
+		CompletedRuns: promotion.CompletedRuns, MinimumSources: promotion.MinimumSources,
+		MinimumAvailableMemoryBytes: minimumAvailable,
+		MaximumCPUP95Percent:        promotion.MaximumCPUP95Percent,
+	}
+	if configured.EmergencyMemoryMiB < 256 {
+		return Coordination{}, errors.New("schema 3 emergency memory floor is invalid")
+	}
+	result.EmergencyAvailableMemoryBytes, err = policy.MiBToBytes(configured.EmergencyMemoryMiB)
+	if err != nil {
+		return Coordination{}, err
+	}
+	result.Tiers = make(map[string]guard.ResourceTierPolicy, 3)
+	for _, name := range []string{"light", "standard", "heavy"} {
+		configuredTier, exists := configured.Tiers[name]
+		if !exists {
+			return Coordination{}, fmt.Errorf("schema 3 requires %s resource tier", name)
+		}
+		minimumMemory, conversionError := policy.MiBToBytes(configuredTier.MinimumMemoryMiB)
+		if conversionError != nil {
+			return Coordination{}, conversionError
+		}
+		maximumMemory, conversionError := policy.MiBToBytes(configuredTier.MaximumMemoryMiB)
+		if conversionError != nil {
+			return Coordination{}, conversionError
+		}
+		deadline, durationError := time.ParseDuration(configuredTier.QueueDeadline)
+		if durationError != nil || deadline <= 0 {
+			return Coordination{}, fmt.Errorf("schema 3 %s queue deadline is invalid", name)
+		}
+		tier := guard.ResourceTierPolicy{
+			Minimum:       guard.ReservationVector{CPU: configuredTier.MinimumCPU, MemoryBytes: minimumMemory},
+			Maximum:       guard.ReservationVector{CPU: configuredTier.MaximumCPU, MemoryBytes: maximumMemory},
+			QueueDeadline: deadline,
+		}
+		if tier.Minimum.CPU < guard.MinimumReservationCPU ||
+			tier.Minimum.MemoryBytes < guard.MinimumReservationMemoryBytes ||
+			tier.Maximum.CPU < tier.Minimum.CPU || tier.Maximum.MemoryBytes < tier.Minimum.MemoryBytes ||
+			tier.Maximum.CPU > result.MaxCPU || tier.Maximum.MemoryBytes > result.MaxMemoryBytes {
+			return Coordination{}, fmt.Errorf("schema 3 %s resource tier is outside the pool", name)
+		}
+		result.Tiers[name] = tier
+	}
+	if len(configured.Tiers) != len(result.Tiers) {
+		return Coordination{}, errors.New("schema 3 contains an unknown resource tier")
+	}
+
+	return result, nil
+}
+
 func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, error) { //nolint:cyclop,gocognit // Validation enumerates schema compatibility and profile inheritance invariants.
 	if decoded.SchemaVersion == schemaVersionExclusive {
 		if decoded.Coordination != nil {
@@ -94,7 +209,7 @@ func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, erro
 
 		return exclusiveCoordination(), nil
 	}
-	if decoded.SchemaVersion != schemaVersionReservation {
+	if decoded.SchemaVersion != schemaVersionReservation && decoded.SchemaVersion != schemaVersionAdaptive {
 		return Coordination{}, fmt.Errorf("unsupported configuration schema %d", decoded.SchemaVersion)
 	}
 
@@ -104,7 +219,7 @@ func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, erro
 		configured = &coordinationFile{}
 	}
 	if configured.Mode != "" && configured.Mode != "reservation" {
-		return Coordination{}, fmt.Errorf("unsupported schema 2 coordination mode %q", configured.Mode)
+		return Coordination{}, fmt.Errorf("unsupported schema %d coordination mode %q", decoded.SchemaVersion, configured.Mode)
 	}
 	if configured.MaxCPU < 0 || configured.MaxMemoryMiB < 0 || configured.MaxActiveOwners < 0 {
 		return Coordination{}, errors.New("reservation limits must be nonnegative")
@@ -166,7 +281,7 @@ func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, erro
 		}
 	}
 
-	return result, nil
+	return adaptiveCoordination(decoded, result, configured)
 }
 
 func consumeJSON(decoder *json.Decoder) error {
@@ -318,7 +433,8 @@ func validateProfile(profile policy.Profile) error {
 }
 
 func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // Recursive inheritance and fallback validation deliberately share one graph walk.
-	if decoded.SchemaVersion != schemaVersionExclusive && decoded.SchemaVersion != schemaVersionReservation {
+	if decoded.SchemaVersion != schemaVersionExclusive && decoded.SchemaVersion != schemaVersionReservation &&
+		decoded.SchemaVersion != schemaVersionAdaptive {
 		return policy.Catalog{}, fmt.Errorf("unsupported configuration schema %d", decoded.SchemaVersion)
 	}
 

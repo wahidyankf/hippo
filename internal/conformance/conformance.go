@@ -1048,7 +1048,8 @@ func Run(ctx context.Context, manifestPath string, output io.Writer) (returnErro
 
 	environment := removeEnvironment(
 		os.Environ(),
-		"HIPPO_SESSION", "HIPPO_PROFILE", "HIPPO_CONCURRENCY", "HIPPO_RESERVED_MEMORY_BYTES", "HIPPO_DEFAULT_CONFIG",
+		"HIPPO_SESSION", "HIPPO_PROFILE", "HIPPO_CONCURRENCY", "HIPPO_RESERVED_MEMORY_BYTES",
+		"HIPPO_DEFAULT_CONFIG", "HIPPO_DEFAULT_IDENTITY",
 	)
 	environment = replaceEnvironment(environment, "HIPPO_ROOT", manifest.SharedRoot)
 	executionOutput := io.Discard
