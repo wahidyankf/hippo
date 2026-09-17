@@ -53,7 +53,7 @@ release `checksums.txt`. **Pin both the tag and the expected SHA-256; never foll
 runtime.**
 
 ```sh
-VERSION=v0.6.0
+VERSION=v0.6.1
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -70,8 +70,8 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ```
 
 ```console
-hippo_v0.6.0_darwin_arm64.tar.gz: OK
-{"schemaVersion":1,"version":"v0.6.0","commit":"e609e163e6938de2e9ab7950d5e56c6ed39d79b1"}
+hippo_v0.6.1_darwin_arm64.tar.gz: OK
+{"schemaVersion":1,"version":"v0.6.1","commit":"b72e728c5bdf4604eec352ba514ed8455f4faae7"}
 ```
 
 Working from a source checkout instead? The tracked `./hippo` bootstrap compiles the CLI once and
