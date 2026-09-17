@@ -22,7 +22,11 @@ const (
 	coordinationModeReservation = "reservation"
 	coordinationPollInterval    = 10 * time.Millisecond
 	coordinationLifecycleWait   = 100 * time.Millisecond
-	coordinationSelectionWait   = 500 * time.Millisecond
+	// Activation follows payload launch and must outwait the brief serialized
+	// admissions created by a simultaneous multi-repository burst. A genuinely
+	// stalled mutation still fails boundedly so unrecorded work cannot continue.
+	coordinationActivationWait = 2 * time.Second
+	coordinationSelectionWait  = 500 * time.Millisecond
 	// Reading the shared root is an inspection every repository performs while
 	// its peers hold the lock for their own bounded transactions, so it waits
 	// out ordinary contention instead of reporting it as a coordination error.
@@ -237,6 +241,10 @@ func acquireCoordinationLock(ctx context.Context, root string, wait time.Duratio
 
 func lockCoordinationForRelease(root string) (*os.File, error) {
 	return acquireCoordinationLock(context.Background(), root, coordinationLifecycleWait)
+}
+
+func lockCoordinationForActivation(root string) (*os.File, error) {
+	return acquireCoordinationLock(context.Background(), root, coordinationActivationWait)
 }
 
 func readCoordinationMarker(root string) (coordinationMarker, bool, error) {

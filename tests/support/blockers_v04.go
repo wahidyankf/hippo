@@ -1120,11 +1120,15 @@ func requireV04StatusWaitsOutContention(string) error {
 	return runInternalGuardRegressionV04("TestReservationStatusWaitsOutABusyCoordinationRoot")
 }
 
-func requireV04ContentionDefersInsteadOfFailing(string) error {
+func requireV072BoundedActivationContention(string) error {
 	return errors.Join(
-		runInternalGuardRegressionV04("TestActivationContentionFailsAfterOwnedCleanup"),
+		runInternalGuardRegressionV04("TestActivationContentionWaitsWithoutCuttingStartedWork"),
 		runInternalGuardRegressionV04("TestSupervisionContentionDoesNotStopHealthyWork"),
 	)
+}
+
+func requireV072StalledActivationContention(string) error {
+	return runInternalGuardRegressionV04("TestStalledActivationContentionFailsAfterOwnedCleanup")
 }
 
 func requireV04AggressiveGraceRetirement(string) error {

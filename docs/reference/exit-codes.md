@@ -35,7 +35,8 @@ receipt.
 
 Exit `1` is a non-retryable HIPPO failure. The evidence tells you whether a payload started. Usage
 errors happen before launch and print command usage next to the diagnostic. Corrupt or inaccessible
-shared state also fails before launch without mutation. Activation failure happens after launch,
+shared state also fails before launch without mutation. Brief activation contention is retried for up
+to two seconds after launch. Contention or another activation failure that outlives that deadline
 stops the owned payload, records `task-failed`, and writes `state: "started-activation-failure"`.
 
 Known causes:
@@ -48,7 +49,8 @@ Known causes:
 - `release monitor` without `--health-url` or without `--routed-origin`.
 - `release monitor` with both `--output -` and `--summary -`.
 - Malformed or inaccessible shared coordination state.
-- A post-launch activation transaction that cannot record the supervised process group.
+- A post-launch activation transaction that cannot record the supervised process group within its
+  two-second deadline.
 
 ```console
 $ hippo run --disk-path . --concurrency-env HIPPO_CONCURRENCY -- true

@@ -1317,7 +1317,7 @@ func ActivateReservation(root string, session *Session, processGroup int) (retur
 	if session == nil || session.Inherited || processGroup <= 0 {
 		return nil
 	}
-	lock, err := lockCoordinationForRelease(root)
+	lock, err := lockCoordinationForActivation(root)
 	if err != nil {
 		return err
 	}

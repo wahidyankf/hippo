@@ -33,6 +33,8 @@ $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make tes
   incompatible peer, and `78` replan. Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters,
   promotion state, and bounded run outcomes without exposing commands or paths.
+- **Burst-safe activation.** Simultaneous repository clients wait through brief coordination
+  contention after launch instead of cutting an already started payload.
 - **No daemon.** One short-lived process per guarded command, plus files in a shared state root.
 
 ## 🤔 Why
@@ -53,7 +55,7 @@ release `checksums.txt`. **Pin both the tag and the expected SHA-256; never foll
 runtime.**
 
 ```sh
-VERSION=v0.7.1
+VERSION=v0.7.2
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -69,8 +71,8 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ./hippo version --json
 ```
 
-The checksum command prints `hippo_v0.7.1_<os>_<arch>.tar.gz: OK`; `version --json` reports
-`v0.7.1` and the exact release commit.
+The checksum command prints `hippo_v0.7.2_<os>_<arch>.tar.gz: OK`; `version --json` reports
+`v0.7.2` and the exact release commit.
 
 Working from a source checkout instead? The tracked `./hippo` bootstrap compiles the CLI once and
 caches it. Full details: [How to install a pinned release](./docs/how-to/install-a-pinned-release.md).
