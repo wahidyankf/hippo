@@ -7,6 +7,15 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.7.1] — 2026-09-17
+
+### Fixed
+
+- `status` and `watch` now report every live schema-1 exclusive compatibility session as a
+  privacy-safe legacy owner. A heavy owner and its session record are deduplicated, class totals are
+  accurate, and observation never mutates compatibility state. Malformed state still returns `1`;
+  a future compatibility schema still returns `76`.
+
 ## [v0.7.0] — 2026-09-17
 
 ### Added
@@ -189,6 +198,7 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 
 - First standalone release, published as Resource Guard.
 
+[v0.7.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.1
 [v0.7.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.0
 [v0.6.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.6.1
 [v0.6.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.6.0

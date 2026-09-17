@@ -117,9 +117,7 @@ func statusCoordination(ctx context.Context, root, configuredMode string) (guard
 		return totals, nil
 	}
 	if activeMode != reservationCoordinationMode {
-		totals.Mode = activeMode
-
-		return totals, nil
+		return guard.ExclusiveStatus(ctx, root)
 	}
 
 	return guard.ReservationStatus(ctx, root)

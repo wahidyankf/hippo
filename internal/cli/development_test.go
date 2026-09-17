@@ -3,6 +3,7 @@ package cli //nolint:testpackage // Application dependencies are injected at the
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,94 @@ import (
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
+
+func TestStatusExposesLiveExclusiveOwnerWithoutMutation(t *testing.T) {
+	root := t.TempDir()
+	owner, err := guard.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, time.Second)
+	if err != nil || owner == nil {
+		t.Fatalf("acquire exclusive owner: session=%v error=%v", owner != nil, err)
+	}
+	defer func() { _ = guard.ReleaseSession(root, owner) }()
+	paths := []string{
+		filepath.Join(root, "coordination-mode.json"),
+		filepath.Join(root, "heavy.lock", "owner.json"),
+		owner.RecordPath,
+	}
+	before := make(map[string][]byte, len(paths))
+	for _, path := range paths {
+		before[path], err = os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	stdout := &bytes.Buffer{}
+	application := Application{
+		Stdout: stdout, Stderr: &bytes.Buffer{}, Environment: []string{"HIPPO_ROOT=" + root},
+		Collector: stableCollector{sample: stableDevelopmentSample(now)}, Now: func() time.Time { return now },
+		Sleep: func(time.Duration) {},
+	}
+	code, statusError := application.Run(context.Background(), []string{"status", "--json"})
+	if code != 0 || statusError != nil {
+		t.Fatalf("status code=%d error=%v", code, statusError)
+	}
+	var payload struct {
+		Coordination guard.ReservationTotals `json:"coordination"`
+	}
+	if err = json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	totals := payload.Coordination
+	if totals.Mode != "exclusive" || totals.ActiveOwners != 1 || totals.Ephemeral != 1 ||
+		totals.LegacyEntries != 1 || len(totals.Owners) != 1 || !totals.Owners[0].Legacy {
+		t.Fatalf("exclusive status did not expose owner: %+v", totals)
+	}
+	for path, original := range before {
+		after, readError := os.ReadFile(path)
+		if readError != nil || !bytes.Equal(original, after) {
+			t.Fatalf("status changed %s: error=%v", filepath.Base(path), readError)
+		}
+	}
+}
+
+func TestStatusClassifiesExclusiveCompatibilityState(t *testing.T) {
+	for _, testCase := range []struct {
+		name, contents string
+		exitCode       int
+	}{
+		{name: "malformed", contents: `{"schemaVersion":1`, exitCode: 1},
+		{name: "future", contents: `{"schemaVersion":2}`, exitCode: policy.ProtocolMismatchExitCode},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := t.TempDir()
+			owner, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
+			if err != nil || owner == nil {
+				t.Fatalf("acquire exclusive owner: session=%v error=%v", owner != nil, err)
+			}
+			defer func() { _ = guard.ReleaseSession(root, owner) }()
+			contents := []byte(testCase.contents + "\n")
+			if err = os.WriteFile(owner.RecordPath, contents, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+			application := Application{
+				Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, Environment: []string{"HIPPO_ROOT=" + root},
+				Collector: stableCollector{sample: stableDevelopmentSample(now)}, Now: func() time.Time { return now },
+				Sleep: func(time.Duration) {},
+			}
+			code, statusError := application.Run(context.Background(), []string{"status", "--json"})
+			if code != testCase.exitCode || statusError == nil {
+				t.Fatalf("status code=%d want=%d error=%v", code, testCase.exitCode, statusError)
+			}
+			after, readError := os.ReadFile(owner.RecordPath)
+			if readError != nil || !bytes.Equal(contents, after) {
+				t.Fatalf("status changed invalid state: %q error=%v", after, readError)
+			}
+		})
+	}
+}
 
 const adaptiveConfigFixture = `{
   "schemaVersion": 3,

@@ -11,6 +11,21 @@ Feature: Public HIPPO CLI
     When JSON status is requested for an existing path
     Then status returns schema version 5 with profile capability and coordination evidence
 
+  Scenario: Status exposes live exclusive compatibility owners
+    Given a live exclusive compatibility owner in an isolated shared root
+    When JSON status inspects that exclusive shared root
+    Then status reports one legacy owner and preserves the compatibility state
+
+  Scenario Outline: Status classifies invalid exclusive compatibility state
+    Given a live exclusive compatibility owner with a <state> session document
+    When JSON status inspects that invalid exclusive shared root
+    Then status exits <code> without changing the invalid compatibility state
+
+    Examples:
+      | state     | code |
+      | malformed | 1    |
+      | future    | 76   |
+
   @e2e-exempt
   Scenario: Status exposes privacy-safe labeled owner rows
     Given a labeled reservation owner in the shared queue

@@ -53,7 +53,7 @@ release `checksums.txt`. **Pin both the tag and the expected SHA-256; never foll
 runtime.**
 
 ```sh
-VERSION=v0.7.0
+VERSION=v0.7.1
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -69,8 +69,8 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ./hippo version --json
 ```
 
-The checksum command prints `hippo_v0.7.0_<os>_<arch>.tar.gz: OK`; `version --json` reports
-`v0.7.0` and the exact release commit.
+The checksum command prints `hippo_v0.7.1_<os>_<arch>.tar.gz: OK`; `version --json` reports
+`v0.7.1` and the exact release commit.
 
 Working from a source checkout instead? The tracked `./hippo` bootstrap compiles the CLI once and
 caches it. Full details: [How to install a pinned release](./docs/how-to/install-a-pinned-release.md).

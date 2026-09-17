@@ -97,7 +97,8 @@ state=normal reason=normal profile=balanced concurrency=8 swap=active availableG
 ```
 
 The JSON form includes privacy-safe owner/waiter rows plus the base, maximum, and currently effective
-owner limit. Filters change rows, not the global aggregate totals. It is documented in
+owner limit. A live exclusive compatibility session appears as a legacy owner, while exclusive
+waiters remain unregistered. Filters change rows, not the global aggregate totals. It is documented in
 [JSON schemas](./json-schemas.md#status---json).
 
 ## `hippo watch`

@@ -216,6 +216,8 @@ type Driver struct {
 	v04State                   []byte
 	v04Action                  func(string) error
 	v04Scenario                string
+	exclusiveStatusSession     *guard.Session
+	exclusiveStatusState       map[string][]byte
 }
 
 type failingStream struct {
@@ -275,6 +277,10 @@ func (driver *Driver) Reset() {
 }
 
 func (driver *Driver) cleanup() {
+	if driver.exclusiveStatusSession != nil && driver.evidenceRoot != "" {
+		_ = guard.ReleaseSession(driver.evidenceRoot, driver.exclusiveStatusSession)
+		driver.exclusiveStatusSession = nil
+	}
 	if driver.admissionSession != nil && driver.leaseRoot != "" {
 		_ = guard.ReleaseReservation(driver.leaseRoot, driver.admissionSession)
 		driver.admissionSession = nil
