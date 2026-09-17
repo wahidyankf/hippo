@@ -1816,7 +1816,10 @@ func TestSchemaOneEmbeddedOwnershipRetiresAfterHolder(t *testing.T) {
 	starter := func(
 		_ context.Context, _ RunConfig, _ string, _ []string, identityFiles ...*os.File,
 	) (*supervisedLifetime, error) {
-		holder = exec.Command("/bin/sh", "-c", "sleep 0.2")
+		// The fixture, not scheduler speed, decides when the inherited identity
+		// retires. A short sleep can finish while a loaded CI runner is still
+		// returning from cancellation and falsely look like premature release.
+		holder = exec.Command("/bin/sleep", "30")
 		for _, identity := range identityFiles {
 			if identity == nil {
 				continue
@@ -1866,8 +1869,14 @@ func TestSchemaOneEmbeddedOwnershipRetiresAfterHolder(t *testing.T) {
 	if competitor != nil {
 		_ = ReleaseSession(root, competitor)
 	}
-	if err := holder.Wait(); err != nil {
-		t.Fatal(err)
+	killError := holder.Process.Kill()
+	waitError := holder.Wait()
+	if killError != nil && !errors.Is(killError, os.ErrProcessDone) {
+		t.Fatal(killError)
+	}
+	var exitError *exec.ExitError
+	if waitError != nil && !errors.As(waitError, &exitError) {
+		t.Fatal(waitError)
 	}
 	deadline := time.Now().Add(time.Second)
 	var replacement *Session
