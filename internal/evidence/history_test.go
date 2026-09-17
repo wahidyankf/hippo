@@ -1,6 +1,7 @@
 package evidence //nolint:testpackage // Compaction fixtures exercise private atomic archive boundaries.
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 
 func writeHistoryFixture(t *testing.T, root, name string, value Summary, modified time.Time) {
 	t.Helper()
-	data, err := json.Marshal(value)
+	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,6 +21,31 @@ func writeHistoryFixture(t *testing.T, root, name string, value Summary, modifie
 	}
 	if err = os.Chtimes(path, modified, modified); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestReadHistoryAcceptsLegacyMultilineArchive(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	finished := now.Add(-48 * time.Hour)
+	summary := Summary{
+		SchemaVersion: 5, RunID: "legacy-pretty", Source: "hippo", ResourceTier: "standard",
+		TaskClass: "ephemeral", Outcome: "passed", FinishedAt: finished.Format(time.RFC3339Nano),
+	}
+	encoded, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "history", "2026-09-15.jsonl.gz")
+	if err = atomicGzipWrite(archive, [][]byte{encoded}, finished); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := ReadHistory(root, Query{Since: HistoryRetention, Now: now, Source: "hippo"})
+	if err != nil || len(rows) != 1 || rows[0].RunID != summary.RunID {
+		t.Fatalf("history rows=%+v error=%v", rows, err)
 	}
 }
 
@@ -44,8 +70,17 @@ func TestCleanupCompactsRawAndPriorDaySummaries(t *testing.T) {
 	if err := Cleanup(root, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "history", "2026-09-15.jsonl.gz")); err != nil {
+	archivePath := filepath.Join(root, "history", "2026-09-15.jsonl.gz")
+	if _, err := os.Stat(archivePath); err != nil {
 		t.Fatalf("history archive: %v", err)
+	}
+	var archive bytes.Buffer
+	if err := CopyGzip(&archive, archivePath); err != nil {
+		t.Fatalf("expand history archive: %v", err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(archive.Bytes()), []byte("\n"))
+	if len(lines) != 1 || !json.Valid(lines[0]) {
+		t.Fatalf("history archive is not one compact JSON row: lines=%d", len(lines))
 	}
 	if _, err := os.Stat(filepath.Join(root, "raw", "run-one.jsonl.gz")); err != nil {
 		t.Fatalf("raw archive: %v", err)

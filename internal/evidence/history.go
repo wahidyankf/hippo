@@ -1,7 +1,6 @@
 package evidence
 
 import (
-	"bufio"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -109,12 +108,14 @@ func readGzipSummaries(path string, fallback time.Time) ([]Summary, error) {
 		return nil, err
 	}
 	defer reader.Close() //nolint:errcheck // Read result already carries scanner/decompressor errors.
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	decoder := json.NewDecoder(reader)
 	rows := []Summary{}
-	for scanner.Scan() {
+	for {
 		var summary Summary
-		if err = json.Unmarshal(scanner.Bytes(), &summary); err != nil {
+		if err = decoder.Decode(&summary); errors.Is(err, io.EOF) {
+			return rows, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 		if summary.FinishedAt == "" && !fallback.IsZero() {
@@ -122,8 +123,6 @@ func readGzipSummaries(path string, fallback time.Time) ([]Summary, error) {
 		}
 		rows = append(rows, summary)
 	}
-
-	return rows, scanner.Err()
 }
 
 func archiveFallback(name string) time.Time {
@@ -392,7 +391,11 @@ func compactSummaries(root string, now time.Time, protected map[string]bool) err
 				hash := sha256.Sum256(data)
 				key = hex.EncodeToString(hash[:])
 			}
-			rows[key] = data
+			encoded, encodeError := json.Marshal(summary)
+			if encodeError != nil {
+				return encodeError
+			}
+			rows[key] = encoded
 		}
 		keys := make([]string, 0, len(rows))
 		for key := range rows {

@@ -7,6 +7,14 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.6.1] — 2026-09-17
+
+### Fixed
+
+- History reads now accept both compact JSONL rows and the multiline JSON records produced when
+  v0.6.0 compacted pretty-printed summaries. New archives always write one compact JSON object per
+  line, so existing shared history remains queryable and future compaction is canonical.
+
 ## [v0.6.0] — 2026-09-17
 
 ### Added
