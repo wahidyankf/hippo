@@ -182,10 +182,16 @@ Feature: Shared vector reservations
     Then it returns boundedly without signaling and preserves the selected barrier
 
   @e2e-exempt
-  Scenario: Shared-root contention fails safely after launch and preserves healthy observed work
-    Given a peer holding the shared coordination lock while a guard activates and supervises its child
-    When the guard activates its reservation and then samples through the held lock
-    Then activation returns exit 1 after owned cleanup and later observation contention keeps healthy work running
+  Scenario: Bounded shared-root contention preserves started work and healthy observation
+    Given a peer briefly holds the shared coordination lock while a guard activates and supervises its child
+    When the guard waits to activate its reservation and then samples through later contention
+    Then activation succeeds without relaunch and later observation contention keeps healthy work running
+
+  @e2e-exempt
+  Scenario: Stalled activation contention fails safely after launch
+    Given a peer holds the shared coordination lock past the activation deadline after the child starts
+    When the guard attempts to activate its reservation
+    Then activation returns exit 1 after owned cleanup with a started-failure receipt
 
   @e2e-exempt
   Scenario: Owner cancellation remains bounded when release coordination is held

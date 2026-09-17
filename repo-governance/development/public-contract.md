@@ -9,7 +9,8 @@ pre-stable minor release or, after stability, a major release.
   when a safety receipt proves `never-started`. `76` means an incompatible peer coordination
   protocol: drain the epoch or upgrade the client. `78` means the local request cannot be satisfied
   as stated and needs replanning. Exit `1` includes corrupt shared state and HIPPO-owned failures
-  after payload launch. A guarded child's own exit code remains unchanged, including a child-owned
+  after payload launch. Brief activation contention is absorbed within the bounded activation
+  window; a stalled activation remains a started failure. A guarded child's own exit code remains unchanged, including a child-owned
   reserved code; evidence distinguishes it from a HIPPO decision.
 - **Evidence readers.** The supported readers and their record shapes. A consumer parsing evidence is a consumer whose parser breaks when the shape does.
 - **Configuration compatibility.** Existing keys keep their meaning. A breaking transition requires the owner's explicit authorization, not a judgement that the old shape was worse.

@@ -7,6 +7,15 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.7.2] — 2026-09-17
+
+### Fixed
+
+- Reservation activation now waits up to two seconds for brief shared-root contention. Concurrent
+  repository bursts no longer stop an already started payload merely because peer admission
+  transactions occupied the previous 100 ms lifecycle window. A genuinely stalled activation
+  still stops owned work boundedly, returns `1`, and records `started-activation-failure`.
+
 ## [v0.7.1] — 2026-09-17
 
 ### Fixed
@@ -198,6 +207,7 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 
 - First standalone release, published as Resource Guard.
 
+[v0.7.2]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.2
 [v0.7.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.1
 [v0.7.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.0
 [v0.6.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.6.1

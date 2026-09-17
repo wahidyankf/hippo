@@ -2245,23 +2245,28 @@ func holdCoordinationLock(t *testing.T, root string, after, duration time.Durati
 	}
 }
 
-func TestActivationContentionFailsAfterOwnedCleanup(t *testing.T) {
+func TestActivationContentionWaitsWithoutCuttingStartedWork(t *testing.T) {
 	// Several repositories share one coordination root, so a peer holding the
-	// shared lock while this guard activates its reservation is ordinary
-	// contention before launch. Once the child started, the guard must never
-	// claim the invocation is a retryable never-started deferral.
+	// shared lock briefly while this guard activates its reservation is ordinary
+	// contention. A started child must remain single-launch and finish normally.
 	root := contendedRoot(t)
 	config := contendedReservationConfig(t, root, func(sharedRoot string) {
 		holdCoordinationLock(t, sharedRoot, 0, 400*time.Millisecond)
 	})
+	marker := filepath.Join(root, "started-once")
+	config.Arguments = []string{"-c", `printf started >> "$1"; sleep 1`, "hippo-activation-probe", marker}
 	config.ReservationMetadata = ReservationMetadata{Source: "activation-test"}
 
 	code, err := Run(context.Background(), config)
 	if err != nil {
 		t.Fatalf("contended activation exited %d and reported %v", code, err)
 	}
-	if code != 1 {
-		t.Fatalf("contended activation exited %d, want 1", code)
+	if code != 0 {
+		t.Fatalf("contended activation exited %d, want 0", code)
+	}
+	markerData, readError := os.ReadFile(marker)
+	if readError != nil || string(markerData) != "started" {
+		t.Fatalf("activation payload starts=%q error=%v", markerData, readError)
 	}
 	summaryPaths, globError := filepath.Glob(filepath.Join(root, "*.summary.json"))
 	if globError != nil || len(summaryPaths) != 1 {
@@ -2275,16 +2280,57 @@ func TestActivationContentionFailsAfterOwnedCleanup(t *testing.T) {
 	if err = json.Unmarshal(summaryData, &summary); err != nil {
 		t.Fatal(err)
 	}
-	if summary.Outcome != outcomeTaskFailed {
+	if summary.Outcome != "passed" {
 		t.Fatalf("activation contention summary=%+v", summary)
 	}
 	receipts, readError := os.ReadDir(filepath.Join(root, "receipts"))
+	if readError != nil && !errors.Is(readError, os.ErrNotExist) {
+		t.Fatal(readError)
+	}
+	if len(receipts) != 0 {
+		t.Fatalf("successful activation wrote failure receipts: %v", receipts)
+	}
+}
+
+func TestStalledActivationContentionFailsAfterOwnedCleanup(t *testing.T) {
+	// A coordination transaction that outlives the activation deadline remains
+	// a fail-safe started failure: HIPPO stops its one child and never reports a
+	// retryable never-started deferral.
+	root := contendedRoot(t)
+	config := contendedReservationConfig(t, root, func(sharedRoot string) {
+		holdCoordinationLock(t, sharedRoot, 0, 2500*time.Millisecond)
+	})
+	config.ReservationMetadata = ReservationMetadata{Source: "activation-test"}
+
+	code, err := Run(context.Background(), config)
+	if err != nil {
+		t.Fatalf("stalled activation exited %d and reported %v", code, err)
+	}
+	if code != 1 {
+		t.Fatalf("stalled activation exited %d, want 1", code)
+	}
+	summaryPaths, globError := filepath.Glob(filepath.Join(root, "*.summary.json"))
+	if globError != nil || len(summaryPaths) != 1 {
+		t.Fatalf("stalled activation summary paths=%v error=%v", summaryPaths, globError)
+	}
+	summaryData, readError := os.ReadFile(summaryPaths[0])
+	if readError != nil {
+		t.Fatal(readError)
+	}
+	var summary evidence.Summary
+	if err = json.Unmarshal(summaryData, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Outcome != outcomeTaskFailed {
+		t.Fatalf("stalled activation summary=%+v", summary)
+	}
+	receipts, readError := os.ReadDir(filepath.Join(root, "receipts"))
 	if readError != nil || len(receipts) != 1 {
-		t.Fatalf("activation contention receipts=%d error=%v", len(receipts), readError)
+		t.Fatalf("stalled activation receipts=%d error=%v", len(receipts), readError)
 	}
 	receiptData, readError := os.ReadFile(filepath.Join(root, "receipts", receipts[0].Name()))
 	if readError != nil || !bytes.Contains(receiptData, []byte(`"state":"started-activation-failure"`)) {
-		t.Fatalf("activation contention receipt=%s error=%v", receiptData, readError)
+		t.Fatalf("stalled activation receipt=%s error=%v", receiptData, readError)
 	}
 }
 
