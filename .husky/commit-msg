@@ -1,5 +1,5 @@
 set -e
 
-# Git's argument is the path to the message being written, forwarded unchanged
-# so a gate that reads the message file gets the path Git handed the hook.
-exec ./rhino gate run --surface commit-msg -- "$@"
+# Rhino proves Git supplied this worktree's canonical COMMIT_EDITMSG path before
+# binding its typed message to the declared gates.
+exec ./rhino gate run --surface commit-msg --message-file "$1"

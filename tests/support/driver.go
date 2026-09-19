@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -78,6 +77,7 @@ const (
 	requestedField                = "requested"
 	childStartedArgScript         = `printf started > "$1"`
 	hippoRootEnvironment          = "HIPPO_ROOT"
+	literalValidate               = "literal: validate"
 )
 
 // interruptReadinessWait bounds how long a fixture waits for a guarded child to
@@ -119,105 +119,105 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
-	mode                       string
-	samples                    []policy.Sample
-	assessment                 policy.Assessment
-	admitted, accepted         bool
-	exitCode                   int
-	output, errorOutput        string
-	binary, summaryPath        string
-	temporaryPaths             []string
-	lifecycleOK                bool
-	cacheRoot                  string
-	historicalCaches           []string
-	lintConfiguration          string
-	lintCommand                string
-	hookEnvironment            []string
-	ambientRepository          string
-	ambientHead                string
-	fixtureCheckout            string
-	gateScripts                map[string]string
-	strictAdapters             bool
-	unitExemptionsForbidden    bool
-	approvedExemptions         bool
-	serialCompliance           bool
-	e2ePlacement               bool
-	conventionalCommits        bool
-	pullRequestOnlyGate        bool
-	sharedDocumentationCheck   bool
-	pinnedValidatorsRun        bool
-	pushHookForwardsNoArgument bool
-	stagedFormatting           bool
-	pushQuickGate              bool
-	coreCoverage               bool
-	resolution                 policy.Resolution
-	requestedProfile           string
-	taskClass                  policy.TaskClass
-	effectiveMemory            int64
-	linuxMemInfo               string
-	linuxCgroupLimit           int64
-	configPath                 string
-	privateArtifacts           bool
-	exampleTracked             bool
-	applicationLayout          bool
-	leaseRoot                  string
-	leaseHolder                int
-	heavySession               *guard.Session
-	admissionSession           *guard.Session
-	serviceSessions            []*guard.Session
-	coordinationMarker         []byte
-	coordinationRequests       int
-	coordinationDeferrals      int
-	admissionUnblockAfter      int
-	admissionAttempts          int
-	admissionElapsed           time.Duration
-	deferralProbeScript        string
-	deferralProbeError         error
-	abandonedGroup             int
-	abandonedPayload           *exec.Cmd
-	abandonedIdentityLock      *os.File
-	abandonedTotals            guard.ReservationTotals
-	inheritedSessions          bool
-	forceStopElapsed           time.Duration
-	runtimeFailureOutput       string
-	runtimeFailureExit         int
-	usageErrorOutput           string
-	terminationSignals         int
-	supervisionFailure         error
-	childReaped                bool
-	evidenceRoot               string
-	evidenceIdentifier         string
-	evidenceSampleCount        int
-	evidenceWriters            []*evidence.Writer
-	excessEvidencePath         string
-	excessEvidenceError        error
-	inactiveEvidencePaths      []string
-	operandCommandsRejected    bool
-	childInput                 string
-	childEnvironment           []string
-	concurrencyEnvironment     []string
-	childResolution            policy.Resolution
-	releaseMonitorRun          func() error
-	releaseMonitorError        error
-	releaseRawPath             string
-	releaseSummaryPath         string
-	releaseArguments           []string
-	releaseCollector           *sequenceCollector
-	releaseDeadlinePassed      bool
-	loadedGateScript           string
-	saturationReaders          []string
-	loadSaturationDeclared     bool
-	guardedChildStarted        bool
-	deferralAccepted           bool
-	streamCloseCalls           int
-	invalidMappingsRejected    bool
-	v04Error                   error
-	v04Session                 *guard.Session
-	v04State                   []byte
-	v04Action                  func(string) error
-	v04Scenario                string
-	exclusiveStatusSession     *guard.Session
-	exclusiveStatusState       map[string][]byte
+	mode                     string
+	samples                  []policy.Sample
+	assessment               policy.Assessment
+	admitted, accepted       bool
+	exitCode                 int
+	output, errorOutput      string
+	binary, summaryPath      string
+	temporaryPaths           []string
+	lifecycleOK              bool
+	cacheRoot                string
+	historicalCaches         []string
+	lintConfiguration        string
+	lintCommand              string
+	hookEnvironment          []string
+	ambientRepository        string
+	ambientHead              string
+	fixtureCheckout          string
+	gateScripts              map[string]string
+	strictAdapters           bool
+	unitExemptionsForbidden  bool
+	approvedExemptions       bool
+	serialCompliance         bool
+	e2ePlacement             bool
+	conventionalCommits      bool
+	pullRequestOnlyGate      bool
+	sharedDocumentationCheck bool
+	pinnedValidatorsRun      bool
+	threeHarnessProfiles     bool
+	stagedFormatting         bool
+	pushQuickGate            bool
+	coreCoverage             bool
+	resolution               policy.Resolution
+	requestedProfile         string
+	taskClass                policy.TaskClass
+	effectiveMemory          int64
+	linuxMemInfo             string
+	linuxCgroupLimit         int64
+	configPath               string
+	privateArtifacts         bool
+	exampleTracked           bool
+	applicationLayout        bool
+	leaseRoot                string
+	leaseHolder              int
+	heavySession             *guard.Session
+	admissionSession         *guard.Session
+	serviceSessions          []*guard.Session
+	coordinationMarker       []byte
+	coordinationRequests     int
+	coordinationDeferrals    int
+	admissionUnblockAfter    int
+	admissionAttempts        int
+	admissionElapsed         time.Duration
+	deferralProbeScript      string
+	deferralProbeError       error
+	abandonedGroup           int
+	abandonedPayload         *exec.Cmd
+	abandonedIdentityLock    *os.File
+	abandonedTotals          guard.ReservationTotals
+	inheritedSessions        bool
+	forceStopElapsed         time.Duration
+	runtimeFailureOutput     string
+	runtimeFailureExit       int
+	usageErrorOutput         string
+	terminationSignals       int
+	supervisionFailure       error
+	childReaped              bool
+	evidenceRoot             string
+	evidenceIdentifier       string
+	evidenceSampleCount      int
+	evidenceWriters          []*evidence.Writer
+	excessEvidencePath       string
+	excessEvidenceError      error
+	inactiveEvidencePaths    []string
+	operandCommandsRejected  bool
+	childInput               string
+	childEnvironment         []string
+	concurrencyEnvironment   []string
+	childResolution          policy.Resolution
+	releaseMonitorRun        func() error
+	releaseMonitorError      error
+	releaseRawPath           string
+	releaseSummaryPath       string
+	releaseArguments         []string
+	releaseCollector         *sequenceCollector
+	releaseDeadlinePassed    bool
+	loadedGateScript         string
+	saturationReaders        []string
+	loadSaturationDeclared   bool
+	guardedChildStarted      bool
+	deferralAccepted         bool
+	streamCloseCalls         int
+	invalidMappingsRejected  bool
+	v04Error                 error
+	v04Session               *guard.Session
+	v04State                 []byte
+	v04Action                func(string) error
+	v04Scenario              string
+	exclusiveStatusSession   *guard.Session
+	exclusiveStatusState     map[string][]byte
 }
 
 type failingStream struct {
@@ -2817,74 +2817,27 @@ func (driver *Driver) requireE2EPlacement() error {
 	return nil
 }
 
-// gateCommands returns the declared gate commands that a surface selects, in
-// declaration order, each joined into one string.
-//
-// The gate list is read rather than the hooks it dispatches, because that is
-// where v2 moved the answer: a hook now names a surface and nothing else, so a
-// check that read the hook would find a dispatch and learn nothing about what
-// runs. This walks the `gates:` block by indentation; a full YAML reader would
-// be a dependency this module does not otherwise need.
-func gateCommands(config, surface string) []string {
-	commands := make([]string, 0, 8)
-
-	var run []string
-	var surfaces []string
-	inGates := false
-	section := ""
-
-	flush := func() {
-		if len(run) == 0 {
-			return
-		}
-		if slices.Contains(surfaces, surface) {
-			commands = append(commands, strings.Join(run, " "))
-		}
-		run = nil
-		surfaces = nil
+// gateBlock returns one grouped-v2 lifecycle declaration. The behavior test
+// reads repository-owned configuration instead of importing a second YAML
+// parser only to repeat Rhino's schema work.
+func gateBlock(config, id string) string {
+	start := "\n    - id: " + id + "\n"
+	from := strings.Index(config, start)
+	if from < 0 {
+		return ""
 	}
-
-	for line := range strings.SplitSeq(config, "\n") {
-		if !inGates {
-			inGates = line == "gates:"
-
-			continue
-		}
-		// A new top-level key ends the block.
-		if line != "" && !strings.HasPrefix(line, " ") {
-			break
-		}
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(trimmed, "- id:"):
-			flush()
-			section = ""
-		case trimmed == "run:":
-			section = runCommandName
-		case trimmed == "surfaces:":
-			section = "surfaces"
-		case strings.HasPrefix(trimmed, "kind:"):
-			section = ""
-		case strings.HasPrefix(trimmed, "- ") && section == runCommandName:
-			run = append(run, strings.TrimPrefix(trimmed, "- "))
-		case strings.HasPrefix(trimmed, "- ") && section == "surfaces":
-			surfaces = append(surfaces, strings.TrimPrefix(trimmed, "- "))
-		}
-	}
-	flush()
-
-	return commands
+	block := config[from+1:]
+	block, _, _ = strings.Cut(block, "\n    - id: ")
+	return block
 }
 
-// declares reports whether any command the surface selects contains the needle.
-func declares(config, surface, needle string) bool {
-	for _, command := range gateCommands(config, surface) {
-		if strings.Contains(command, needle) {
-			return true
+func containsAll(value string, needles ...string) bool {
+	for _, needle := range needles {
+		if !strings.Contains(value, needle) {
+			return false
 		}
 	}
-
-	return false
+	return true
 }
 
 func (driver *Driver) inspectContributorEnforcement() error {
@@ -2936,25 +2889,34 @@ func (driver *Driver) inspectContributorEnforcement() error {
 		return err
 	}
 
-	// Each hook names a surface; the configuration says what that surface runs.
-	// Both halves are required, because either one alone can be true while the
-	// gate does nothing: a hook that dispatches a surface holding no gate, or a
-	// declared gate no hook ever dispatches.
-	//
-	// No pushed-commits job to require any more. Integration is pull-request
-	// only, so a commit reaches `main` exactly by merging a pull request this
-	// gate already validated; a second job on the push event would re-lint
-	// history it had just approved.
-	driver.conventionalCommits = strings.Contains(commitHook, "--surface commit-msg") &&
-		declares(config, "commit-msg", "commitlint --edit") &&
-		strings.Contains(workflow, "commitlint --from") &&
-		strings.Contains(workflow, "Validate pull request commits")
+	commitMessage := gateBlock(config, "commit-message")
+	formatStaged := gateBlock(config, "format-staged")
+	publicSafetyRange := gateBlock(config, "public-safety-range")
+	quickGate := gateBlock(config, "quick")
+
+	driver.conventionalCommits = strings.Contains(commitHook, `--surface commit-msg --message-file "$1"`) &&
+		containsAll(commitMessage,
+			"message: { kind: commit-message }",
+			"scripts/check-commit-message.sh",
+			"RHINO_GATE_MESSAGE: { input: message.text }",
+			"source: hook-message-file",
+			"source: explicit-range, range: explicit") &&
+		strings.Contains(workflow, `--surface pull-request --base "$BASE_SHA" --head "$HEAD_SHA"`)
 	driver.pullRequestOnlyGate = workflowTriggers(workflow) == "pull_request"
 	driver.stagedFormatting = strings.Contains(preCommitHook, "--surface pre-commit") &&
-		declares(config, "pre-commit", "lint-staged") &&
+		!strings.Contains(preCommitHook, `-- "$@"`) &&
+		containsAll(formatStaged,
+			"type: mutation",
+			"mutation: { local: apply-index, ci: verify-clean }",
+			"scripts/format-staged.sh",
+			"source: git-index",
+			"source: explicit-range, range: explicit") &&
 		formatsEveryStagedLanguage(stagedConfig)
-	driver.pushQuickGate = strings.Contains(prePushHook, "--surface pre-push") &&
-		declares(config, "pre-push", "./scripts/test-quick.sh") &&
+	driver.pushQuickGate = strings.Contains(prePushHook, "--surface pre-push --push-updates-stdin") &&
+		containsAll(publicSafetyRange,
+			"range: { kind: commit-range }",
+			"source: push-updates, fallback: refs/remotes/origin/main") &&
+		containsAll(quickGate, "scripts/test-quick.sh", "run-on: { pre-push: {}, pull-request: {}, main: {} }") &&
 		strings.Contains(manifest, `"test:quick": "./scripts/test-quick.sh"`) &&
 		!strings.Contains(prePushHook, "npm exec -- nx") &&
 		!strings.Contains(prePushHook, "npx nx") &&
@@ -2987,21 +2949,25 @@ func formatsEveryStagedLanguage(stagedConfig string) bool {
 
 func (driver *Driver) requireConventionalCommits() error {
 	if !driver.conventionalCommits {
-		return errors.New("the commit surface and CI do not invoke conventional commit validation")
+		return errors.New("the one commit-message gate does not bind the canonical hook message and reviewed pull-request range")
 	}
 	return nil
 }
 
-// pinnedValidators are the six questions the documentation gate asks. They are
-// listed here rather than counted, because a gate that silently stopped asking
-// one of them would still report a clean run.
-var pinnedValidators = []string{
-	"repo-config validate",
-	"governance word-budget validate",
-	"governance directory-map validate",
-	"harness parity validate",
-	"md internal-link validate",
-	"md mermaid validate",
+type pinnedValidator struct {
+	gate     string
+	commands []string
+}
+
+// Pinned policy questions are listed rather than counted. A lifecycle that
+// silently drops one would otherwise report a false clean result.
+var pinnedValidators = []pinnedValidator{
+	{gate: "repo-config", commands: []string{"literal: repo-config", literalValidate}},
+	{gate: "word-budget", commands: []string{"literal: governance", "literal: word-budget", literalValidate}},
+	{gate: "directory-map", commands: []string{"literal: governance", "literal: directory-map", literalValidate}},
+	{gate: "harness-adapters", commands: []string{"literal: harness", "literal: adapters", literalValidate}},
+	{gate: "internal-links", commands: []string{"literal: md", "literal: internal-link", literalValidate}},
+	{gate: "mermaid", commands: []string{"literal: md", "literal: mermaid", literalValidate}},
 }
 
 func (driver *Driver) inspectDocumentationGate() error {
@@ -3028,49 +2994,64 @@ func (driver *Driver) inspectDocumentationGate() error {
 		return err
 	}
 
-	// One definition, selected by two surfaces. The push hook and the pull
-	// request gate reach the same declared list rather than holding a copy of
-	// the invocation each, so the copy that stopped asking a question cannot be
-	// the one nobody reran.
-	driver.sharedDocumentationCheck = strings.Contains(prePushHook, "--surface pre-push") &&
-		strings.Contains(workflow, "--surface ci")
+	claudeCatalog, err := read(".claude", "agents", "catalog.json")
+	if err != nil {
+		return err
+	}
+
+	codexCatalog, err := read(".codex", "agents", "catalog.json")
+	if err != nil {
+		return err
+	}
+
+	opencodeCatalog, err := read(".opencode", "agents", "catalog.json")
+	if err != nil {
+		return err
+	}
+
+	// Hooks and hosted review have no untyped argv fallback: all callers invoke
+	// Rhino's closed v0.4 surfaces, and review binds one immutable base/head.
+	driver.sharedDocumentationCheck = strings.Contains(config, "schema: rhino/repo-config/v2") &&
+		strings.Contains(prePushHook, "--surface pre-push --push-updates-stdin") &&
+		strings.Contains(workflow, `--surface pull-request --base "$BASE_SHA" --head "$HEAD_SHA"`) &&
+		!strings.Contains(config, "\n        ci:")
 
 	driver.pinnedValidatorsRun = true
 	for _, validator := range pinnedValidators {
 		driver.pinnedValidatorsRun = driver.pinnedValidatorsRun &&
-			declares(config, "pre-push", "./rhino "+validator) &&
-			declares(config, "ci", "./rhino "+validator)
+			containsAll(gateBlock(config, validator.gate), validator.commands...) &&
+			strings.Contains(gateBlock(config, validator.gate), "run-on: { pre-push: {}, pull-request: {}, main: {} }")
 	}
 
-	// Arguments after `--` reach every gate on the surface, not just the one
-	// that wants them. Git hands the push hook a remote name and a URL; the
-	// pinned validators take neither and refuse an argument they do not know.
-	// Forwarding them would have meant every validator on this surface failed
-	// on the argument rather than on the repository -- and the hook would have
-	// looked wired while screening nothing. What the ref screen actually reads
-	// is stdin, which flows through either way.
-	driver.pushHookForwardsNoArgument = !strings.Contains(prePushHook, `-- "$@"`)
+	harness, _, _ := strings.Cut(config, "\npolicies:")
+	driver.threeHarnessProfiles = strings.Count(harness, "\n    - id: claude\n") == 1 &&
+		strings.Count(harness, "\n    - id: codex\n") == 1 &&
+		strings.Count(harness, "\n    - id: opencode\n") == 1 &&
+		containsAll(harness, ".claude/agents/{name}.md", ".codex/agents/{name}.toml", ".opencode/agents/{name}.md") &&
+		containsAll(claudeCatalog, "plan-maker") &&
+		containsAll(codexCatalog, "plan-maker") &&
+		containsAll(opencodeCatalog, "plan-maker")
 
 	return nil
 }
 
 func (driver *Driver) requireSharedDocumentationCheck() error {
 	if !driver.sharedDocumentationCheck {
-		return errors.New("the push hook and the pull request gate do not dispatch declared surfaces")
+		return errors.New("the hooks and pull-request caller do not dispatch only closed v0.4 surfaces")
 	}
 	return nil
 }
 
 func (driver *Driver) requirePinnedValidatorsRun() error {
 	if !driver.pinnedValidatorsRun {
-		return errors.New("a declared surface does not run every pinned validator")
+		return errors.New("the declared main and pull-request runners do not retain every owned policy validator")
 	}
 	return nil
 }
 
-func (driver *Driver) requirePushHookForwardsNoArgument() error {
-	if !driver.pushHookForwardsNoArgument {
-		return errors.New("the push hook forwards Git's arguments to validators that cannot take them")
+func (driver *Driver) requireThreeHarnessProfiles() error {
+	if !driver.threeHarnessProfiles {
+		return errors.New("the harness declaration does not own non-overlapping Claude Codex and OpenCode profiles")
 	}
 	return nil
 }

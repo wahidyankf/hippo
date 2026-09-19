@@ -2,11 +2,11 @@
 description: Review changed Gherkin scenarios and step bindings for whether they would actually fail. Read-only.
 mode: subagent
 permission:
-  read: allow
+  bash: deny
+  edit: deny
   glob: allow
   grep: allow
-  edit: deny
-  bash: deny
+  read: allow
   task: deny
 ---
 

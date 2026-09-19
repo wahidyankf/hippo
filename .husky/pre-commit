@@ -1,5 +1,9 @@
 set -e
 
-# One dispatch, one registry: the configuration says what runs before a commit,
-# and Git's own arguments are forwarded unchanged.
-exec ./rhino gate run --surface pre-commit -- "$@"
+# Keep locally installed formatter binaries available when Rhino replays the
+# selected index in its disposable mutation boundary.
+root=$(git rev-parse --show-toplevel)
+export PATH="$root/node_modules/.bin:$PATH"
+
+# One dispatch, one registry: the configuration says what runs before a commit.
+exec ./rhino gate run --surface pre-commit

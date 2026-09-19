@@ -2,24 +2,24 @@
 
 One canonical instruction body, expressed in each harness's own surface. Harnesses do not get their own rules; they get their own spelling of the same rules.
 
-`rhino harness parity validate` reconciles the canon against every harness declared in [`repo-config.yml`](../../repo-config.yml), and reports a digest so "nothing changed" is distinguishable from "nothing was checked".
+`./rhino harness adapters validate` compares the complete native adapter tree with the canonical sources and three profiles declared in [`repo-config.yml`](../../repo-config.yml). Generated catalog and provenance artifacts identify the exact sources and their digests.
 
 ## The Canon
 
 - **Instructions**: root [`AGENTS.md`](../../AGENTS.md). It is the only instruction body. Every other harness-facing instruction file is an adapter that routes to it and adds nothing.
-- **Skills**: `.agents/skills/<name>/SKILL.md`. Codex and OpenCode read that path natively, so for them the canon _is_ the surface and no adapter exists.
+- **Skills**: `.agents/skills/<name>/SKILL.md`. Codex and OpenCode read that path natively; Claude receives the generated native route.
 - **Agents**: `.agents/agents/<name>.md`, carrying its own capability declaration — what it requires, what it denies, what constrains it.
 
 ## Adapters
 
-An adapter exists only where a harness cannot read the canon. It routes and declares; it never restates. A wrapper that copied the canonical body would be a second copy to keep true, which is the failure this contract exists to prevent, so the validator refuses it.
+An adapter exists only where a harness needs a native route or agent representation. It routes and declares; it never restates the canonical body.
 
-Where a harness translates a capability into its own vocabulary — a tool list, a permission map, a sandbox mode — the translation is declared in configuration and checked. A denial weakened in an adapter is a finding, not a local preference. Where a harness cannot express a denial an agent declares, that agent is not published for that harness. Codex is that case today: its per-agent configuration has no control for the nested-agent denial every canonical agent carries, so Codex reads `AGENTS.md` and the skills natively and receives no agent adapter.
+Where a harness translates a capability into its own vocabulary — a tool list or permission map — the translation is declared in configuration and checked. A denial weakened in an adapter is a finding, not a local preference. Codex's native TOML agent schema carries its supported name, description, and `developer_instructions` route; the canonical boundary remains in that routed source when the schema has no agent-scoped permission field.
 
-Adapters are generated from the canon by `node scripts/generate-adapters.mjs`, never edited in place. An adapter a hand can edit is a second place for the rule to live, and the two will disagree. The writer and the judge stay apart: the generator writes and checks nothing, and `./rhino harness parity validate` decides whether what is on disk matches what `repo-config.yml` declares.
+Adapters are generated from the canon only by `./rhino harness adapters generate`, never by a repository-local generator or hand edit. The writer and judge stay apart: generation writes the declared transaction, and `./rhino harness adapters validate` compares its desired output with the files on disk.
 
 ## Prohibited Instruction Sources
 
-Files that would compete with the canon are prohibited by name, and the prohibition is checked. A second instruction file does not add rules; it splits them, and the reader has no way to know which half they got.
+Files that would compete with the canon remain prohibited. A second instruction file does not add rules; it splits them, and the reader has no way to know which half they got. The v0.4 adapter validator proves generated-adapter ownership; it does not claim to scan arbitrary nested instruction filenames, so that broader product check must not be claimed as adapter-validation evidence.
 
 Changing any of this follows [the harness contract change workflow](../workflows/coding-harness-contract-change.md).

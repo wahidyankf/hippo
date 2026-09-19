@@ -21,18 +21,18 @@ Feature: HIPPO quality gates
   @e2e-exempt
   Scenario: Contributor gate wiring is complete
     When contributor gate wiring is inspected
-    Then the commit surface and CI invoke conventional commit validation
+    Then one commit-message gate binds the canonical hook message and reviewed pull request range
     And the quality gate runs on pull requests rather than pushes
     And the pre-commit surface invokes staged formatting for supported files
-    And the pre-push surface invokes the direct quick gate without Nx
+    And the pre-push surface binds one typed range and invokes the direct quick gate without Nx
     And the quick gate invokes deterministic core coverage at 99 percent
 
   @e2e-exempt
-  Scenario: Documentation hygiene wiring is complete
-    When documentation gate wiring is inspected
-    Then the push hook and the pull request gate dispatch declared surfaces
-    And both declared surfaces run every pinned validator
-    And the push hook forwards no argument its validators cannot take
+  Scenario: Stable lifecycle wiring is complete
+    When stable lifecycle wiring is inspected
+    Then the hooks and pull request caller dispatch only closed v0.4 surfaces
+    And the declared main and pull request runners retain every owned policy validator
+    And the harness declaration owns non-overlapping Claude Codex and OpenCode projections
 
   Scenario: Fixture Git work ignores the repository a hook names
     Given a hook environment naming another repository
