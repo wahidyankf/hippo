@@ -8,7 +8,7 @@ Changing the canonical instruction body, a skill, an agent, or any harness adapt
 
 ## 2. Prove the Divergence
 
-Run `rhino harness parity validate` and read the finding. A change to the canon that produces no finding either changed nothing a harness expresses, or the harness that should express it is not declared.
+Run `./rhino harness adapters validate` and read the finding. A change to the canon that produces no finding either changed nothing a harness expresses, or the harness that should express it is not declared.
 
 Capture that output. It is the RED — see [red green refactor](red-green-refactor.md).
 
@@ -18,7 +18,7 @@ Each declared harness, in the same change. An adapter left behind is not a small
 
 ## 4. Prove Parity
 
-Run the validator again. It must report every declared harness reconciled, with a digest — the digest is what distinguishes "nothing changed" from "nothing was checked".
+Run the validator again. It must report the declared adapter tree clean; the generated catalog and provenance artifacts carry the source digests that distinguish "nothing changed" from "nothing was checked".
 
 Then weaken one denial deliberately and confirm the validator reports it. A parity check that passes whatever the adapters say is not a check. See [coding harness parity verification](coding-harness-parity-verification.md).
 

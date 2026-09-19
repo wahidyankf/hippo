@@ -26,39 +26,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  commit-messages:
-    name: Commit messages
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      # The real head, not the synthetic merge commit: commitlint must read the
-      # messages this branch actually contributes. GitHub's merge commit carries
-      # a "Merge ... into ..." subject that no Conventional Commits rule accepts.
-      - name: Check out the pull request head
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci --ignore-scripts
-
-      - name: Validate pull request commits
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -eu
-          git fetch --no-tags origin "${BASE_REF}"
-          # The fork point, not the base tip: a branch behind `main` would
-          # otherwise re-lint commits it never authored and fail on history it
-          # did not write.
-          from=$(git merge-base FETCH_HEAD HEAD)
-          npm exec -- commitlint --from "${from}" --to HEAD --verbose
-
   formatting:
     name: Formatting
     runs-on: ubuntu-24.04
@@ -122,37 +89,32 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      # The push surface runs the same documentation checks, as part of the
-      # gates the push hook dispatches. Named again, and narrowed, so that a
-      # broken directory map or a dead link is legible in the job list rather
-      # than buried in a long test log -- and so an ordinary code change does
-      # not resolve a pinned release to answer a question about documentation
-      # it did not touch.
-      - name: Route on the governed surface
-        id: route
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      # One typed lifecycle replay. Rhino derives every child command from the
+      # registry and refuses a caller that supplies an incomplete or mutable
+      # review range.
+      - name: Repository policy under the pinned RHINO
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eu
-          git fetch --no-tags origin "${BASE_REF}"
-          changed=$(git diff --name-only FETCH_HEAD...HEAD -- \
-            '*.md' specs docs repo-governance .agents .claude .codex .opencode \
-            repo-config.yml rhino rhino.lock \
-            '.github/workflows/pr-quality-gate.yml')
-          if [ -n "${changed}" ]; then
-            echo "changed=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "changed=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      # The `ci` surface, dispatched by name. What it runs is declared in
-      # repo-config.yml rather than repeated here, so a check added there
-      # reaches this job without anyone remembering to edit it.
-      - name: Repository policy under the pinned RHINO
-        if: steps.route.outputs.changed == 'true'
-        run: ./rhino gate run --surface ci
+          export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
+          ./rhino gate run --surface pull-request --base "$BASE_SHA" --head "$HEAD_SHA"
 
   consumer-bootstrap:
     name: Pinned RHINO bootstrap
@@ -214,14 +176,7 @@ jobs:
     # job that is added but forgotten here still cannot pass unnoticed, because
     # `needs` fails the aggregate when any dependency does.
     needs:
-      [
-        commit-messages,
-        formatting,
-        test,
-        repository-contract,
-        consumer-bootstrap,
-        release-build,
-      ]
+      [formatting, test, repository-contract, consumer-bootstrap, release-build]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

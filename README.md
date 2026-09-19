@@ -208,8 +208,9 @@ check, defined in `.github/workflows/pr-quality-gate.yml`, is required, and it i
 Git hooks.
 
 Documentation gates run under [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and SHA-256
-in `rhino.lock`; `repo-config.yml` supplies the shared hook and CI declarations. RHINO guards its own
-builds with a pinned `./hippo`.
+in `rhino.lock`; `repo-config.yml` supplies the grouped-v2 lifecycle and three native harness
+projections. Regenerate those projections only with `./rhino harness adapters generate` and prove
+them with `./rhino harness adapters validate`. RHINO guards its own builds with a pinned `./hippo`.
 
 Everything else — the coverage floor, the exemption boundaries, where a worktree may live, how a
 release is cut — is in `repo-governance/`.

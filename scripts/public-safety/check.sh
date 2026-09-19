@@ -2,12 +2,13 @@
 # ==============================================================================
 # check.sh — this repository's public-safety gate
 # ==============================================================================
-# Usage: OSE_GATE_SURFACE=<surface> scripts/public-safety/check.sh [hook args]
+# Usage: RHINO_GATE_SURFACE=<surface> scripts/public-safety/check.sh
 #
-#   commit-msg   $1 is the file holding the message being written
+#   commit-msg   PUBLIC_SAFETY_MESSAGE holds the declared message text
 #   pre-commit   no arguments; the staged tree is the subject
-#   pre-push     ref updates arrive on stdin, as Git supplies them
-#   ci           no arguments; the checked-out tree is the subject
+#   pre-push     PUBLIC_SAFETY_BASE and PUBLIC_SAFETY_HEAD hold one declared range
+#   pull-request the declared tree, message, and range gates run separately
+#   main         no arguments; the checked-out tree is the subject
 #
 # The surface arrives in the environment and nowhere else. It is never inferred
 # from an argument's filename, from which hook happens to be running, or from
@@ -35,15 +36,15 @@ leaf="$here/outbound-preflight.sh"
 	exit 2
 }
 
-surface="${OSE_GATE_SURFACE:-}"
+surface="${RHINO_GATE_SURFACE:-}"
 case "$surface" in
-commit-msg | pre-commit | pre-push | ci) ;;
+commit-msg | pre-commit | pre-push | pull-request | main) ;;
 "")
-	printf '[public-safety] blocked scan-error OSE_GATE_SURFACE is unset\n' >&2
+	printf '[public-safety] blocked scan-error RHINO_GATE_SURFACE is unset\n' >&2
 	exit 2
 	;;
 *)
-	printf '[public-safety] blocked scan-error OSE_GATE_SURFACE is not a known surface\n' >&2
+	printf '[public-safety] blocked scan-error RHINO_GATE_SURFACE is not a known surface\n' >&2
 	exit 2
 	;;
 esac
@@ -93,6 +94,16 @@ add_staged() {
 	add_paths git diff --cached --name-only -z --diff-filter=ACMR
 }
 
+add_range() {
+	local base=$1 head=$2 range
+	[[ "$base" =~ ^[0-9a-fA-F]{7,64}$ && "$head" =~ ^[0-9a-fA-F]{7,64}$ ]] || {
+		printf '[public-safety] blocked scan-error range input is not a commit ID\n' >&2
+		exit 2
+	}
+	range="$base..$head"
+	add_paths git diff --name-only -z --diff-filter=ACMR "$range" --
+}
+
 run_leaf() {
 	# run_leaf <leaf-surface>; consumes and clears `args`.
 	local leaf_surface=$1 rc
@@ -110,17 +121,27 @@ current_ref() {
 	git symbolic-ref --quiet --short HEAD 2>/dev/null || git rev-parse --short HEAD
 }
 
+range_messages() {
+	local base=$1 head=$2 range
+	[[ "$base" =~ ^[0-9a-fA-F]{7,64}$ && "$head" =~ ^[0-9a-fA-F]{7,64}$ ]] || {
+		printf '[public-safety] blocked scan-error range input is not a commit ID\n' >&2
+		exit 2
+	}
+	range="$base..$head"
+	git log --format=%B "$range"
+}
+
 # ------------------------------------------------------------------------------
 # Surfaces
 # ------------------------------------------------------------------------------
 
 case "$surface" in
 commit-msg)
-	[[ $# -ge 1 && -r "$1" ]] || {
-		printf '[public-safety] blocked scan-error commit-msg received no readable message file\n' >&2
+	[[ ${PUBLIC_SAFETY_MESSAGE+x} ]] || {
+		printf '[public-safety] blocked scan-error commit-msg received no declared message\n' >&2
 		exit 2
 	}
-	args+=(--file "$1" --text "$(current_ref)")
+	args+=(--text "$PUBLIC_SAFETY_MESSAGE" --text "$(current_ref)")
 	run_leaf commit || exit $?
 	;;
 
@@ -134,46 +155,42 @@ pre-commit)
 	;;
 
 pre-push)
-	# Git supplies `<local-ref> <local-sha> <remote-ref> <remote-sha>` per line.
-	# Deletions carry an all-zero local sha and send nothing outbound.
-	local_refs=()
-	ranges=()
-	while read -r local_ref local_sha remote_ref remote_sha; do
-		[[ -z "${local_ref:-}" ]] && continue
-		[[ "$local_sha" =~ ^0+$ ]] && continue
-		local_refs+=("${local_ref#refs/heads/}" "${remote_ref#refs/heads/}")
-		if [[ "$remote_sha" =~ ^0+$ ]]; then
-			ranges+=("$local_sha --not --remotes")
-		else
-			ranges+=("$remote_sha..$local_sha")
-		fi
-	done
-
-	# Invoked outside a hook, with nothing on stdin: screen what is here now
-	# rather than reporting a vacuous pass.
-	if [[ ${#local_refs[@]} -eq 0 ]]; then
-		local_refs=("$(current_ref)")
-		ranges=("HEAD --not --remotes")
-	fi
-
-	for r in "${local_refs[@]}"; do
-		[[ -n "$r" ]] && args+=(--text "$r")
-	done
+	[[ -n "${PUBLIC_SAFETY_BASE:-}" && -n "${PUBLIC_SAFETY_HEAD:-}" ]] || {
+		printf '[public-safety] blocked scan-error pre-push received no declared range\n' >&2
+		exit 2
+	}
+	args+=(--text "$PUBLIC_SAFETY_BASE" --text "$PUBLIC_SAFETY_HEAD")
 	run_leaf ref || exit $?
-
-	for range in "${ranges[@]}"; do
-		# shellcheck disable=SC2086
-		while IFS= read -r sha; do
-			[[ -n "$sha" ]] && args+=(--text "$(git log -1 --format=%B "$sha")")
-		done < <(git rev-list $range 2>/dev/null)
-	done
+	args+=(--text "$(range_messages "$PUBLIC_SAFETY_BASE" "$PUBLIC_SAFETY_HEAD")")
 	run_leaf commit || exit $?
-
-	add_tracked_tree
-	run_leaf baseline || exit $?
+	add_range "$PUBLIC_SAFETY_BASE" "$PUBLIC_SAFETY_HEAD"
+	run_leaf diff || exit $?
 	;;
 
-ci)
+pull-request)
+	if [[ ${PUBLIC_SAFETY_MESSAGE+x} ]]; then
+		args+=(--text "$PUBLIC_SAFETY_MESSAGE")
+		run_leaf commit || exit $?
+	elif [[ -n "${PUBLIC_SAFETY_BASE:-}" || -n "${PUBLIC_SAFETY_HEAD:-}" ]]; then
+		[[ -n "${PUBLIC_SAFETY_BASE:-}" && -n "${PUBLIC_SAFETY_HEAD:-}" ]] || {
+			printf '[public-safety] blocked scan-error pull-request range is incomplete\n' >&2
+			exit 2
+		}
+		args+=(--text "$PUBLIC_SAFETY_BASE" --text "$PUBLIC_SAFETY_HEAD")
+		run_leaf ref || exit $?
+		args+=(--text "$(range_messages "$PUBLIC_SAFETY_BASE" "$PUBLIC_SAFETY_HEAD")")
+		run_leaf commit || exit $?
+		add_range "$PUBLIC_SAFETY_BASE" "$PUBLIC_SAFETY_HEAD"
+		run_leaf diff || exit $?
+	else
+		args+=(--text "$(current_ref)" --text "$(git log -1 --format=%B HEAD)")
+		run_leaf ref || exit $?
+		add_tracked_tree
+		run_leaf baseline || exit $?
+	fi
+	;;
+
+main)
 	args+=(--text "$(current_ref)" --text "$(git log -1 --format=%B HEAD)")
 	run_leaf ref || exit $?
 	add_tracked_tree

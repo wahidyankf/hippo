@@ -5,32 +5,32 @@ Proving the roster still reconciles — and that the check would notice if it di
 ## The Check
 
 ```sh
-rhino harness parity validate
+./rhino harness adapters validate
 ```
 
-It reports the number of harnesses reconciled, the canon it read, and a digest over everything it saw. Read all three. `checked 0 harnesses, no findings` is not a pass; it is a roster that reconciles against nothing.
+It validates the full declared adapter tree without writing it. The generated catalog and provenance artifacts record the canonical sources and their digests. A configuration with fewer than the required three profiles is refused before validation.
 
 ## Proving the Check Works
 
 A validator that never fails proves nothing. At least once per contract change, break one thing deliberately and confirm the finding:
 
-| Weakening                              | Expected finding                         |
-| -------------------------------------- | ---------------------------------------- |
-| grant a tool the canon denies          | the adapter grants what the canon denies |
-| flip a permission from deny to allow   | the permission is not `deny`             |
-| add a declaration to a closed wrapper  | beyond what a wrapper may declare        |
-| copy the canonical body into a wrapper | the body is not the canonical route      |
+| Weakening                              | Expected finding    |
+| -------------------------------------- | ------------------- |
+| grant a tool the canon denies          | `divergent-adapter` |
+| flip a permission from deny to allow   | `divergent-adapter` |
+| add an undeclared native adapter       | `stale-adapter`     |
+| copy canonical content into an adapter | `divergent-adapter` |
 
 Restore afterwards and confirm green.
 
 ## Prohibited Instruction Sources
 
-The same run reports any file that would compete with the canon. Prove that too: add a nested instruction file, see it reported, remove it. A prohibition nobody has ever seen fire is a prohibition nobody knows is loaded.
+The adapter validator reports undeclared files inside a native adapter root as `stale-adapter`. It does not scan arbitrary nested instruction filenames in v0.4, so do not represent an adapter-validation run as proof of that separate product-level prohibition.
 
 ## Narrowing
 
-`--harness <name>` reconciles one declared harness. A name the repository does not declare is refused outright — narrowing asks a smaller question, never a quieter answer to the same one.
+Validation is whole-roster only: every declared profile and generated artifact is compared in the same read-only run.
 
 ## When to Run It
 
-On every contract change, and on every gate run: the check is a [declared gate](../development/software-quality-enforcement.md) on the `pre-push` and `ci` surfaces, so it runs before every push and in the pull-request gate.
+On every contract change, and on every gate run: the check is a [declared gate](../development/software-quality-enforcement.md) on the `pre-push`, `pull-request`, and `main` surfaces.

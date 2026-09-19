@@ -1,7 +1,7 @@
 # Skills
 
-Canonical skill definitions. Every harness reads these; Claude Code reads a generated wrapper under `.claude/skills/`
-that routes back here. Edit a skill here and run `node scripts/generate-adapters.mjs`.
+Canonical skill definitions. Codex and OpenCode read these natively; Claude Code reads a generated wrapper under
+`.claude/skills/` that routes back here. Edit a skill here and run `./rhino harness adapters generate`.
 
 ## Planning
 
