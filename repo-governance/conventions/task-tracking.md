@@ -9,11 +9,11 @@ Task state lives in the repository, not in a session. A list held only in a conv
 - Mark an item complete only when it is fully done and verified. A partially done item left ticked is worse than one left open, because it removes the reason anyone would look again.
 - When an item turns out to be blocked, leave it open and record what blocks it. A blocked item that is quietly closed is a decision nobody made.
 - Keep the list current as the work proceeds rather than at the end. The value is in the state during the work, not in the record afterwards.
-- Where work follows a plan, the plan's own delivery list is the tracked list, and it is updated in the same change as the work it describes.
+- Where work follows a plan, the plan's own delivery list is the tracked list and the only written record of its progress, and it is updated in the same change as the work it describes.
 
 ## What Belongs in the Repository
 
-Anything the next reader needs to resume: the plan, its delivery units, the evidence each unit produced, and the decisions taken along the way. Scratch work belongs in ignored `local-tmp/`; a report someone asked for belongs in ignored `generated-reports/`. Neither is authoritative, and neither is a plan.
+Anything the next reader needs to resume: the plan, its delivery units, the evidence each unit produced, and the decisions taken along the way. Scratch work belongs in ignored `local-tmp/`; a report someone asked for belongs in ignored `generated-reports/`. Neither is authoritative, and neither is a plan. Scratch holds what a run needs and then discards — scripts, assets, logs, the touched-path ledger — never a copy of a delivery list, its ticks, or its status. Away from a plan, a scratch file may hold working notes that have to survive a context boundary.
 
 ## New Direction Mid-Task
 
