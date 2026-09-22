@@ -9,5 +9,6 @@ node_modules/
 .codex/agents/
 .opencode/agents/
 
-# Verified against the catalog digest, never edited. See specs/fixtures/README.md.
+# Fixture data whose bytes are the fixture; a reformat changes what the suite tests.
+# See specs/fixtures/README.md.
 specs/fixtures/
