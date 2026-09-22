@@ -44,6 +44,25 @@ filed plan reads as a finished one, and filing an unfinished plan destroys that 
 Substantive completion and archival stay separate. A plan can be finished and not yet filed; the reverse must not be
 possible.
 
+## Resolution Is Not a Tick
+
+An item is resolved when its outcome is recorded, not when its box is ticked: a recovery trigger that never fires
+stays unticked under a dated `Not triggered` disposition, and that has always counted as resolved.
+
+Three dispositions resolve an item or a criterion — **met**, **not applicable**, and **accepted as permanently
+unmet**. The third is for a plan finished except for evidence that no longer exists to be taken, such as a slot
+promoted and retired. It holds only when all of these do:
+
+1. the evidence is unobtainable rather than unobtained, and the disposition says why;
+2. the plan's authority accepts it, as a dated decision naming what was put to them and what they chose, never
+   the executor;
+3. the requirement keeps its wording, so the gap stays legible;
+4. the box stays unticked, because a tick means met; and
+5. the execution review confirms each acceptance in its verdict.
+
+An accepted item no longer blocks archival. The archived plan still shows the gap; it no longer implies unfinished
+work.
+
 ## The Archival Sequence
 
 Archival is one transaction, in this order:
