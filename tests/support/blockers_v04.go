@@ -23,6 +23,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 	"golang.org/x/sys/unix" //nolint:depguard // Cross-process flock fixtures must exercise the production kernel primitive.
 )
 
@@ -379,7 +380,7 @@ func (driver *Driver) requireCheckedMiBConversionV04(root string) error {
 		command := exec.Command(driver.binary, arguments...)
 		command.Env = append(os.Environ(), "HIPPO_ROOT="+filepath.Join(root, "cli-root"))
 		output, runError := command.CombinedOutput()
-		if exitCode(runError) != policy.ReplanRequiredExitCode || !strings.Contains(string(output), "representable") {
+		if exitCode(runError) != status.CallerError || !strings.Contains(string(output), "representable") {
 			return fmt.Errorf("compiled overflowing MiB result: exit=%d output=%q error=%w", exitCode(runError), output, runError)
 		}
 
@@ -392,7 +393,7 @@ func (driver *Driver) requireCheckedMiBConversionV04(root string) error {
 		Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(base)}},
 		Environment: []string{"HIPPO_ROOT=" + filepath.Join(root, "cli-root")},
 	}).Run(context.Background(), arguments)
-	if code != policy.ReplanRequiredExitCode || runError == nil || !strings.Contains(runError.Error(), "representable") {
+	if code != status.CallerError || runError == nil || !strings.Contains(runError.Error(), "representable") {
 		return fmt.Errorf("in-process overflowing MiB result: exit=%d stderr=%q error=%w", code, stderr.String(), runError)
 	}
 
@@ -1173,8 +1174,13 @@ func requireV04LifetimeCapability(root string) error {
 		"UNAUTHORIZED_PAYLOAD="+payloadMarker,
 	)
 	output, runError := command.CombinedOutput()
+	// An unauthorized capability makes the hidden launcher argument fall
+	// through to ordinary parsing, where it is a flag hippo does not have.
+	// That is a usage mistake, and what this scenario is really about is the
+	// two assertions below it: the payload never ran, and nothing private
+	// reached the output.
 	exitError, ok := errors.AsType[*exec.ExitError](runError)
-	if !ok || exitError.ExitCode() != 1 {
+	if !ok || exitError.ExitCode() != status.CallerError {
 		return fmt.Errorf("unauthorized launcher exit=%w output=%s", runError, output)
 	}
 	if _, statError := os.Stat(payloadMarker); !errors.Is(statError, os.ErrNotExist) {

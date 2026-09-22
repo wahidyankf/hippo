@@ -16,6 +16,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/host"
 	"github.com/wahidyankf/hippo/internal/identity"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 const reservationCoordinationMode = "reservation"
@@ -165,7 +166,7 @@ func filterCoordinationRows(totals guard.ReservationTotals, source string, tags 
 func (application Application) status(ctx context.Context, options statusOptions) (int, error) {
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
 	filterTags, filterError := identity.ParseTags(options.tags)
 	if filterError != nil {
@@ -342,7 +343,7 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
 
 	var previous policy.CPUState
@@ -428,7 +429,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
 	environment := environmentMap(application.Environment)
 	identityPath := identity.Path(environment, options.workingDir)
@@ -508,23 +509,23 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		reservationPolicy.Tiers = guard.DefaultResourceTiers()
 	}
 	if options.reserveCPU < 0 || options.reserveMemoryMiB < 0 {
-		return policy.ReplanRequiredExitCode, errors.New("reservation flags must be nonnegative")
+		return 0, status.Fail(status.CodeArgsInvalid, "reservation flags must be nonnegative")
 	}
 	if !reservationPolicy.Enabled && (options.reserveCPU != 0 || options.reserveMemoryMiB != 0) {
-		return policy.ReplanRequiredExitCode, errors.New("explicit reservations require schema 2 coordination")
+		return 0, status.Fail(status.CodeArgsInvalid, "explicit reservations require schema 2 coordination")
 	}
 	reservationPlan := guard.ReservationPlan{}
 	admissionWait := resolution.Policy.LeaseWait
 	if reservationPolicy.Enabled { //nolint:nestif // Tier and legacy reservation paths deliberately converge before guarded launch.
 		reservationMemoryBytes, conversionError := policy.MiBToBytes(options.reserveMemoryMiB)
 		if conversionError != nil {
-			return policy.ReplanRequiredExitCode, conversionError
+			return 0, status.Fail(status.CodeArgsInvalid, "%v", conversionError)
 		}
 		if configuration.Coordination.SchemaVersion >= 3 && options.resourceTier == "" {
-			return policy.ReplanRequiredExitCode, errors.New("schema 3 requires --resource-tier")
+			return 0, status.Fail(status.CodeArgsInvalid, "schema 3 requires --resource-tier")
 		}
 		if configuration.Coordination.SchemaVersion >= 3 && options.waitForAdmission != 0 {
-			return policy.ReplanRequiredExitCode, errors.New("schema 3 queue deadlines come from --resource-tier")
+			return 0, status.Fail(status.CodeArgsInvalid, "schema 3 queue deadlines come from --resource-tier")
 		}
 		if options.resourceTier != "" {
 			reservationPlan, admissionWait, resolveError = guard.PlanTierReservation(
@@ -582,6 +583,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		ChildStdout:                   application.Stdout,
 		ChildStderr:                   application.Stderr,
 		Stderr:                        application.Stderr,
+		ObserveChildStatus:            options.observeChild,
 	}
 	return guard.Run(ctx, config)
 }

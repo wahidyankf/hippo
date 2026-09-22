@@ -560,8 +560,8 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^an admitted guarded command$`, driver.givenAdmitted),
 		step(`^the guarded child exits with code 17$`, driver.child17),
 		step(`^the guard exits with code 17$`, driver.require17),
-		step(`^the guarded child exits with reserved code (75|76)$`, driver.childReservedCode),
-		step(`^the guard preserves code (75|76) with task-failed evidence and no never-started receipt$`, driver.requireReservedChildFailure),
+		step(`^the guarded child exits with reserved code (124|125)$`, driver.childReservedCode),
+		step(`^the guard preserves code (124|125) with task-failed evidence and no never-started receipt$`, driver.requireReservedChildFailure),
 		step(`^an admitted command without consumer concurrency mappings$`, driver.admittedWithoutConcurrencyMappings),
 		step(`^an admitted command with explicit consumer concurrency mappings$`, driver.admittedWithConcurrencyMappings),
 		step(`^the guarded child inspects its environment$`, driver.inspectGuardedEnvironment),
@@ -636,7 +636,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^status reports one legacy owner and preserves the compatibility state$`, driver.requireExclusiveStatusOwner),
 		step(`^a live exclusive compatibility owner with a (malformed|future) session document$`, driver.invalidExclusiveStatusOwner),
 		step(`^JSON status inspects that invalid exclusive shared root$`, driver.inspectInvalidExclusiveStatusOwner),
-		step(`^status exits (1|76) without changing the invalid compatibility state$`, driver.requireInvalidExclusiveStatusOwner),
+		step(`^status exits (125) without changing the invalid compatibility state$`, driver.requireInvalidExclusiveStatusOwner),
 		step(`^a labeled reservation owner in the shared queue$`, driver.labeledReservationOwnerV05),
 		step(`^JSON status is filtered by its source and worktree tag$`, driver.filteredLabeledStatusV05),
 		step(`^the matching owner row exposes tier and labels without private paths$`, driver.requireFilteredLabeledStatusV05),
@@ -672,7 +672,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^a runtime failure and a usage error are requested$`, driver.requestRuntimeFailureAndUsageError),
 		step(`^only the usage error prints the command usage block$`, driver.requireUsageOnlyForUsageErrors),
 		step(`^an unknown command is requested$`, driver.unknownCommand),
-		step(`^Cobra reports the command and exits with code 1$`, driver.requireCobraDiagnostic),
+		step(`^the diagnostic names the command and exits with code 2$`, driver.requireCobraDiagnostic),
 		step(`^run is requested without a command separator$`, driver.invalidRun),
 		step(`^the command fails with a useful validation error$`, driver.requireValidation),
 		step(`^operand-free commands are requested with positional arguments$`, driver.requestOperandFreeCommandsWithArguments),
@@ -703,7 +703,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^the command rejects a missing generic health URL$`, driver.requireMissingHealthURL),
 		step(`^an explicit HIPPO config with an unknown field$`, driver.invalidExplicitConfig),
 		step(`^JSON status is requested with that config$`, driver.statusWithConfig),
-		step(`^configuration fails with exit 78$`, driver.requireConfigExit),
+		step(`^configuration fails with exit 125$`, driver.requireConfigExit),
 	}
 }
 

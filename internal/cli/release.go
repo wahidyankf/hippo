@@ -11,12 +11,13 @@ import (
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 	releaseguard "github.com/wahidyankf/hippo/internal/release"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 func (application Application) releaseCheck(ctx context.Context, options releaseCheckOptions) (int, error) {
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
-		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
 
 	probe, collectError := application.Collector.Collect(ctx, nil, options.diskPath)
@@ -43,11 +44,11 @@ func (application Application) releaseCheck(ctx context.Context, options release
 
 func (application Application) releaseAssess(_ context.Context, options releaseAssessOptions) (int, error) {
 	if options.summaryPath == "" {
-		return 1, errors.New("--summary is required")
+		return 0, status.Fail(status.CodeArgsInvalid, "--summary is required")
 	}
 
 	if _, configError := application.loadConfig(options.configPath); configError != nil {
-		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
 
 	var summary policy.ReleaseSummary
@@ -97,11 +98,11 @@ func (application Application) releaseMonitor(ctx context.Context, options relea
 		return 1, err
 	}
 	if options.outputPath == "-" && options.summaryPath == "-" {
-		return 1, errors.New("raw evidence and summary cannot both use standard output")
+		return 0, status.Fail(status.CodeArgsInvalid, "raw evidence and summary cannot both use standard output")
 	}
 
 	if _, configError := application.loadConfig(options.configPath); configError != nil {
-		return policy.ReplanRequiredExitCode, fmt.Errorf("resource configuration: %w", configError)
+		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
 
 	monitorContext := ctx

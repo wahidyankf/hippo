@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 type configOptions struct {
@@ -54,6 +55,10 @@ type monitorOptions struct {
 type runOptions struct {
 	configOptions
 
+	// observeChild is called with a started child's status, and only then. It
+	// is what lets the boundary pass that status through untouched rather than
+	// treating it as one hippo chose.
+	observeChild           func(int)
 	command                []string
 	class                  string
 	workingDir             string
@@ -95,12 +100,58 @@ type releaseMonitorOptions struct {
 	durationMs     int64
 }
 
+// exitStatusHelp publishes the closed vocabulary in --help, so the numbers a
+// caller has to branch on are discoverable from the tool rather than only from
+// its documentation.
+const exitStatusHelp = `Exit statuses:
+  0    the work ran and the answer is affirmative
+  1    the work ran and the answer is negative
+  2    the invocation could not be used
+  124  a limit stopped the work; retry when it lifts
+  125  hippo could not do its job and started nothing
+  126  the command exists and could not be executed
+  127  the command was not found
+  N    a started command's own status, or 128+N when a signal ended it
+
+Every failure also names a reason, as HIPPO error [hippo.area.reason] on
+stderr and as error.code in the JSON body beneath it.`
+
 func (application Application) rootCommand(execution *commandExecution) *cobra.Command {
+	var showVersion bool
+	var colour, outputFormat string
+
 	command := &cobra.Command{
 		Use:   "hippo",
 		Short: "Protect local development work from resource pressure",
-		Long:  "HIPPO — Host Infrastructure Pressure & Process Orchestrator — admits, supervises, and sheds local development work from host resource evidence.",
+		Long: "HIPPO — Host Infrastructure Pressure & Process Orchestrator — admits, supervises, and sheds local " +
+			"development work from host resource evidence.\n\n" + exitStatusHelp,
+		Args:         cobra.ArbitraryArgs,
+		SilenceUsage: true,
+		RunE: func(command *cobra.Command, arguments []string) error {
+			if showVersion {
+				return executeHandler(command, execution, func() (int, error) {
+					return application.version(versionOptions{})
+				})
+			}
+
+			// Being asked to do nothing is not doing nothing successfully.
+			// Exiting 0 here would tell a script that whatever it meant to run
+			// had run, which is the one thing that definitely did not happen.
+			execution.usage = command.UsageString()
+
+			message := "no command given"
+			if len(arguments) > 0 {
+				message = fmt.Sprintf("unknown command %q", arguments[0])
+			}
+
+			return status.Fail(status.CodeArgsInvalid, "%s", message)
+		},
 	}
+	command.Flags().BoolVar(&showVersion, "version", false, "print build version information and exit")
+	command.PersistentFlags().StringVar(&colour, "color", "auto",
+		"colour diagnostics: always, never, or auto")
+	command.PersistentFlags().StringVar(&outputFormat, "output", "text",
+		"diagnostic format: text, or json to add a machine-readable failure body on stderr")
 
 	command.AddCommand(
 		application.versionCommand(execution),
@@ -244,6 +295,7 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 		Args:  requireGuardedCommand,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			options.command = append([]string{}, arguments...)
+			options.observeChild = func(childStatus int) { execution.childStatus = &childStatus }
 
 			return executeHandler(command, execution, func() (int, error) {
 				return application.run(command.Context(), options)

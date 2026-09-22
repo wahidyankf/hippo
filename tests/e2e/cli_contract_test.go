@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -42,14 +43,12 @@ var classes []string
 // set is asserted exact in both directions: a gap fixed without being removed
 // fails, and so does a new one. Otherwise a known-gap list becomes the place
 // failures go to be forgotten.
-var knownGaps = map[string]string{
-	"cli.exit.usage-mistake-is-two":                 "a usage mistake exits 1, the status reserved for a result",
-	"cli.streams.usage-mistake-leaves-stdout-clean": "the usage block reaches stdout through the writer Run supplies",
-	"cli.exit.vocabulary-is-closed":                 "78 is returned for an unreadable resource configuration, and 73, 75, and 76 for guard and policy outcomes",
-	"cli.streams.requested-version-on-stdout":       "there is no --version flag; a version subcommand carries it instead",
-	"cli.exit.child-not-found-is-one-two-seven":     "an absent child exits 1, not 127; launch failures are not distinguished",
-	"cli.args.bare-invocation-is-a-usage-mistake":   "no arguments prints help on stdout and exits 0, reporting work that did not happen",
-}
+// knownGaps is empty, and asserting that it is empty is the point: every
+// assertion this runner binds either passes or fails the run. An entry here
+// would name a measured gap hippo has chosen not to close yet, and the runner
+// fails just as loudly when an entry starts passing, so a repaired gap cannot
+// sit here pretending to still be one.
+var knownGaps = map[string]string{}
 
 type assertion struct {
 	ID        string `json:"id"`
@@ -132,6 +131,28 @@ func invoke(t *testing.T, binary string, arguments ...string) observed {
 	return observed{status: status, stdout: out.String(), stderr: errOut.String()}
 }
 
+// invokeWithEnvironment is invoke with extra environment entries, for the one
+// assertion that asks what a failure does with a credential it could see.
+func invokeWithEnvironment(t *testing.T, binary string, environment []string, arguments ...string) observed {
+	t.Helper()
+	command := exec.Command(binary, arguments...)
+	command.Stdin = nil
+	command.Env = append(os.Environ(), environment...)
+	var out, errOut strings.Builder
+	command.Stdout, command.Stderr = &out, &errOut
+
+	status := 0
+	if runError := command.Run(); runError != nil {
+		var exitError *exec.ExitError
+		if !errors.As(runError, &exitError) {
+			t.Fatalf("invoking the executable failed outright: %v", runError)
+		}
+		status = exitError.ExitCode()
+	}
+
+	return observed{status: status, stdout: out.String(), stderr: errOut.String()}
+}
+
 // firstLine keeps a failure message to one line, so a panic or traceback names
 // itself without pasting itself into the report.
 func firstLine(text string) string {
@@ -185,6 +206,23 @@ func invokeWithClosedReader(t *testing.T, binary string, arguments ...string) ob
 	return observed{status: status, stderr: errOut.String()}
 }
 
+// shedByLimit reports whether HIPPO stopped this invocation against one of its
+// own limits, which says nothing about the behaviour a probe was measuring.
+//
+// A probe that runs `hippo run` and demands an exact status is asking the host
+// a question it did not mean to ask: a loaded runner sheds the work and the
+// probe reads that as the behaviour failing. This is the same trap the
+// vocabulary sweep documents below, and the fix is the same -- report the
+// assertion unmeasured rather than failed, because nothing was measured.
+//
+// Telling the two apart is exact rather than heuristic, and that is what the
+// two-layer contract buys: HIPPO's own shed exits 124 *and* writes a limit
+// reason to stderr, while a child that chose 124 for its own purposes writes
+// no such line.
+func shedByLimit(result observed) bool {
+	return result.status == 124 && strings.Contains(result.stderr, "hippo: [hippo.limit.")
+}
+
 // probe binds one assertion identifier to a concrete invocation. The areas are
 // separate functions rather than one switch: a single switch covering every
 // assertion outgrows the repository's complexity ceiling, and the areas are how
@@ -193,7 +231,7 @@ func probe(t *testing.T, binary, assertionID string) (outcome, bool) {
 	t.Helper()
 
 	for _, area := range []func(*testing.T, string, string) (outcome, bool){
-		probeExit, probeStreams, probeArgs, probeOther,
+		probeExit, probeStreams, probeArgs, probeOutput, probeVocabulary, probeOther,
 	} {
 		if result, bound := area(t, binary, assertionID); bound {
 			return result, true
@@ -227,7 +265,10 @@ func probeExit(t *testing.T, binary, assertionID string) (outcome, bool) {
 	case "cli.exit.child-status-passes-through":
 		result := invoke(t, binary, "run", "--class", "ephemeral", "--resource-tier", "light",
 			"--disk-path", ".", "--", "/bin/sh", "-c", "exit 7")
-		if result.status == 7 {
+		switch {
+		case shedByLimit(result):
+			return unmeasured("the host shed this run against a limit, so no child ever chose a status"), true
+		case result.status == 7:
 			return pass(), true
 		}
 		return fail("expected the child's own status 7, observed %d", result.status), true
@@ -235,7 +276,10 @@ func probeExit(t *testing.T, binary, assertionID string) (outcome, bool) {
 	case "cli.exit.child-not-found-is-one-two-seven":
 		result := invoke(t, binary, "run", "--class", "ephemeral", "--resource-tier", "light",
 			"--disk-path", ".", "--", "/no/such/program")
-		if result.status == 127 {
+		switch {
+		case shedByLimit(result):
+			return unmeasured("the host shed this run against a limit before the child was looked for"), true
+		case result.status == 127:
 			return pass(), true
 		}
 		return fail("expected exit 127 for an absent child, observed %d", result.status), true
@@ -413,7 +457,10 @@ func probeArgs(t *testing.T, binary, assertionID string) (outcome, bool) {
 		// the operand after it must not be read as an option.
 		result := invoke(t, binary, "run", "--class", "ephemeral", "--resource-tier", "light",
 			"--disk-path", ".", "--", "/bin/echo", "-n")
-		if result.status == 0 {
+		switch {
+		case shedByLimit(result):
+			return unmeasured("the host shed this run against a limit, so the operand was never reached"), true
+		case result.status == 0:
 			return pass(), true
 		}
 		return fail("an operand beginning with - after -- was not accepted: exit %d", result.status), true
@@ -429,6 +476,171 @@ func probeArgs(t *testing.T, binary, assertionID string) (outcome, bool) {
 	return outcome{}, false
 }
 
+// failureBodyOf runs an invocation that must fail with --output json and
+// returns the body it wrote to stderr, parsed. Every cli.output assertion
+// needs the same thing, and parsing it once keeps the probes about what they
+// each measure.
+func failureBodyOf(t *testing.T, binary string, arguments ...string) (map[string]any, observed, bool) {
+	t.Helper()
+	result := invoke(t, binary, arguments...)
+	if result.status == 0 {
+		return nil, result, false
+	}
+
+	// The diagnostic line comes first and the body is the JSON document after
+	// it, so the probe reads from the first brace that begins a line.
+	index := strings.Index(result.stderr, "\n{")
+	if index < 0 {
+		return nil, result, false
+	}
+
+	// A decoder rather than Unmarshal: the usage block may follow the body on
+	// stderr, and only the first document is the body.
+	body := map[string]any{}
+	if err := json.NewDecoder(strings.NewReader(result.stderr[index+1:])).Decode(&body); err != nil {
+		return nil, result, false
+	}
+
+	return body, result, true
+}
+
+// publishedCodes is the vocabulary docs/reference/exit-codes.md publishes,
+// read from the document rather than from the package, so a code that reaches
+// a caller without being written down fails this runner.
+func publishedCodes(t *testing.T) map[string]bool {
+	t.Helper()
+	document, readError := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "exit-codes.md"))
+	if readError != nil {
+		t.Fatalf("reading the published error codes failed: %v", readError)
+	}
+
+	codes := map[string]bool{}
+	for _, match := range regexp.MustCompile(`hippo\.[a-z]+\.[a-z-]+`).FindAllString(string(document), -1) {
+		codes[match] = true
+	}
+
+	return codes
+}
+
+// failurePaths is one invocation per documented failure path this runner can
+// provoke without manufacturing a host state. Two assertions walk all of them,
+// which is what "every documented failure path in turn" asks for.
+func failurePaths() [][]string {
+	run := []string{"run", "--output", "json", "--class", "ephemeral", "--resource-tier", "light", "--disk-path", "."}
+
+	return [][]string{
+		{"--output", "json", "--no-such-flag"},
+		{"--output", "json"},
+		{"--output", "json", "not-a-command"},
+		append(append([]string{}, run...), "--", "definitely-not-a-command-anywhere"),
+		append(append([]string{}, run...), "--", filepath.Join("testdata", "not-executable")),
+		{"--output", "json", "status", "--config", filepath.Join("testdata", "no-such-config.json")},
+	}
+}
+
+// probeVocabulary walks every failure path this runner can provoke. Both of
+// its assertions need the same walk, and keeping them beside each other keeps
+// the walk in one place.
+func probeVocabulary(t *testing.T, binary, assertionID string) (outcome, bool) {
+	t.Helper()
+
+	switch assertionID {
+	case "cli.output.error-codes-are-namespaced":
+		shape := regexp.MustCompile(`^[a-z0-9]+\.[a-z0-9-]+\.[a-z0-9-]+$`)
+		for _, arguments := range failurePaths() {
+			body, result, parsed := failureBodyOf(t, binary, arguments...)
+			if !parsed {
+				return fail("%v emitted no body: exit %d", arguments, result.status), true
+			}
+			code, _ := body["error"].(map[string]any)["code"].(string)
+			if !shape.MatchString(code) {
+				return fail("%q is not shaped tool.area.reason", code), true
+			}
+		}
+		return pass(), true
+
+	case "cli.output.error-code-vocabulary-is-closed":
+		published := publishedCodes(t)
+		for _, arguments := range failurePaths() {
+			body, _, parsed := failureBodyOf(t, binary, arguments...)
+			if !parsed {
+				return fail("%v emitted no body", arguments), true
+			}
+			code, _ := body["error"].(map[string]any)["code"].(string)
+			if !published[code] {
+				return fail("%q is returned but not published", code), true
+			}
+		}
+		return pass(), true
+	}
+
+	return outcome{}, false
+}
+
+func probeOutput(t *testing.T, binary, assertionID string) (outcome, bool) {
+	t.Helper()
+
+	switch assertionID {
+	case "cli.exit.every-status-is-published":
+		result := invoke(t, binary, "--help")
+		missing := []string{}
+		for _, published := range []string{"0", "1", "2", "124", "125", "126", "127"} {
+			if !regexp.MustCompile(`(?m)^\s+` + published + `\s`).MatchString(result.stdout) {
+				missing = append(missing, published)
+			}
+		}
+		if len(missing) > 0 {
+			return fail("--help does not document the status(es) %s", strings.Join(missing, ", ")), true
+		}
+		return pass(), true
+
+	case "cli.exit.negative-result-is-one":
+		// `history` filtered to a source no run can have used: the question was
+		// asked and answered, and the answer is that there is nothing.
+		result := invoke(t, binary, "history", "--source", "no-such-source-anywhere")
+		if result.status == 1 {
+			return pass(), true
+		}
+		return fail("expected exit 1 for an empty result, observed %d", result.status), true
+
+	case "cli.output.error-body-required-fields":
+		body, result, parsed := failureBodyOf(t, binary, "--output", "json", "--no-such-flag")
+		if !parsed {
+			return fail("no machine-readable body on stderr: %q", first(result.stderr, 80)), true
+		}
+		for _, field := range []string{"schemaVersion", "error"} {
+			if _, present := body[field]; !present {
+				return fail("the body omits the required field %q", field), true
+			}
+		}
+		failureFields, ok := body["error"].(map[string]any)
+		if !ok {
+			return fail("error is not an object"), true
+		}
+		for _, field := range []string{"code", "message"} {
+			if value, present := failureFields[field]; !present || value == "" {
+				return fail("the body omits the required field error.%s", field), true
+			}
+		}
+		return pass(), true
+
+	case "cli.output.machine-readable-is-escape-free":
+		result := invoke(t, binary, "--output", "json", "--color", "always", "--no-such-flag")
+		index := strings.Index(result.stderr, "\n{")
+		switch {
+		case result.stdout != "":
+			return fail("a failed invocation wrote %d bytes to stdout", len(result.stdout)), true
+		case index < 0:
+			return fail("no machine-readable body was written"), true
+		case strings.Contains(result.stderr[index:], "\x1b"):
+			return fail("the body carries escape bytes although it is read by a parser"), true
+		}
+		return pass(), true
+	}
+
+	return outcome{}, false
+}
+
 func probeOther(t *testing.T, binary, assertionID string) (outcome, bool) {
 	t.Helper()
 
@@ -438,6 +650,16 @@ func probeOther(t *testing.T, binary, assertionID string) (outcome, bool) {
 		result := invoke(t, binary, "status")
 		if strings.HasPrefix(strings.TrimSpace(result.stdout), "{") {
 			return fail("machine-readable output was emitted without an explicit flag"), true
+		}
+		return pass(), true
+
+	case "cli.diagnostics.carry-no-secret":
+		secret := "s3cr3t-token-do-not-print"
+		result := invokeWithEnvironment(t, binary,
+			[]string{"HIPPO_TEST_CREDENTIAL=" + secret, "AWS_SECRET_ACCESS_KEY=" + secret},
+			"--output", "json", "--no-such-flag")
+		if strings.Contains(result.stderr, secret) || strings.Contains(result.stdout, secret) {
+			return fail("a credential in the environment reached the diagnostics"), true
 		}
 		return pass(), true
 

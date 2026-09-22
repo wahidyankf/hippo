@@ -52,8 +52,8 @@ Feature: Guarded process execution
 
     Examples:
       | code |
-      | 75   |
-      | 76   |
+      | 124  |
+      | 125  |
 
   @e2e-exempt
   Scenario: Canonical concurrency remains ecosystem neutral

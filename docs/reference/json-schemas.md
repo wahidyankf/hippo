@@ -23,7 +23,7 @@ omitted according to that field's compatibility contract. Field _order_ is not p
 
 The smallest public document has three required fields: integer `schemaVersion` `1`, the release
 string in `version`, and the exact source commit in `commit`. Release builds currently report
-`v0.7.2`; source builds report `dev` and `unknown`.
+`v0.8.0`; source builds report `dev` and `unknown`.
 
 ## `monitor --json`
 

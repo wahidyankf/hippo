@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 func TestStatusExposesLiveExclusiveOwnerWithoutMutation(t *testing.T) {
@@ -65,12 +67,22 @@ func TestStatusExposesLiveExclusiveOwnerWithoutMutation(t *testing.T) {
 }
 
 func TestStatusClassifiesExclusiveCompatibilityState(t *testing.T) {
+	// Both are refusals before anything is started, so both exit 125. What
+	// tells them apart is the reason, which is the layer that exists to carry
+	// exactly this distinction.
 	for _, testCase := range []struct {
 		name, contents string
 		exitCode       int
+		code           status.Code
 	}{
-		{name: "malformed", contents: `{"schemaVersion":1`, exitCode: 1},
-		{name: "future", contents: `{"schemaVersion":2}`, exitCode: policy.ProtocolMismatchExitCode},
+		{
+			name: "malformed", contents: `{"schemaVersion":1`, exitCode: status.GuardFailed,
+			code: status.CodeSupervisionFailed,
+		},
+		{
+			name: "future", contents: `{"schemaVersion":2}`, exitCode: status.GuardFailed,
+			code: status.CodeCoordinationProtocolMismatch,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -93,6 +105,10 @@ func TestStatusClassifiesExclusiveCompatibilityState(t *testing.T) {
 			code, statusError := application.Run(context.Background(), []string{"status", "--json"})
 			if code != testCase.exitCode || statusError == nil {
 				t.Fatalf("status code=%d want=%d error=%v", code, testCase.exitCode, statusError)
+			}
+			var failure status.Failure
+			if !errors.As(statusError, &failure) || failure.Code != testCase.code {
+				t.Fatalf("status reason=%v want=%s", statusError, testCase.code)
 			}
 			after, readError := os.ReadFile(owner.RecordPath)
 			if readError != nil || !bytes.Equal(contents, after) {
@@ -179,8 +195,11 @@ func TestSchemaThreeRefusesLiveLegacyOwnerWithProtocolMismatch(t *testing.T) {
 		"run", "--config", writeAdaptiveCLIConfig(t, workingDirectory), "--cwd", workingDirectory,
 		"--resource-tier", "light", "--", "/bin/sh", "-c", `printf started > "$CHILD_MARKER"`,
 	})
-	if code != policy.ProtocolMismatchExitCode || runError == nil || !strings.Contains(runError.Error(), "legacy") {
+	if code != status.GuardFailed || runError == nil || !strings.Contains(runError.Error(), "legacy") {
 		t.Fatalf("code=%d stderr=%q error=%v", code, stderr.String(), runError)
+	}
+	if !strings.Contains(runError.Error(), string(status.CodeCoordinationProtocolMismatch)) {
+		t.Fatalf("the refusal does not name the protocol mismatch: %v", runError)
 	}
 	if _, statError := os.Stat(childMarker); !os.IsNotExist(statError) {
 		t.Fatalf("schema-three mismatch started its child: %v", statError)
@@ -208,8 +227,12 @@ func TestStatusReturnsProtocolMismatchForFutureLedger(t *testing.T) {
 		Sleep: func(time.Duration) {},
 	}
 	code, statusError := application.Run(context.Background(), []string{"status", "--json"})
-	if code != policy.ProtocolMismatchExitCode || statusError == nil {
+	if code != status.GuardFailed || statusError == nil {
 		t.Fatalf("code=%d error=%v", code, statusError)
+	}
+	var failure status.Failure
+	if !errors.As(statusError, &failure) || failure.Code != status.CodeCoordinationProtocolMismatch {
+		t.Fatalf("the refusal does not name the protocol mismatch: %v", statusError)
 	}
 	after, readError := os.ReadFile(ledgerPath)
 	if readError != nil || !bytes.Equal(after, ledger) {

@@ -20,7 +20,7 @@ checksums.txt
 ## Download, verify, extract
 
 ```sh
-VERSION=v0.7.2
+VERSION=v0.8.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 [ "$ARCH" = x86_64 ] && ARCH=amd64
@@ -42,7 +42,7 @@ tar -xzf "$ASSET"
 ```
 
 ```console
-hippo_v0.7.2_darwin_arm64.tar.gz: OK
+hippo_v0.8.0_darwin_arm64.tar.gz: OK
 ```
 
 Each archive contains exactly one regular mode-755 member named `hippo`.
@@ -52,7 +52,7 @@ Each archive contains exactly one regular mode-755 member named `hippo`.
 ```sh
 ./hippo version --json | jq -e '
   .schemaVersion == 1 and
-  .version == "v0.7.2" and
+  .version == "v0.8.0" and
   (.commit | type == "string" and length > 0 and . != "unknown")
 '
 ```

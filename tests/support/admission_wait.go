@@ -14,6 +14,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/cli"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 // healthyAdmissionSamples gives the collector a steady healthy reading. The
@@ -162,10 +163,13 @@ func (driver *Driver) requireDeferralReportedOnce() error {
 // A caller that silenced the whole stream would pass the counting scenario and
 // fail here, which is the only reason this scenario exists.
 func (driver *Driver) requireBlockedNoticeSurvivesQuieting() error {
-	if driver.exitCode != guard.StorageBlockedExitCode {
+	// Both sheds exit 124; the reason is what says which one, so the exit
+	// alone is no longer enough to prove this scenario measured storage.
+	if driver.exitCode != status.LimitShed ||
+		!strings.Contains(driver.errorOutput, string(status.CodeLimitStorageBlocked)) {
 		return fmt.Errorf(
-			"exit=%d want storage blocked %d: stderr=%s",
-			driver.exitCode, guard.StorageBlockedExitCode, driver.errorOutput,
+			"exit=%d want %d and %s: stderr=%s",
+			driver.exitCode, status.LimitShed, status.CodeLimitStorageBlocked, driver.errorOutput,
 		)
 	}
 
@@ -262,8 +266,12 @@ func (driver *Driver) requireRetriedThenAdmitted() error {
 }
 
 func (driver *Driver) requireDeferralSurvivesTheBudget() error {
-	if driver.exitCode != guard.CapacityDeferredExitCode {
-		return fmt.Errorf("exit=%d want the deferral %d: stderr=%s", driver.exitCode, guard.CapacityDeferredExitCode, driver.errorOutput)
+	if driver.exitCode != status.LimitShed ||
+		!strings.Contains(driver.errorOutput, string(status.CodeLimitCapacityDeferred)) {
+		return fmt.Errorf(
+			"exit=%d want %d and %s: stderr=%s",
+			driver.exitCode, status.LimitShed, status.CodeLimitCapacityDeferred, driver.errorOutput,
+		)
 	}
 	if driver.admissionElapsed < time.Second {
 		return fmt.Errorf("the owner surrendered after %s without spending its one second budget", driver.admissionElapsed)
