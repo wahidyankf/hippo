@@ -73,12 +73,12 @@ variables. Violations are usage errors (exit `1`), rejected before anything runs
 The caller's existing value, if any, is taken as a ceiling request and reconciled against the
 allocation:
 
-| Caller's value               | Result                            |
-| ---------------------------- | --------------------------------- |
-| unset                        | Receives the allocated CPU        |
-| positive, below allocation   | Survives unchanged                |
-| positive, above allocation   | Clamped down to the allocation    |
-| zero, negative, or malformed | Exit `78` before the child starts |
+| Caller's value               | Result                           |
+| ---------------------------- | -------------------------------- |
+| unset                        | Receives the allocated CPU       |
+| positive, below allocation   | Survives unchanged               |
+| positive, above allocation   | Clamped down to the allocation   |
+| zero, negative, or malformed | Exit `2` before the child starts |
 
 ```console
 $ BUILD_WORKERS=1 hippo run --config reservation.json --reserve-cpu 4 --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'

@@ -59,11 +59,11 @@ class.
 ## Upgrade to adaptive schema 3
 
 Upgrade every consumer binary and wrapper to a build that documents distinct protocol-mismatch exit
-`76`, live exclusive-owner status, and bounded activation contention; the current tagged baseline is
+a protocol mismatch, live exclusive-owner status, and bounded activation contention; the current tagged baseline is
 v0.8.0. Verify each exact binary
 with `version --json` and its release checksum instead of inferring capability from SemVer ordering.
 Keep schema 2 active until `hippo status --json` reports no owners or waiters with `legacy: true`, then
-atomically install the schema-3 policy. A schema-3 launch returns `76` before enqueue or child launch
+atomically install the schema-3 policy. A schema-3 launch returns `125` naming `hippo.coordination.protocol-mismatch` before enqueue or child launch
 when legacy ledger entries remain.
 
 Schema 3 requires an identity and a resource tier:
@@ -111,7 +111,7 @@ cpu=2 mem=4294967296
 That is 6 CPU and 16 GiB divided four ways.
 
 Caps may only _tighten_. `maxMemoryMiB` below 256 and `maxActiveOwners` above 20 are rejected at load
-time with exit `78`:
+time with exit `125`:
 
 ```console
 $ hippo status --config weakened.json --disk-path .
@@ -133,11 +133,11 @@ hippo run --reserve-cpu 2 --reserve-memory-mib 1024 -- make test
 ```
 
 An explicit reservation may be smaller than the automatic share but never below one CPU or 256 MiB.
-Asking for more than the host can safely provide returns `78` immediately rather than queueing.
+Asking for more than the host can safely provide returns `125` immediately rather than queueing.
 
 ## Handle a full budget
 
-A temporarily exhausted schema-2 budget returns `75` after its bounded FIFO wait. To wait longer
+A temporarily exhausted schema-2 budget returns `124` after its bounded FIFO wait. To wait longer
 before the single payload launch:
 
 ```sh

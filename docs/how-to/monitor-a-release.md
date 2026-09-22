@@ -51,7 +51,7 @@ hippo release assess --summary summary.json
 {"accepted":true,"schemaVersion":5}
 ```
 
-Rejected evidence returns exit `75` and says why:
+Rejected evidence returns exit `124` and says why:
 
 ```console
 {"accepted":false,"schemaVersion":5}

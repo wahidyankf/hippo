@@ -112,7 +112,7 @@ Same-day raw `.jsonl` chunks hold one host sample per line for finer-grained ana
 streams are gzip-compressed under `raw/`; use `gzip -dc`. Prior-day summaries are under
 `history/YYYY-MM-DD.jsonl.gz`. The summary/history view is complete without raw samples.
 
-Safety receipts under `receipts/` answer the operationally important question after exit `75`:
+Safety receipts under `receipts/` answer the operationally important question after exit `124`:
 `never-started` means no payload launched; `started-safety-stop` means emergency pressure stopped a
 running payload. `started-activation-failure` accompanies exit `1` when ledger activation still
 failed after its two-second contention window. Never blindly retry either started state.
@@ -174,14 +174,15 @@ payload that will never exit on its own.
 ## When the root will not admit anything
 
 If admission fails with `1` and the ledger looks empty, shared state may be corrupt or inaccessible.
-Exit `76` instead means the state is valid but uses an incompatible peer protocol. HIPPO preserves
-both kinds of bytes instead of clearing them; exit `75` remains a capacity or safety result.
+A `hippo.coordination.protocol-mismatch` reason instead means the state is valid but uses an
+incompatible peer protocol. HIPPO preserves both kinds of bytes instead of clearing them; exit `124`
+remains a limit result.
 
 Recovery is manual and deliberate:
 
 1. Inspect the state root.
 2. Confirm that no owner remains — check every PID and process group it names.
-3. For exit `1`, correct whatever made the files inaccessible or malformed. For exit `76`, drain
+3. For an unreadable-state reason, correct whatever made the files inaccessible or malformed. For a protocol mismatch, drain
    the live epoch or upgrade every client that shares the root.
 4. Retry.
 

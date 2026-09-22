@@ -1,1 +1,76 @@
-{"schemaVersion":1,"profile":"opencode","sources":[{"id":"agent/gherkin-implementation-reviewer","path":".agents/agents/gherkin-implementation-reviewer.md","digest":"2f13b819d2f6fcb74ffd701c455fcb8612a83e6451c2a71adb5aaa3d48b0fbce"},{"id":"agent/plan-checker","path":".agents/agents/plan-checker.md","digest":"9da369d9e0aca525e71d4d522b520feae9b76e39492ff2420296bd2ab34ede01"},{"id":"agent/plan-execution-checker","path":".agents/agents/plan-execution-checker.md","digest":"ea948a303885131b7cb10d5947d105bc040e03f6ad568f8dc7f78487f9abbbfd"},{"id":"agent/plan-maker","path":".agents/agents/plan-maker.md","digest":"cdc00a5fdca7d71ee17148f70723d7fc173aef0bbb4d890d88d9582b775226cc"},{"id":"skill/grill-me","path":".agents/skills/grill-me/SKILL.md","digest":"4ace858d988ce3621b624d7e98a091ddf9893d03373ed2ab0d11fe4ee01ebe45"},{"id":"skill/plan-creating-project-plans","path":".agents/skills/plan-creating-project-plans/SKILL.md","digest":"dc3acecfd934a7374e3319b6fb4bb32d3825f74cb59be8a39eb9537677c750ae"},{"id":"skill/plan-grooming-idea-briefs","path":".agents/skills/plan-grooming-idea-briefs/SKILL.md","digest":"26f4ae89d4ae1189f58bf5d84ffdc5879166f3586fc678f28c41eeba09a28e14"},{"id":"skill/plan-validating-quality","path":".agents/skills/plan-validating-quality/SKILL.md","digest":"9a30cd24cfc11be0842fe218f5a6aa8d7e15fc129e219eca3b44f8be6d035513"},{"id":"skill/plan-verifying-execution","path":".agents/skills/plan-verifying-execution/SKILL.md","digest":"1bf36e33d8a8e7e6eee592a91c66ab86d57273652c394e5469e59206fe85604a"},{"id":"skill/plan-writing-gherkin-criteria","path":".agents/skills/plan-writing-gherkin-criteria/SKILL.md","digest":"c8f6cbaa5d7a7bf6c13514ddfd6de1c343887b4aa839d4af348e2d3c2b16a29d"},{"id":"skill/release-cut","path":".agents/skills/release-cut/SKILL.md","digest":"3d5ddc3441cb40fea1d8fcbe45001db93fd8c6ec239cce1e5c6c0db2577ad57f"},{"id":"skill/spec-impact-assessment","path":".agents/skills/spec-impact-assessment/SKILL.md","digest":"7163f30fe7adf4ed7f6a1a3cef5ca178573c4f9bd0091d479e9c203dda1e2873"},{"id":"skill/worktree-to-pr","path":".agents/skills/worktree-to-pr/SKILL.md","digest":"5d2174c6a0d07d4ce6b76e3d3e694e8423cc36710acb383f5745f4f67ea45c55"},{"id":"instruction","path":"AGENTS.md","digest":"bbf2f8b4db3cd2a0912e849a5a5ec77fc1a0ff1febebf226ec913764be409e50"}]}
+{
+  "schemaVersion": 1,
+  "profile": "opencode",
+  "sources": [
+    {
+      "id": "agent/gherkin-implementation-reviewer",
+      "path": ".agents/agents/gherkin-implementation-reviewer.md",
+      "digest": "2f13b819d2f6fcb74ffd701c455fcb8612a83e6451c2a71adb5aaa3d48b0fbce"
+    },
+    {
+      "id": "agent/plan-checker",
+      "path": ".agents/agents/plan-checker.md",
+      "digest": "9da369d9e0aca525e71d4d522b520feae9b76e39492ff2420296bd2ab34ede01"
+    },
+    {
+      "id": "agent/plan-execution-checker",
+      "path": ".agents/agents/plan-execution-checker.md",
+      "digest": "ea948a303885131b7cb10d5947d105bc040e03f6ad568f8dc7f78487f9abbbfd"
+    },
+    {
+      "id": "agent/plan-maker",
+      "path": ".agents/agents/plan-maker.md",
+      "digest": "cdc00a5fdca7d71ee17148f70723d7fc173aef0bbb4d890d88d9582b775226cc"
+    },
+    {
+      "id": "skill/grill-me",
+      "path": ".agents/skills/grill-me/SKILL.md",
+      "digest": "4ace858d988ce3621b624d7e98a091ddf9893d03373ed2ab0d11fe4ee01ebe45"
+    },
+    {
+      "id": "skill/plan-creating-project-plans",
+      "path": ".agents/skills/plan-creating-project-plans/SKILL.md",
+      "digest": "dc3acecfd934a7374e3319b6fb4bb32d3825f74cb59be8a39eb9537677c750ae"
+    },
+    {
+      "id": "skill/plan-grooming-idea-briefs",
+      "path": ".agents/skills/plan-grooming-idea-briefs/SKILL.md",
+      "digest": "26f4ae89d4ae1189f58bf5d84ffdc5879166f3586fc678f28c41eeba09a28e14"
+    },
+    {
+      "id": "skill/plan-validating-quality",
+      "path": ".agents/skills/plan-validating-quality/SKILL.md",
+      "digest": "9a30cd24cfc11be0842fe218f5a6aa8d7e15fc129e219eca3b44f8be6d035513"
+    },
+    {
+      "id": "skill/plan-verifying-execution",
+      "path": ".agents/skills/plan-verifying-execution/SKILL.md",
+      "digest": "1bf36e33d8a8e7e6eee592a91c66ab86d57273652c394e5469e59206fe85604a"
+    },
+    {
+      "id": "skill/plan-writing-gherkin-criteria",
+      "path": ".agents/skills/plan-writing-gherkin-criteria/SKILL.md",
+      "digest": "c8f6cbaa5d7a7bf6c13514ddfd6de1c343887b4aa839d4af348e2d3c2b16a29d"
+    },
+    {
+      "id": "skill/release-cut",
+      "path": ".agents/skills/release-cut/SKILL.md",
+      "digest": "3d5ddc3441cb40fea1d8fcbe45001db93fd8c6ec239cce1e5c6c0db2577ad57f"
+    },
+    {
+      "id": "skill/spec-impact-assessment",
+      "path": ".agents/skills/spec-impact-assessment/SKILL.md",
+      "digest": "7163f30fe7adf4ed7f6a1a3cef5ca178573c4f9bd0091d479e9c203dda1e2873"
+    },
+    {
+      "id": "skill/worktree-to-pr",
+      "path": ".agents/skills/worktree-to-pr/SKILL.md",
+      "digest": "eb8b6c6ce3e8d12a1c3994d42d151e7798a89870e6a64fbc8b42d53dd1f291cc"
+    },
+    {
+      "id": "instruction",
+      "path": "AGENTS.md",
+      "digest": "a72725d0ad044e95b90b803002edef7904a06149bdbcd299a1d9e2f651816b91"
+    }
+  ]
+}

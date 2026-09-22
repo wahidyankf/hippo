@@ -82,7 +82,7 @@ immediately for new admissions; it does not kill an already admitted owner.
 Every schema-3 `run` must select `--resource-tier`. Queue deadlines come from the tier, so combining
 schema 3 with `--wait-for-admission` is rejected. Upgrade every consumer first and let schema-2
 owners and waiters drain before activating schema 3; a schema-3 launch returns protocol-mismatch
-exit `76` before enqueue or child launch when a mixed legacy ledger remains.
+exit `125` naming `hippo.coordination.protocol-mismatch` before enqueue or child launch when a mixed legacy ledger remains.
 
 ## Minimal reservation configuration
 
@@ -106,7 +106,7 @@ exit `76` before enqueue or child launch when a mixed legacy ledger remains.
 | `automaticOwnerShares` | object  | Profile name → share count, each between `1` and `20`  |
 
 These fields may only _tighten_ safety. `maxMemoryMiB` below 256 and `maxActiveOwners` above 20 are
-rejected at load time with exit `78`, so a local file cannot weaken the compiled floors.
+rejected at load time with exit `125` naming `hippo.config.unreadable`, so a local file cannot weaken the compiled floors.
 
 Schema 3 additionally requires positive `maxCpu`, `maxMemoryMiB`, `baseActiveOwners`, and
 `maxActiveOwners`; exactly the `light`, `standard`, and `heavy` tiers; a positive deadline per tier;
@@ -160,22 +160,22 @@ may set a `fallback`.
 }
 ```
 
-| Field                        | Type    | Meaning                                                         |
-| ---------------------------- | ------- | --------------------------------------------------------------- |
-| `extends`                    | string  | Built-in profile this one derives from                          |
-| `fallback`                   | string  | Profile to resolve to when this one does not fit                |
-| `strict`                     | boolean | When true, no fallback is attempted; a misfit replans with `78` |
-| `memoryReservePercent`       | number  | Share of effective memory held back                             |
-| `memoryReserveMinMiB`        | integer | Lower clamp on the memory reserve                               |
-| `memoryReserveMaxMiB`        | integer | Upper clamp on the memory reserve                               |
-| `noSwapMemoryReservePercent` | number  | Memory reserve when the host has no usable swap                 |
-| `noSwapMemoryReserveMinMiB`  | integer | Lower clamp, no-swap case. Never below 256 MiB                  |
-| `noSwapMemoryReserveMaxMiB`  | integer | Upper clamp, no-swap case                                       |
-| `diskReservePercent`         | number  | Share of disk held back                                         |
-| `diskReserveMinMiB`          | integer | Lower clamp on the disk reserve                                 |
-| `diskReserveMaxMiB`          | integer | Upper clamp on the disk reserve                                 |
-| `maxConcurrency`             | integer | Ceiling on canonical concurrency                                |
-| `maxCpuUtilizationPercent`   | number  | CPU utilization above which the profile does not fit            |
+| Field                        | Type    | Meaning                                                          |
+| ---------------------------- | ------- | ---------------------------------------------------------------- |
+| `extends`                    | string  | Built-in profile this one derives from                           |
+| `fallback`                   | string  | Profile to resolve to when this one does not fit                 |
+| `strict`                     | boolean | When true, no fallback is attempted; a misfit replans with `125` |
+| `memoryReservePercent`       | number  | Share of effective memory held back                              |
+| `memoryReserveMinMiB`        | integer | Lower clamp on the memory reserve                                |
+| `memoryReserveMaxMiB`        | integer | Upper clamp on the memory reserve                                |
+| `noSwapMemoryReservePercent` | number  | Memory reserve when the host has no usable swap                  |
+| `noSwapMemoryReserveMinMiB`  | integer | Lower clamp, no-swap case. Never below 256 MiB                   |
+| `noSwapMemoryReserveMaxMiB`  | integer | Upper clamp, no-swap case                                        |
+| `diskReservePercent`         | number  | Share of disk held back                                          |
+| `diskReserveMinMiB`          | integer | Lower clamp on the disk reserve                                  |
+| `diskReserveMaxMiB`          | integer | Upper clamp on the disk reserve                                  |
+| `maxConcurrency`             | integer | Ceiling on canonical concurrency                                 |
+| `maxCpuUtilizationPercent`   | number  | CPU utilization above which the profile does not fit             |
 
 A profile override that weakens an immutable safety floor is rejected with
 `profile weakens immutable safety floors`.

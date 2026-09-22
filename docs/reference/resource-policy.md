@@ -27,7 +27,7 @@ alongside the `fallbackChain` that produced it.
 | `release`       | Yes     | Not applicable — release commands only                  |
 
 `transactional` and `release` are strict: they do not fall back to a safer profile. A misfit replans
-with exit `78` instead.
+with exit `125` naming `hippo.policy.replan-required` instead.
 
 ## Default thresholds
 
@@ -57,7 +57,7 @@ with exit `78` instead.
 | Sample interval                 | 1 s     |
 
 The 5-minute lease wait is why a deferred owner can sit at the FIFO head for a long time before
-returning `75`. It is not a hang.
+returning `124`. It is not a hang.
 
 ## Schema-3 resource tiers
 

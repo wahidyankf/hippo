@@ -353,7 +353,7 @@ Schema 5, with generic health fields.
 { "accepted": true, "schemaVersion": 5 }
 ```
 
-A rejected summary reports `"accepted": false` and exits `75`.
+A rejected summary reports `"accepted": false` and exits `124`.
 
 ## Related
 

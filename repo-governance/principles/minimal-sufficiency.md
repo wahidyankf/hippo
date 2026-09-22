@@ -16,7 +16,7 @@ The smallest change that fully solves the problem, and no smaller. Both halves a
 
 HIPPO holds no defaults about the work it guards, and that is this principle rather than an accident. Every product-specific default — a task runner's flag, a repository's layout, a build tool's name — would be a value this tool cannot verify and cannot retract. See [the vision](../vision/README.md).
 
-The same applies to exit codes. `73`, `75`, `76`, and `78` each have one stable meaning; a new meaning
+The same applies to exit codes. `0`, `1`, `2`, `124`, `125`, `126`, and `127` each have one stable meaning; a new meaning
 wedged into an existing code costs every consumer its ability to branch on it. See
 [public contract](../development/public-contract.md).
 

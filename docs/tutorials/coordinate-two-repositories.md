@@ -138,13 +138,15 @@ Error: reservation requires replanning: requested vector exceeds safe host capac
 78
 ```
 
-Exit `78` means _replan_. HIPPO is not saying "busy, try later" — it is saying this request can never
-succeed on this host, so waiting would be pointless. A FIFO deadline before launch is a different
-situation: it gets exit `75` plus a `never-started` receipt and may be requeued.
+Exit `125` with `hippo.policy.replan-required` means _replan_. HIPPO is not saying "busy, try
+later" — it is saying this request can never succeed on this host, so waiting would be pointless. A
+FIFO deadline before launch is a different situation: it gets exit `124` with
+`hippo.limit.capacity-deferred`, plus a `never-started` receipt, and may be requeued.
 
-That distinction matters when you script around HIPPO: retry `75` only when its receipt says the
-payload never started. A pressure-shed or emergency safety-stopped payload also uses `75` and needs
-operator or payload-specific recovery. Exit `78` deserves a smaller request.
+That distinction is why the status and the reason are separate. Retry a `124` only when its receipt
+says the payload never started: a pressure-shed or emergency safety-stopped payload carries
+`hippo.limit.pressure-shed` and needs operator or payload-specific recovery. A `125` deserves a
+smaller request.
 
 ## Step 7: watch the budget come back
 
@@ -177,7 +179,7 @@ unset HIPPO_ROOT
 - Enabled reservation coordination with a two-line schema-2 configuration.
 - Held a fixed CPU-and-memory reservation and observed it from a separate HIPPO process.
 - Ran two owners concurrently against one shared budget.
-- Saw an impossible request rejected with `78` rather than queued.
+- Saw an impossible request rejected with `125` rather than queued.
 - Watched capacity return when the owner's process group retired.
 
 Two tasks in one shell is a stand-in for the real case: two checkouts, two terminals, two build
@@ -191,5 +193,5 @@ budget without knowing about each other.
   the queue is strict FIFO.
 - [How to enable reservation coordination](../how-to/enable-reservation-coordination.md) — do this
   permanently for a real repository.
-- [How to respond to a HIPPO exit code](../how-to/respond-to-exit-codes.md) — handle `73`, `75`,
-  `76`, and `78` in scripts.
+- [How to respond to a HIPPO exit code](../how-to/respond-to-exit-codes.md) — handle `124`, `125`,
+  and the reasons beneath them in scripts.

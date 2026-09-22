@@ -1,5 +1,6 @@
 ---
-description: "Cut and publish a HIPPO release, with the immutability rules that make a published tag safe to pin."
+description: |-
+  Cut and publish a HIPPO release, with the immutability rules that make a published tag safe to pin.
 name: release-cut
 ---
 

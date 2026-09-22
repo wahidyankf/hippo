@@ -95,9 +95,11 @@ echo $?
 3
 ```
 
-HIPPO passed the child's own exit status straight through. Its stable operational codes are `1`,
-`73`, `75`, `76`, and `78`; `0` is success. A child can also return any of those numbers, so use
-HIPPO's receipt and task-failed evidence when the distinction matters. The
+HIPPO passed the child's own exit status straight through. Its own statuses are `1` for an empty
+result, `2` for an unusable invocation, `124` for a limit that stopped the work, `125` for HIPPO
+starting nothing, and `126` or `127` for a command that cannot be run; `0` is success. A child can
+also return any of those numbers — but only HIPPO's own failures write a `hippo:` line to stderr, so
+the diagnostic tells them apart, and the receipt and task-failed evidence say the same independently. The
 [exit code reference](../reference/exit-codes.md) covers the contract.
 
 ## Step 5: confirm your pipeline survives

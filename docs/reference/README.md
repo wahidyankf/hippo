@@ -5,7 +5,7 @@ Exact, information-oriented facts about HIPPO. Look things up here; learn elsewh
 ## Pages
 
 - [Command-line interface](./cli.md) — every command, every flag, every default.
-- [Exit codes](./exit-codes.md) — the stable `0` / `1` / `73` / `75` / `76` / `78` contract.
+- [Exit codes](./exit-codes.md) — the closed status and error-code contract.
 - [Environment variables](./environment-variables.md) — what HIPPO reads, what it exports, and the
   rules for caller-selected concurrency mappings.
 - [Configuration](./configuration.md) — schemas 1–3, tiers, promotion, coordination caps, and profiles.
