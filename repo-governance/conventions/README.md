@@ -7,6 +7,8 @@ A convention chooses a path. It does not authorize anyone to walk it; see [commi
 ## Directory Map
 
 - [Coding harness contract](coding-harness-contract.md) — one canonical instruction body, expressed per harness.
+- [Command-line interface](command-line-interface.md) — the two-layer contract a command-line tool presents to its callers.
+- [Command-line interface modules](command-line-interface/README.md) — the ordered modules of that contract.
 - [Commit authorization](commit-authorization.md) — when committing and pushing are permitted.
 - [Directory maps](directory-maps.md) — every mapped directory lists its siblings.
 - [Documentation architecture](documentation-architecture.md) — Diátaxis, and what `docs/` may not contradict.
