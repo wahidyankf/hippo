@@ -76,7 +76,7 @@ Every repository on a host shares one coordination root, so its lock is routinel
 a bounded transaction. That contention is never a supervision failure — but it resolves differently
 depending on when it happens:
 
-- **Before admission**, it returns `75` and no child has run.
+- **Before admission**, it returns `124` and no child has run.
 - **At activation**, it waits up to two seconds for ordinary peer transactions. If contention
   outlives that deadline, it returns `1` and stops the child it already started. The lifetime
   summary says `task-failed`, and a `started-activation-failure` receipt proves the payload ran.
@@ -88,7 +88,7 @@ depending on when it happens:
 
 The middle case becomes a failure only after its bounded retry window and must not resemble
 capacity. A caller can watch its payload begin, so HIPPO records a started failure and never returns
-retryable `75`. `--wait-for-admission` therefore requeues only a verified never-started waiter and
+retryable `124`. `--wait-for-admission` therefore requeues only a verified never-started waiter and
 never repeats a payload after activation.
 
 ## Cleanup that cannot take the lock is not an error

@@ -11,9 +11,11 @@
 # Verification is unconditional and happens before execution. A cached copy is
 # re-digested every run, because a cache is a place other processes can write.
 #
-# Exit 78 is this wrapper refusing to run: a malformed pin, an unsupported
+# Exit 125 is this wrapper refusing to run: a malformed pin, an unsupported
 # platform, a digest that does not match, or an identity that is not the one
-# the pin names. Every other exit code is RHINO's own.
+# the pin names. It is the status that says the wrapper could not do its job
+# and started nothing, and it is the one RHINO itself uses for the same
+# situation. Every other exit code is RHINO's own.
 set -euo pipefail
 unset CDPATH
 
@@ -22,7 +24,7 @@ lock_file="$tool_dir/rhino.lock"
 
 refuse() {
 	printf '[rhino] %s\n' "$1" >&2
-	exit 78
+	exit 125
 }
 
 [[ -r "$lock_file" ]] || refuse "there is no pin at rhino.lock, and an unpinned gate is not a gate"

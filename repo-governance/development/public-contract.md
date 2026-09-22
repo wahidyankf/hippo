@@ -5,27 +5,37 @@ pre-stable minor release or, after stability, a major release.
 
 ## The Contract
 
-- **Exit codes.** `73` means clean storage and retry. `75` means capacity or a safety stop: retry only
-  when a safety receipt proves `never-started`. `76` means an incompatible peer coordination
-  protocol: drain the epoch or upgrade the client. `78` means the local request cannot be satisfied
-  as stated and needs replanning. Exit `1` includes corrupt shared state and HIPPO-owned failures
-  after payload launch. Brief activation contention is absorbed within the bounded activation
-  window; a stalled activation remains a started failure. A guarded child's own exit code remains unchanged, including a child-owned
-  reserved code; evidence distinguishes it from a HIPPO decision.
+- **Exit statuses.** `0` and `1` are a result, affirmative and negative. `2` is an unusable
+  invocation. `124` is a limit stopping the work. `125` is HIPPO unable to do its job, with nothing
+  started. `126` and `127` are a command that cannot be executed and one that is not there. Nothing
+  else is returned except a started child's own status, or `128+N` for a signal. A guarded child's
+  status passes through unchanged, including one that collides with a status HIPPO also uses;
+  HIPPO's own failures always write a `hippo:` line to stderr and a child's never does.
+- **Error codes.** Every failure names one `hippo.area.reason` from the published vocabulary, on
+  stderr and, with `--output json`, as `error.code`. The status says what a shell should do; the
+  code says what happened.
 - **Evidence readers.** The supported readers and their record shapes. A consumer parsing evidence is a consumer whose parser breaks when the shape does.
 - **Configuration compatibility.** Existing keys keep their meaning. A breaking transition requires the owner's explicit authorization, not a judgement that the old shape was worse.
 - **The command surface.** Command paths, flag names, and the exit-code-to-condition mapping, which is what a caller branches on.
 
-## Why These Four Stable Codes and No More
+## Why Few Statuses and Many Codes
 
-A new meaning wedged into an existing code costs every consumer its ability to branch on that code.
-HIPPO v0.7.0 therefore adds `76` instead of continuing to report peer protocol mismatch as capacity
-exit `75` or local replan exit `78`. While HIPPO remains pre-stable, an explicitly authorized
-breaking contract change advances the minor version. After a stable release, any new condition must
-fit one stable meaning or ship in another major version. See
+A new meaning wedged into an existing status costs every consumer its ability to branch on it, and
+the obvious escape — a new number per condition — costs more. HIPPO v0.7.0 took that escape and
+added `76`; by v0.8.0 there were four such numbers, all inside the range a child may return, so the
+number alone never said who chose it, and the `./hippo` bootstrap that nine repositories share
+reached `exit 78` from one helper in sixteen call sites without ever asking which reason produced
+it. A vocabulary nobody reads is not information.
+
+So the two questions are answered in two places. The status stays small enough to learn, and uses
+the numbers `timeout` and every POSIX shell already assign to these situations. The reason has no
+such limit, and a new condition gets a new code rather than a new number. Adding a code is not a
+breaking change; moving a code to a different status is. While HIPPO remains pre-stable, an
+explicitly authorized breaking contract change advances the minor version. See
 [minimal sufficiency](../principles/minimal-sufficiency.md).
 
-`75` in particular is load-bearing beyond this repository. `state: never-started` means the FIFO
+The `never-started` distinction is load-bearing beyond this repository, and survives the renumbering
+inside `124`'s reasons rather than in a status of its own. `state: never-started` means the FIFO
 deadline or cancellation happened before launch and the same invocation may be requeued once.
 `started-safety-stop`, `pressure-shed`, `storage-shed`, and `started-activation-failure` mean a
 payload ran; payload-specific

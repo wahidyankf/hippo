@@ -1,31 +1,54 @@
 # How to respond to a HIPPO exit code
 
-HIPPO has five stable nonzero operational codes. A guarded child may also return any numeric code,
-including a reserved one, so evidence—not the number alone—identifies who produced it.
+HIPPO answers in two parts, and both matter here. The **status** tells a shell what to do. The
+**reason** on stderr tells you which case you are in, and two reasons under one status can need
+opposite responses.
 
 For the full definitions see the [exit code reference](../reference/exit-codes.md).
 
 ## Decide quickly
 
-| Code | Do this                                                                     |
-| ---- | --------------------------------------------------------------------------- |
-| `1`  | Inspect the diagnostic and evidence; do not assume that nothing ran.        |
-| `73` | Free disk space on the measured path, then retry.                           |
-| `75` | Inspect the receipt/outcome; retry only if it says `never-started`.         |
-| `76` | Drain the incompatible epoch or upgrade the peer; never capacity-retry.     |
-| `78` | Change the local request — reservation, configuration, mapping, or profile. |
+| Status | Do this                                                                      |
+| ------ | ---------------------------------------------------------------------------- |
+| `1`    | Nothing matched. This is a result, not a failure.                            |
+| `2`    | The invocation is wrong. Read the diagnostic and fix the command.            |
+| `124`  | A limit stopped the work. Read the reason — see below; they differ.          |
+| `125`  | HIPPO started nothing. Read the reason; retrying it unchanged will not help. |
+| `126`  | The command exists and cannot be executed. Fix its permissions.              |
+| `127`  | The command is not there. Fix the path or the spelling.                      |
 
 Never respond to any of them by bypassing the guard or by changing `--class` to get admitted.
 Changing a task to `transactional` so it cannot be shed does not make the host any bigger; it makes
 the eventual failure worse.
 
-## Handle `75` in a script
+## Handle `124`
 
-`75` can mean a queue deadline before launch or a safety stop after launch. Use `hippo history` and
-the receipt under the shared root to decide which happened. A `never-started` receipt is safe to
-requeue; `started-safety-stop`, `pressure-shed`, and a child-owned `75` are not automatically safe.
+Three reasons share this status, and only one of them is a plain "wait and retry".
 
-Let HIPPO wait before launch. Schema 3 takes the deadline from the tier; schema 2 can set one:
+| Reason                          | Do this                                                      |
+| ------------------------------- | ------------------------------------------------------------ |
+| `hippo.limit.capacity-deferred` | Retry when the host is quieter, subject to the receipt below |
+| `hippo.limit.pressure-shed`     | The payload ran. Recover it before repeating anything        |
+| `hippo.limit.storage-blocked`   | Free disk on the measured path. Waiting will not do it       |
+
+`error.retryable` in the `--output json` body says the same thing: it is `true` for the first two
+and `false` for storage, because a caller that retries on a full disk retries forever.
+
+### Tell never-started from started
+
+A deferral before launch is safe to requeue once. A shed after launch is not.
+
+```sh
+hippo history --since 1d --source my-repo --outcome emergency-safety-stop
+ls "${HIPPO_ROOT}/receipts"
+```
+
+Queue expiry or cancellation writes `state: "never-started"`. Emergency termination writes
+`state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
+`pressure-shed` or `storage-shed`.
+
+Let HIPPO wait before launch rather than looping yourself. Schema 3 takes the deadline from the
+tier; schema 2 can set one:
 
 ```sh
 hippo run --wait-for-admission 10m -- make test
@@ -39,24 +62,13 @@ Or handle it yourself when the payload is not safe to repeat:
 ```sh
 hippo run --disk-path . -- ./deploy.sh
 status=$?
-if [ "$status" -eq 75 ]; then
+if [ "$status" -eq 124 ]; then
   echo "inspect the safety receipt before requeueing this payload" >&2
 fi
 exit "$status"
 ```
 
-### Tell never-started from started
-
-```sh
-hippo history --since 1d --source my-repo --outcome emergency-safety-stop
-ls "${HIPPO_ROOT}/receipts"
-```
-
-Queue expiry/cancellation writes `state: "never-started"`. Emergency termination writes
-`state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
-`pressure-shed` or `storage-shed`.
-
-### When `75` means a heavy-work lease
+### When a deferral names a heavy-work lease
 
 In exclusive mode, the deferral names the holder:
 
@@ -66,27 +78,13 @@ HIPPO deferred task: the heavy-work lease is held by pid 33413 (class transactio
 
 That is another repository's guarded work. Wait for it.
 
-## Handle `76`
-
-```console
-HIPPO protocol mismatch: shared coordination protocol mismatch: reservation mode is active; drain or upgrade the incompatible client before retrying.
-```
-
-The shared root contains a live incompatible coordination epoch. Do not send this through a capacity
-retry loop and do not delete state to force takeover. Upgrade clients that share the root, let the
-existing sessions drain, and retry once — see
-[How to enable reservation coordination](./enable-reservation-coordination.md).
-
-During a rolling migration, a pre-v0.7 client can still report this conflict as `75`. Treat the old
-diagnostic as protocol mismatch even though its number is ambiguous, then finish the v0.7 upgrade.
-
-## Handle `73`
+### Storage
 
 ```console
 $ hippo run --disk-path /Volumes/Small -- echo should-not-run
-HIPPO decision=cleanup requested=balanced resolved=balanced.
+hippo: [hippo.limit.storage-blocked] the disk floor stopped this work; free space before retrying
 $ echo $?
-73
+124
 ```
 
 Free storage on the path you passed to `--disk-path`. The floor is 256 MiB and it is immutable.
@@ -95,43 +93,59 @@ Free storage on the path you passed to `--disk-path`. The floor is 256 MiB and i
 your work will actually write to; moving it elsewhere hides the problem until the build fails
 halfway through with a partial artifact.
 
-## Handle `78`
+## Handle `125`
 
-Three distinct causes, distinguished by the message.
+HIPPO could not do its job, and no child was started. The reason says which part failed.
 
-**Impossible reservation** — ask for less:
+**`hippo.coordination.protocol-mismatch`** — the shared root contains a live incompatible
+coordination epoch. Do not send this through a capacity retry loop and do not delete state to force
+takeover. Upgrade clients that share the root, let the existing sessions drain, and retry once — see
+[How to enable reservation coordination](./enable-reservation-coordination.md).
 
-```console
-Error: reservation requires replanning: requested vector exceeds safe host capacity
-Error: reservation requires replanning: reservations require at least one CPU and 256 MiB
-```
-
-**Invalid inherited mapping** — fix whatever exports the bad value:
+**`hippo.policy.replan-required`** — ask for less:
 
 ```console
-Error: concurrency environment "BUILD_WORKERS" must be a positive integer
+hippo: [hippo.policy.replan-required] reservation requires replanning: requested vector exceeds safe host capacity
 ```
 
-**Rejected configuration** — the file weakens a compiled floor:
+**`hippo.config.unreadable`** — the configuration cannot be read, or weakens a compiled floor:
 
 ```console
-Error: resource configuration: maximum memory weakens the immutable 256 MiB floor
-Error: resource configuration: maxActiveOwners cannot exceed 20
+hippo: [hippo.config.unreadable] resource configuration: maximum memory weakens the immutable 256 MiB floor
 ```
 
-Retrying any of these produces the same answer. The request has to change.
+Retrying any of these produces the same answer. The request or the configuration has to change.
 
-## Tell HIPPO's codes from your command's
+## Handle `2`
 
-A guarded command can itself exit `75` or `76`. HIPPO preserves that value, writes `task-failed`
-summary evidence, and writes no never-started receipt. Use the receipt and summary together:
+The invocation itself is unusable: an unknown flag, a missing argument, a value HIPPO cannot accept.
+
+```console
+hippo: [hippo.args.invalid] concurrency environment name "HIPPO_ROOT" is reserved
+```
+
+stdout stays empty on every failed invocation, so a caller parsing stdout never has to skip a usage
+block to find its answer.
+
+## Tell HIPPO's status from your command's
+
+A guarded command can itself exit `124` or `125`, and HIPPO passes that value through unchanged.
+The number alone will not say who chose it — but the diagnostic will, because HIPPO's own failures
+always write a line beginning `hippo:` to stderr and a child's status never produces one.
 
 ```sh
-hippo run --disk-path . -- ./task.sh
+hippo run --output json --disk-path . -- ./task.sh 2>errors
 status=$?
-hippo history --since 1d --source my-repo --outcome task-failed
-printf 'task or HIPPO exited %s; inspect the matching receipt before retrying\n' "$status" >&2
+if grep -q '^hippo: ' errors; then
+  echo "HIPPO decided this; the reason is on the line above" >&2
+else
+  echo "./task.sh chose $status for its own reasons" >&2
+fi
+exit "$status"
 ```
+
+Evidence says the same thing independently: a child that ran and failed leaves a `task-failed`
+summary and no never-started receipt.
 
 ## Related
 

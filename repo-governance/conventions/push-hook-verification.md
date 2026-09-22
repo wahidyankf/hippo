@@ -12,10 +12,12 @@ The hooks are `commit-msg` (Conventional Commits), `pre-commit` (staged formatti
 
 Read the output. The hook prints the failing command and its diagnostic; that is the whole of the investigation in most cases.
 
-A `pre-push` failure carrying HIPPO's exit `75` may be retried only when its receipt says
-`never-started`; a started safety stop needs task-specific recovery. Exit `73` means clean storage
-first, exit `76` means drain or upgrade an incompatible peer, and exit `78` means replan the local
-request. See [resource-aware development](../development/resource-aware-development.md).
+A `pre-push` failure carrying HIPPO's exit `124` means a limit stopped the work, and the reason on
+stderr says which. `hippo.limit.capacity-deferred` may be retried only when its receipt says
+`never-started`; a started safety stop needs task-specific recovery, and
+`hippo.limit.storage-blocked` needs storage cleaned first. Exit `125` means HIPPO started nothing:
+drain or upgrade an incompatible peer for `hippo.coordination.protocol-mismatch`, and replan the
+local request or fix the configuration for the others. See [resource-aware development](../development/resource-aware-development.md).
 
 ## When a Hook Is Wrong
 

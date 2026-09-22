@@ -117,7 +117,9 @@ if [ ! -x "$binary" ]; then
 	mkdir -p "$cache_root/$goos-$goarch"
 	attempts=0
 	# mkdir is the cross-platform atomic lock. The bounded wait maps contention
-	# to retryable exit 75 instead of starting parallel Go builds.
+	# to exit 124 instead of starting parallel Go builds. 124 is the status a
+	# limit stopped the work, which is exactly what a contended build lock is,
+	# and it is retryable where hippo's own 125 is not.
 	while ! mkdir "$lock" 2>/dev/null; do
 		if [ -f "$lock/pid" ]; then
 			lock_pid=$(sed -n '1p' "$lock/pid" 2>/dev/null || true)
@@ -135,7 +137,7 @@ if [ ! -x "$binary" ]; then
 		attempts=$((attempts + 1))
 		if [ "$attempts" -ge 300 ]; then
 			echo "hippo bootstrap timed out waiting for its build lock" >&2
-			exit 75
+			exit 124
 		fi
 		sleep 1
 	done

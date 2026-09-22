@@ -182,7 +182,7 @@ hippo run [flags] -- <command> [arguments...]
 The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A normal
 child exit code is passed through unchanged. Capacity waiting creates one FIFO identity and does not
 launch the payload until admitted. A heartbeat reports that run ID, queue position, and remaining
-deadline every 30 seconds. Expiry returns `75` with a `never-started` safety receipt; HIPPO never
+deadline every 30 seconds. Expiry returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt; HIPPO never
 retries a payload.
 
 ```console
@@ -251,7 +251,7 @@ $ hippo release assess --summary summary.json
 {"accepted":true,"schemaVersion":5}
 ```
 
-Rejected evidence prints `"accepted":false` and returns exit `75`:
+Rejected evidence prints `"accepted":false` and returns exit `124`:
 
 ```console
 $ hippo release assess --summary summary.json
@@ -286,7 +286,7 @@ Usage:
 ```
 
 Invalid `--concurrency-env` _names_ are usage errors (`1`). Invalid mapped _values_ inherited from
-the caller's environment are admission failures (`78`). See [Exit codes](./exit-codes.md).
+the caller's environment are usage mistakes (`2`, `hippo.args.invalid`). See [Exit codes](./exit-codes.md).
 
 ## Related
 

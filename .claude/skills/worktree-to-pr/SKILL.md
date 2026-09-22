@@ -1,5 +1,6 @@
 ---
-description: "Take a change from a fresh worktree to a merged pull request in this repository, in the order the rules require."
+description: |-
+  Take a change from a fresh worktree to a merged pull request in this repository, in the order the rules require.
 name: worktree-to-pr
 ---
 

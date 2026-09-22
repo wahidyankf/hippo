@@ -1,5 +1,6 @@
 ---
-description: "Assess what a proposed change does to specs/behaviours and specs/architecture.md before writing any code."
+description: |-
+  Assess what a proposed change does to specs/behaviours and specs/architecture.md before writing any code.
 name: spec-impact-assessment
 ---
 

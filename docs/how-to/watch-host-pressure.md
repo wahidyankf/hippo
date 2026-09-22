@@ -92,7 +92,7 @@ hippo monitor --interval 5s --disk-path ./target
 ```
 
 Measuring a roomy volume while the work fills a small one is the most common way to be surprised by
-exit `73`.
+exit `124` naming `hippo.limit.storage-blocked`.
 
 ## Related
 

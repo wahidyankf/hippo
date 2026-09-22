@@ -150,7 +150,7 @@ upgrade an incompatible peer, change the request, or fix the configuration.
 | Schema 2 — `reservation` | Concurrent owners against a shared vector budget. Opt in per repository.                         |
 | Schema 3 — `adaptive`    | Tiered FIFO admission, labeled status/history, and evidence-gated burst capacity.                |
 
-The modes never mix within one state root. A v1 client meeting the other live protocol exits `76`
+The modes never mix within one state root. A v1 client meeting the other live protocol exits `125` naming `hippo.coordination.protocol-mismatch`
 without changing state; drain the old epoch before retrying.
 
 ## 📚 Documentation

@@ -15,7 +15,7 @@ alike — claims a fixed CPU-and-memory _vector_ from a shared ledger. Several o
 as long as their vectors fit together.
 
 The two cannot be mixed within one state root. A v1 client that meets a live incompatible epoch exits
-`76`. It preserves the existing state and starts no child. This is what lets a host migrate: old
+`125`, naming `hippo.coordination.protocol-mismatch`. It preserves the existing state and starts no child. This is what lets a host migrate: old
 sessions drain, and only then does the new mode take over. HIPPO never creates a mixed epoch and
 never describes protocol incompatibility as transient capacity.
 
@@ -61,9 +61,9 @@ one core would jump ahead of a task wanting eight indefinitely, and the large ta
 a busy host.
 
 A waiter stays at the FIFO head through a bounded lease interval — five minutes by default — before
-returning `75`. That is a long time to wait silently, and it is intentional: on a machine where four
+returning `124`. That is a long time to wait silently, and it is intentional: on a machine where four
 builds are legitimately in flight, five minutes is often shorter than the time to fail and be
-manually retried. A caller that would rather decide for itself gets `75` and can act; a caller that
+manually retried. A caller that would rather decide for itself gets `124` and can act; a caller that
 just wants the work to happen can set `--wait-for-admission`.
 
 ## The effective owner limit is a minimum, not a maximum
@@ -80,12 +80,12 @@ permissive peer cannot loosen it. Safety composes downward only.
 
 Two failures that look similar to a caller are treated as fundamentally different:
 
-- A vector that **cannot ever** fit the host returns `78` immediately. Waiting would accomplish
+- A vector that **cannot ever** fit the host returns `125` immediately. Waiting would accomplish
   nothing; the request itself has to change.
-- A vector that **does not currently** fit returns `75` after the bounded wait. Retrying is the
+- A vector that **does not currently** fit returns `124` after the bounded wait. Retrying is the
   correct response only when the receipt proves `never-started`, because capacity genuinely frees
   up.
-- A live incompatible peer protocol returns `76`. Capacity changes cannot fix it; the epoch must
+- A live incompatible peer protocol returns `125`. Capacity changes cannot fix it; the epoch must
   drain or the peer must upgrade.
 
 Collapsing these into one code would force every caller to either retry forever on an impossible

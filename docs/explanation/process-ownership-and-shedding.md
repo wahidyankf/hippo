@@ -22,7 +22,7 @@ guard that can see an owner it would like to shed still cannot touch it.
 Under critical pressure, some owner must actually stop. The mechanism is mark-and-observe:
 
 1. Under one locked evaluation, a guard selects **at most one** victim and writes a mark into the
-   shared ledger. The mark carries only the intended stable exit code — `73` for storage, `75` for
+   shared ledger. The mark carries only the intended internal shed reason — storage, or
    other pressure.
 2. The selecting guard, if it is not the victim's owner, **waits**. It does not signal.
 3. The victim's own guard observes its own mark before collecting its next host sample.

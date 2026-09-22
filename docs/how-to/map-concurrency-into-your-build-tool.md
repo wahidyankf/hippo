@@ -62,12 +62,12 @@ Under a fixed reservation allocation the existing value is read as a request and
 the allocation. In schema 3, the selected tier supplies a minimum and maximum; HIPPO grants the
 largest vector that fits when the FIFO head is admitted and exports that fixed CPU allocation.
 
-| Your value                   | Result                            |
-| ---------------------------- | --------------------------------- |
-| unset                        | Receives the allocated CPU        |
-| positive, below allocation   | Survives unchanged                |
-| positive, above allocation   | Clamped down to the allocation    |
-| zero, negative, or malformed | Exit `78` before the child starts |
+| Your value                   | Result                           |
+| ---------------------------- | -------------------------------- |
+| unset                        | Receives the allocated CPU       |
+| positive, below allocation   | Survives unchanged               |
+| positive, above allocation   | Clamped down to the allocation   |
+| zero, negative, or malformed | Exit `2` before the child starts |
 
 ```console
 $ BUILD_WORKERS=1 hippo run --config reservation.json --reserve-cpu 4 --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
@@ -121,7 +121,7 @@ Error: concurrency environment name "HIPPO_CONCURRENCY" is reserved
 
 Use a POSIX identifier that is not one of HIPPO's own `HIPPO_*` protocol variables.
 
-**Exit `78` — the inherited value is wrong.** Reservation mode only; exclusive mode does not
+**Exit `2` — the inherited value is wrong.** Reservation mode only; exclusive mode does not
 inspect the value.
 
 ```console
