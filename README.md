@@ -29,8 +29,10 @@ $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make tes
   works by marking a victim and waiting for that victim's own guard to act.
 - **Fails closed.** Unreadable shared state returns a non-retryable failure and preserves bytes
   rather than guessing and rewriting.
-- **A stable exit contract.** `73` cleanup, `75` inspect receipt/outcome, `76` drain or upgrade an
-  incompatible peer, and `78` replan. Child-owned codes pass through with task-failed evidence.
+- **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO started nothing, `126` and
+  `127` the command cannot be run, `2` the invocation cannot be used — the numbers `timeout` and
+  every POSIX shell already use. Each failure also names a reason, as `hippo: [hippo.area.reason]`.
+  Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters,
   promotion state, and bounded run outcomes without exposing commands or paths.
 - **Burst-safe activation.** Simultaneous repository clients wait through brief coordination
@@ -55,7 +57,7 @@ release `checksums.txt`. **Pin both the tag and the expected SHA-256; never foll
 runtime.**
 
 ```sh
-VERSION=v0.7.2
+VERSION=v0.8.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -71,8 +73,8 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ./hippo version --json
 ```
 
-The checksum command prints `hippo_v0.7.2_<os>_<arch>.tar.gz: OK`; `version --json` reports
-`v0.7.2` and the exact release commit.
+The checksum command prints `hippo_v0.8.0_<os>_<arch>.tar.gz: OK`; `version --json` reports
+`v0.8.0` and the exact release commit.
 
 Working from a source checkout instead? The tracked `./hippo` bootstrap compiles the CLI once and
 caches it. Full details: [How to install a pinned release](./docs/how-to/install-a-pinned-release.md).
@@ -136,11 +138,11 @@ last only at the configured emergency floor. A remote guard **never** signals an
 group; it marks and waits for that owner to stop its own child. A live unresponsive victim blocks any
 further selection, so pressure cannot cascade into emptying the ledger.
 
-**Failure.** Exit `73` needs storage cleanup. Exit `75` may be requeued only when its receipt says
-`never-started`; a pressure shed or started safety stop needs payload-specific recovery. Exit `76`
-means a live peer uses an incompatible coordination protocol, so drain the epoch or upgrade the
-client. Exit `78` needs a changed local request. Corrupt state and HIPPO-owned failures after launch
-return `1`; evidence records that the payload started.
+**Failure.** Exit `124` means a limit stopped the work; the reason says which. `storage-blocked`
+needs cleanup, `capacity-deferred` may be requeued when its receipt says `never-started`, and
+`pressure-shed` needs payload-specific recovery. Exit `125` means HIPPO started nothing: drain or
+upgrade an incompatible peer, change the request, or fix the configuration.
+[Exit codes and error codes](./docs/reference/exit-codes.md) lists both closed vocabularies.
 
 | Mode                     | Behavior                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------ |

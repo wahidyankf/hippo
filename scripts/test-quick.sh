@@ -29,5 +29,17 @@ go test -count=1 -coverpkg=./internal/policy,./internal/config,./internal/host,.
 go run ./tests/coverage --profile coverage/unit.out --directories internal/policy,internal/config --files internal/host/collector.go,internal/host/linux_parsers.go,internal/evidence/histogram.go --minimum 99
 HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd
 HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd
-HIPPO_BDD_ADAPTER=e2e go test -count=1 ./tests/bdd
+# The end-to-end adapter runs a real binary, and which binary it runs is the
+# whole question. HIPPO_BIN is already in the environment here -- the guard that
+# wraps this script exports it -- and it points at the checksum-pinned release
+# in .cache, so inheriting it would measure the version already installed and
+# tell us nothing about the working tree. Build what is being tested, with the
+# same embedded identity tests/e2e/run.sh uses, and hand that to the adapter.
+bdd_temporary=$(mktemp -d "${TMPDIR:-/tmp}/hippo-bdd.XXXXXX")
+trap 'rm -rf -- "$bdd_temporary"' EXIT
+go build -trimpath \
+	-ldflags "-X github.com/wahidyankf/hippo/internal/cli.Version=v0.0.0-test -X github.com/wahidyankf/hippo/internal/cli.Commit=0000000000000000000000000000000000000000" \
+	-o "$bdd_temporary/hippo" ./cmd/hippo
+HIPPO_BDD_ADAPTER=e2e HIPPO_BIN="$bdd_temporary/hippo" go test -count=1 ./tests/bdd
+
 ./tests/artifacts/run.sh

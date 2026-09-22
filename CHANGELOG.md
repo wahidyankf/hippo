@@ -7,6 +7,44 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.8.0] — 2026-09-23
+
+### Changed — breaking
+
+- The exit vocabulary is closed and renumbered. HIPPO's own refusals returned `73`, `75`, `76` and
+  `78`; they now return `124` when a limit stopped the work and `125` when HIPPO could not do its
+  job and started nothing. A usage mistake returns `2` rather than `1`, and `1` now means only that
+  the work ran and the answer is empty. The four old numbers sat inside the range a child may
+  return, so the number alone never said who chose it, and no consumer branched on them: the
+  `./hippo` bootstrap shared across nine repositories reached `exit 78` from one helper in sixteen
+  call sites and never asked which reason produced it.
+- A command that cannot be run is now reported before admission: `127` when it is not found and
+  `126` when it exists and cannot be executed, matching every POSIX shell. Both were `1`.
+- A failed invocation no longer writes the usage block to stdout. Everything HIPPO says about a
+  failure goes to stderr, and stdout stays empty, so a consumer reading the answer never meets a
+  flag list instead.
+- Diagnostics use the GNU `program: message` form: `hippo: [hippo.area.reason] message`.
+- `history` exits `1` when nothing matched, rather than `0`.
+
+### Added
+
+- Every failure names a reason, a namespaced `hippo.area.reason` from a closed vocabulary published
+  in [Exit codes and error codes](./docs/reference/exit-codes.md). It reaches the caller on stderr
+  and, with `--output json`, as `error.code` in a machine-readable body carrying `schemaVersion`,
+  `command`, `exitCode`, `error.message` and `error.retryable`.
+- A `--version` flag on the root command, beside the existing `version` subcommand.
+- A `--color` flag honouring `NO_COLOR` and `TERM=dumb`. The default is plain text, because HIPPO's
+  output is read by scripts far more often than by people.
+- `--help` publishes the exit statuses HIPPO can return.
+- A top-level handler turns a fault in HIPPO into a declared status and a reason, rather than a
+  stack trace and whatever the runtime chose.
+
+### Fixed
+
+- The end-to-end behaviour adapter inherited `HIPPO_BIN` from the guard that wraps the test script,
+  so it measured the checksum-pinned release already installed rather than the working tree. It now
+  builds and runs what is being tested.
+
 ## [v0.7.2] — 2026-09-17
 
 ### Fixed
@@ -207,6 +245,7 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 
 - First standalone release, published as Resource Guard.
 
+[v0.8.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.0
 [v0.7.2]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.2
 [v0.7.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.1
 [v0.7.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.0

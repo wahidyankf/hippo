@@ -15,6 +15,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 const (
@@ -50,12 +51,18 @@ type RunConfig struct {
 	EvidenceLimits                        evidence.Limits
 	ConfigHash                            string
 	Now                                   func() time.Time
-	Sleep                                 func(time.Duration)
-	ChildStdin                            io.Reader
-	ChildStdout, ChildStderr              io.Writer
-	Stderr                                io.Writer
-	startLifetime                         func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error)
-	stopLifetime                          func(*supervisedLifetime, time.Duration) (error, error)
+	// ObserveChildStatus, when set, is called with the status a started
+	// child produced, and only then. It is how the boundary tells a status
+	// the child chose from one hippo chose: hippo reports a reason for its
+	// own refusals, and passes a child's status through untouched and
+	// unexplained, which is the only honest thing to do with it.
+	ObserveChildStatus       func(int)
+	Sleep                    func(time.Duration)
+	ChildStdin               io.Reader
+	ChildStdout, ChildStderr io.Writer
+	Stderr                   io.Writer
+	startLifetime            func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error)
+	stopLifetime             func(*supervisedLifetime, time.Duration) (error, error)
 }
 
 // environmentValue resolves name against the duplicate-key semantics the child
@@ -125,11 +132,14 @@ func normalizeConcurrencyEnvironment(names []string) ([]string, error) {
 	result := make([]string, 0, len(names))
 
 	for _, name := range names {
+		// Both are the caller naming something hippo cannot accept, which is a
+		// usage mistake and not a request that a different host could admit.
 		if !validEnvironmentName(name) {
-			return nil, fmt.Errorf("concurrency environment name %q is not a POSIX identifier", name)
+			return nil, status.Fail(status.CodeArgsInvalid,
+				"concurrency environment name %q is not a POSIX identifier", name)
 		}
 		if reservedConcurrencyEnvironment(name) {
-			return nil, fmt.Errorf("concurrency environment name %q is reserved", name)
+			return nil, status.Fail(status.CodeArgsInvalid, "concurrency environment name %q is reserved", name)
 		}
 		if !seen[name] {
 			result = append(result, name)
@@ -193,6 +203,56 @@ func ReservationEnvironment(
 	return environment, nil
 }
 
+// checkCommandIsRunnable answers, before hippo admits anything, whether the
+// command it was asked to guard can be run at all. A caller that misspelled a
+// command deserves to hear that immediately, in the words every shell already
+// uses for it, rather than after hippo has queued, reserved, and launched a
+// supervisor for a program that was never there.
+//
+// It is a check and not a guarantee: a file can vanish between here and exec.
+// That race resolves to the launcher's existing status, which is the honest
+// answer when hippo genuinely cannot tell what happened.
+func checkCommandIsRunnable(command string) *status.Failure {
+	resolved := command
+	if !strings.ContainsRune(command, os.PathSeparator) {
+		found, lookError := exec.LookPath(command)
+		if lookError != nil {
+			if errors.Is(lookError, exec.ErrNotFound) {
+				failure := status.Fail(status.CodeChildNotFound, "%s: command not found", command)
+
+				return &failure
+			}
+
+			failure := status.Fail(status.CodeChildNotExecutable, "%s: %v", command, lookError)
+
+			return &failure
+		}
+		resolved = found
+	}
+
+	info, statError := os.Stat(resolved)
+	switch {
+	case errors.Is(statError, os.ErrNotExist):
+		failure := status.Fail(status.CodeChildNotFound, "%s: no such file or directory", command)
+
+		return &failure
+	case statError != nil:
+		failure := status.Fail(status.CodeChildNotExecutable, "%s: %v", command, statError)
+
+		return &failure
+	case info.IsDir():
+		failure := status.Fail(status.CodeChildNotExecutable, "%s: is a directory", command)
+
+		return &failure
+	case info.Mode().Perm()&0o111 == 0:
+		failure := status.Fail(status.CodeChildNotExecutable, "%s: permission denied", command)
+
+		return &failure
+	}
+
+	return nil
+}
+
 func waitStatusCode(err error) int {
 	if err == nil {
 		return 0
@@ -208,6 +268,17 @@ func waitStatusCode(err error) int {
 	}
 
 	return 1
+}
+
+// childStatus is waitStatusCode plus the note to the boundary that a child,
+// not hippo, decided this status.
+func childStatus(config RunConfig, err error) int {
+	status := waitStatusCode(err)
+	if config.ObserveChildStatus != nil {
+		config.ObserveChildStatus(status)
+	}
+
+	return status
 }
 
 func signalGroup(processGroup int, signal syscall.Signal) error {
@@ -388,6 +459,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 	if config.Command == "" {
 		return 1, errors.New("guarded command is empty")
+	}
+	if failure := checkCommandIsRunnable(config.Command); failure != nil {
+		return failure.Status(), *failure
 	}
 	if config.TaskClass == "" {
 		config.TaskClass = policy.TaskEphemeral
@@ -625,14 +699,14 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		case waitError := <-lifetime.exited:
 			ownershipRetired = true
 
-			return waitStatusCode(waitError), nil
+			return childStatus(config, waitError), nil
 		case <-ctx.Done():
 			waitError, stopError := stopLifetime()
 			if stopError != nil {
 				return 1, stopError
 			}
 
-			return waitStatusCode(waitError), nil
+			return childStatus(config, waitError), nil
 		}
 	}
 
@@ -798,7 +872,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				outcome = outcomeTaskFailed
 			}
 
-			return waitStatusCode(waitError), nil
+			return childStatus(config, waitError), nil
 
 		case <-ctx.Done():
 			waitError, stopError := stopLifetime()
@@ -807,7 +881,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				return 1, stopError
 			}
 
-			return waitStatusCode(waitError), nil
+			return childStatus(config, waitError), nil
 
 		case <-ticker.C:
 			if config.ReservationPolicy.Enabled { //nolint:nestif // Owner-side marked shedding must remain ahead of fresh pressure collection.
@@ -849,7 +923,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 						return 1, stopError
 					}
 
-					return waitStatusCode(waitError), nil
+					return childStatus(config, waitError), nil
 				}
 
 				outcome = outcomeSupervisionFailed

@@ -23,6 +23,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/host"
 	"github.com/wahidyankf/hippo/internal/policy"
 	releaseguard "github.com/wahidyankf/hippo/internal/release"
+	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
 
@@ -1881,9 +1882,9 @@ func (driver *Driver) unknownCommand() {
 }
 
 func (driver *Driver) requireCobraDiagnostic() error {
-	if driver.exitCode != 1 ||
+	if driver.exitCode != status.CallerError ||
 		!strings.Contains(driver.errorOutput, "unknown command \"not-a-command\"") ||
-		!strings.Contains(driver.errorOutput, "hippo --help") {
+		!strings.Contains(driver.errorOutput, "--help") {
 		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
 	}
 
@@ -1938,7 +1939,7 @@ func (driver *Driver) requestOperandFreeCommandsWithArguments() {
 		if err != nil {
 			diagnostic += err.Error()
 		}
-		if driver.exitCode != 1 ||
+		if driver.exitCode != status.CallerError ||
 			!strings.Contains(diagnostic, "unknown command") && !strings.Contains(diagnostic, "accepts 0 arg") {
 			driver.operandCommandsRejected = false
 			driver.errorOutput = fmt.Sprintf("arguments=%v exit=%d diagnostic=%q", arguments, driver.exitCode, diagnostic)
@@ -2316,7 +2317,7 @@ func (driver *Driver) mixedReleaseStandardOutput() error {
 }
 
 func (driver *Driver) requireMixedOutputRejected() error {
-	if driver.exitCode != 1 || !strings.Contains(driver.errorOutput, "cannot both use standard output") {
+	if driver.exitCode != status.CallerError || !strings.Contains(driver.errorOutput, "cannot both use standard output") {
 		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
 	}
 	if driver.releaseCollector != nil && driver.releaseCollector.index != 0 {
@@ -3252,7 +3253,9 @@ func (driver *Driver) statusWithConfig() {
 }
 
 func (driver *Driver) requireConfigExit() error {
-	if driver.exitCode != policy.ReplanRequiredExitCode || !strings.Contains(driver.errorOutput, "unknown") {
+	if driver.exitCode != status.GuardFailed ||
+		!strings.Contains(driver.errorOutput, "unknown") ||
+		!strings.Contains(driver.errorOutput, string(status.CodeConfigUnreadable)) {
 		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
 	}
 	return nil

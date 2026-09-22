@@ -15,6 +15,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 // retryDeferred repeats an operation until the shared root gives a definite
@@ -73,7 +74,7 @@ func TestCompiledReservationRejectsHIPPOConcurrencyMappingBeforeChild(t *testing
 		command.Stdout, command.Stderr = &output, &output
 		err := command.Run()
 		var exitError *exec.ExitError
-		if !errors.As(err, &exitError) || exitError.ExitCode() != policy.ReplanRequiredExitCode {
+		if !errors.As(err, &exitError) || exitError.ExitCode() != status.CallerError {
 			t.Fatalf("mapping %s exit=%v output=%q", name, err, output.String())
 		}
 		if _, statError := os.Stat(marker); !errors.Is(statError, os.ErrNotExist) {

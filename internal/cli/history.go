@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/host"
 	"github.com/wahidyankf/hippo/internal/identity"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 func parseRollingDuration(value string) (time.Duration, error) {
@@ -29,15 +29,15 @@ func parseRollingDuration(value string) (time.Duration, error) {
 
 func (application Application) history(options historyOptions) (int, error) {
 	if options.jsonOutput && options.jsonLines {
-		return 1, errors.New("--json and --jsonl are mutually exclusive")
+		return 0, status.Fail(status.CodeArgsInvalid, "--json and --jsonl are mutually exclusive")
 	}
 	since, err := parseRollingDuration(options.since)
 	if err != nil || since <= 0 || since > evidence.HistoryRetention {
-		return 1, errors.New("since must be positive and no more than 30d")
+		return 0, status.Fail(status.CodeArgsInvalid, "since must be positive and no more than 30d")
 	}
 	tags, err := identity.ParseTags(options.tags)
 	if err != nil {
-		return 1, err
+		return 0, status.Fail(status.CodeArgsInvalid, "%v", err)
 	}
 	root := host.DefaultEvidenceRoot(environmentMap(application.Environment))
 	rows, err := evidence.ReadHistory(root, evidence.Query{
@@ -45,7 +45,14 @@ func (application Application) history(options historyOptions) (int, error) {
 		Class: options.taskClass, Tier: options.resourceTier, Outcome: options.outcome,
 	})
 	if err != nil {
-		return 1, err
+		return 0, status.Fail(status.CodeEvidenceUnwritable, "reading run history: %v", err)
+	}
+	// An empty history is an answer, and `1` is how this contract says a run
+	// completed with nothing to report. A caller scripting against it can tell
+	// "no runs matched" from "hippo could not look" without reading a word.
+	emptyResult := 0
+	if len(rows) == 0 {
+		emptyResult = 1
 	}
 	if options.jsonOutput {
 		encoded, encodeError := json.Marshal(struct {
@@ -58,7 +65,7 @@ func (application Application) history(options historyOptions) (int, error) {
 		}
 		_, err = fmt.Fprintln(application.Stdout, string(encoded))
 
-		return 0, err
+		return emptyResult, err
 	}
 	for _, row := range rows {
 		if options.jsonLines {
@@ -81,12 +88,12 @@ func (application Application) history(options historyOptions) (int, error) {
 		}
 	}
 
-	return 0, nil
+	return emptyResult, nil
 }
 
 func (application Application) watch(ctx context.Context, options watchOptions) (int, error) {
 	if options.interval <= 0 {
-		return 1, errors.New("interval must be positive")
+		return 0, status.Fail(status.CodeArgsInvalid, "interval must be positive")
 	}
 	prior := ""
 	for {

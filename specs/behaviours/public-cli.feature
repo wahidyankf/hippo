@@ -23,8 +23,8 @@ Feature: Public HIPPO CLI
 
     Examples:
       | state     | code |
-      | malformed | 1    |
-      | future    | 76   |
+      | malformed | 125  |
+      | future    | 125  |
 
   @e2e-exempt
   Scenario: Status exposes privacy-safe labeled owner rows
@@ -85,10 +85,10 @@ Feature: Public HIPPO CLI
     When Zsh completion is requested
     Then a Zsh completion script is emitted
 
-  Scenario: Unknown commands use Cobra diagnostics
+  Scenario: An unknown command names itself and exits as a usage mistake
     Given the compiled HIPPO binary
     When an unknown command is requested
-    Then Cobra reports the command and exits with code 1
+    Then the diagnostic names the command and exits with code 2
 
   Scenario: Only usage errors print the command usage block
     Given the compiled HIPPO binary
@@ -98,7 +98,7 @@ Feature: Public HIPPO CLI
   Scenario: Invalid explicit configuration is actionable
     Given an explicit HIPPO config with an unknown field
     When JSON status is requested with that config
-    Then configuration fails with exit 78
+    Then configuration fails with exit 125
 
   Scenario: Run validates its command boundary
     Given the compiled HIPPO binary

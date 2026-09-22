@@ -1,182 +1,118 @@
-# Exit codes
+# Exit codes and error codes
 
-HIPPO's exit codes are a stable contract. A caller can branch on them without parsing diagnostics.
+HIPPO answers in two layers, because one number cannot carry both meanings a caller needs.
 
-| Code    | Name              | Meaning                                                                 | Retry?                    |
-| ------- | ----------------- | ----------------------------------------------------------------------- | ------------------------- |
-| `0`     | Success           | The command completed, or the guarded child exited `0`                  | n/a                       |
-| `1`     | Failure           | Invalid invocation, corrupt state, or HIPPO-owned post-launch failure   | No — inspect the evidence |
-| `73`    | Cleanup required  | Storage is below the immutable floor; free space before retrying        | No — free disk first      |
-| `75`    | Deferred/stopped  | Capacity was unavailable, or a supervised child was safety-stopped      | Only with `never-started` |
-| `76`    | Protocol mismatch | A live peer or valid shared document uses an incompatible protocol      | No — drain or upgrade     |
-| `78`    | Replan required   | Local configuration, reservation, mapping, or strict profile is invalid | No — change the request   |
-| _other_ | Child exit code   | A guarded child's own exit code is passed through unchanged             | Depends on the child      |
+The **exit status** is what a shell branches on. There are seven of them and the list is closed. The
+**error code** is what a failure was: a namespaced `hippo.area.reason` that names the decision
+precisely. Every failure carries both, and the pairing is fixed — a given error code always returns
+the same status.
 
-Any exit code other than the five above came from the guarded command itself, not from HIPPO.
+The split exists because the statuses have to stay few. A status is the only thing a `if [ $? -eq N ]`
+can see, so a vocabulary with a dozen entries is a vocabulary nobody learns and every caller gets
+wrong. The reasons have no such limit, so that is where the detail lives.
 
-## `0` — success
+## Exit statuses
 
-`hippo run` returns the child's exit status. A child that exits `0` produces `0`.
+| Status  | Meaning                                                         | Retry?                   |
+| ------- | --------------------------------------------------------------- | ------------------------ |
+| `0`     | The work ran and the answer is affirmative                      | n/a                      |
+| `1`     | The work ran and the answer is negative                         | No — the answer is empty |
+| `2`     | The invocation could not be used                                | No — fix the command     |
+| `124`   | A limit stopped the work                                        | Yes, once it lifts       |
+| `125`   | HIPPO could not do its job and started nothing                  | No — read the reason     |
+| `126`   | The command exists and could not be executed                    | No — fix the permissions |
+| `127`   | The command was not found                                       | No — fix the path        |
+| _other_ | A started child's own status, or `128+N` when a signal ended it | Depends on the child     |
 
-## Child exit codes pass through
+`124` and `125` are the statuses `timeout` returns for the same two situations, and `126` and `127`
+are the ones every POSIX shell returns. A caller who has never read this page still reads them
+correctly, which is the whole reason for choosing them.
 
-```console
-$ hippo run --disk-path . -- sh -c 'exit 42'
-$ echo $?
-42
+### Telling HIPPO's status from a child's
+
+A started child's status passes through exactly as it arrived, and HIPPO writes nothing beside it.
+So a bare `124` from `hippo run` may be HIPPO's own limit or a child that chose to exit `124`, and
+the number alone will not say which.
+
+The diagnostic says which. HIPPO's own failures always write a line beginning `hippo:` to stderr; a
+child's status never produces one. A script that needs certainty can ask for
+`--output json` and look for a body.
+
+## Error codes
+
+Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] message`, and in the
+`--output json` body as `error.code`. Nothing outside this list is ever returned.
+
+| Error code                             | Status | Meaning                                                |
+| -------------------------------------- | ------ | ------------------------------------------------------ |
+| `hippo.args.invalid`                   | `2`    | The invocation could not be parsed or accepted         |
+| `hippo.internal.failure`               | `2`    | A fault in HIPPO itself, including an unhandled panic  |
+| `hippo.limit.capacity-deferred`        | `124`  | Admission deferred, or a bounded wait elapsed          |
+| `hippo.limit.storage-blocked`          | `124`  | The disk floor stopped the work; free space first      |
+| `hippo.limit.pressure-shed`            | `124`  | A started child was shed under host pressure           |
+| `hippo.config.unreadable`              | `125`  | The resource configuration could not be read           |
+| `hippo.config.unresolvable`            | `125`  | The configuration was read and is not usable           |
+| `hippo.policy.replan-required`         | `125`  | No profile admits this request as asked for            |
+| `hippo.coordination.protocol-mismatch` | `125`  | Live peer state this client cannot safely join         |
+| `hippo.host.unreadable`                | `125`  | Host evidence could not be collected                   |
+| `hippo.evidence.unwritable`            | `125`  | The evidence root refused a write HIPPO needs          |
+| `hippo.supervision.failed`             | `125`  | HIPPO failed at a step it did not classify further     |
+| `hippo.child.not-executable`           | `126`  | The command exists and cannot be executed              |
+| `hippo.child.not-found`                | `127`  | The command is not on `PATH` and not at the path given |
+
+`error.retryable` in the body is `true` for `hippo.limit.capacity-deferred` and
+`hippo.limit.pressure-shed`, and `false` for the rest. `hippo.limit.storage-blocked` is not
+retryable although it is a limit: waiting does not free disk, and a caller that retries on it will
+retry forever.
+
+## The machine-readable body
+
+`--output json` adds one JSON document to stderr beneath the diagnostic line:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "hippo run",
+  "exitCode": 127,
+  "error": {
+    "code": "hippo.child.not-found",
+    "message": "definitely-not-a-command: command not found",
+    "retryable": false
+  }
+}
 ```
 
-Because arbitrary child codes pass through, a child can itself exit `1`, `73`, `75`, `76`, or `78`.
-The number alone cannot identify its owner. A HIPPO refusal or safety stop writes its own diagnostic
-and receipt; a child-owned reserved code produces `task-failed` evidence and no never-started
-receipt.
+`schemaVersion`, `error.code` and `error.message` are always present. `error.field` appears only
+when one named flag or field caused the failure. The body is never coloured, whatever `--color`
+says, because an escape byte in it is a parse error rather than a presentation choice.
 
-## `1` — failure
+Diagnostics go to stderr and results go to stdout, always. A failed invocation leaves stdout empty.
 
-Exit `1` is a non-retryable HIPPO failure. The evidence tells you whether a payload started. Usage
-errors happen before launch and print command usage next to the diagnostic. Corrupt or inaccessible
-shared state also fails before launch without mutation. Brief activation contention is retried for up
-to two seconds after launch. Contention or another activation failure that outlives that deadline
-stops the owned payload, records `task-failed`, and writes `state: "started-activation-failure"`.
+## Reading a status in a script
 
-Known causes:
-
-- A missing `--` boundary before the guarded command.
-- An unknown command or unusable flag.
-- A `--class` value other than `ephemeral`, `service`, or `transactional`.
-- A `--concurrency-env` name that is not a POSIX identifier, or that collides with one of HIPPO's own
-  protocol variables.
-- `release monitor` without `--health-url` or without `--routed-origin`.
-- `release monitor` with both `--output -` and `--summary -`.
-- Malformed or inaccessible shared coordination state.
-- A post-launch activation transaction that cannot record the supervised process group within its
-  two-second deadline.
-
-```console
-$ hippo run --disk-path . --concurrency-env HIPPO_CONCURRENCY -- true
-Error: concurrency environment name "HIPPO_CONCURRENCY" is reserved
-$ echo $?
-1
-
-$ hippo run --disk-path . --concurrency-env '1BAD-NAME' -- true
-Error: concurrency environment name "1BAD-NAME" is not a POSIX identifier
-$ echo $?
-1
+```sh
+hippo run --class ephemeral --resource-tier light --disk-path . -- "$@"
+case $? in
+  0)   ;;                                    # it ran and it worked
+  124) echo "shed against a limit; retrying later" ;;
+  125) echo "hippo could not run this; see the diagnostic" >&2; exit 1 ;;
+  126|127) echo "the command is wrong, not the host" >&2; exit 1 ;;
+  *)   exit $? ;;                            # the child's own answer
+esac
 ```
 
-## `73` — cleanup required
+## What changed, and when
 
-Free space on the measured `--disk-path` is below the immutable 256 MiB hard floor, or the reading is
-unavailable. No child is started.
+Before `v0.8.0` HIPPO returned `73`, `75`, `76` and `78` for its own refusals, and `1` for both an
+empty result and a usage mistake. Those four numbers were in the range a child may return, carried
+no reason, and no consumer branched on them. They are gone.
 
-```console
-$ hippo status --disk-path /Volumes/Tiny
-state=critical reason=disk-critical profile=balanced concurrency=11 swap=active availableGiB=11.84 diskFreeGiB=0.02 cpu=23.0%
+| Was  | Now   | Reason now carried                                             |
+| ---- | ----- | -------------------------------------------------------------- |
+| `73` | `124` | `hippo.limit.storage-blocked`                                  |
+| `75` | `124` | `hippo.limit.capacity-deferred` or `hippo.limit.pressure-shed` |
+| `76` | `125` | `hippo.coordination.protocol-mismatch`                         |
+| `78` | `125` | `hippo.policy.replan-required` or a `hippo.config.*` reason    |
+| `1`  | `2`   | `hippo.args.invalid`, when the invocation was the problem      |
 
-$ hippo run --disk-path /Volumes/Tiny -- echo should-not-run
-HIPPO decision=cleanup requested=balanced resolved=balanced.
-$ echo $?
-73
-```
-
-**Response:** free storage on the measured path, then retry. Do not point `--disk-path` somewhere
-roomier to get past the gate — the gate is measuring the volume the work will actually write to.
-
-## `75` — deferred or safety-stopped
-
-Exit `75` is transient only when HIPPO records `state: "never-started"`. A supervised payload may
-also return `75` after ordinary pressure shedding or an emergency safety stop. Never infer retry
-safety from the number alone; inspect stderr and the bounded receipt/history record.
-
-Known causes:
-
-- Reservation capacity is temporarily exhausted, and the bounded FIFO wait expired.
-- A coordination lock was held by a peer repository through the bounded window.
-- `release assess` rejected the summary as outside the release envelope.
-
-```console
-$ hippo run --config reservation.json --disk-path . -- echo never-runs
-HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.
-$ echo $?
-75
-```
-
-**Response:** schema 3 already waits with one FIFO identity until the chosen tier deadline. Schema 2
-can opt into the same single-waiter behavior with `--wait-for-admission`. A 30-second heartbeat shows
-the run ID, current position, and remaining time:
-
-```console
-$ hippo run --wait-for-admission 10m --disk-path . -- make test
-HIPPO waiting for admission run=6f... position=3 remaining=9m29s
-HIPPO admission deadline expired before payload start.
-$ echo $?
-75
-```
-
-No payload is launched while queued, and HIPPO never auto-retries one. Receipts distinguish
-`never-started` admission deadline/cancellation from `started-safety-stop` emergency pressure. An
-ordinary `pressure-shed` outcome likewise means the payload started and must not be blindly retried.
-
-## `76` — protocol mismatch
-
-A live peer coordination epoch or a valid shared protocol document is newer or incompatible with
-this client. HIPPO preserves the existing bytes, starts no payload, and tells the caller to drain or
-upgrade instead of pretending the host is merely busy.
-
-Known causes:
-
-- A reservation client meets a live exclusive epoch, or an exclusive client meets a live
-  reservation epoch.
-- A coordination marker, reservation ledger, compatibility owner, or session uses a supported
-  document shape with an unsupported positive schema version.
-- Schema 3 sees live schema-2 owners or waiters without v1 metadata.
-
-```console
-$ hippo run --config hippo.local.json --resource-tier light --disk-path . -- true
-Error: verify schema-3 activation: schema 3 activation requires legacy owners and waiters to drain (remaining=1)
-$ echo $?
-76
-```
-
-**Response:** do not retry in a capacity loop. Run `hippo status --json`, let the incompatible epoch
-drain, and upgrade every client that shares the root to the same v1 protocol. Do not delete shared
-state while an owner may still be live.
-
-## `78` — replan required
-
-The request cannot be satisfied as written. No amount of retrying changes the answer.
-
-Known causes:
-
-- The requested reservation vector exceeds safe host capacity.
-- The requested reservation is below the one-CPU or 256 MiB floor.
-- Schema 3 lacks `--resource-tier`, uses an unknown tier, or receives a vector outside that tier.
-- The identity document or invocation labels are missing or invalid under schema 3.
-- A mapped `--concurrency-env` variable already holds a zero, negative, or malformed value.
-- A strict profile (`transactional` or `release` class) has no usable fallback under current pressure.
-
-```console
-$ hippo run --config reservation.json --disk-path . --reserve-cpu 9999 -- true
-Error: reservation requires replanning: requested vector exceeds safe host capacity
-$ echo $?
-78
-
-$ hippo run --config reservation.json --disk-path . --reserve-memory-mib 1 -- true
-Error: reservation requires replanning: reservations require at least one CPU and 256 MiB
-$ echo $?
-78
-
-$ BUILD_WORKERS=0 hippo run --config reservation.json --concurrency-env BUILD_WORKERS -- true
-Error: concurrency environment "BUILD_WORKERS" must be a positive integer
-$ echo $?
-78
-```
-
-**Response:** change the request — a smaller reservation, a corrected environment value, or a
-different profile. Never bypass the guard or change task class to obtain admission.
-
-## Related
-
-- [How to respond to a HIPPO exit code](../how-to/respond-to-exit-codes.md)
-- [Why HIPPO fails closed](../explanation/failing-closed.md)
-- [Command-line interface](./cli.md)
+`1` still means an empty result, which is the only thing it ever should have meant.
