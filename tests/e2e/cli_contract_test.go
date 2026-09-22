@@ -45,7 +45,7 @@ var classes []string
 var knownGaps = map[string]string{
 	"cli.exit.usage-mistake-is-two":                 "a usage mistake exits 1, the status reserved for a result",
 	"cli.streams.usage-mistake-leaves-stdout-clean": "the usage block reaches stdout through the writer Run supplies",
-	"cli.exit.vocabulary-is-closed":                 "73, 75, 76, and 78 are returned for guard and policy outcomes",
+	"cli.exit.vocabulary-is-closed":                 "78 is returned for an unreadable resource configuration, and 73, 75, and 76 for guard and policy outcomes",
 	"cli.streams.requested-version-on-stdout":       "there is no --version flag; a version subcommand carries it instead",
 	"cli.exit.child-not-found-is-one-two-seven":     "an absent child exits 1, not 127; launch failures are not distinguished",
 	"cli.args.bare-invocation-is-a-usage-mistake":   "no arguments prints help on stdout and exits 0, reporting work that did not happen",
@@ -241,15 +241,26 @@ func probeExit(t *testing.T, binary, assertionID string) (outcome, bool) {
 		return fail("expected exit 127 for an absent child, observed %d", result.status), true
 
 	case "cli.exit.vocabulary-is-closed":
+		// Every path here must return the same status on every host. The first
+		// version of this probe swept `run` invocations, which reach the guard
+		// statuses only when the machine is actually under pressure: it found
+		// 73, 75, and 78 on a loaded workstation and nothing at all on an idle
+		// CI runner, so the same commit passed in one place and failed in the
+		// other. A gate whose verdict depends on the load average is not a
+		// gate, and a known-gap ledger asserted exact in both directions turns
+		// that straight into a red build.
+		//
+		// A missing configuration file reaches the same out-of-vocabulary
+		// status by a path that has nothing to do with host state.
+		missingConfiguration := filepath.Join(t.TempDir(), "absent.json")
 		allowed := map[int]bool{0: true, 1: true, 2: true, 124: true, 125: true, 126: true, 127: true}
 		probes := [][]string{
 			{"status"},
 			{"--help"},
 			{"--no-such-flag"},
 			{"no-such-command"},
-			{"run", "--class", "ephemeral", "--resource-tier", "light", "--disk-path", ".", "--", "/bin/true"},
-			{"run", "--class", "ephemeral", "--resource-tier", "light", "--disk-path", ".", "--", "/no/such/program"},
-			{"run", "--disk-path", ".", "--", "/bin/true"},
+			{"status", "--config", missingConfiguration},
+			{"release", "check", "--config", missingConfiguration},
 		}
 		var outside []string
 		for _, arguments := range probes {
