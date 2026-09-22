@@ -132,6 +132,59 @@ func invoke(t *testing.T, binary string, arguments ...string) observed {
 	return observed{status: status, stdout: out.String(), stderr: errOut.String()}
 }
 
+// firstLine keeps a failure message to one line, so a panic or traceback names
+// itself without pasting itself into the report.
+func firstLine(text string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	return line
+}
+
+// invokeWithClosedReader provokes a closed pipe by closing the read end before
+// the child writes anything, so its first write meets a reader that is already
+// gone.
+//
+// The obvious probe -- read one byte, then close -- cannot work on a command
+// whose whole output fits in the kernel's pipe buffer: the write succeeds, the
+// process exits 0, and the assertion goes unmeasured for a reason that is about
+// the runner rather than the executable. Closing first removes the race.
+func invokeWithClosedReader(t *testing.T, binary string, arguments ...string) observed {
+	t.Helper()
+	command := exec.Command(binary, arguments...)
+	command.Stdin = nil
+	var errOut strings.Builder
+	command.Stderr = &errOut
+
+	pipe, pipeError := command.StdoutPipe()
+	if pipeError != nil {
+		t.Fatalf("opening a pipe on stdout failed: %v", pipeError)
+	}
+	if startError := command.Start(); startError != nil {
+		t.Fatalf("starting the executable failed: %v", startError)
+	}
+	if closeError := pipe.Close(); closeError != nil {
+		t.Fatalf("closing the read end failed: %v", closeError)
+	}
+
+	status := 0
+	if waitError := command.Wait(); waitError != nil {
+		var exitError *exec.ExitError
+		switch {
+		case errors.As(waitError, &exitError):
+			waitStatus, ok := exitError.Sys().(syscall.WaitStatus)
+			switch {
+			case ok && waitStatus.Signaled():
+				status = 128 + int(waitStatus.Signal())
+			default:
+				status = exitError.ExitCode()
+			}
+		default:
+			t.Fatalf("waiting on the executable failed: %v", waitError)
+		}
+	}
+
+	return observed{status: status, stderr: errOut.String()}
+}
+
 // probe binds one assertion identifier to a concrete invocation. The areas are
 // separate functions rather than one switch: a single switch covering every
 // assertion outgrows the repository's complexity ceiling, and the areas are how
@@ -214,10 +267,14 @@ func probeExit(t *testing.T, binary, assertionID string) (outcome, bool) {
 		return unmeasured("no fault-injection point exists at the process boundary"), true
 
 	case "cli.exit.closed-pipe-is-one-four-one":
-		return unmeasured(
-			"this executable's own output is small enough to complete before a reader can close, " +
-				"so EPIPE cannot be provoked from the outside",
-		), true
+		result := invokeWithClosedReader(t, binary, "--help")
+		switch {
+		case result.status != 141:
+			return fail("expected exit 141 on a closed pipe, observed %d", result.status), true
+		case result.stderr != "":
+			return fail("expected a silent stderr, observed %q", firstLine(result.stderr)), true
+		}
+		return pass(), true
 
 	case "cli.exit.interrupt-is-one-three-zero":
 		return unmeasured("a signal cannot be raced reliably against a run this short"), true
