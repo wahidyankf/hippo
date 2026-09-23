@@ -7,6 +7,18 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.8.1] — 2026-09-23
+
+### Fixed
+
+- `--help` named a diagnostic form HIPPO has never written. The exit block closed by telling a
+  reader that every failure names its reason as `HIPPO error [hippo.area.reason]` on stderr; v0.8.0
+  moved diagnostics to the GNU `program: message` form, so HIPPO writes `hippo: [hippo.area.reason]`
+  and always had, once that release shipped. The one place a reader looks to learn what to match on
+  named a string the tool never emits. Nothing asserted that text, which is why the full gate passed
+  over it in every repository that runs one; it was found by reading the published help against the
+  binary's own output.
+
 ## [v0.8.0] — 2026-09-23
 
 ### Changed — breaking
@@ -245,6 +257,7 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 
 - First standalone release, published as Resource Guard.
 
+[v0.8.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.1
 [v0.8.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.0
 [v0.7.2]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.2
 [v0.7.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.1
