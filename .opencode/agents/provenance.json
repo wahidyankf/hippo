@@ -35,7 +35,7 @@
     {
       "id": "skill/plan-creating-project-plans",
       "path": ".agents/skills/plan-creating-project-plans/SKILL.md",
-      "digest": "dc3acecfd934a7374e3319b6fb4bb32d3825f74cb59be8a39eb9537677c750ae"
+      "digest": "c28ad00f00fbfe99297cc2fd5f9eec121cc27da08c939cd260fe910d17bd90b2"
     },
     {
       "id": "skill/plan-grooming-idea-briefs",
@@ -60,7 +60,7 @@
     {
       "id": "skill/release-cut",
       "path": ".agents/skills/release-cut/SKILL.md",
-      "digest": "3d5ddc3441cb40fea1d8fcbe45001db93fd8c6ec239cce1e5c6c0db2577ad57f"
+      "digest": "699ce276b37f5b1258314985cc34c0c7923de7618c401c822ee0c08faeb6381a"
     },
     {
       "id": "skill/spec-impact-assessment",
@@ -75,7 +75,7 @@
     {
       "id": "instruction",
       "path": "AGENTS.md",
-      "digest": "a72725d0ad044e95b90b803002edef7904a06149bdbcd299a1d9e2f651816b91"
+      "digest": "211c1d2215f6e043e14bb409a67284a306209f8075a17b7d587364a1f8088bd6"
     }
   ]
 }

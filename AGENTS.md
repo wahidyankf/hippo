@@ -20,7 +20,7 @@ What a plan is groomed, written, executed and reviewed with — every workflow, 
 
 `specs/` is canonical. Assess it before every change and write behaviour there first: [specification maintenance](repo-governance/development/specification-maintenance.md). Keep the C4 model as-built: [architecture specifications](repo-governance/development/architecture-specifications.md).
 
-`README.md`, `docs/`, and `CHANGELOG.md` follow Diátaxis and may not contradict `specs/`: [documentation architecture](repo-governance/conventions/documentation-architecture.md).
+`README.md`, `docs/`, and `CHANGELOG.md` follow Diátaxis and may not contradict `specs/`: [documentation architecture](repo-governance/conventions/documentation-architecture.md). Every change that alters what a document describes runs [docs propagation](repo-governance/workflows/docs-propagation.md); the [docs quality gate](repo-governance/workflows/docs-quality-gate.md) audits on request.
 
 ## Testing
 
