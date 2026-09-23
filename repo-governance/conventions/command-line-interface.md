@@ -56,6 +56,7 @@ A tool that starts other programs additionally owes the supervisor statuses. One
 6. [Errors and Diagnostics](command-line-interface/006-errors-and-diagnostics.md)
 7. [Terminal and Environment](command-line-interface/007-terminal-and-environment.md)
 8. [Help and Discovery](command-line-interface/008-help-and-discovery.md)
+9. [FERRET Capture Here](command-line-interface/009-ferret-capture-here.md)
 
 ## What This Convention Does Not Decide
 

@@ -9,8 +9,8 @@ when_to_use: >-
 
 # Command-Line Interface Modules
 
-Read in order. Together these hold the contract the [Command-Line Interface](../command-line-interface.md) entrypoint
-indexes.
+Read in order. Together the first eight hold the contract the [Command-Line Interface](../command-line-interface.md)
+entrypoint indexes; the last is this repository's own record, like the entrypoint's tiers.
 
 ## Directory Map
 
@@ -22,3 +22,4 @@ indexes.
 - [006 Errors and Diagnostics](006-errors-and-diagnostics.md)
 - [007 Terminal and Environment](007-terminal-and-environment.md)
 - [008 Help and Discovery](008-help-and-discovery.md)
+- [009 FERRET Capture Here](009-ferret-capture-here.md)
