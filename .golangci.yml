@@ -112,7 +112,7 @@ linters:
           - maintidx
           # Deferred cleanup must be able to promote its failure into the process result.
           - nonamedreturns
-      # A nil session with no error is the explicit transient-capacity result consumed as exit 75.
+      # A nil session with no error is the explicit transient-capacity result consumed as exit 124.
       - path: ^internal/guard/lease\.go$
         linters:
           - nilnil
