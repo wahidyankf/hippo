@@ -34,6 +34,11 @@ of its result.
 Every task-created artifact is classified, the scratch class is removed, its absence is verified, and unrelated changes
 are untouched.
 
+## Leftovers
+
+Scratch a crashed session left behind in `local-tmp/` is reclaimed only deliberately, never by an ambient sweep: once
+unmodified for seven days, it moves to `local-tmp/.reclaim-quarantine-YYYY-MM-DD/`, and is deleted once nothing needs it.
+
 ## Deletion Is Not Reversible in the Way People Assume
 
 Version control restores what was committed. Scratch artifacts are, by definition, uncommitted — deleting one is
