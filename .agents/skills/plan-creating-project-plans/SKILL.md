@@ -43,6 +43,13 @@ Two tests:
   it is a thought rather than an item.
 - **Self-contained proof.** If proving it requires finishing the next item, the split is in the wrong place.
 
+## Carry the Documents With the Change
+
+A delivery unit that changes what a README, documentation page, or specification describes also carries a
+[docs propagation](../../../repo-governance/workflows/docs-propagation.md) item, landing in the same commit as the
+change. Documentation deferred to one task at the end is written from memory, after the change it describes has
+already landed.
+
 ## Write for a Cold Executor
 
 The reader is someone who was not present, has no memory of the discussion, and will not ask. Name paths in full, name

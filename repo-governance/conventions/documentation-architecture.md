@@ -17,6 +17,8 @@ A page serving two modes serves neither. Split it.
 
 **Never publish a command or a transcript that has not been executed against the current build.** An invented transcript is indistinguishable from a real one to every reader, and it stays wrong long after the behaviour it describes has changed. Where a path cannot be exercised safely — a destructive operation, a host state that cannot be arranged — say so plainly instead.
 
+Each change carries its documents with it through [docs propagation](../workflows/docs-propagation.md); the [docs quality gate](../workflows/docs-quality-gate.md) audits them on request.
+
 ## Structure
 
 `docs/` is deliberately outside the [directory map](directory-maps.md) requirement: its landing pages link into sections by name, which is a different contract from naming every direct sibling once.

@@ -11,6 +11,8 @@ A workflow describes how something is done. It never grants permission to do it 
 - [Exploratory and usability review](exploratory-usability-review.md) — a bounded exploration, recorded with its evidence.
 - [Gherkin implementation review](gherkin-implementation-review.md) — the manual review a changed scenario or adapter requires.
 - [Dev artifact clean-up](dev-artifact-clean-up.md) — removing the artifacts one piece of work created, and nothing else.
+- [Docs propagation](docs-propagation.md) — carrying a change into every human-facing document it affects.
+- [Docs quality gate](docs-quality-gate.md) — auditing the human-facing documents, on request or at a release.
 - [Plan backlog grooming](plan-backlog-grooming.md) — keeping the backlog ordered and current.
 - [Plan execution](plan-execution.md) — executing one plan while its record stays true.
 - [Plan execution check](plan-execution-check.md) — judging a finished plan against what it promised.

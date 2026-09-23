@@ -12,7 +12,7 @@ The authoritative procedure is [`repo-governance/workflows/release-cut.md`](../.
 - On `main`, synced, in a worktree. This repository's clone is bare, so there is no primary checkout to prefer.
 - Working tree clean **including untracked files** — the build script verifies this itself and refuses otherwise.
 - `scripts/test.sh` passes.
-- `CHANGELOG.md`, `README.md`, and `docs/` are true to the binary being cut.
+- A [docs quality gate](../../../repo-governance/workflows/docs-quality-gate.md) run with scope `all` passes.
 - The cut is authorized.
 
 ## Build
