@@ -113,7 +113,7 @@ const exitStatusHelp = `Exit statuses:
   127  the command was not found
   N    a started command's own status, or 128+N when a signal ended it
 
-Every failure also names a reason, as HIPPO error [hippo.area.reason] on
+Every failure also names a reason, as hippo: [hippo.area.reason] on
 stderr and as error.code in the JSON body beneath it.`
 
 func (application Application) rootCommand(execution *commandExecution) *cobra.Command {
