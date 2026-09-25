@@ -51,15 +51,16 @@ scope; never bypass a hook.
       no backlog copy exists. `[AC-03]`
 - [ ] `[AI]` Update `plans/backlog/README.md` and `plans/in-progress/README.md`; acceptance: only the in-progress index
       links the active plan. `[AC-03]`
-- [ ] `[AI]` Run `./rhino plan validate`; acceptance: plan validation exits `0`. `[AC-03]`
+- [ ] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and
+      run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-03]`
 
 ### Phase 0 Gate
 
 - [ ] `[AI]` Run `git status --short` and record the baseline plus plan activation paths in this file; acceptance: no
       unowned path is present. `[AC-03]`
 
-> **Pause Safety**: one clean worktree exists and the active plan validates. Safe to stop. To resume:
-> `./rhino plan validate`.
+> **Pause Safety**: one clean worktree exists and the active plan passes the structural rules. Safe to stop. To
+> resume: `./rhino md internal-link validate`.
 
 ## Phase 1: Deterministic Readiness Cycle
 
@@ -170,7 +171,8 @@ origin/main`.
 - [ ] `[AI]` Update `plans/in-progress/README.md`, `plans/done/README.md`, and every live reference; acceptance: no live
       link names the former in-progress path. `[AC-03]`
 - [ ] `[AI]` Run `npm run test:quick`; acceptance: exit `0` from the archived state. `[AC-03]`
-- [ ] `[AI]` Run `./rhino plan validate`; acceptance: exit `0` from the archived state. `[AC-03]`
+- [ ] `[AI]` Re-check the archived plan against `repo-governance/conventions/plans/006-structural-validation.md`;
+      acceptance: no rule fails in the archived state. `[AC-03]`
 - [ ] `[AI]` Run `git diff --check`; acceptance: exit `0` from the archived state. `[AC-03]`
 - [ ] `[AI]` Commit the archival transaction using a Conventional Commit; acceptance: hooks pass and only archive/index
       paths are present. `[AC-03]`
