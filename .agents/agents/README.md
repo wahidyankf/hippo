@@ -13,6 +13,15 @@ generated from these only by `./rhino harness adapters generate` and are never e
 
 There is no fixer. The maker validates the checker's findings and applies the ones that hold.
 
+## Software Development
+
+Adopted from the shared catalog. The maker loads each project's stack skill and standard on demand from the inventory;
+see the [repository adapter](../../repo-governance/development/quality/stacks/repository-adapter.md).
+
+- [swe-code-maker](swe-code-maker.md) — builds behaviour test-first in the projects named.
+- [swe-code-checker](swe-code-checker.md) — audits code against the adopted standards and reports; changes nothing.
+- [swe-code-fixer](swe-code-fixer.md) — applies re-validated checker findings and records every disposition.
+
 ## This Repository
 
 - [gherkin-implementation-reviewer](gherkin-implementation-reviewer.md) — reviews whether a changed scenario would

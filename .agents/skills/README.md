@@ -14,6 +14,21 @@ The six skills of the canonical plan system, in the order a plan moves through t
 - [plan-validating-quality](plan-validating-quality/SKILL.md) — judge whether a draft is complete and executable.
 - [plan-verifying-execution](plan-verifying-execution/SKILL.md) — judge whether execution did what the plan said.
 
+## Software Development
+
+Adopted from the shared catalog with the software-development agents.
+
+- [developing-applications](developing-applications/SKILL.md) — place code, give each error one fate, validate input
+  where trust ends.
+- [programming-golang](programming-golang/SKILL.md) — apply the Go standard while writing or reviewing Go.
+- [programming-shell](programming-shell/SKILL.md) — apply the shell standards while writing or reviewing a script.
+- [applying-maker-checker-fixer](applying-maker-checker-fixer/SKILL.md) — the judgement inside a make, check, and fix
+  loop.
+- [assessing-criticality-confidence](assessing-criticality-confidence/SKILL.md) — rate a finding's criticality and
+  confidence.
+- [generating-validation-reports](generating-validation-reports/SKILL.md) — write an audit or fix report that survives
+  interruption.
+
 ## This Repository
 
 - [release-cut](release-cut/SKILL.md) — cut and publish a HIPPO release.
