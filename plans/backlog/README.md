@@ -16,5 +16,9 @@ Check first that the plan still matches the repository. A plan queued two months
 
 ## Directory Map
 
+- [Gate shell static analysis](gate-shell-static-analysis/README.md) closes the recorded shell-analysis gap with a
+  pinned ShellCheck gate over one shared script list.
+- [Isolate test coordination state](isolate-test-coordination-state/README.md) keeps inherited `HIPPO_*` variables and
+  the shared evidence root away from the binary under test.
 - [Repair supervision readiness race](repair-supervision-readiness-race/README.md) makes the collector-failure fixture
   establish child PID readiness before it asserts supervision cleanup.
