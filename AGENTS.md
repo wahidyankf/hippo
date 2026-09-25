@@ -34,6 +34,8 @@ What runs and where: [quality gates](repo-governance/development/quality-gates.m
 
 [Minimal sufficiency](repo-governance/principles/minimal-sufficiency.md) governs the size of a change; [code clarity](repo-governance/development/code-clarity.md) governs its shape; [dependency selection](repo-governance/development/dependency-selection.md) governs what it may depend on.
 
+Go and shell stack standards, and every local deviation: the [repository adapter](repo-governance/development/quality/stacks/repository-adapter.md).
+
 HIPPO cannot guard HIPPO; the reason, and the contract this repository owes consumers, is in [resource-aware development](repo-governance/development/resource-aware-development.md).
 
 Workflow storage stays inside the free allowance: [GitHub Actions storage](repo-governance/development/github-actions-storage.md).

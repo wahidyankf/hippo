@@ -347,3 +347,24 @@ gates:
         executable: ./rhino
         args: [{ literal: md }, { literal: mermaid }, { literal: validate }]
       run-on: { pre-push: {}, pull-request: {}, main: {} }
+
+extensions:
+  # Owner: repo-governance/development/quality/stacks/repository-adapter.md
+  software-development:
+    projects:
+      hippo:
+        path: .
+        kind: app
+        stacks: [golang]
+      hippo-conformance:
+        path: cmd/hippo-conformance
+        kind: tooling
+        stacks: [golang]
+      repo-scripts:
+        path: scripts
+        kind: tooling
+        stacks: [shell]
+      public-safety:
+        path: scripts/public-safety
+        kind: tooling
+        stacks: [shell]

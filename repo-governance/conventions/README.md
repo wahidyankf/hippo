@@ -32,6 +32,7 @@ A convention chooses a path. It does not authorize anyone to walk it; see [commi
 - [Pull request merge](pull-request-merge.md) — the preconditions for merging.
 - [Push hook verification](push-hook-verification.md) — fix the cause, never bypass the hook.
 - [Rules](rules.md) — how a rule is written and where it lives.
+- [Structure](structure/README.md) — where each kind of adopted catalog artifact lives.
 - [Task tracking](task-tracking.md) — task state lives in the repository.
 - [Thematic commits](thematic-commits.md) — one theme per commit.
 - [Working tree](working-tree.md) — what stays ignored.

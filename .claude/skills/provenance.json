@@ -23,9 +23,44 @@
       "digest": "cdc00a5fdca7d71ee17148f70723d7fc173aef0bbb4d890d88d9582b775226cc"
     },
     {
+      "id": "agent/swe-code-checker",
+      "path": ".agents/agents/swe-code-checker.md",
+      "digest": "984d72e8cde0f82b9085ef30cf28d63e633d3fd66f217969ee86c62c2f6e55b3"
+    },
+    {
+      "id": "agent/swe-code-fixer",
+      "path": ".agents/agents/swe-code-fixer.md",
+      "digest": "1e161414dc149bb6151e2b7f0df9a93c8498206288f04e32e21c08d163033195"
+    },
+    {
+      "id": "agent/swe-code-maker",
+      "path": ".agents/agents/swe-code-maker.md",
+      "digest": "295a05a19007e0fae5852e1fa811810617d6e32e7a0c65b1b742d032e8cd9658"
+    },
+    {
+      "id": "skill/applying-maker-checker-fixer",
+      "path": ".agents/skills/applying-maker-checker-fixer/SKILL.md",
+      "digest": "e575ede9a87629905b326f85fef993e92b5f167dd44ddee2b9ad476fa49a2935"
+    },
+    {
+      "id": "skill/assessing-criticality-confidence",
+      "path": ".agents/skills/assessing-criticality-confidence/SKILL.md",
+      "digest": "7a94d12c6e640636163d513fe470884155150c547b6cc121e7d47889a1091191"
+    },
+    {
       "id": "skill/building-command-line-interfaces",
       "path": ".agents/skills/building-command-line-interfaces/SKILL.md",
       "digest": "e424522a1e6dd1f3918028eef815f08cc0b9a970929603603a49340a33eefdf1"
+    },
+    {
+      "id": "skill/developing-applications",
+      "path": ".agents/skills/developing-applications/SKILL.md",
+      "digest": "aa68230ac2e965b90b7684cc3cf4444f5ff1572cb11d423c096029aec5ff9477"
+    },
+    {
+      "id": "skill/generating-validation-reports",
+      "path": ".agents/skills/generating-validation-reports/SKILL.md",
+      "digest": "26b35ae1ed0792cce334686209d115e3e2bacadb68d4b4a565e1d1dceeeee233"
     },
     {
       "id": "skill/grill-me",
@@ -58,6 +93,16 @@
       "digest": "c8f6cbaa5d7a7bf6c13514ddfd6de1c343887b4aa839d4af348e2d3c2b16a29d"
     },
     {
+      "id": "skill/programming-golang",
+      "path": ".agents/skills/programming-golang/SKILL.md",
+      "digest": "16932d646dc91eba11847f8f615870a7482c60bb7e048b00dd8f113af1f9bb20"
+    },
+    {
+      "id": "skill/programming-shell",
+      "path": ".agents/skills/programming-shell/SKILL.md",
+      "digest": "7667dc1d1443539795bc233c7f3174bb0674ad4e86f60e703e7037af1d7fea98"
+    },
+    {
       "id": "skill/release-cut",
       "path": ".agents/skills/release-cut/SKILL.md",
       "digest": "699ce276b37f5b1258314985cc34c0c7923de7618c401c822ee0c08faeb6381a"
@@ -75,7 +120,7 @@
     {
       "id": "instruction",
       "path": "AGENTS.md",
-      "digest": "211c1d2215f6e043e14bb409a67284a306209f8075a17b7d587364a1f8088bd6"
+      "digest": "f9945e15198751064e999bb767063973f247bd84ca545722c1089547ef542f7a"
     }
   ]
 }

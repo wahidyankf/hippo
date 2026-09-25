@@ -15,6 +15,7 @@ Engineering standards for changing this repository's code. They sit under the [c
 - [Planning capabilities](planning-capabilities.md) — the workflows, skills and agents a plan is executed with.
 - [Planning capabilities modules](planning-capabilities/README.md) — the ordered modules of that roster.
 - [Public contract](public-contract.md) — exit codes, evidence readers, configuration compatibility.
+- [Quality](quality/README.md) — the software-development standards adopted from the shared catalog.
 - [Quality gates](quality-gates.md) — what runs, where, and in what order.
 - [Resource-aware development](resource-aware-development.md) — the guard, and why this repository cannot use it on itself.
 - [Software quality enforcement](software-quality-enforcement.md) — the gates that must pass before a change is done.
