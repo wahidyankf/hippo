@@ -318,7 +318,7 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 		&options.waitForAdmission,
 		"wait-for-admission",
 		0,
-		"legacy schema-2 queue deadline; schema 3 uses the selected resource tier",
+		"schema-2 queue deadline without a resource tier; a tier sets its own",
 	)
 	command.Flags().StringArrayVar(
 		&options.concurrencyEnvironment,

@@ -112,6 +112,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Unsupported coordination marker schema is a protocol mismatch", Boundary: leaseOwnershipBoundary, Reason: "requires injecting a private future coordination marker and byte-preservation inspection"},
 		{Scenario: "Unsupported reservation ledger schema is a protocol mismatch", Boundary: leaseOwnershipBoundary, Reason: "requires injecting a private future reservation ledger and byte-preservation inspection"},
 		{Scenario: "Schema three refuses live legacy entries as a protocol mismatch", Boundary: leaseOwnershipBoundary, Reason: "requires a live private schema-two owner and direct pre-launch state inspection"},
+		{Scenario: "A resource tier refuses an admission wait it would ignore", Boundary: leaseOwnershipBoundary, Reason: "requires direct pre-launch inspection of the private ledger under a controlled host sample"},
 		{Scenario: "Host pressure thresholds remain authoritative", Boundary: hostEvidenceBoundary, Reason: syntheticHostPressureReason},
 		{Scenario: "Shedding selects one newest revocable owner", Boundary: processControlBoundary, Reason: "requires multiple controlled owners and synthetic critical pressure"},
 		{Scenario: "Service shedding follows exhausted ephemeral owners", Boundary: processControlBoundary, Reason: "requires multiple controlled service owners and synthetic critical pressure"},

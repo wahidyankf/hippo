@@ -140,6 +140,12 @@ Feature: Shared vector reservations
     Then it exits 125 naming hippo.coordination.protocol-mismatch before enqueue or child launch
 
   @e2e-exempt
+  Scenario: A resource tier refuses an admission wait it would ignore
+    Given schema two reservation coordination and a resource tier with an admission wait
+    When tiered admission is requested
+    Then it exits 2 naming hippo.args.invalid before enqueue or child launch
+
+  @e2e-exempt
   Scenario: Host pressure thresholds remain authoritative
     Given vector capacity fits under a threshold-blocked host sample
     When reservation admission evaluates that sample

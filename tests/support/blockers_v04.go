@@ -1081,6 +1081,10 @@ func requireV10SchemaThreeLegacyOwner(string) error {
 	return runGoRegressionV10("./internal/cli", "TestSchemaThreeRefusesLiveLegacyOwnerWithProtocolMismatch")
 }
 
+func requireTierRefusesAdmissionWait(string) error {
+	return runGoRegressionV10("./internal/cli", "TestSchemaTwoRejectsATierCombinedWithAnAdmissionWait")
+}
+
 func requireV10ConformanceProtocolMismatch(string) error {
 	return runIntegrationConformanceRegressionV04("TestCompiledConformanceProtocolMismatchIsNotCapacitySkip")
 }

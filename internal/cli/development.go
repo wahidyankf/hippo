@@ -412,6 +412,26 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 	}
 }
 
+// admissionWaitConflict refuses a wait that could only be ignored. A tier
+// carries its own queue deadline, and schema 3 always uses one, so a
+// --wait-for-admission beside either would silently wait for a deadline the
+// caller did not ask for.
+func admissionWaitConflict(schemaVersion int, resourceTier string, wait time.Duration) error {
+	switch {
+	case wait == 0:
+		return nil
+	case schemaVersion >= 3:
+		return status.Fail(status.CodeArgsInvalid, "schema 3 queue deadlines come from --resource-tier")
+	case resourceTier != "":
+		return status.Fail(
+			status.CodeArgsInvalid,
+			"--wait-for-admission cannot be combined with --resource-tier; the tier sets the queue deadline",
+		)
+	default:
+		return nil
+	}
+}
+
 func (application Application) run(ctx context.Context, options runOptions) (int, error) { //nolint:cyclop,funlen,gocognit,gocyclo // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
 	if options.workingDir != "" {
 		absolute, err := filepath.Abs(options.workingDir)
@@ -524,8 +544,10 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		if configuration.Coordination.SchemaVersion >= 3 && options.resourceTier == "" {
 			return 0, status.Fail(status.CodeArgsInvalid, "schema 3 requires --resource-tier")
 		}
-		if configuration.Coordination.SchemaVersion >= 3 && options.waitForAdmission != 0 {
-			return 0, status.Fail(status.CodeArgsInvalid, "schema 3 queue deadlines come from --resource-tier")
+		if waitError := admissionWaitConflict(
+			configuration.Coordination.SchemaVersion, options.resourceTier, options.waitForAdmission,
+		); waitError != nil {
+			return 0, waitError
 		}
 		if options.resourceTier != "" {
 			reservationPlan, admissionWait, resolveError = guard.PlanTierReservation(
