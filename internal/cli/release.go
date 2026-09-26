@@ -8,7 +8,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 	releaseguard "github.com/wahidyankf/hippo/internal/release"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -33,13 +32,27 @@ func (application Application) releaseCheck(ctx context.Context, options release
 		return resolution.ExitCode, nil
 	}
 
-	if err := releaseguard.CheckWithPolicy(ctx, application.Collector, options.diskPath, application.Sleep, resolution.Policy); err != nil {
-		_, _ = fmt.Fprintln(application.Stderr, err)
+	return releaseCheckVerdict(releaseguard.CheckWithPolicy(
+		ctx, application.Collector, options.diskPath, application.Sleep, resolution.Policy,
+	))
+}
 
-		return guard.CapacityDeferredExitCode, nil
+// releaseCheckVerdict turns a stability check's result into one truthful
+// failure. Memory and CPU that do not settle defer the release: waiting can
+// lift them. A disk below the reserve is the same storage block run reports
+// for the same threshold: waiting does not free disk. Anything else is the
+// check itself failing, which is not a deferral at all.
+func releaseCheckVerdict(err error) (int, error) {
+	switch {
+	case err == nil:
+		return 0, nil
+	case errors.Is(err, releaseguard.ErrMemoryHeadroom), errors.Is(err, releaseguard.ErrCPUHeadroom):
+		return 0, status.Fail(status.CodeLimitCapacityDeferred, "release check deferred: %v", err)
+	case errors.Is(err, releaseguard.ErrDiskReserve):
+		return 0, status.Fail(status.CodeLimitStorageBlocked, "release check blocked: %v; free space on --disk-path first", err)
+	default:
+		return 1, fmt.Errorf("release check: %w", err)
 	}
-
-	return 0, nil
 }
 
 func (application Application) releaseAssess(_ context.Context, options releaseAssessOptions) (int, error) {
