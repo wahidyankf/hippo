@@ -53,6 +53,13 @@ Feature: Shared vector reservations
     And the deferral writes a never-started receipt even when the wait's budget is nearly spent
 
   @e2e-exempt
+  Scenario: A free coordination gate is taken at once however little of the wait is left
+    Given a reservation root that no other admission is updating
+    When a fitting reservation reaches the coordination gate with one nanosecond of its wait left, 200 times
+    Then every attempt is admitted and none is deferred for coordination
+    And with the coordination lock held by another admission, the same wait is deferred for coordination
+
+  @e2e-exempt
   Scenario: FIFO head cannot be bypassed by a smaller request
     Given a large waiter is ahead of a smaller waiter
     When capacity becomes sufficient only for the smaller waiter

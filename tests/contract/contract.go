@@ -98,6 +98,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Vector admission is atomic", Boundary: leaseOwnershipBoundary, Reason: "requires deterministic asymmetric capacity exhaustion and private ledger inspection"},
 		{Scenario: "Impossible reservation requires replanning", Boundary: reservationCapacityBoundary, Reason: "requires deterministic synthetic total capacity"},
 		{Scenario: "Temporary exhaustion uses the bounded wait", Boundary: leaseOwnershipBoundary, Reason: "requires deterministic live owner timing and private waiter inspection"},
+		{Scenario: "A free coordination gate is taken at once however little of the wait is left", Boundary: leaseOwnershipBoundary, Reason: "requires an injected admission clock that leaves one nanosecond of the wait at the coordination gate"},
 		{Scenario: "FIFO head cannot be bypassed by a smaller request", Boundary: leaseOwnershipBoundary, Reason: "requires deterministic concurrent waiter ordering and private queue inspection"},
 		{Scenario: "Exhausted FIFO sequence resets only after a stale epoch empties", Boundary: leaseOwnershipBoundary, Reason: "requires injected maximum sequence state and private liveness identities"},
 		{Scenario: "Inherited sessions reuse their fixed allocation", Boundary: "session inheritance", Reason: "requires direct private allocation and nested ownership inspection"},
