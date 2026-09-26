@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -82,7 +83,7 @@ func (driver *Driver) waitThroughHeldLockV082(milliseconds string) error {
 
 func (driver *Driver) requireHeldLockDeferralV082() error {
 	line := "hippo: [" + string(status.CodeLimitCapacityDeferred) + "]"
-	if driver.exitCode != status.LimitShed || !bytes.Contains([]byte(driver.errorOutput), []byte(line)) {
+	if driver.exitCode != status.LimitShed || !strings.Contains(driver.errorOutput, line) {
 		return fmt.Errorf("exit %d, want %d naming %s: %q",
 			driver.exitCode, status.LimitShed, status.CodeLimitCapacityDeferred, driver.errorOutput)
 	}
@@ -151,7 +152,7 @@ func (driver *Driver) signalCompiledAfter(command *exec.Cmd, signal syscall.Sign
 	var waitError error
 	select {
 	case waitError = <-exited:
-		return fmt.Errorf("the run ended before it was signalled: %v: %q", waitError, stderr.String())
+		return fmt.Errorf("the run ended before it was signalled: %w: %q", waitError, stderr.String())
 	case <-time.After(delay):
 	}
 	if err := command.Process.Signal(signal); err != nil {

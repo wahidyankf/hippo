@@ -7,9 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -100,7 +99,7 @@ func (driver *Driver) requireEveryAttemptAdmittedV082() error {
 	gate := driver.gate
 	if gate.admitted == 0 || gate.coordinationDeferred != 0 || gate.deferred != 0 || len(gate.other) != 0 {
 		return fmt.Errorf(
-			"a free gate with one nanosecond left: admitted=%d coordination-deferred=%d capacity-deferred=%d other=%v",
+			"a free gate with one nanosecond left: admitted=%d coordination-deferred=%d capacity-deferred=%d other=%w",
 			gate.admitted, gate.coordinationDeferred, gate.deferred, errors.Join(gate.other...),
 		)
 	}
@@ -112,18 +111,17 @@ func (driver *Driver) requireEveryAttemptAdmittedV082() error {
 // description of its own, the way another admitting process holds it, and
 // keeps it until the scenario ends.
 func (driver *Driver) holdCoordinationLock(root string) error {
-	//nolint:gosec // G304: the lock path is inside the scenario's own temporary root.
 	lock, err := os.OpenFile(filepath.Join(root, "coordination.lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
-	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = lock.Close()
 
 		return fmt.Errorf("hold the coordination lock: %w", err)
 	}
 	driver.stops = append(driver.stops, func() {
-		_ = unix.Flock(int(lock.Fd()), unix.LOCK_UN)
+		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 		_ = lock.Close()
 	})
 
@@ -141,7 +139,7 @@ func (driver *Driver) requireHeldGateDefersV082() error {
 		return errors.New("a held coordination lock admitted a second admission")
 	}
 	if !guard.IsCoordinationDeferred(err) {
-		return fmt.Errorf("a held coordination lock returned %v, want a coordination deferral", err)
+		return fmt.Errorf("a held coordination lock returned %w, want a coordination deferral", err)
 	}
 
 	return nil
