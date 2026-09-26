@@ -30,6 +30,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.conformanceBindings(),
 		driver.interruptionBindings(),
 		driver.refusalBindings(),
+		driver.conformanceSignalBindings(),
 	)
 }
 

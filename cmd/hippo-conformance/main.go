@@ -3,12 +3,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/wahidyankf/hippo/internal/conformance"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 func main() {
@@ -16,18 +14,8 @@ func main() {
 }
 
 func run() int {
-	if len(os.Args) != 2 {
-		_, _ = fmt.Fprintln(os.Stderr, "usage: hippo-conformance <manifest.json>")
+	ctx, stop := status.SignalContext(context.Background())
+	defer stop()
 
-		return 2
-	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-	if err := conformance.Run(ctx, os.Args[1], os.Stdout); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-
-		return 1
-	}
-
-	return 0
+	return conformance.Main(ctx, os.Args[1:], os.Stdout, os.Stderr)
 }

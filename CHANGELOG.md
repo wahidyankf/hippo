@@ -117,6 +117,11 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   failed when the caller had cancelled work that never began. A caller that branched on `125` here
   should branch on `128+N` and, as before, read the `never-started` receipt before requeueing once.
   A run whose child had started still passes the child's own status through.
+- `hippo-conformance` stopped by `SIGINT` or `SIGTERM` now exits `130` or `143`. It exited `1`,
+  the status for consumers that do not conform, although a stopped run reached no verdict. It
+  still retires every started process group, reconciles the checkouts, and prints what it found
+  before exiting. A caller that treated `1` from an interrupted run as a conformance failure should
+  treat `128+N` as a run to repeat, after reading stderr for a changed checkout.
 - Host evidence HIPPO cannot read before launch now names `hippo.host.unreadable`, still exit
   `125`: a denied `/proc` or `sysctl` read, a failed memory or process probe, or a `--disk-path` it
   cannot inspect. `status` and `run` named `hippo.supervision.failed`, and `release check` exited

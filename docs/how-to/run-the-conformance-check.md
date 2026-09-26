@@ -63,6 +63,19 @@ because the four lanes run concurrently. A passing run ends with:
 four-consumer conformance passed with unchanged checkouts
 ```
 
+### Read its exit status
+
+| Status  | Meaning                                                                   |
+| ------- | ------------------------------------------------------------------------- |
+| `0`     | The four consumers conform and every checkout is unchanged                |
+| `1`     | They do not; stderr names each failure                                    |
+| `2`     | The invocation is unusable: no manifest argument, or more than one        |
+| `128+N` | Signal `N` stopped the run first: `130` for `SIGINT`, `143` for `SIGTERM` |
+
+A stopped run reached no verdict, so it does not exit `1`. It still retires every started process
+group and reconciles the checkouts before exiting, and prints what it found on the way out, so read
+stderr for a changed checkout or a cleanup failure before rerunning.
+
 ## Understand the phases
 
 1. **Bootstrap** — sequential within one consumer, concurrent across all four lanes. Any bootstrap
