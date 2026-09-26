@@ -59,6 +59,17 @@ Feature: Shared vector reservations
     Then every attempt is admitted and none is deferred for coordination
     And with the coordination lock held by another admission, the same wait is deferred for coordination
 
+  Scenario: A coordination lock held through the whole wait still leaves a never-started receipt
+    Given a reservation root whose coordination lock another admission holds
+    When a guarded run waits 300 milliseconds for admission
+    Then it exits 124 naming hippo.limit.capacity-deferred and no child starts
+    And its receipt records never-started admission-deadline
+
+  Scenario: A signal while a run waits for the coordination lock leaves a never-started receipt
+    Given a reservation root whose coordination lock another admission holds
+    When a guarded run waiting for that lock receives SIGINT
+    Then the run exits 130 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
+
   @e2e-exempt
   Scenario: FIFO head cannot be bypassed by a smaller request
     Given a large waiter is ahead of a smaller waiter

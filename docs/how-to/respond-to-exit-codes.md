@@ -50,8 +50,9 @@ hippo history --since 1d --source my-repo --outcome emergency-safety-stop
 ls "$HIPPO_ROOT/receipts"
 ```
 
-Queue expiry or cancellation writes `state: "never-started"`; a signal before launch records the
-reason `admission-cancelled`. Emergency termination writes
+Queue expiry or cancellation writes `state: "never-started"`, including a wait that ran out, or was
+signalled, while another admission held the shared coordination lock; a signal before launch records
+the reason `admission-cancelled`. Emergency termination writes
 `state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
 `pressure-shed` or `storage-shed`.
 

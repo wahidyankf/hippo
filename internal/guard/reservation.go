@@ -1130,7 +1130,7 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 		remaining := max(deadline.Sub(now()), 0)
 		coordinationLock, lockError := acquireCoordinationLock(ctx, root, remaining)
 		if lockError != nil {
-			return nil, lockError
+			return nil, neverStartedAtCoordinationLock(root, value, options.Metadata, class, now(), lockError)
 		}
 		if lockError = ensureReservationCoordination(root); lockError != nil {
 			_ = releaseCoordinationLock(coordinationLock)
@@ -1266,6 +1266,38 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 			return nil, err
 		}
 	}
+}
+
+// neverStartedAtCoordinationLock leaves the never-started receipt a waiter
+// owes when it stops at the coordination lock rather than in its retry wait.
+// A lock another admission held until the wait ran out is the wait reaching
+// its deadline, and a signal while waiting for it cancels admission; either
+// way nothing started, and the receipt is what a caller reads before
+// requeueing. Any other failure keeps its own shape.
+func neverStartedAtCoordinationLock(
+	root, runID string, metadata ReservationMetadata, class policy.TaskClass, now time.Time, lockError error,
+) error {
+	reason := ""
+	switch {
+	case errors.Is(lockError, errCoordinationDeferred):
+		reason = "admission-deadline"
+	case errors.Is(lockError, context.Canceled), errors.Is(lockError, context.DeadlineExceeded):
+		reason = outcomeAdmissionCancelled
+	default:
+		return lockError
+	}
+	receiptError := writeSafetyReceipt(root, runID, "never-started", reason, metadata, class, now)
+	if receiptError == nil {
+		return lockError
+	}
+	refused := refusedEvidenceWrite("writing the never-started receipt", receiptError)
+	if reason == outcomeAdmissionCancelled {
+		return errors.Join(lockError, refused)
+	}
+
+	// As at the deadline of the retry wait, a refused receipt outranks the
+	// deferral: the caller must not requeue on a receipt that is missing.
+	return refused
 }
 
 func retainReservationWaiterUntilCleanup(root, value string, identity *os.File) {
