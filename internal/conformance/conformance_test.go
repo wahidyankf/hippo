@@ -36,9 +36,9 @@ func TestExecuteDoesNotStartWithPreCancelledContext(t *testing.T) {
 }
 
 func TestCleanCapacitySkipRequiresNeverStartedDiagnostic(t *testing.T) {
-	exit := &commandError{category: "exited", exitCode: 75}
+	exit := &commandError{category: "exited", exitCode: 124}
 	if cleanCapacitySkip(exit, nil, true) {
-		t.Fatal("bare exit 75 was accepted as a capacity skip")
+		t.Fatal("bare exit 124 was accepted as a capacity skip")
 	}
 	if cleanCapacitySkip(exit, []byte(capacityDeferralDiagnostic+"\n"), false) {
 		t.Fatal("capacity diagnostic without a never-started receipt was accepted")
@@ -46,11 +46,30 @@ func TestCleanCapacitySkipRequiresNeverStartedDiagnostic(t *testing.T) {
 	if !cleanCapacitySkip(exit, []byte(capacityDeferralDiagnostic+"\n"), true) {
 		t.Fatal("documented never-started capacity deferral was rejected")
 	}
-	if cleanCapacitySkip(&commandError{category: "exited", exitCode: 76}, []byte(capacityDeferralDiagnostic+"\n"), true) {
+	if cleanCapacitySkip(&commandError{category: "exited", exitCode: 125}, []byte(capacityDeferralDiagnostic+"\n"), true) {
 		t.Fatal("protocol mismatch was accepted as a capacity skip")
 	}
 	if cleanCapacitySkip(errors.Join(exit, errors.New("integrity failure")), []byte(capacityDeferralDiagnostic+"\n"), true) {
 		t.Fatal("joined capacity and integrity failure was accepted as a clean skip")
+	}
+}
+
+func TestCleanCapacitySkipMatchesWhatHippoEmits(t *testing.T) {
+	// The exact stderr a v0.8 guard writes for a capacity deferral: its own
+	// progress line, then the closed reason the exit-status contract names.
+	// Pinned as literal bytes so the skip cannot drift from the binary again.
+	deferral := []byte("HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.\n" +
+		"hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter\n")
+	if !cleanCapacitySkip(&commandError{category: "exited", exitCode: 124}, deferral, true) {
+		t.Fatal("a current capacity deferral with a never-started receipt was not skipped")
+	}
+	retired := []byte("HIPPO deferred task: safe admission was not reached.\n")
+	if cleanCapacitySkip(&commandError{category: "exited", exitCode: 75}, retired, true) {
+		t.Fatal("the retired exit 75 was accepted as a capacity skip")
+	}
+	shed := []byte("hippo: [hippo.limit.pressure-shed] host pressure shed this work\n")
+	if cleanCapacitySkip(&commandError{category: "exited", exitCode: 124}, shed, true) {
+		t.Fatal("a pressure shed, which stops a started child, was accepted as a capacity skip")
 	}
 }
 
