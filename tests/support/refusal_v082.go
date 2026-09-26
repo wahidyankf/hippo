@@ -422,7 +422,7 @@ func (driver *Driver) runWithPortLeaseV082() error {
 	return driver.runRefusal(
 		append([]string{
 			runCommandName, sourceFlagName, refusedRunSource, diskPathFlag, driver.interruption.diskPath,
-			"--lease-port", port, "--lease-min", port, "--lease-max", port, "--lease-owner", "fixture",
+			leasePortFlagName, port, leaseMinimumFlagName, port, leaseMaximumFlagName, port, leaseOwnerFlagName, "fixture",
 		}, driver.payloadArguments()...),
 		&sequenceCollector{samples: driver.samples},
 	)
