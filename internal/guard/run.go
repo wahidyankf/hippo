@@ -33,7 +33,19 @@ const (
 	outcomeTaskFailed        = "task-failed"
 	outcomeSupervisionFailed = "supervision-failed"
 	outcomeEmergencyStop     = "emergency-safety-stop"
+	outcomePressureShed      = "pressure-shed"
+	outcomeStorageShed       = "storage-shed"
 )
+
+// RunOutcomes is every outcome a run's lifetime summary can record. history
+// uses it to tell a filter no run can match from a question with an empty
+// answer.
+func RunOutcomes() []string {
+	return []string{
+		"passed", outcomeTaskFailed, outcomeSupervisionFailed, outcomePressureShed, outcomeStorageShed,
+		outcomeEmergencyStop, "capacity-deferred", "storage-blocked",
+	}
+}
 
 // RunConfig describes one guarded child process and its resource policy.
 type RunConfig struct {
@@ -904,12 +916,12 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					return 1, errors.Join(selectionError, stopError)
 				}
 				if selectionError == nil && selected {
-					outcome = "pressure-shed"
+					outcome = outcomePressureShed
 					if config.TaskClass == policy.TaskTransactional {
 						outcome = outcomeEmergencyStop
 					}
 					if selectedExit == StorageBlockedExitCode {
-						outcome = "storage-shed"
+						outcome = outcomeStorageShed
 					}
 					_, _ = fmt.Fprintln(config.Stderr, "HIPPO shedding this selected child from its owning guard.")
 					_, stopError := stopLifetime()
@@ -991,9 +1003,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			if assessment.State == policy.StateCritical || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) { //nolint:nestif // Pressure outcome, atomic victim election, and owned reaping remain one lifecycle branch.
 				shedCode := CapacityDeferredExitCode
 				if assessment.StorageBlocked {
-					shedCode, outcome = StorageBlockedExitCode, "storage-shed"
+					shedCode, outcome = StorageBlockedExitCode, outcomeStorageShed
 				} else {
-					outcome = "pressure-shed"
+					outcome = outcomePressureShed
 				}
 
 				if config.ReservationPolicy.Enabled {

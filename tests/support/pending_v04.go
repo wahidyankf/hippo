@@ -839,7 +839,10 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	childScript := "printf ready > \"$HIPPO_PTY_READY\"; value=; while [ -z \"$value\" ]; do IFS= read -r value || :; done; printf '%s' \"$value\" > \"$HIPPO_PTY_RESULT\""
 	arguments, err := v04ScriptArguments(
 		driver.binary,
-		"run", "--class", "ephemeral", "--wait-for-admission", "60s", "--", shellPath, "-c", childScript,
+		// No configuration reaches this run, so it is schema 1, which has no
+		// FIFO queue for --wait-for-admission to bound; HIPPO refuses the flag
+		// there rather than ignoring it.
+		"run", "--class", "ephemeral", "--", shellPath, "-c", childScript,
 	)
 	if err != nil {
 		return err

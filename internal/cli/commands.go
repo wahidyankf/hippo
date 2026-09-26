@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -127,6 +128,15 @@ func (application Application) rootCommand(execution *commandExecution) *cobra.C
 			"development work from host resource evidence.\n\n" + exitStatusHelp,
 		Args:         cobra.ArbitraryArgs,
 		SilenceUsage: true,
+		// Every command inherits the global flags, so every command checks
+		// them here, after Cobra parsed them and before anything runs. A value
+		// neither flag has is the caller's mistake, never something to ignore.
+		PersistentPreRunE: func(command *cobra.Command, _ []string) error {
+			command.SilenceUsage = true
+			execution.accepted = true
+
+			return globalFlagMistake(command, colour, outputFormat)
+		},
 		RunE: func(command *cobra.Command, arguments []string) error {
 			if showVersion {
 				return executeHandler(command, execution, func() (int, error) {
@@ -172,6 +182,32 @@ const (
 	outputText     = "text"
 	outputJSON     = "json"
 )
+
+// globalFlagMistake refuses a --color or --output value neither flag has. A
+// command that defines --output for itself, as release monitor does, owns that
+// value, so only --color is the global flag's to check there.
+func globalFlagMistake(command *cobra.Command, colour, outputFormat string) error {
+	switch strings.ToLower(colour) {
+	case "always", "never", colourAuto:
+	default:
+		return status.Failure{
+			Code: status.CodeArgsInvalid, Field: "--" + colourFlagName,
+			Message: fmt.Sprintf("--color must be always, never, or auto, not %q", colour),
+		}
+	}
+	if command.LocalNonPersistentFlags().Lookup(outputFlagName) != nil {
+		return nil
+	}
+	switch outputFormat {
+	case outputText, outputJSON:
+		return nil
+	default:
+		return status.Failure{
+			Code: status.CodeArgsInvalid, Field: "--" + outputFlagName,
+			Message: fmt.Sprintf("--output must be text or json, not %q", outputFormat),
+		}
+	}
+}
 
 // requireSubcommands makes every command that only groups other commands
 // refuse to run on its own. Left alone, Cobra prints such a command's help to
@@ -339,9 +375,9 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 	command.Flags().StringVar(&options.workingDir, "cwd", "", "child working directory")
 	command.Flags().StringVar(&options.diskPath, "disk-path", "", "path whose free space is measured")
 	command.Flags().IntVar(&options.leasePort, "lease-port", 0, "service port to lease")
-	command.Flags().StringVar(&options.leaseOwner, "lease-owner", "", "service port owner")
-	command.Flags().IntVar(&options.leaseMinimum, "lease-min", 0, "minimum allowed leased port")
-	command.Flags().IntVar(&options.leaseMaximum, "lease-max", 0, "maximum allowed leased port")
+	command.Flags().StringVar(&options.leaseOwner, "lease-owner", "", "service port owner; requires --lease-port")
+	command.Flags().IntVar(&options.leaseMinimum, "lease-min", 0, "minimum allowed leased port; requires --lease-port")
+	command.Flags().IntVar(&options.leaseMaximum, "lease-max", 0, "maximum allowed leased port; requires --lease-port")
 	command.Flags().IntVar(&options.reserveCPU, "reserve-cpu", 0, "fixed CPU reservation; zero selects an automatic fair share")
 	command.Flags().Int64Var(&options.reserveMemoryMiB, "reserve-memory-mib", 0, "fixed memory reservation in MiB; zero selects an automatic fair share")
 	command.Flags().StringVar(&options.resourceTier, "resource-tier", "", "resource tier: light, standard, or heavy")

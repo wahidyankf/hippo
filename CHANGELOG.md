@@ -40,6 +40,24 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   with an invalid `--lease-owner`. So does `monitor --interval` that is not positive. These exited
   `125` naming `hippo.supervision.failed` or `hippo.policy.replan-required`, and an unknown tier
   under schema 1 ran the payload. A caller that branched on `125` for them should branch on `2`.
+- `--color` and `--output` accept only their documented values on every command: `always`,
+  `never`, or `auto`, and `text` or `json`. Any other value now exits `2` naming
+  `hippo.args.invalid`; it was silently ignored, so `--output JSON` quietly wrote no body. A caller
+  passing another value should pass a documented one. `release monitor`'s own `--output` is a file
+  path and is not checked this way.
+- `run` refuses two more flag values before it reads configuration: a negative
+  `--wait-for-admission`, and a `--lease-owner`, `--lease-min`, or `--lease-max` without
+  `--lease-port`. Both exit `2` naming `hippo.args.invalid`; both were silently ignored and the
+  payload ran as though they had not been given. A caller should drop them or add `--lease-port`.
+- `run --wait-for-admission` under schema 1, with no reservation configuration, now exits `2`
+  naming `hippo.args.invalid` before any payload starts. The flag bounds the schema-2 FIFO queue,
+  which schema 1 does not have, so the run was admitted by the profile's own lease wait and the
+  value asked for was silently ignored. A caller relying on it should drop the flag, or enable
+  schema 2 reservation coordination to get a queue it can bound.
+- `history` refuses a `--class`, `--resource-tier`, or `--outcome` value no recorded run can carry,
+  with exit `2` naming `hippo.args.invalid` and the accepted values. It returned `1`, the empty
+  result, so a misspelt filter read as "nothing matched". A caller that branched on `1` for such a
+  value should correct the value; a valid filter that matches nothing still exits `1`.
 - `release monitor` reports a missing or malformed `--health-url` or `--routed-origin`, a missing
   output, summary or deployment root, a negative `--duration-ms`, or an out-of-range
   `--service-port` as a usage mistake: exit `2` naming `hippo.args.invalid`. Each exited `125`

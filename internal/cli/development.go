@@ -412,14 +412,21 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 	}
 }
 
-// admissionWaitConflict refuses a wait that could only be ignored. A tier
-// carries its own queue deadline, and schema 3 always uses one, so a
-// --wait-for-admission beside either would silently wait for a deadline the
-// caller did not ask for.
+// admissionWaitConflict refuses a wait that could only be ignored. The flag
+// bounds the schema-2 FIFO queue. Schema 1 has no such queue — its exclusive
+// lease waits as long as the resolved profile says — a tier carries its own
+// queue deadline, and schema 3 always uses one, so a --wait-for-admission
+// under any of them would silently wait for a deadline the caller did not ask
+// for.
 func admissionWaitConflict(schemaVersion int, resourceTier string, wait time.Duration) error {
 	switch {
 	case wait == 0:
 		return nil
+	case schemaVersion < 2:
+		return status.Fail(
+			status.CodeArgsInvalid,
+			"--wait-for-admission bounds the schema 2 reservation queue; schema 1 exclusive coordination has none",
+		)
 	case schemaVersion >= 3:
 		return status.Fail(status.CodeArgsInvalid, "schema 3 queue deadlines come from --resource-tier")
 	case resourceTier != "":
@@ -448,12 +455,19 @@ func runArgumentMistake(options runOptions) error {
 	if _, known := guard.DefaultResourceTiers()[options.resourceTier]; options.resourceTier != "" && !known {
 		return status.Fail(status.CodeArgsInvalid, "resource tier must be light, standard, or heavy")
 	}
+	if options.waitForAdmission < 0 {
+		return status.Fail(status.CodeArgsInvalid, "--wait-for-admission must not be negative")
+	}
 	if options.leasePort != 0 {
 		if err := guard.ValidatePortLeaseRequest(
 			options.leasePort, options.leaseOwner, options.leaseMinimum, options.leaseMaximum,
 		); err != nil {
 			return status.Fail(status.CodeArgsInvalid, "--lease-port: %v", err)
 		}
+	} else if options.leaseOwner != "" || options.leaseMinimum != 0 || options.leaseMaximum != 0 {
+		// Without a port there is no lease for these to shape, and ignoring
+		// them would let a caller believe a range or owner was enforced.
+		return status.Fail(status.CodeArgsInvalid, "--lease-owner, --lease-min, and --lease-max require --lease-port")
 	}
 	if err := identity.ValidateOverrides(options.source, options.tags); err != nil {
 		return status.Fail(status.CodeArgsInvalid, "%v", err)
@@ -480,6 +494,13 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
 		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
+	}
+	// Whether the wait can apply depends only on the schema and the flags, so
+	// it is decided before identity, host evidence, or coordination state.
+	if waitError := admissionWaitConflict(
+		configuration.Coordination.SchemaVersion, options.resourceTier, options.waitForAdmission,
+	); waitError != nil {
+		return 0, waitError
 	}
 	environment := environmentMap(application.Environment)
 	identityPath := identity.Path(environment, options.workingDir)
@@ -573,11 +594,6 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		}
 		if configuration.Coordination.SchemaVersion >= 3 && options.resourceTier == "" {
 			return 0, status.Fail(status.CodeArgsInvalid, "schema 3 requires --resource-tier")
-		}
-		if waitError := admissionWaitConflict(
-			configuration.Coordination.SchemaVersion, options.resourceTier, options.waitForAdmission,
-		); waitError != nil {
-			return 0, waitError
 		}
 		if options.resourceTier != "" {
 			reservationPlan, admissionWait, resolveError = guard.PlanTierReservation(

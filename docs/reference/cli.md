@@ -62,6 +62,7 @@ Every command accepts these, placed before or after the command name.
 | `--color <when>`  | `auto`  | Colour the diagnostic line: `always`, `never`, or `auto` (see [Colour](./environment-variables.md#colour)) |
 | `--output <form>` | `text`  | Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr                    |
 
+Any other value is a usage mistake: exit `2`, naming `hippo.args.invalid`.
 HIPPO reads these flags only before `--`, so a guarded command's own `--output` or `--color` after
 `run`'s `--` belongs to that command and changes nothing HIPPO writes.
 
@@ -158,6 +159,12 @@ arguments, working directories, or repository paths.
 
 `--json` and `--jsonl` are mutually exclusive.
 
+A filter value no recorded run can carry is a usage mistake (`2`, `hippo.args.invalid`), not an
+empty result: `--class` takes `ephemeral`, `service`, `transactional`, or `release`;
+`--resource-tier` takes `light`, `standard`, or `heavy`; and `--outcome` takes `passed`,
+`task-failed`, `supervision-failed`, `pressure-shed`, `storage-shed`, `emergency-safety-stop`,
+`capacity-deferred`, or `storage-blocked`. A valid filter that matches nothing exits `1`.
+
 ## `hippo monitor`
 
 Prints the initial state, then one line per state or profile transition. Runs until cancelled.
@@ -187,22 +194,22 @@ command's own arguments are never parsed as hippo flags.
 hippo run [flags] -- <command> [arguments...]
 ```
 
-| Flag                              | Default     | Meaning                                                                                                                       |
-| --------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `--class <name>`                  | `ephemeral` | Task class: `ephemeral`, `service`, or `transactional`                                                                        |
-| `--cwd <path>`                    | unset       | Child working directory                                                                                                       |
-| `--disk-path <path>`              | unset       | Path whose free space is measured                                                                                             |
-| `--reserve-cpu <n>`               | `0`         | Fixed CPU reservation; `0` selects the automatic fair share                                                                   |
-| `--reserve-memory-mib <n>`        | `0`         | Fixed memory reservation in MiB; `0` selects the automatic fair share                                                         |
-| `--resource-tier <name>`          | unset       | `light`, `standard`, or `heavy`; required by schema 3                                                                         |
-| `--source <label>`                | identity    | Override the discovered `hippo.identity.json` source                                                                          |
-| `--tag <key=value>`               | identity    | Override/add a privacy-safe label; repeatable, last duplicate wins                                                            |
-| `--concurrency-env <NAME>`        | none        | Child variable that receives resolved concurrency; repeatable                                                                 |
-| `--wait-for-admission <duration>` | `0`         | Schema-2 FIFO deadline without a tier; refused beside a tier under schema 2 and always under schema 3; ignored under schema 1 |
-| `--lease-port <n>`                | `0`         | Service port to lease; 1–65535, within `--lease-min`..`--lease-max`                                                           |
-| `--lease-owner <name>`            | unset       | Service port owner; lowercase letters, digits, and `-`; required with `--lease-port`                                          |
-| `--lease-min <n>`                 | `0`         | Minimum allowed leased port                                                                                                   |
-| `--lease-max <n>`                 | `0`         | Maximum allowed leased port                                                                                                   |
+| Flag                              | Default     | Meaning                                                                                                                                |
+| --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `--class <name>`                  | `ephemeral` | Task class: `ephemeral`, `service`, or `transactional`                                                                                 |
+| `--cwd <path>`                    | unset       | Child working directory                                                                                                                |
+| `--disk-path <path>`              | unset       | Path whose free space is measured                                                                                                      |
+| `--reserve-cpu <n>`               | `0`         | Fixed CPU reservation; `0` selects the automatic fair share                                                                            |
+| `--reserve-memory-mib <n>`        | `0`         | Fixed memory reservation in MiB; `0` selects the automatic fair share                                                                  |
+| `--resource-tier <name>`          | unset       | `light`, `standard`, or `heavy`; required by schema 3                                                                                  |
+| `--source <label>`                | identity    | Override the discovered `hippo.identity.json` source                                                                                   |
+| `--tag <key=value>`               | identity    | Override/add a privacy-safe label; repeatable, last duplicate wins                                                                     |
+| `--concurrency-env <NAME>`        | none        | Child variable that receives resolved concurrency; repeatable                                                                          |
+| `--wait-for-admission <duration>` | `0`         | Schema-2 FIFO deadline without a tier; never negative; refused under schema 1, beside a tier under schema 2, and always under schema 3 |
+| `--lease-port <n>`                | `0`         | Service port to lease; 1–65535, within `--lease-min`..`--lease-max`                                                                    |
+| `--lease-owner <name>`            | unset       | Service port owner; lowercase letters, digits, and `-`; required with `--lease-port`, refused without it                               |
+| `--lease-min <n>`                 | `0`         | Minimum allowed leased port; refused without `--lease-port`                                                                            |
+| `--lease-max <n>`                 | `0`         | Maximum allowed leased port; refused without `--lease-port`                                                                            |
 
 The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A normal
 child exit code is passed through unchanged. Capacity waiting creates one FIFO identity and does not
@@ -320,12 +327,17 @@ $ echo $?
 2
 ```
 
-`run` checks its flag values before it reads configuration, host evidence, or coordination state:
+Every command refuses a `--color` other than `always`, `never`, or `auto`, and an `--output` other
+than `text` or `json`, the same way. `run` checks its flag values before it reads configuration,
+host evidence, or coordination state:
 a `--class` other than `ephemeral`, `service`, or `transactional`; a `--resource-tier` other than
-`light`, `standard`, or `heavy`; a malformed `--tag` or `--source`; and a `--lease-port` outside
-1–65535, outside `--lease-min`..`--lease-max`, or without a valid lowercase `--lease-owner` are each
-usage errors (`2`, `hippo.args.invalid`, diagnostic only), as is a non-positive `monitor
---interval`. Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`,
+`light`, `standard`, or `heavy`; a malformed `--tag` or `--source`; a negative
+`--wait-for-admission`; a `--lease-port` outside 1–65535, outside `--lease-min`..`--lease-max`, or
+without a valid lowercase `--lease-owner`; and a `--lease-owner`, `--lease-min`, or `--lease-max`
+without `--lease-port` are each usage errors (`2`, `hippo.args.invalid`, diagnostic only), as is a
+non-positive `monitor --interval`. Once the configuration is read, `run` also refuses
+`--wait-for-admission` under schema 1 the same way.
+Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`,
 diagnostic only). Invalid mapped
 _values_ inherited from the caller's environment are not: they return `125`,
 `hippo.policy.replan-required`. The rules live in

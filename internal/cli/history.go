@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/host"
 	"github.com/wahidyankf/hippo/internal/identity"
+	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
 
@@ -27,9 +30,36 @@ func parseRollingDuration(value string) (time.Duration, error) {
 	return time.ParseDuration(value)
 }
 
+// historyTaskClasses are the classes a recorded run can carry. release is
+// among them because runs recorded before run refused it stay in history for
+// the whole retention window.
+var historyTaskClasses = []string{
+	string(policy.TaskEphemeral), string(policy.TaskService), string(policy.TaskTransactional), string(policy.TaskRelease),
+}
+
+// historyFilterMistake refuses a filter value no recorded run can carry. An
+// empty answer to it would read as "nothing matched" when the question could
+// never have matched anything, which hides a typo behind a valid result.
+func historyFilterMistake(options historyOptions) error {
+	if options.taskClass != "" && !slices.Contains(historyTaskClasses, options.taskClass) {
+		return status.Fail(status.CodeArgsInvalid, "--class must be one of %s", strings.Join(historyTaskClasses, ", "))
+	}
+	if _, known := guard.DefaultResourceTiers()[options.resourceTier]; options.resourceTier != "" && !known {
+		return status.Fail(status.CodeArgsInvalid, "--resource-tier must be light, standard, or heavy")
+	}
+	if outcomes := guard.RunOutcomes(); options.outcome != "" && !slices.Contains(outcomes, options.outcome) {
+		return status.Fail(status.CodeArgsInvalid, "--outcome must be one of %s", strings.Join(outcomes, ", "))
+	}
+
+	return nil
+}
+
 func (application Application) history(options historyOptions) (int, error) {
 	if options.jsonOutput && options.jsonLines {
 		return 0, status.Fail(status.CodeArgsInvalid, "--json and --jsonl are mutually exclusive")
+	}
+	if err := historyFilterMistake(options); err != nil {
+		return 0, err
 	}
 	since, err := parseRollingDuration(options.since)
 	if err != nil || since <= 0 || since > evidence.HistoryRetention {

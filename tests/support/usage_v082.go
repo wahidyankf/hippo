@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,6 +34,7 @@ const (
 	sourceFlagName        = "--source"
 	leaseOwnerFlagName    = "--lease-owner"
 	leasePortFlagName     = "--lease-port"
+	waitForAdmissionFlag  = "--wait-for-admission"
 	watchCommandName      = "watch"
 	missingGuardedCommand = "/nonexistent/guarded-command"
 	failureBodyMarker     = `"schemaVersion"`
@@ -73,9 +75,46 @@ func invalidFlagValues() [][]string {
 		append([]string{runCommandName, tagFlagName, "no-equals-sign"}, payload...),
 		append([]string{runCommandName, "--resource-tier", unknownSubcommand}, payload...),
 		append([]string{runCommandName, sourceFlagName, "Not A Source"}, payload...),
+		append([]string{runCommandName, waitForAdmissionFlag, "-1s"}, payload...),
+		append([]string{runCommandName, "--lease-min", "8000"}, payload...),
+		append([]string{runCommandName, "--lease-max", "9000"}, payload...),
+		append([]string{runCommandName, leaseOwnerFlagName, leaseOwnerName}, payload...),
 		{monitorCommandName, intervalFlagName, "0s"},
+		{historyCommandName, "--class", unknownSubcommand},
+		{historyCommandName, "--outcome", unknownSubcommand},
+		{historyCommandName, "--resource-tier", unknownSubcommand},
 	}
+	// The global flags are accepted by every command, so every command must
+	// refuse a value neither of them has. They go before the command name,
+	// which is documented, because after run's -- they would be the payload's.
+	// release monitor is the one exception for --output, which it defines for
+	// itself as a file path.
+	for _, command := range everyLeafCommand() {
+		invocations = append(invocations, append([]string{"--color", unknownSubcommand}, command...))
+		if !slices.Equal(command, []string{releaseCommandName, monitorCommandName}) {
+			invocations = append(invocations, append([]string{outputFlag, unknownSubcommand}, command...))
+		}
+	}
+
 	return invocations
+}
+
+// everyLeafCommand is each command that does work of its own, as the words a
+// caller types to reach it. run carries a payload so that a refusal which
+// comes too late is visible as the payload's output.
+func everyLeafCommand() [][]string {
+	return [][]string{
+		{versionCommandName},
+		{statusCommandName},
+		{watchCommandName},
+		{historyCommandName},
+		{monitorCommandName},
+		{runCommandName, "--", shellPath, "-c", "printf " + usageChildOutput},
+		{releaseCommandName, releaseCheckName},
+		{releaseCommandName, releaseAssessName},
+		{releaseCommandName, monitorCommandName},
+		{completionCommandName, "zsh"},
+	}
 }
 
 func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
@@ -190,9 +229,25 @@ func (driver *Driver) requireInvalidFlagValuesRefused() error {
 		if strings.Contains(attempt.stdout, usageChildOutput) {
 			return fmt.Errorf("%q started its payload before refusing it", strings.Join(attempt.arguments, " "))
 		}
+		// A value the command rejects after parsing has one precise complaint
+		// to make; a flag list beneath it would bury that complaint.
+		if strings.Contains(attempt.stderr, usageBlockMarker) {
+			return fmt.Errorf("%q printed the usage block for a rejected value: %q",
+				strings.Join(attempt.arguments, " "), attempt.stderr)
+		}
 	}
 
 	return nil
+}
+
+// requestSchemaOneAdmissionWait asks to wait for admission where no
+// configuration exists, which is schema 1 exclusive coordination: there is no
+// FIFO queue for the wait to bound.
+func (driver *Driver) requestSchemaOneAdmissionWait() error {
+	return driver.attemptEach([][]string{{
+		runCommandName, waitForAdmissionFlag, "5s", diskPathFlag, ".",
+		"--", shellPath, "-c", "printf " + usageChildOutput,
+	}})
 }
 
 // requestChildArgumentsThatLookLikeGlobalFlags gives a guarded command its own

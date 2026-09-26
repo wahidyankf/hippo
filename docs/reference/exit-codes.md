@@ -125,4 +125,6 @@ no reason, and no consumer branched on them. They are gone.
 
 `1` still means an empty result, which is the only thing it ever should have meant. The same rule
 reached one more case in v0.8.2: activation contention that outlives its deadline after the child
-started had kept `1`, and now returns `125` naming `hippo.supervision.failed`.
+started had kept `1`, and now returns `125` naming `hippo.supervision.failed`. One case moved to `2` in the
+same release because the invocation was the problem: a `history` filter value no run can carry had
+returned `1` as an empty result.
