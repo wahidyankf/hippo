@@ -58,6 +58,12 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   with exit `2` naming `hippo.args.invalid` and the accepted values. It returned `1`, the empty
   result, so a misspelt filter read as "nothing matched". A caller that branched on `1` for such a
   value should correct the value; a valid filter that matches nothing still exits `1`.
+- A `run` whose identity has no source — `--tag` given, or schema 3 in force, with no `--source` and
+  no `hippo.identity.json` through `HIPPO_IDENTITY`, upward discovery, or `HIPPO_DEFAULT_IDENTITY` —
+  now exits `2` naming `hippo.args.invalid`, and the diagnostic names `--source`. It exited `125`
+  naming `hippo.policy.replan-required`, which says no profile admits the request, although the
+  fix is one flag. A caller that branched on `125` here should branch on `2` and supply a source.
+  An identity file that is present and invalid still exits `125`.
 - `release monitor` reports a missing or malformed `--health-url` or `--routed-origin`, a missing
   output, summary or deployment root, a negative `--duration-ms`, or an out-of-range
   `--service-port` as a usage mistake: exit `2` naming `hippo.args.invalid`. Each exited `125`

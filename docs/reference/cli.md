@@ -337,6 +337,9 @@ without a valid lowercase `--lease-owner`; and a `--lease-owner`, `--lease-min`,
 without `--lease-port` are each usage errors (`2`, `hippo.args.invalid`, diagnostic only), as is a
 non-positive `monitor --interval`. Once the configuration is read, `run` also refuses
 `--wait-for-admission` under schema 1 the same way.
+A run with no identity source — no `--source`, and no `hippo.identity.json` through
+`HIPPO_IDENTITY`, upward discovery, or `HIPPO_DEFAULT_IDENTITY`, while `--tag` or schema 3 needs one
+— is refused the same way, naming `--source` in the diagnostic.
 Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`,
 diagnostic only). Invalid mapped
 _values_ inherited from the caller's environment are not: they return `125`,
