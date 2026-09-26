@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 set -e
 
 # Keep locally installed formatter binaries available when Rhino replays the

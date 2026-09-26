@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+tool_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 temporary_parent=${HIPPO_E2E_TEMP_PARENT:-${TMPDIR:-/tmp}}
 go_binary=${HIPPO_GO_BINARY:-go}
 temporary_dir=$(mktemp -d "$temporary_parent/hippo-e2e.XXXXXX")

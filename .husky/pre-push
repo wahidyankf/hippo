@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 set -e
 
 # The last local moment before anything reaches the remote, which for a public
