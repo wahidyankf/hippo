@@ -457,8 +457,10 @@ func (driver *Driver) requireDegradedDeferred() error {
 	return nil
 }
 
+// requireStorageBlocked observes the policy decision the command boundary
+// reports as 124 naming hippo.limit.storage-blocked.
 func (driver *Driver) requireStorageBlocked() error {
-	if !driver.assessment.StorageBlocked || driver.exitCode != 73 {
+	if !driver.assessment.StorageBlocked || driver.exitCode != guard.StorageBlockedExitCode {
 		return fmt.Errorf("got %+v and exit %d", driver.assessment, driver.exitCode)
 	}
 	return nil
@@ -808,8 +810,8 @@ func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskCla
 
 // requestCompatibilityClassE2E asks until the answer is about coordination.
 //
-// A saturated host can defer with exit 75 before the compatibility check is
-// reached. This scenario needs the later exit-76 protocol verdict, so a verified
+// A saturated host can defer with exit 124 before the compatibility check is
+// reached. This scenario needs the later protocol-mismatch verdict, so a verified
 // capacity deferral is retried rather than counted as the terminal answer.
 func (driver *Driver) requestCompatibilityClassE2E(class policy.TaskClass) error {
 	for attempt := range compatibilityDeferralAttempts {
@@ -932,8 +934,10 @@ func (driver *Driver) waitLease() error {
 	return nil
 }
 
+// requireDeferred observes the guard decision the command boundary reports as
+// 124 naming hippo.limit.capacity-deferred.
 func (driver *Driver) requireDeferred() error {
-	if driver.exitCode != 75 {
+	if driver.exitCode != guard.CapacityDeferredExitCode {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
 	return nil
@@ -1567,8 +1571,10 @@ func (driver *Driver) observeCritical() error {
 	return driver.runGuardedShell("sleep 10", nil)
 }
 
+// requireShed observes the guard's non-storage shed decision, which the command
+// boundary reports as 124.
 func (driver *Driver) requireShed() error {
-	if driver.exitCode != 75 {
+	if driver.exitCode != guard.CapacityDeferredExitCode {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
 	if driver.forceStopElapsed >= 3*time.Second {

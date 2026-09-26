@@ -29,7 +29,7 @@ Feature: Shared vector reservations
   Scenario: Reservation floors reject unsafe requests
     Given explicit requests below one CPU or 256 MiB
     When each unsafe reservation is validated
-    Then each request requires replanning with exit 78 before enqueue
+    Then each request requires replanning with exit 125 naming hippo.policy.replan-required before enqueue
 
   @e2e-exempt
   Scenario: Vector admission is atomic
@@ -41,13 +41,13 @@ Feature: Shared vector reservations
   Scenario: Impossible reservation requires replanning
     Given a reservation larger than total safe host capacity
     When impossible capacity is requested
-    Then admission requires replanning with exit 78 instead of waiting
+    Then admission requires replanning with exit 125 naming hippo.policy.replan-required instead of waiting
 
   @e2e-exempt
   Scenario: Temporary exhaustion uses the bounded wait
     Given a live owner temporarily consumes the remaining capacity
     When another fitting reservation waits through its deadline
-    Then the waiter remains FIFO head through its deadline and is deferred with exit 75
+    Then the waiter remains FIFO head through its deadline and is deferred with exit 124 naming hippo.limit.capacity-deferred
 
   @e2e-exempt
   Scenario: FIFO head cannot be bypassed by a smaller request
@@ -89,55 +89,55 @@ Feature: Shared vector reservations
   Scenario: Active exclusive compatibility blocks reservation takeover
     Given a live schema one exclusive compatibility session
     When reservation-mode admission is requested
-    Then it rejects with exit 76 without changing compatibility state
+    Then it rejects with exit 125 naming hippo.coordination.protocol-mismatch without changing compatibility state
 
   @e2e-exempt
   Scenario: Malformed compatibility state remains fail closed during takeover
     Given malformed compatibility heavy state without a mode marker
     When reservation-mode admission inspects that state
-    Then it fails with exit 1 and leaves the malformed state unchanged
+    Then it fails with exit 125 naming hippo.supervision.failed and leaves the malformed state unchanged
 
   @e2e-exempt
   Scenario: Unsupported compatibility heavy-owner schema remains actionable
     Given compatibility heavy state with an unsupported owner schema
     When exclusive admission and the heavy-lease diagnostic inspect that state
-    Then admission reports protocol mismatch exit 76 without mutation and the diagnostic reports private recovery guidance
+    Then admission reports exit 125 naming hippo.coordination.protocol-mismatch without mutation and the diagnostic reports private recovery guidance
 
   @e2e-exempt
   Scenario: Malformed compatibility service session remains fail closed during takeover
     Given an unverifiable compatibility service session record without a mode marker
     When reservation-mode admission inspects the service session
-    Then it fails with exit 1 and leaves the service record unchanged
+    Then it fails with exit 125 naming hippo.supervision.failed and leaves the service record unchanged
 
   @e2e-exempt
   Scenario: Unreadable compatibility session inventory blocks reservation takeover
     Given compatibility session inventory cannot be enumerated
     When reservation admission attempts to take over the shared root
-    Then admission fails with exit 1 and preserves the session inventory with private recovery guidance
+    Then admission fails with exit 125 naming hippo.supervision.failed and preserves the session inventory with private recovery guidance
 
   @e2e-exempt
   Scenario: Failed stale heavy cleanup blocks reservation takeover
     Given positively stale compatibility heavy state cannot be removed
     When reservation admission attempts to take over the shared root
-    Then admission fails with exit 1 without writing a reservation marker or changing heavy state
+    Then admission fails with exit 125 naming hippo.supervision.failed without writing a reservation marker or changing heavy state
 
   @e2e-exempt
   Scenario: Unsupported coordination marker schema is a protocol mismatch
     Given a shared root with a valid future coordination marker schema
     When compatibility and reservation clients inspect that root
-    Then both reject with exit 76 without changing the marker
+    Then both reject with exit 125 naming hippo.coordination.protocol-mismatch without changing the marker
 
   @e2e-exempt
   Scenario: Unsupported reservation ledger schema is a protocol mismatch
     Given reservation coordination with a valid future ledger schema
     When status and reservation admission inspect that ledger
-    Then both report exit 76 without changing the ledger
+    Then both report exit 125 naming hippo.coordination.protocol-mismatch without changing the ledger
 
   @e2e-exempt
   Scenario: Schema three refuses live legacy entries as a protocol mismatch
     Given schema three observes a live schema two owner without metadata
     When adaptive admission is requested
-    Then it exits 76 before enqueue or child launch
+    Then it exits 125 naming hippo.coordination.protocol-mismatch before enqueue or child launch
 
   @e2e-exempt
   Scenario: Host pressure thresholds remain authoritative
@@ -227,7 +227,7 @@ Feature: Shared vector reservations
   Scenario: Pressure shedding preserves its stable exit while retirement is unconfirmed
     Given selected reserved owners for storage and non-storage pressure whose KILL waits remain unconfirmed
     When each owning guard performs bounded shedding
-    Then each returns exit 73 or 75 respectively while reservation and port competitors defer until retirement and then admit
+    Then each returns exit 124 naming its storage or non-storage limit respectively while reservation and port competitors defer until retirement and then admit
 
   @e2e-exempt
   Scenario: Port ownership survives supervisor-only death
@@ -328,7 +328,7 @@ Feature: Shared vector reservations
   Scenario Outline: Schema-one ownership survives supervisor-only death
     Given a compiled schema-one <class> guard with a live child group
     When only the compatibility supervisor is killed and ownership is reconciled
-    Then reservation takeover reports exit 76 until the compatibility child group retires
+    Then reservation takeover reports exit 125 naming hippo.coordination.protocol-mismatch until the compatibility child group retires
 
     Examples:
       | class   |
@@ -345,7 +345,7 @@ Feature: Shared vector reservations
   Scenario Outline: Legacy schema-one PID-only ownership remains conservative
     Given live and positively stale zero-metadata legacy <class> ownership records
     When compatibility liveness and reservation takeover reconcile each shared root
-    Then the live PID record is retained and rejects takeover with exit 76 while only the positively stale record is reclaimed
+    Then the live PID record is retained and rejects takeover with exit 125 naming hippo.coordination.protocol-mismatch while only the positively stale record is reclaimed
 
     Examples:
       | class   |
@@ -356,7 +356,7 @@ Feature: Shared vector reservations
   Scenario: Owner-side shedding preserves the selected exit
     Given a reserved owner selected for storage shedding
     When its own guard observes the mark and terminates its child
-    Then the child is reaped and the guard returns storage-blocked exit 73 before release
+    Then the child is reaped and the guard returns exit 124 naming hippo.limit.storage-blocked before release
 
   @e2e-exempt
   Scenario: Transactional owners are protected during ordinary shedding
