@@ -274,6 +274,15 @@ owner that was admitted and released between host-sampling ticks is still counte
 }
 ```
 
+The example row is abridged. A row carries every field below that has a value; empty fields are
+omitted:
+
+| Group        | Fields                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------- |
+| Identity     | `schemaVersion`, `runId`, `startedAt`, `finishedAt`, `source`, `tags`, `resourceTier`, `taskClass`              |
+| Result       | `outcome`, `budgetOutcome`, `peakOwnerCount`, `aggregateCount`                                                  |
+| Host summary | `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `cpuUtilizationP95Percent`, `swapOutsDelta` |
+
 History rows are the queryable safe subset of lifetime summaries. Under the 128 MiB history cap,
 the oldest daily archive is first aggregated by source, exact tags, class, tier, and outcome;
 `aggregateCount` then reports how many original runs the row represents. Aggregates never qualify

@@ -1,8 +1,9 @@
 # Resource policy
 
 The thresholds and profiles HIPPO uses to classify host evidence and decide admission. These are
-compiled defaults; local configuration may tighten them but never weaken them. The resource tiers
-are the one exception: under schema 3 the configuration file defines them.
+compiled defaults. Local configuration can never cross the immutable floors — one CPU, 256 MiB, and
+at most 20 owners — but within them a profile override may move a compiled profile value either way,
+and under schema 3 the configuration file defines the resource tiers.
 
 ## Profiles
 
