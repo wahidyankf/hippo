@@ -3,11 +3,13 @@ package support
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/wahidyankf/hippo/internal/cli"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -31,6 +33,15 @@ const (
 	sourceFlagName        = "--source"
 	leaseOwnerFlagName    = "--lease-owner"
 	leasePortFlagName     = "--lease-port"
+	watchCommandName      = "watch"
+	missingGuardedCommand = "/nonexistent/guarded-command"
+	failureBodyMarker     = `"schemaVersion"`
+	usageAttemptBound     = 30 * time.Second
+	leaseOwnerName        = "svc"
+	tagFlagName           = "--tag"
+	sinceFlagName         = "--since"
+	outputJSONValue       = "json"
+	releaseCheckName      = "check"
 )
 
 // commandGroupMistakes are invocations of a command that only groups other
@@ -49,21 +60,22 @@ func commandGroupMistakes() [][]string {
 // command cannot accept. Each is the caller's mistake, found before any work
 // starts, so each is a usage mistake and never HIPPO's own failure.
 func invalidFlagValues() [][]string {
-	payload := []string{"--", "/bin/sh", "-c", "printf " + usageChildOutput}
+	payload := []string{"--", shellPath, "-c", "printf " + usageChildOutput}
 
-	return [][]string{
+	invocations := [][]string{
 		append([]string{runCommandName, taskClassFlag, unknownSubcommand}, payload...),
-		append([]string{runCommandName, leasePortFlagName, "-1", leaseOwnerFlagName, "svc"}, payload...),
-		append([]string{runCommandName, leasePortFlagName, "8080", leaseOwnerFlagName, "svc"}, payload...),
+		append([]string{runCommandName, leasePortFlagName, "-1", leaseOwnerFlagName, leaseOwnerName}, payload...),
+		append([]string{runCommandName, leasePortFlagName, "8080", leaseOwnerFlagName, leaseOwnerName}, payload...),
 		append([]string{
 			runCommandName, leasePortFlagName, "8080", leaseOwnerFlagName, "Bad Owner",
 			"--lease-min", "8000", "--lease-max", "9000",
 		}, payload...),
-		append([]string{runCommandName, "--tag", "no-equals-sign"}, payload...),
+		append([]string{runCommandName, tagFlagName, "no-equals-sign"}, payload...),
 		append([]string{runCommandName, "--resource-tier", unknownSubcommand}, payload...),
 		append([]string{runCommandName, sourceFlagName, "Not A Source"}, payload...),
 		{monitorCommandName, intervalFlagName, "0s"},
 	}
+	return invocations
 }
 
 func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
@@ -73,8 +85,13 @@ func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
 	}
 	attempt := usageAttempt{arguments: arguments}
 	environment := []string{"HIPPO_ROOT=" + root, "HOME=" + root, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+	// watch and monitor run until cancelled once they accept their arguments,
+	// so an invocation that should have been refused and was not would hang
+	// the suite. The bound turns that into an ordinary failed assertion.
+	ctx, cancel := context.WithTimeout(context.Background(), usageAttemptBound)
+	defer cancel()
 	if driver.mode == contract.E2E {
-		command := exec.Command(driver.binary, arguments...)
+		command := exec.CommandContext(ctx, driver.binary, arguments...)
 		command.Env = environment
 		command.Dir = root
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
@@ -108,7 +125,7 @@ func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
 	defer func() { _ = os.Chdir(workingDirectory) }()
 	attempt.exitCode, _ = (cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environment,
-	}).Run(context.Background(), arguments)
+	}).Run(ctx, arguments)
 	attempt.stdout, attempt.stderr = stdout.String(), stderr.String()
 
 	return attempt, nil
@@ -172,6 +189,93 @@ func (driver *Driver) requireInvalidFlagValuesRefused() error {
 		}
 		if strings.Contains(attempt.stdout, usageChildOutput) {
 			return fmt.Errorf("%q started its payload before refusing it", strings.Join(attempt.arguments, " "))
+		}
+	}
+
+	return nil
+}
+
+// requestChildArgumentsThatLookLikeGlobalFlags gives a guarded command its own
+// --output and --color. They are the child's arguments, and HIPPO must not
+// read them as its own: the missing command makes HIPPO report a failure,
+// which is where it would show.
+func (driver *Driver) requestChildArgumentsThatLookLikeGlobalFlags() error {
+	return driver.attemptEach([][]string{{
+		runCommandName, diskPathFlag, ".", "--", missingGuardedCommand, outputFlag, outputJSONValue, "--color", "always",
+	}})
+}
+
+func (driver *Driver) requireChildArgumentsIgnored() error {
+	if len(driver.usageAttempts) == 0 {
+		return errors.New("no guarded command was attempted")
+	}
+	attempt := driver.usageAttempts[0]
+	switch {
+	case attempt.exitCode == 0:
+		return fmt.Errorf("a missing guarded command exited 0: stderr=%q", attempt.stderr)
+	case strings.Contains(attempt.stderr, "\x1b"):
+		return fmt.Errorf("the child's --color coloured HIPPO's diagnostic: stderr=%q", attempt.stderr)
+	case strings.Contains(attempt.stderr, failureBodyMarker):
+		return fmt.Errorf("the child's --output added HIPPO's failure body: stderr=%q", attempt.stderr)
+	case !strings.HasPrefix(attempt.stderr, "hippo: ["):
+		return fmt.Errorf("HIPPO wrote no diagnostic of its own: stderr=%q", attempt.stderr)
+	}
+
+	return nil
+}
+
+// requestReleaseMonitorRawOutputJSON names json as the raw sample file. It is
+// release monitor's own flag, so it asks for no body, and the missing inputs
+// make the command refuse before it samples anything.
+func (driver *Driver) requestReleaseMonitorRawOutputJSON() error {
+	return driver.attemptEach([][]string{{releaseCommandName, monitorCommandName, outputFlag, outputJSONValue}})
+}
+
+func (driver *Driver) requireNoFailureBody() error {
+	if len(driver.usageAttempts) == 0 {
+		return errors.New("no release monitor invocation was attempted")
+	}
+	for _, attempt := range driver.usageAttempts {
+		if err := requireArgsInvalid(attempt); err != nil {
+			return err
+		}
+		if strings.Contains(attempt.stderr, failureBodyMarker) {
+			return fmt.Errorf("%q wrote a failure body it was never asked for: stderr=%q",
+				strings.Join(attempt.arguments, " "), attempt.stderr)
+		}
+	}
+
+	return nil
+}
+
+// requestHistoryMistakesWithJSON places --output json on either side of the
+// command name. Both placements are documented, so both must describe the
+// same failure the same way.
+func (driver *Driver) requestHistoryMistakesWithJSON() error {
+	return driver.attemptEach([][]string{
+		{outputFlag, outputJSONValue, historyCommandName, sinceFlagName, "nope"},
+		{historyCommandName, sinceFlagName, "nope", outputFlag, outputJSONValue},
+		{outputFlag + "=json", historyCommandName, unexpectedArgument},
+	})
+}
+
+func (driver *Driver) requireHistoryNamedInEveryBody() error {
+	if len(driver.usageAttempts) == 0 {
+		return errors.New("no history invocation was attempted")
+	}
+	for _, attempt := range driver.usageAttempts {
+		index := strings.Index(attempt.stderr, "\n{")
+		if index < 0 {
+			return fmt.Errorf("%q wrote no failure body: stderr=%q", strings.Join(attempt.arguments, " "), attempt.stderr)
+		}
+		body := struct {
+			Command string `json:"command"`
+		}{}
+		if err := json.NewDecoder(strings.NewReader(attempt.stderr[index+1:])).Decode(&body); err != nil {
+			return fmt.Errorf("%q wrote an unreadable failure body: %w", strings.Join(attempt.arguments, " "), err)
+		}
+		if body.Command != "hippo history" {
+			return fmt.Errorf("%q named %q as the command", strings.Join(attempt.arguments, " "), body.Command)
 		}
 	}
 

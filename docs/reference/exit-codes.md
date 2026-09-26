@@ -83,9 +83,12 @@ retry forever.
 }
 ```
 
-`schemaVersion`, `error.code` and `error.message` are always present. `error.field` appears only
-when one named flag or field caused the failure. The body is never coloured, whatever `--color`
-says, because an escape byte in it is a parse error rather than a presentation choice.
+`schemaVersion`, `error.code` and `error.message` are always present. `command` names the command
+that ran — `hippo history` for `hippo --output json history …` as for `hippo history … --output json`
+— and is `hippo` itself only when no command was named or the one named does not exist.
+`error.field` appears only when one named flag or field caused the failure. The body is never
+coloured, whatever `--color` says, because an escape byte in it is a parse error rather than a
+presentation choice.
 
 Diagnostics go to stderr and results go to stdout, always. A failed invocation leaves stdout empty.
 

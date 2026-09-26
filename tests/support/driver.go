@@ -1895,7 +1895,7 @@ func (driver *Driver) releaseHelp() error {
 }
 
 func (driver *Driver) requireReleaseHelp() error {
-	commands := []string{releaseAssessName, "check", monitorCommandName}
+	commands := []string{releaseAssessName, releaseCheckName, monitorCommandName}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("release help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}
@@ -1966,8 +1966,10 @@ func (driver *Driver) requestOperandFreeCommandsWithArguments() {
 	commands := [][]string{
 		{versionCommandName, unexpectedArgument},
 		{statusCommandName, unexpectedArgument},
+		{watchCommandName, unexpectedArgument},
+		{historyCommandName, unexpectedArgument},
 		{monitorCommandName, unexpectedArgument},
-		{releaseCommandName, "check", unexpectedArgument},
+		{releaseCommandName, releaseCheckName, unexpectedArgument},
 		{releaseCommandName, "assess", unexpectedArgument},
 		{releaseCommandName, monitorCommandName, unexpectedArgument},
 	}
@@ -1983,8 +1985,12 @@ func (driver *Driver) requestOperandFreeCommandsWithArguments() {
 		if err != nil {
 			diagnostic += err.Error()
 		}
+		// The usage that helps is the one for the command that was mistyped,
+		// never the root's, which lists commands the caller already chose.
+		ownUsage := "Usage:\n  hippo " + strings.Join(arguments[:len(arguments)-1], " ") + " [flags]"
 		if driver.exitCode != status.CallerError ||
-			!strings.Contains(diagnostic, "unknown command") && !strings.Contains(diagnostic, "accepts 0 arg") {
+			!strings.Contains(diagnostic, "unknown command") && !strings.Contains(diagnostic, "accepts 0 arg") ||
+			!strings.Contains(driver.errorOutput, ownUsage) {
 			driver.operandCommandsRejected = false
 			driver.errorOutput = fmt.Sprintf("arguments=%v exit=%d diagnostic=%q", arguments, driver.exitCode, diagnostic)
 

@@ -111,6 +111,21 @@ Feature: Public HIPPO CLI
     When run and monitor are requested with flag values they cannot accept
     Then each exits 2 naming hippo.args.invalid before any payload starts
 
+  Scenario: Arguments after the separator belong to the guarded command
+    Given the compiled HIPPO binary
+    When run guards a missing command whose own arguments ask for JSON output and colour
+    Then HIPPO reports its failure as one plain diagnostic line without a failure body
+
+  Scenario: The release monitor output flag is not the global output format
+    Given the compiled HIPPO binary
+    When release monitoring is refused with its raw output flag set to json
+    Then the refusal carries no machine-readable failure body
+
+  Scenario: A failure body names the command wherever the global flags are placed
+    Given the compiled HIPPO binary
+    When history usage mistakes ask for JSON output before and after the command name
+    Then every failure body names hippo history as the command
+
   Scenario: Only usage errors print the command usage block
     Given the compiled HIPPO binary
     When a runtime failure and a usage error are requested
@@ -129,7 +144,7 @@ Feature: Public HIPPO CLI
   Scenario: Commands without operands reject positional arguments
     Given the compiled HIPPO binary
     When operand-free commands are requested with positional arguments
-    Then every command rejects the unexpected argument
+    Then every command rejects the unexpected argument with its own usage
 
   Scenario: Release summary assessment accepts healthy evidence
     Given a healthy release summary file

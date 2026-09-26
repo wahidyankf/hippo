@@ -62,9 +62,13 @@ Every command accepts these, placed before or after the command name.
 | `--color <when>`  | `auto`  | Colour the diagnostic line: `always`, `never`, or `auto` (see [Colour](./environment-variables.md#colour)) |
 | `--output <form>` | `text`  | Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr                    |
 
+HIPPO reads these flags only before `--`, so a guarded command's own `--output` or `--color` after
+`run`'s `--` belongs to that command and changes nothing HIPPO writes.
+
 `release monitor` defines its own `--output` (the raw sample destination), which takes the place of
-the global flag for that command. The failure body is described in
-[Exit codes](./exit-codes.md#the-machine-readable-body).
+the global flag for that command wherever it is placed, so that command never writes a failure body.
+The failure body is described in [Exit codes](./exit-codes.md#the-machine-readable-body); its
+`command` field names the command that ran, wherever the global flags sit.
 
 The root command also accepts `--version`, which prints the same text as `hippo version` and exits.
 
@@ -299,9 +303,9 @@ $ hippo completion zsh > "${fpath[1]}/_hippo"
 ## Usage errors
 
 A usage mistake returns exit `2`, naming `hippo.args.invalid`. A mistyped invocation — an unknown
-flag or command, a missing `--`, or a command group such as `release` or `completion` given no
-subcommand or an unknown one — also prints the command usage on stderr next to its diagnostic, and
-nothing on stdout. A value or
+flag or command, a positional argument a command does not take, a missing `--`, or a command group
+such as `release` or `completion` given no subcommand or an unknown one — also prints the usage of
+the command it named on stderr next to its diagnostic, and nothing on stdout. A value or
 combination the command rejects after parsing, and any failure after the arguments were accepted,
 print only the diagnostic, so consumer logs keep the real cause instead of a flag list.
 
@@ -310,8 +314,7 @@ $ hippo run --disk-path . echo hi
 hippo: [hippo.args.invalid] run requires -- followed by a command
 
 Usage:
-  hippo [flags]
-  hippo [command]
+  hippo run -- <command> [arguments...] [flags]
 ...
 $ echo $?
 2
