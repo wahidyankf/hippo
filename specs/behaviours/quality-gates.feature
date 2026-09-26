@@ -86,3 +86,15 @@ Feature: HIPPO quality gates
     And the guarded child signalled readiness
     When a compiled guarded run ends in exit 124 naming hippo.limit.capacity-deferred with a never-started receipt
     Then the fixture refuses the run
+
+  @e2e-exempt
+  Scenario Outline: The end-to-end adapter runs a test-stamped build
+    Given <inherited> as the inherited HIPPO_BIN
+    When the end-to-end adapter chooses the binary it runs
+    Then it runs <chosen>
+
+    Examples:
+      | inherited                   | chosen                                          |
+      | no binary                   | a build of the working tree stamped v0.0.0-test |
+      | an unstamped build          | a build of the working tree stamped v0.0.0-test |
+      | a build stamped v0.0.0-test | that build unchanged                            |
