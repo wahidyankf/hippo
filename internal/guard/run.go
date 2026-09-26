@@ -36,6 +36,10 @@ const (
 	outcomeEmergencyStop     = "emergency-safety-stop"
 	outcomePressureShed      = "pressure-shed"
 	outcomeStorageShed       = "storage-shed"
+	// outcomeAdmissionCancelled is a run a signal or other cancellation
+	// stopped before its child started. It is the same word the run's
+	// never-started receipt carries as its reason, so the two records agree.
+	outcomeAdmissionCancelled = "admission-cancelled"
 )
 
 // RunOutcomes is every outcome a run's lifetime summary can record. history
@@ -822,8 +826,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	// work that never started, exactly as one that cancels a queued waiter
 	// does, and leaves the same receipt so it may requeue once.
 	cancelledBeforeLaunch := func(cause error) (int, error) {
+		outcome = outcomeAdmissionCancelled
 		receiptError := writeSafetyReceipt(
-			config.EvidenceRoot, writer.summary.RunID, "never-started", "admission-cancelled",
+			config.EvidenceRoot, writer.summary.RunID, "never-started", outcomeAdmissionCancelled,
 			config.ReservationMetadata, config.TaskClass, config.Now(),
 		)
 

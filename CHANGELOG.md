@@ -117,6 +117,13 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   failed when the caller had cancelled work that never began. A caller that branched on `125` here
   should branch on `128+N` and, as before, read the `never-started` receipt before requeueing once.
   A run whose child had started still passes the child's own status through.
+- A `run` stopped by a signal or other cancellation while it sampled the host before launch now
+  summarizes those samples under a new lifetime-summary outcome, `admission-cancelled`, the reason
+  its `never-started` receipt already gave. It was summarized as `capacity-deferred`, so the
+  summary and the receipt disagreed and `history --outcome capacity-deferred` counted cancellations
+  as deferrals. A queued waiter cancelled the same way still writes no summary, because it collects
+  no host evidence while it waits. The JSON schema reference now lists every `outcome` value. A
+  consumer that counts `capacity-deferred` summaries should count `admission-cancelled` separately.
 - `hippo-conformance` stopped by `SIGINT` or `SIGTERM` now exits `130` or `143`. It exited `1`,
   the status for consumers that do not conform, although a stopped run reached no verdict. It
   still retires every started process group, reconciles the checkouts, and prints what it found

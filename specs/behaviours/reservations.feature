@@ -218,12 +218,14 @@ Feature: Shared vector reservations
     Given a reservation root whose live owners fill its capacity and owner limit
     When a queued guarded run receives SIGINT before it is admitted
     Then the run exits 130 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
+    And no lifetime summary is written, because a queued waiter collects no host evidence
 
   @e2e-exempt
   Scenario: A signal during host admission sampling keeps a never-started receipt
     Given a granted run still sampling the host before admission
     When the guarded run receives SIGTERM before its child starts
     Then the run exits 143 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
+    And its lifetime summary records the outcome admission-cancelled
 
   @e2e-exempt
   Scenario: Failed cancelled-waiter cleanup retains verifiable FIFO ownership

@@ -148,16 +148,16 @@ transition stream. It runs until it is stopped: `SIGINT` ends it with `130` and 
 Reads current and daily compacted summaries from the shared root. It never emits commands,
 arguments, working directories, or repository paths.
 
-| Flag                     | Default | Meaning                                        |
-| ------------------------ | ------- | ---------------------------------------------- |
-| `--since <duration>`     | `30d`   | Positive rolling window, at most 30 days       |
-| `--source <label>`       | unset   | Filter by source                               |
-| `--tag <key=value>`      | none    | Filter by label; repeatable, all must match    |
-| `--class <name>`         | unset   | Filter by task class                           |
-| `--resource-tier <name>` | unset   | Filter by resource tier                        |
-| `--outcome <name>`       | unset   | Filter by outcome                              |
-| `--json`                 | `false` | Emit one schema-1 document with a `rows` array |
-| `--jsonl`                | `false` | Emit one summary object per line               |
+| Flag                     | Default | Meaning                                                             |
+| ------------------------ | ------- | ------------------------------------------------------------------- |
+| `--since <duration>`     | `30d`   | Positive rolling window, at most 30 days                            |
+| `--source <label>`       | unset   | Filter by source                                                    |
+| `--tag <key=value>`      | none    | Filter by label; repeatable, all must match                         |
+| `--class <name>`         | unset   | Filter by task class                                                |
+| `--resource-tier <name>` | unset   | Filter by resource tier                                             |
+| `--outcome <name>`       | unset   | Filter by [outcome](./json-schemas.md#development-lifetime-summary) |
+| `--json`                 | `false` | Emit one schema-1 document with a `rows` array                      |
+| `--jsonl`                | `false` | Emit one summary object per line                                    |
 
 `--json` and `--jsonl` are mutually exclusive.
 
