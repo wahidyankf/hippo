@@ -126,6 +126,11 @@ Feature: Public HIPPO CLI
     When history usage mistakes ask for JSON output before and after the command name
     Then every failure body names hippo history as the command
 
+  Scenario: An identity file that is present and invalid is named as invalid
+    Given the compiled HIPPO binary
+    When run is requested from a directory whose identity file has an unknown field
+    Then it exits 125 naming hippo.identity.invalid and the identity file before any payload starts
+
   Scenario: A run label without any source is a usage mistake
     Given the compiled HIPPO binary
     When run is requested with a tag but no source and no identity file

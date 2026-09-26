@@ -122,7 +122,14 @@ hippo: [hippo.policy.replan-required] reservation requires replanning: requested
 hippo: [hippo.config.unreadable] resource configuration: maximum memory weakens the immutable 256 MiB floor
 ```
 
-Retrying any of these produces the same answer. The request or the configuration has to change.
+**`hippo.identity.invalid`** — a `hippo.identity.json` identity file was found for this run and cannot be used. The
+diagnostic names the file; fix it, or remove it and pass `--source`:
+
+```console
+hippo: [hippo.identity.invalid] run identity file hippo.identity.json is invalid: decode identity: json: unknown field "unexpected"; fix or remove it
+```
+
+Retrying any of these produces the same answer. The request, the configuration, or the identity file has to change.
 
 **`hippo.supervision.failed`** — HIPPO failed at a step it does not classify further, possibly after
 the child started. When the shared coordination lock stays held past the two-second activation
