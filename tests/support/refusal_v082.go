@@ -40,6 +40,11 @@ func (driver *Driver) refusalBindings() []contract.StepBinding {
 		step(`^it exits 125 naming hippo\.supervision\.failed after the child started$`, driver.requireSupervisionLostV082),
 		step(`^a state root HIPPO is not permitted to create$`, driver.uncreatableStateRootV082),
 		step(`^a guarded run is requested with that state root$`, driver.runWithStateRootV082),
+		step(`^a reservation state root whose coordination lock refuses writes$`, driver.refusedReservationLockV082),
+		step(`^status is requested with that state root$`, driver.statusWithStateRootV082),
+		step(`^status exits 125 naming hippo\.evidence\.unwritable$`, func() error {
+			return driver.requireRefusedBeforeLaunchV082("evidence.unwritable")
+		}),
 		step(
 			`^a state root whose (coordination lock|reservation identity directory|session directory) refuses writes$`,
 			driver.refusedCoordinationStateV082,
@@ -325,6 +330,35 @@ func (driver *Driver) refusedCoordinationStateV082(state string) error {
 	}
 
 	return nil
+}
+
+// refusedReservationLockV082 stages a live reservation-mode root whose shared
+// lock status cannot open for update.
+func (driver *Driver) refusedReservationLockV082() error {
+	if err := driver.prepareInterruption(statusCommandName); err != nil {
+		return err
+	}
+	root := driver.interruption.root
+	driver.interruption.diskPath = root
+	if err := os.WriteFile(
+		filepath.Join(root, coordinationModeMarker), []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n"), 0o600,
+	); err != nil {
+		return err
+	}
+	if err := driver.refuseFile(filepath.Join(root, "coordination.lock")); err != nil {
+		return err
+	}
+	if driver.mode == contract.E2E {
+		return driver.compiledBinary()
+	}
+
+	return nil
+}
+
+func (driver *Driver) statusWithStateRootV082() error {
+	return driver.runRefusal(
+		[]string{statusCommandName, diskPathFlag, driver.interruption.diskPath}, &sequenceCollector{samples: driver.samples},
+	)
 }
 
 // refuseFile creates path readable but not writable, and records it so

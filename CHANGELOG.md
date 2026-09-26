@@ -164,7 +164,12 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   `hippo.supervision.failed`, although nothing had started. A caller matching `supervision.failed`
   for them should match `evidence.unwritable` and fix the permissions or free the volume of
   `HIPPO_ROOT`; nothing was started. A coordination write refused after launch still names
-  `hippo.supervision.failed`.
+  `hippo.supervision.failed`. The reason now covers the whole state root, coordination files
+  included, and the exit-code and state-root references say so.
+- `hippo status` against a reservation-mode root whose `coordination.lock` it cannot open for
+  update now exits `125` naming `hippo.evidence.unwritable`. It named `hippo.supervision.failed`,
+  although `status` supervises nothing. A caller matching `supervision.failed` here should match
+  `evidence.unwritable` and fix the permissions of `HIPPO_ROOT`.
 - A queued `run` stopped by a signal whose `never-started` receipt is refused now exits `125`
   naming `hippo.evidence.unwritable` instead of `130` or `143`. The receipt is what a caller reads
   before requeueing, so reporting only the signal would hide that it is missing.

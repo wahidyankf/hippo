@@ -142,7 +142,9 @@ a host HIPPO cannot read is not a busy host.
 **`hippo.evidence.unwritable`** — the evidence root refused a write HIPPO needs before launch: the
 state root cannot be created, or a sample, summary, `never-started` receipt, or the coordination
 lock, ledger, reservation identity or session record in that root cannot be written for lack of
-permission, a read-only file system, or no space or quota. Nothing was started. Fix
+permission, a read-only file system, or no space or quota. `status` names it too when it cannot
+open that lock to read coordination. The reason covers the whole state root, coordination files
+included. Nothing was started. Fix
 `HIPPO_ROOT` or free its volume. A queued run stopped by a signal whose receipt is refused ends here
 too, not with `128+N`, because the receipt you read before requeueing is missing.
 
