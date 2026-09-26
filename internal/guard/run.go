@@ -650,7 +650,10 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			return CapacityDeferredExitCode, nil
 		}
 
-		return 1, err
+		// Coordination state lives in the evidence root, and nothing has
+		// started yet, so a refused lock, ledger, identity, or session write
+		// is that root refusing a write.
+		return 1, refusedEvidenceWrite("joining shared coordination", err)
 	}
 	if session == nil {
 		if config.ReservationPolicy.Enabled {

@@ -40,6 +40,10 @@ func (driver *Driver) refusalBindings() []contract.StepBinding {
 		step(`^it exits 125 naming hippo\.supervision\.failed after the child started$`, driver.requireSupervisionLostV082),
 		step(`^a state root HIPPO is not permitted to create$`, driver.uncreatableStateRootV082),
 		step(`^a guarded run is requested with that state root$`, driver.runWithStateRootV082),
+		step(
+			`^a state root whose (coordination lock|reservation identity directory|session directory) refuses writes$`,
+			driver.refusedCoordinationStateV082,
+		),
 		step(`^a queued run whose receipt directory refuses writes$`, driver.refusedReceiptDirectoryV082),
 		step(`^the queued run receives SIGINT before it is admitted$`, driver.signalQueuedRunV082),
 		step(`^a guarded run that has begun sampling the host$`, driver.samplingRunV082),
@@ -288,6 +292,52 @@ func (driver *Driver) uncreatableStateRootV082() error {
 	driver.interruption.root = filepath.Join(parent, "state")
 	if driver.mode == contract.E2E {
 		return driver.compiledBinary()
+	}
+
+	return nil
+}
+
+// refusedCoordinationStateV082 stages a state root HIPPO can prepare for
+// evidence but whose coordination state refuses the write admission needs:
+// the shared lock it opens for update, or a directory it creates records in.
+func (driver *Driver) refusedCoordinationStateV082(state string) error {
+	if err := driver.prepareInterruption(runCommandName); err != nil {
+		return err
+	}
+	root := driver.interruption.root
+	driver.interruption.diskPath = root
+	switch state {
+	case "coordination lock":
+		if err := driver.refuseFile(filepath.Join(root, "coordination.lock")); err != nil {
+			return err
+		}
+	case "reservation identity directory":
+		if err := driver.lockDirectory(filepath.Join(root, "reservation-identities")); err != nil {
+			return err
+		}
+	default:
+		if err := driver.lockDirectory(filepath.Join(root, "sessions")); err != nil {
+			return err
+		}
+	}
+	if driver.mode == contract.E2E {
+		return driver.compiledBinary()
+	}
+
+	return nil
+}
+
+// refuseFile creates path readable but not writable, and records it so
+// cleanup restores it.
+func (driver *Driver) refuseFile(path string) error {
+	if err := os.WriteFile(path, nil, 0o400); err != nil {
+		return err
+	}
+	driver.interruption.locked = append(driver.interruption.locked, path)
+	if probe, err := os.OpenFile(path, os.O_RDWR, 0); err == nil {
+		_ = probe.Close()
+
+		return errors.New("this user can write a read-only file, so a refused write cannot be staged")
 	}
 
 	return nil
