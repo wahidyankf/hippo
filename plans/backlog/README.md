@@ -20,7 +20,5 @@ Check first that the plan still matches the repository. A plan queued two months
   pinned ShellCheck gate over one shared script list.
 - [Isolate test coordination state](isolate-test-coordination-state/README.md) keeps inherited `HIPPO_*` variables and
   the shared evidence root away from the binary under test.
-- [Neutralize test fixture identifiers](neutralize-test-fixture-identifiers/README.md) replaces a fixture string that
-  names a private repository with a synthetic value.
 - [Repair supervision readiness race](repair-supervision-readiness-race/README.md) makes the collector-failure fixture
   establish child PID readiness before it asserts supervision cleanup.
