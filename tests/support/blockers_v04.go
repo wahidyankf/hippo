@@ -165,7 +165,7 @@ func requireV04UnreadableSessionInventory(root string) error {
 		return errors.New("compatibility inventory error lacks private recovery guidance")
 	}
 
-	return nil
+	return requireSupervisionFailedAtBoundary(root, inventoryPath, before)
 }
 
 func requireV04FailedStaleHeavyCleanup(root string) error {
@@ -202,6 +202,12 @@ func requireV04FailedStaleHeavyCleanup(root string) error {
 	}
 	if strings.Contains(admissionError.Error(), root) || strings.Contains(admissionError.Error(), heavyPath) {
 		return errors.New("stale-heavy cleanup error exposed a private path")
+	}
+	if err := requireSupervisionFailedAtBoundary(root, ownerPath, before); err != nil {
+		return err
+	}
+	if _, markerError = os.Stat(filepath.Join(root, "coordination-mode.json")); markerError == nil {
+		return errors.New("the public run wrote a reservation marker after failed stale-heavy cleanup")
 	}
 
 	return nil
@@ -1149,7 +1155,10 @@ func requireV04BoundedGuardCancellation(string) error {
 }
 
 func requireV04BoundedGuardShedding(string) error {
-	return runInternalGuardRegressionV04("TestRunUnconfirmedRetirementPreservesOwnershipAndExit")
+	return errors.Join(
+		runInternalGuardRegressionV04("TestRunUnconfirmedRetirementPreservesOwnershipAndExit"),
+		requireShedReasonsAtBoundary(),
+	)
 }
 
 func requireV04BoundedLifetimeHandshake(string) error {

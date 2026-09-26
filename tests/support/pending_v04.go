@@ -219,7 +219,7 @@ func requireV04ImpossibleReservation(root string) error {
 		return fmt.Errorf("impossible reservation did not replan: session=%+v error=%w", session, err)
 	}
 
-	return nil
+	return requireImpossibleReplanAtBoundary(root)
 }
 
 func requireV04TemporaryExhaustion(root string) error {
@@ -243,7 +243,7 @@ func requireV04TemporaryExhaustion(root string) error {
 		return errors.New("temporary exhaustion did not honor its bounded wait")
 	}
 
-	return nil
+	return requireCapacityDeferredAtBoundary(root)
 }
 
 func requireV04FIFO(root string) error {
@@ -521,7 +521,7 @@ func (driver *Driver) requireMalformedCompatibilityDeferredV04() error {
 		return fmt.Errorf("malformed compatibility state changed: %q: %w", data, err)
 	}
 
-	return nil
+	return requireSupervisionFailedAtBoundary(driver.evidenceRoot, filepath.Join(driver.evidenceRoot, "heavy.lock", "owner.json"), driver.v04State)
 }
 
 func (driver *Driver) unsupportedCompatibilityV04() error {

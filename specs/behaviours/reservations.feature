@@ -29,7 +29,9 @@ Feature: Shared vector reservations
   Scenario: Reservation floors reject unsafe requests
     Given explicit requests below one CPU or 256 MiB
     When each unsafe reservation is validated
-    Then each request requires replanning with exit 125 naming hippo.policy.replan-required before enqueue
+    Then each request requires replanning before enqueue
+    And a caller asking for memory below the floor sees exit 125 naming hippo.policy.replan-required before enqueue
+    And a caller asking for a negative CPU count sees exit 2 naming hippo.args.invalid before enqueue
 
   @e2e-exempt
   Scenario: Vector admission is atomic
@@ -48,6 +50,7 @@ Feature: Shared vector reservations
     Given a live owner temporarily consumes the remaining capacity
     When another fitting reservation waits through its deadline
     Then the waiter remains FIFO head through its deadline and is deferred with exit 124 naming hippo.limit.capacity-deferred
+    And the deferral writes a never-started receipt even when the wait's budget is nearly spent
 
   @e2e-exempt
   Scenario: FIFO head cannot be bypassed by a smaller request

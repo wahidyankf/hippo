@@ -57,7 +57,7 @@ func (driver *Driver) requireMalformedServiceCompatibilityV04() error {
 		return fmt.Errorf("malformed service compatibility state changed: %q: %w", data, err)
 	}
 
-	return nil
+	return requireSupervisionFailedAtBoundary(driver.evidenceRoot, driver.configPath, driver.v04State)
 }
 
 func validReviewOwner(tokenValue, class string, sequence uint64, requested, allocated guard.ReservationVector) map[string]any {

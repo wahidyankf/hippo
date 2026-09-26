@@ -465,7 +465,8 @@ func (driver *Driver) requireStorageBlocked() error {
 	if !driver.assessment.StorageBlocked || driver.exitCode != guard.StorageBlockedExitCode {
 		return fmt.Errorf("got %+v and exit %d", driver.assessment, driver.exitCode)
 	}
-	return nil
+
+	return driver.requireAdmissionReasonAtBoundary(status.LimitShed, status.CodeLimitStorageBlocked)
 }
 
 func (driver *Driver) requireReason(reason string) error {
@@ -1573,8 +1574,8 @@ func (driver *Driver) observeCritical() error {
 	return driver.runGuardedShell("sleep 10", nil)
 }
 
-// requireShed observes the guard's non-storage shed decision, which the command
-// boundary reports as 124 naming hippo.limit.pressure-shed.
+// requireShed observes the guard's non-storage shed decision, then holds the
+// command boundary to reporting it as 124 naming hippo.limit.pressure-shed.
 func (driver *Driver) requireShed() error {
 	if driver.exitCode != guard.PressureShedExitCode {
 		return fmt.Errorf("got exit %d", driver.exitCode)
@@ -1583,7 +1584,7 @@ func (driver *Driver) requireShed() error {
 		return fmt.Errorf("critical child was not shed promptly: %s", driver.forceStopElapsed)
 	}
 
-	return nil
+	return requirePressureShedAtBoundary()
 }
 
 func (driver *Driver) degradedGrowthChild() error {
@@ -1652,7 +1653,8 @@ func (driver *Driver) requireDegradedShed() error {
 		!strings.Contains(driver.errorOutput, "shedding") {
 		return fmt.Errorf("exit=%d stderr=%q", driver.exitCode, driver.errorOutput)
 	}
-	return nil
+
+	return requirePressureShedAtBoundary()
 }
 
 func (driver *Driver) compiledBinary() error {
@@ -3172,7 +3174,8 @@ func (driver *Driver) requireReplan() error {
 	if driver.exitCode != policy.ReplanRequiredExitCode || driver.resolution.Decision != "replan" {
 		return fmt.Errorf("got %+v exit %d", driver.resolution, driver.exitCode)
 	}
-	return nil
+
+	return driver.requireAdmissionReasonAtBoundary(status.GuardFailed, status.CodePolicyReplanRequired)
 }
 
 func (driver *Driver) linuxCgroupCapacity() {
