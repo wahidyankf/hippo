@@ -79,6 +79,10 @@ const (
 	// CodeLimitPressureShed is a started child shed because the host crossed a
 	// pressure threshold while it ran.
 	CodeLimitPressureShed Code = "hippo.limit.pressure-shed"
+	// CodeLimitReleaseEnvelopeExceeded is release evidence that left the
+	// release envelope. The assessment ran and turned the release down; nothing
+	// was deferred, and assessing the same evidence again gives the same answer.
+	CodeLimitReleaseEnvelopeExceeded Code = "hippo.limit.release-envelope-exceeded"
 	// CodePolicyReplanRequired is strict capacity or configuration that cannot
 	// admit this work as asked for. A different request may succeed.
 	CodePolicyReplanRequired Code = "hippo.policy.replan-required"
@@ -117,6 +121,7 @@ var All = []Code{
 	CodeLimitCapacityDeferred,
 	CodeLimitStorageBlocked,
 	CodeLimitPressureShed,
+	CodeLimitReleaseEnvelopeExceeded,
 	CodePolicyReplanRequired,
 	CodeCoordinationProtocolMismatch,
 	CodeChildNotFound,
@@ -138,6 +143,7 @@ var statuses = map[Code]int{
 	CodeLimitCapacityDeferred:        LimitShed,
 	CodeLimitStorageBlocked:          LimitShed,
 	CodeLimitPressureShed:            LimitShed,
+	CodeLimitReleaseEnvelopeExceeded: LimitShed,
 	CodePolicyReplanRequired:         GuardFailed,
 	CodeCoordinationProtocolMismatch: GuardFailed,
 	CodeChildNotFound:                ChildNotFound,

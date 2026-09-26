@@ -31,6 +31,10 @@ var (
 	ErrDiskReserve = errors.New("release disk reserve is unavailable")
 	// ErrCPUHeadroom is CPU use that never settled inside the release budget.
 	ErrCPUHeadroom = errors.New("CPU use does not leave release and safety headroom")
+	// ErrHeadroomExhausted is a well-formed release summary whose overlap left
+	// the release envelope. Every other Assess error means the summary itself
+	// could not be used.
+	ErrHeadroomExhausted = errors.New("release overlap exhausted resource or routed responsiveness headroom")
 )
 
 // Check requires consecutive CPU samples plus release memory and disk reserves.
@@ -131,7 +135,7 @@ func Assess(reader io.Reader) (policy.ReleaseSummary, error) {
 		return summary, errors.New("resource evidence summary is invalid")
 	}
 	if !policy.ReleaseHeadroomAvailable(summary) {
-		return summary, errors.New("release overlap exhausted resource or routed responsiveness headroom")
+		return summary, ErrHeadroomExhausted
 	}
 
 	return summary, nil

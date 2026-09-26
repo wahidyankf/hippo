@@ -299,15 +299,19 @@ $ hippo release assess --summary summary.json
 ```
 
 Rejected evidence prints `"accepted":false` and returns exit `124`, naming
-`hippo.limit.capacity-deferred`, with a diagnostic that says the evidence was rejected and why:
+`hippo.limit.release-envelope-exceeded`, with a diagnostic that says the evidence was rejected and why. The reason is not
+retryable: the same summary is rejected again, so change the release rather than retry it.
 
 ```console
 $ hippo release assess --summary summary.json
 {"accepted":false,"schemaVersion":5}
-hippo: [hippo.limit.capacity-deferred] release evidence rejected: release overlap exhausted resource or routed responsiveness headroom
+hippo: [hippo.limit.release-envelope-exceeded] release evidence rejected: release overlap exhausted resource or routed responsiveness headroom
 $ echo $?
 124
 ```
+
+A summary that cannot be read or is not a valid summary prints no verdict and returns exit `125`, naming
+`hippo.evidence.unreadable`.
 
 Assessment accepts retained schema 2–5 summaries. New summaries are schema 5.
 

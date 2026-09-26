@@ -43,28 +43,30 @@ child's status never produces one. A script that needs certainty can ask for
 Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] message`, and in the
 `--output json` body as `error.code`. Nothing outside this list is ever returned.
 
-| Error code                             | Status | Meaning                                                |
-| -------------------------------------- | ------ | ------------------------------------------------------ |
-| `hippo.args.invalid`                   | `2`    | The invocation could not be parsed or accepted         |
-| `hippo.internal.failure`               | `2`    | A fault in HIPPO itself, including an unhandled panic  |
-| `hippo.limit.capacity-deferred`        | `124`  | Admission deferred, or a bounded wait elapsed          |
-| `hippo.limit.storage-blocked`          | `124`  | The disk floor stopped the work; free space first      |
-| `hippo.limit.pressure-shed`            | `124`  | A started child was shed under host pressure           |
-| `hippo.config.unreadable`              | `125`  | The resource configuration could not be read           |
-| `hippo.config.unresolvable`            | `125`  | The configuration was read and is not usable           |
-| `hippo.policy.replan-required`         | `125`  | No profile admits this request as asked for            |
-| `hippo.coordination.protocol-mismatch` | `125`  | Live peer state this client cannot safely join         |
-| `hippo.host.unreadable`                | `125`  | Host evidence could not be collected                   |
-| `hippo.evidence.unwritable`            | `125`  | The evidence root refused a write HIPPO needs          |
-| `hippo.evidence.unreadable`            | `125`  | Evidence HIPPO recorded earlier can no longer be read  |
-| `hippo.supervision.failed`             | `125`  | HIPPO failed at a step it did not classify further     |
-| `hippo.child.not-executable`           | `126`  | The command exists and cannot be executed              |
-| `hippo.child.not-found`                | `127`  | The command is not on `PATH` and not at the path given |
+| Error code                              | Status | Meaning                                                |
+| --------------------------------------- | ------ | ------------------------------------------------------ |
+| `hippo.args.invalid`                    | `2`    | The invocation could not be parsed or accepted         |
+| `hippo.internal.failure`                | `2`    | A fault in HIPPO itself, including an unhandled panic  |
+| `hippo.limit.capacity-deferred`         | `124`  | Admission deferred, or a bounded wait elapsed          |
+| `hippo.limit.storage-blocked`           | `124`  | The disk floor stopped the work; free space first      |
+| `hippo.limit.pressure-shed`             | `124`  | A started child was shed under host pressure           |
+| `hippo.limit.release-envelope-exceeded` | `124`  | Release evidence left the release envelope             |
+| `hippo.config.unreadable`               | `125`  | The resource configuration could not be read           |
+| `hippo.config.unresolvable`             | `125`  | The configuration was read and is not usable           |
+| `hippo.policy.replan-required`          | `125`  | No profile admits this request as asked for            |
+| `hippo.coordination.protocol-mismatch`  | `125`  | Live peer state this client cannot safely join         |
+| `hippo.host.unreadable`                 | `125`  | Host evidence could not be collected                   |
+| `hippo.evidence.unwritable`             | `125`  | The evidence root refused a write HIPPO needs          |
+| `hippo.evidence.unreadable`             | `125`  | Evidence HIPPO recorded earlier can no longer be read  |
+| `hippo.supervision.failed`              | `125`  | HIPPO failed at a step it did not classify further     |
+| `hippo.child.not-executable`            | `126`  | The command exists and cannot be executed              |
+| `hippo.child.not-found`                 | `127`  | The command is not on `PATH` and not at the path given |
 
 `error.retryable` in the body is `true` for `hippo.limit.capacity-deferred` and
 `hippo.limit.pressure-shed`, and `false` for the rest. `hippo.limit.storage-blocked` is not
 retryable although it is a limit: waiting does not free disk, and a caller that retries on it will
-retry forever.
+retry forever. `hippo.limit.release-envelope-exceeded` is not retryable either: it is a verdict on
+evidence already collected, and the same summary is rejected again.
 
 ## The machine-readable body
 
@@ -129,3 +131,9 @@ started had kept `1`, and now returns `125` naming `hippo.supervision.failed`. T
 in the same release because the invocation was the problem: a `run` with no identity source had
 returned `125` naming `hippo.policy.replan-required`, and a `history` filter value no run can carry
 had returned `1` as an empty result.
+
+v0.8.2 also added a reason so that a status no longer names something that did not happen.
+`release assess` over rejected evidence keeps `124` but names `hippo.limit.release-envelope-exceeded`,
+not retryable, where it had named `hippo.limit.capacity-deferred` and invited a retry that could only
+be rejected again; a summary it cannot read at all now returns `125` naming
+`hippo.evidence.unreadable` with no verdict.

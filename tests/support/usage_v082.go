@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -326,15 +327,9 @@ func (driver *Driver) requireHistoryNamedInEveryBody() error {
 		return errors.New("no history invocation was attempted")
 	}
 	for _, attempt := range driver.usageAttempts {
-		index := strings.Index(attempt.stderr, "\n{")
-		if index < 0 {
-			return fmt.Errorf("%q wrote no failure body: stderr=%q", strings.Join(attempt.arguments, " "), attempt.stderr)
-		}
-		body := struct {
-			Command string `json:"command"`
-		}{}
-		if err := json.NewDecoder(strings.NewReader(attempt.stderr[index+1:])).Decode(&body); err != nil {
-			return fmt.Errorf("%q wrote an unreadable failure body: %w", strings.Join(attempt.arguments, " "), err)
+		body, err := failureBodyIn(attempt)
+		if err != nil {
+			return err
 		}
 		if body.Command != "hippo history" {
 			return fmt.Errorf("%q named %q as the command", strings.Join(attempt.arguments, " "), body.Command)
@@ -364,9 +359,12 @@ func (driver *Driver) requireSourceNamed() error {
 }
 
 // requestRejectedAssessment runs the assessment through the command line in
-// every adapter, because the sentence under test is the one the command writes.
+// every adapter, because the sentence and body under test are the ones the
+// command writes.
 func (driver *Driver) requestRejectedAssessment() error {
-	return driver.attemptEach([][]string{{releaseCommandName, releaseAssessName, summaryFlag, driver.summaryPath}})
+	return driver.attemptEach([][]string{{
+		outputFlag, outputJSONValue, releaseCommandName, releaseAssessName, summaryFlag, driver.summaryPath,
+	}})
 }
 
 func (driver *Driver) requireRejectionNamed() error {
@@ -374,13 +372,74 @@ func (driver *Driver) requireRejectionNamed() error {
 		return errors.New("no release assessment was attempted")
 	}
 	attempt := driver.usageAttempts[0]
+	body, err := failureBodyIn(attempt)
 	switch {
+	case err != nil:
+		return err
 	case !strings.Contains(attempt.stdout, `"accepted":false`):
 		return fmt.Errorf("the evidence was not rejected: exit=%d stdout=%q", attempt.exitCode, attempt.stdout)
+	case attempt.exitCode != status.LimitShed || body.Error.Code != status.CodeLimitReleaseEnvelopeExceeded:
+		return fmt.Errorf("the rejection is not 124 naming %s: exit=%d stderr=%q",
+			status.CodeLimitReleaseEnvelopeExceeded, attempt.exitCode, attempt.stderr)
+	case body.Error.Retryable:
+		return fmt.Errorf("a rejected assessment is marked retryable: stderr=%q", attempt.stderr)
 	case !strings.Contains(attempt.stderr, "release evidence rejected"):
 		return fmt.Errorf("the diagnostic does not say the evidence was rejected: stderr=%q", attempt.stderr)
 	case strings.Contains(attempt.stderr, "capacity deferred"):
 		return fmt.Errorf("the diagnostic claims a capacity deferral: stderr=%q", attempt.stderr)
+	}
+
+	return nil
+}
+
+// failureBody is the part of the machine-readable failure these steps read.
+type failureBody struct {
+	Command string `json:"command"`
+	Error   struct {
+		Code      status.Code `json:"code"`
+		Retryable bool        `json:"retryable"`
+	} `json:"error"`
+}
+
+func failureBodyIn(attempt usageAttempt) (failureBody, error) {
+	body := failureBody{}
+	index := strings.Index(attempt.stderr, "\n{")
+	if index < 0 {
+		return body, fmt.Errorf("%q wrote no failure body: stderr=%q", strings.Join(attempt.arguments, " "), attempt.stderr)
+	}
+	if err := json.NewDecoder(strings.NewReader(attempt.stderr[index+1:])).Decode(&body); err != nil {
+		return body, fmt.Errorf("%q wrote an unreadable failure body: %w", strings.Join(attempt.arguments, " "), err)
+	}
+
+	return body, nil
+}
+
+// unusableSummary writes a summary path whose content is not a release
+// summary, as a truncated or overwritten file would be.
+func (driver *Driver) unusableSummary() error {
+	directory, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+	driver.summaryPath = filepath.Join(directory, "summary.json")
+
+	return os.WriteFile(driver.summaryPath, []byte("not a summary"), 0o600)
+}
+
+func (driver *Driver) requireUnusableSummaryRefused() error {
+	if len(driver.usageAttempts) == 0 {
+		return errors.New("no release assessment was attempted")
+	}
+	attempt := driver.usageAttempts[0]
+	body, err := failureBodyIn(attempt)
+	switch {
+	case err != nil:
+		return err
+	case attempt.exitCode != status.GuardFailed || body.Error.Code != status.CodeEvidenceUnreadable:
+		return fmt.Errorf("an unusable summary is not 125 naming %s: exit=%d stderr=%q",
+			status.CodeEvidenceUnreadable, attempt.exitCode, attempt.stderr)
+	case attempt.stdout != "":
+		return fmt.Errorf("an unusable summary wrote a verdict to stdout: %q", attempt.stdout)
 	}
 
 	return nil

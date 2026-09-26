@@ -23,16 +23,18 @@ the eventual failure worse.
 
 ## Handle `124`
 
-Three reasons share this status, and only one of them is a plain "wait and retry".
+Four reasons share this status, and only one of them is a plain "wait and retry".
 
-| Reason                          | Do this                                                      |
-| ------------------------------- | ------------------------------------------------------------ |
-| `hippo.limit.capacity-deferred` | Retry when the host is quieter, subject to the receipt below |
-| `hippo.limit.pressure-shed`     | The payload ran. Recover it before repeating anything        |
-| `hippo.limit.storage-blocked`   | Free disk on the measured path. Waiting will not do it       |
+| Reason                                  | Do this                                                           |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| `hippo.limit.capacity-deferred`         | Retry when the host is quieter, subject to the receipt below      |
+| `hippo.limit.pressure-shed`             | The payload ran. Recover it before repeating anything             |
+| `hippo.limit.storage-blocked`           | Free disk on the measured path. Waiting will not do it            |
+| `hippo.limit.release-envelope-exceeded` | Release evidence was rejected. Change the release, not the timing |
 
 `error.retryable` in the `--output json` body says the same thing: it is `true` for the first two
-and `false` for storage, because a caller that retries on a full disk retries forever.
+and `false` for storage, because a caller that retries on a full disk retries forever, and for a
+rejected release, because the same evidence is rejected again.
 
 ### Tell never-started from started
 
