@@ -86,7 +86,12 @@ type RunConfig struct {
 	// the child chose from one hippo chose: hippo reports a reason for its
 	// own refusals, and passes a child's status through untouched and
 	// unexplained, which is the only honest thing to do with it.
-	ObserveChildStatus       func(int)
+	ObserveChildStatus func(int)
+	// RetirementConfirmation, when positive, replaces the default window a
+	// forced stop waits for the killed process group to retire. A caller that
+	// knows its host can stall longer than the default sets it, so the stop is
+	// judged by the group's real exit. Zero keeps the default.
+	RetirementConfirmation   time.Duration
 	Sleep                    func(time.Duration)
 	ChildStdin               io.Reader
 	ChildStdout, ChildStderr io.Writer
@@ -367,7 +372,11 @@ var errChildRetirementUnconfirmed = errors.New("child process-group retirement r
 // from a coordination root every repository shares.
 const childRetirementConfirmation = 2 * time.Second
 
-func terminateAndWait(lifetime *supervisedLifetime, grace time.Duration) (error, error) {
+func terminateAndWait(lifetime *supervisedLifetime, grace, confirmation time.Duration) (error, error) {
+	if confirmation <= 0 {
+		confirmation = childRetirementConfirmation
+	}
+
 	select {
 	case waitError := <-lifetime.exited:
 		return waitError, nil
@@ -383,7 +392,7 @@ func terminateAndWait(lifetime *supervisedLifetime, grace time.Duration) (error,
 		return waitError, signalError
 	case <-timer.C:
 		killError := signalGroup(lifetime.processGroup, syscall.SIGKILL)
-		postKill := time.NewTimer(max(grace, childRetirementConfirmation))
+		postKill := time.NewTimer(max(grace, confirmation))
 		defer postKill.Stop()
 		select {
 		case waitError := <-lifetime.exited:
@@ -445,7 +454,7 @@ func stopConfiguredLifetime(config RunConfig, lifetime *supervisedLifetime) (err
 		return config.stopLifetime(lifetime, config.Policy.TerminationGrace)
 	}
 
-	return terminateAndWait(lifetime, config.Policy.TerminationGrace)
+	return terminateAndWait(lifetime, config.Policy.TerminationGrace, config.RetirementConfirmation)
 }
 
 func resolveActivationFailure(

@@ -2191,7 +2191,7 @@ func assertTerminateAndWaitIsBounded(t *testing.T) {
 	go func() {
 		_, stopError := terminateAndWait(&supervisedLifetime{
 			command: command, processGroup: command.Process.Pid, exited: exited,
-		}, 10*time.Millisecond)
+		}, 10*time.Millisecond, 0)
 		done <- stopError
 	}()
 	select {
@@ -2260,7 +2260,7 @@ func TestTerminateAndWaitConfirmsRetirementAfterAnAggressiveGrace(t *testing.T) 
 
 	_, stopError := terminateAndWait(&supervisedLifetime{
 		command: command, processGroup: command.Process.Pid, exited: exited,
-	}, 10*time.Millisecond)
+	}, 10*time.Millisecond, 0)
 	_ = command.Wait()
 
 	if errors.Is(stopError, errChildRetirementUnconfirmed) {
@@ -2268,6 +2268,70 @@ func TestTerminateAndWaitConfirmsRetirementAfterAnAggressiveGrace(t *testing.T) 
 	}
 	if stopError != nil {
 		t.Fatalf("force-stop reported %v", stopError)
+	}
+}
+
+func startRetirementSubject(t *testing.T) *exec.Cmd {
+	t.Helper()
+	command := exec.Command("/bin/sh", "-c", "sleep 60")
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		_ = command.Wait()
+	})
+
+	return command
+}
+
+func TestTerminateAndWaitHonoursAConfiguredRetirementConfirmation(t *testing.T) {
+	// A caller that knows its host can outlast the fixed confirmation window
+	// sets its own, so a forced stop is judged by the killed group's real exit
+	// rather than by how quickly a loaded host reaps it.
+	t.Run("longer than the default confirms a slow retirement", func(t *testing.T) {
+		command := startRetirementSubject(t)
+		exited := make(chan error, 1)
+		time.AfterFunc(childRetirementConfirmation+300*time.Millisecond, func() { exited <- nil })
+
+		_, stopError := terminateAndWait(&supervisedLifetime{
+			command: command, processGroup: command.Process.Pid, exited: exited,
+		}, 10*time.Millisecond, time.Hour)
+		if stopError != nil {
+			t.Fatalf("a retirement inside the configured window reported %v", stopError)
+		}
+	})
+	t.Run("shorter than the default bounds the wait", func(t *testing.T) {
+		command := startRetirementSubject(t)
+		started := time.Now()
+
+		_, stopError := terminateAndWait(&supervisedLifetime{
+			command: command, processGroup: command.Process.Pid, exited: make(chan error),
+		}, 10*time.Millisecond, 100*time.Millisecond)
+		if !errors.Is(stopError, errChildRetirementUnconfirmed) {
+			t.Fatalf("expected unconfirmed retirement, got %v", stopError)
+		}
+		if elapsed := time.Since(started); elapsed >= childRetirementConfirmation {
+			t.Fatalf("the configured window was ignored: waited %s", elapsed)
+		}
+	})
+}
+
+func TestStopConfiguredLifetimeCarriesTheRetirementConfirmation(t *testing.T) {
+	command := startRetirementSubject(t)
+	config := RunConfig{Policy: policy.DefaultPolicy(), RetirementConfirmation: 100 * time.Millisecond}
+	config.Policy.TerminationGrace = 10 * time.Millisecond
+	started := time.Now()
+
+	_, stopError := stopConfiguredLifetime(config, &supervisedLifetime{
+		command: command, processGroup: command.Process.Pid, exited: make(chan error),
+	})
+	if !errors.Is(stopError, errChildRetirementUnconfirmed) {
+		t.Fatalf("expected unconfirmed retirement, got %v", stopError)
+	}
+	if elapsed := time.Since(started); elapsed >= childRetirementConfirmation {
+		t.Fatalf("RunConfig.RetirementConfirmation did not reach the stop: waited %s", elapsed)
 	}
 }
 
