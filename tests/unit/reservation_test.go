@@ -12,8 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 func TestMalformedCompatibilitySessionFailsClosedWithoutMutation(t *testing.T) {
@@ -375,6 +378,39 @@ func TestBoundedWaitDefersOnCapacityWhenBudgetIsNearlySpent(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("receipt entries=%d error=%v, want one never-started receipt", len(entries), err)
+	}
+}
+
+// A waiter that stops at a held coordination lock owes the same receipt as one
+// whose retry wait ran out, and a receipt it cannot write outranks the
+// deferral, so a caller never requeues on a receipt that is missing.
+func TestHeldCoordinationLockWithRefusedReceiptReportsTheRefusal(t *testing.T) {
+	root := t.TempDir()
+	lock, err := os.OpenFile(filepath.Join(root, "coordination.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Close() }()
+	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	receipts := filepath.Join(root, "receipts")
+	if err = os.Mkdir(receipts, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(receipts, 0o700) }()
+
+	session, err := guard.AcquireReservationWithOptions(
+		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
+		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, 20*time.Millisecond,
+		guard.ReservationAdmissionOptions{Metadata: guard.ReservationMetadata{Source: "fixture"}},
+	)
+	if session != nil {
+		t.Fatal("a held coordination lock admitted the waiter")
+	}
+	failure, classified := errors.AsType[status.Failure](err)
+	if !classified || failure.Code != status.CodeEvidenceUnwritable || guard.IsCoordinationDeferred(err) {
+		t.Fatalf("a refused receipt at a held lock returned %v, want only %s", err, status.CodeEvidenceUnwritable)
 	}
 }
 

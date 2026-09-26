@@ -213,6 +213,14 @@ quieter`, although nothing was deferred. The diagnostic is now one line that say
   deferral, and wrote no `never-started` receipt, which is what a consumer reads before requeueing.
   A free lock is now taken before any wait begins, and the timer only bounds a wait for a lock
   someone holds.
+- A reservation that stopped at the shared root's coordination lock wrote no `never-started`
+  receipt. When another admission held that lock until the wait ran out, the run exited `124`
+  naming `hippo.limit.capacity-deferred` with no receipt, and a signal while it waited for the lock
+  exited `128+N` with none. It now writes the receipt a waiter whose retry wait ran out or was
+  signalled writes: `never-started` with reason `admission-deadline` or `admission-cancelled`. If
+  that receipt is refused, the run exits `125` naming `hippo.evidence.unwritable`, as at the end of
+  the retry wait. A caller that requeues once on a `never-started` receipt now requeues these runs
+  too; nothing about the exit status changed.
 - `hippo-conformance` could never skip a capacity deferral against a current binary. An
   allow-capacity-skip check still required the retired exit `75` and a progress sentence the guard
   does not always print. It now requires exit `124`, the `hippo.limit.capacity-deferred` reason, and
