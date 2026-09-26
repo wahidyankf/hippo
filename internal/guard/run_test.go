@@ -2408,9 +2408,11 @@ func TestReservationStatusWaitsOutABusyCoordinationRoot(t *testing.T) {
 }
 
 func TestRunDefersWhenTheRequestedPortIsHeldByALiveOwner(t *testing.T) {
-	// A service port held by a live peer is retryable lease pressure, which the
-	// public contract reports as exit 75. A caller that cannot tell it apart
-	// from a configuration or supervision failure has no basis to retry.
+	// A service port held by a live peer is retryable lease pressure: the guard
+	// returns the internal capacity-deferral status, which the public contract
+	// reports as exit 124 naming hippo.limit.capacity-deferred. A caller that
+	// cannot tell it apart from a configuration or supervision failure has no
+	// basis to retry.
 	leaseRoot := t.TempDir()
 	const port = 45_213
 	held, err := AcquirePortLease(leaseRoot, port, "holder", 45_000, 46_000)

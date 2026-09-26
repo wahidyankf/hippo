@@ -30,7 +30,9 @@ const (
 // ErrReservationReplan identifies a request that can never fit the configured safe budget.
 var ErrReservationReplan = errors.New("reservation requires replanning")
 
-// ErrReservationDeferred identifies bounded FIFO exhaustion that maps to exit 75.
+// ErrReservationDeferred identifies bounded FIFO exhaustion. The guard returns
+// it as the internal capacity-deferral status, which callers see as exit 124
+// naming hippo.limit.capacity-deferred.
 var ErrReservationDeferred = errors.New("reservation capacity remained exhausted")
 
 // ReservationWaitStatus describes one bounded queue heartbeat.

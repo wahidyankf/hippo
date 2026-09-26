@@ -65,7 +65,9 @@ var coordinationProcessGates = struct { //nolint:gochecknoglobals // Process-loc
 	held:       make(map[*os.File]*coordinationProcessGate),
 }
 
-// IsCoordinationDeferred reports whether another compatible owner should be retried with exit 75.
+// IsCoordinationDeferred reports whether another compatible owner should be
+// retried. The guard returns it as the internal capacity-deferral status,
+// which callers see as exit 124 naming hippo.limit.capacity-deferred.
 func IsCoordinationDeferred(err error) bool {
 	return errors.Is(err, errCoordinationDeferred)
 }
