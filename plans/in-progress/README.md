@@ -8,4 +8,5 @@ Work finishes only when every required outcome, acceptance condition, verificati
 
 ## Directory Map
 
-This stage holds no plan folder, so this README has no siblings to map.
+- [Repair supervision readiness race](repair-supervision-readiness-race/README.md) makes the collector-failure fixture
+  establish child PID readiness before it asserts supervision cleanup.

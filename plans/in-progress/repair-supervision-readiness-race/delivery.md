@@ -29,6 +29,15 @@ npm ci
 
 HIPPO cannot guard its own repository commands. Run one heavy command at a time directly; do not wrap them in `./hippo`.
 
+### Execution Record
+
+Executed on 2026-09-26 in the combined v0.8.2 flake-repair worktree `worktrees/deterministic-flaky-tests` (branch
+`worktree/deterministic-flaky-tests`, from `main` at `acf6577`), with the owner's approval, rather than in the declared
+worktree. That branch carries this repair beside other test-only flake repairs, each in its own commit, and one pull
+request delivers them all. Its delivery run was told to run Go and gate commands through `./hippo`, which departs from
+the rule above; see `learnings.md`. Push, pull-request, merge, reconciliation, and clean-up items belong to that
+delivery run and are marked delegated below.
+
 ## Delivery Unit
 
 One branch and pull request deliver one test-only outcome: deterministic child readiness precedes the injected
@@ -43,48 +52,60 @@ scope; never bypass a hook.
 
 - [ ] `[AI]` Provision the declared worktree with the exact `git worktree add` command above; acceptance: it is
       registered once on `worktree/repair-supervision-readiness-race` at `origin/main`. `[AC-03]`
-- [ ] `[AI]` In the worktree, run `npm ci`; acceptance: dependencies install, hooks activate, and
+      **Not performed (2026-09-26):** executed in the combined worktree named in the execution record.
+- [x] `[AI]` In the worktree, run `npm ci`; acceptance: dependencies install, hooks activate, and
       `git status --porcelain` is empty. `[AC-03]`
+      **Result:** `npm ci` installed with 0 vulnerabilities; `git status --porcelain` was empty.
 - [ ] `[AI]` Run `npm run test:quick`; acceptance: the baseline quick gate exits `0` without a retry. `[AC-03]`
-- [ ] `[AI]` Move `plans/backlog/repair-supervision-readiness-race/` to
+      **Not performed (2026-09-26):** no separate baseline; the quick gate runs on the final branch head in Phase 2.
+- [x] `[AI]` Move `plans/backlog/repair-supervision-readiness-race/` to
       `plans/in-progress/repair-supervision-readiness-race/` with `git mv`; acceptance: one in-progress copy exists and
       no backlog copy exists. `[AC-03]`
-- [ ] `[AI]` Update `plans/backlog/README.md` and `plans/in-progress/README.md`; acceptance: only the in-progress index
+      **Result:** `git mv` moved the folder; one in-progress copy exists and no backlog copy.
+- [x] `[AI]` Update `plans/backlog/README.md` and `plans/in-progress/README.md`; acceptance: only the in-progress index
       links the active plan. `[AC-03]`
-- [ ] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and
+      **Result:** only the in-progress index links the plan; the backlog index states it holds no plan.
+- [x] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and
       run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-03]`
+      **Result:** read against every rule, none fails; `./rhino md internal-link validate` reported `checked 770 links, no findings`.
 
 ### Phase 0 Gate
 
-- [ ] `[AI]` Run `git status --short` and record the baseline plus plan activation paths in this file; acceptance: no
+- [x] `[AI]` Run `git status --short` and record the baseline plus plan activation paths in this file; acceptance: no
       unowned path is present. `[AC-03]`
+      **Result:** the plan rename and the two stage indexes, beside the branch's committed repairs; no unowned path.
 
 > **Pause Safety**: one clean worktree exists and the active plan passes the structural rules. Safe to stop. To
 > resume: `./rhino md internal-link validate`.
 
 ## Phase 1: Deterministic Readiness Cycle
 
-- [ ] `[AI]` **RED**: edit only the child command in `tests/support/driver.go::loseHostEvidence` so it delays briefly
+- [x] `[AI]` **RED**: edit only the child command in `tests/support/driver.go::loseHostEvidence` so it delays briefly
       by using `trap '' TERM; sleep 0.05; printf '%s' "$$" > "$GUARD_CHILD_PID"; while :; do sleep 1; done` before
       writing `child.pid`; run `go test -count=1 -run '^TestUnitBehaviours$' ./tests/unit`; acceptance: the existing
       supervision-failure scenario fails with `read guarded child PID` before its cleanup assertion. `[AC-01]`
-- [ ] `[AI]` Record the exact failing command and diagnostic under this item; acceptance: the failure proves the
+      **Result:** the planned `sleep 0.05` did not fail (5 of 5 passed): the child still wrote its PID inside the 50 ms termination grace after the first 20 ms supervision sample. `sleep 0.2` outlasts both and failed 5 of 5.
+- [x] `[AI]` Record the exact failing command and diagnostic under this item; acceptance: the failure proves the
       readiness race without changing production code or the Gherkin corpus. `[AC-01]` `[AC-03]`
-- [ ] `[AI]` **RED**: add `tests/support/driver_test.go` in package `support` to require that a failing
+      **Result:** `go test -count=5 -v -run '^TestUnitBehaviours$/^A_supervision_failure_reaps_the_guarded_child_before_releasing_ownership$' ./tests/unit` failed 5 of 5 with `read guarded child PID: open <temp>/hippo-lease-<n>/child.pid: no such file or directory`; product code and the Gherkin corpus were unchanged.
+- [x] `[AI]` **RED**: add `tests/support/driver_test.go` in package `support` to require that a failing
       `beforeFailure` hook waits on a missing marker through `awaitMarkerFile` with a short test bound, then returns a
       readiness-specific error that wins over the injected collector error; name the tests
       `TestSequenceCollectorRunsBeforeFailureHook` and `TestSequenceCollectorReturnsReadinessErrorWithinBound`, then
       run `go test -count=1 ./tests/support`; acceptance: both tests fail before the optional hook seam exists.
       `[AC-04]`
-- [ ] `[AI]` **GREEN**: add the optional `beforeFailure func() error` seam to `sequenceCollector`, call it immediately
+      **Result:** `go test -count=1 -run TestSequenceCollector ./tests/support` did not build: `unknown field beforeFailure in struct literal of type sequenceCollector`, `undefined: childPIDReadiness`, `undefined: errChildPIDNotReady`.
+- [x] `[AI]` **GREEN**: add the optional `beforeFailure func() error` seam to `sequenceCollector`, call it immediately
       before the injected error, and configure `loseHostEvidence` to use
       `awaitMarkerFile(pidPath, interruptReadinessWait)` with the exact timeout error from `tech-docs.md`; run
       `go test -count=1 -run '^TestUnitBehaviours$' ./tests/unit`, then `go test -count=1 ./tests/support`; acceptance:
       AC-01, AC-02, and AC-04 pass with the readiness error taking precedence on timeout. `[AC-01]` `[AC-02]` `[AC-04]`
-- [ ] `[AI]` **REFACTOR**: keep the hook private and reuse `awaitMarkerFile` without editing
+      **Result:** the private `beforeFailure` seam runs before the injected error, and `childPIDReadiness(pidPath, interruptReadinessWait)` wraps `awaitMarkerFile` and returns `errChildPIDNotReady` with the exact message from `tech-docs.md`. The focused scenario passed 5 of 5 and both support tests passed.
+- [x] `[AI]` **REFACTOR**: keep the hook private and reuse `awaitMarkerFile` without editing
       `tests/support/review_v04.go`; run `gofmt -w tests/support/driver.go tests/support/driver_test.go`, then
       `git diff --check`; acceptance: one bounded polling implementation owns this path and the diff check exits `0`.
       `[AC-01]` `[AC-02]` `[AC-04]`
+      **Result:** `gofmt` reported nothing, `git diff --check` exited `0`, and `review_v04.go` is unchanged. `driver_test.go` carries `//nolint:testpackage` because the seam is package-private.
 - [ ] `[AI]` Run `go test -count=20 -run '^TestUnitBehaviours$' ./tests/unit`; acceptance: all twenty executions pass
       without retry and the delayed PID publication remains enabled. `[AC-01]` `[AC-02]` `[AC-03]`
 
