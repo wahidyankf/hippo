@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -667,9 +668,8 @@ func TestAbandonedLocalHandlesPermitLaterSameProcessReclaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire port: %v", err)
 	}
-	holder := exec.Command("/bin/sh", "-c", "sleep 0.15")
-	holder.ExtraFiles = []*os.File{session.identityLock, lease.identityLock}
-	if err = holder.Start(); err != nil {
+	holder := newRetainedHolder(t)
+	if err = holder.start(session.identityLock, lease.identityLock); err != nil {
 		t.Fatal(err)
 	}
 	if err = errors.Join(abandonReservationIdentity(session), abandonPortLeaseIdentity(lease)); err != nil {
@@ -682,7 +682,7 @@ func TestAbandonedLocalHandlesPermitLaterSameProcessReclaim(t *testing.T) {
 		_ = ReleasePortLease(portRoot, competitor)
 		t.Fatal("live holder port was reclaimed")
 	}
-	if err = holder.Wait(); err != nil {
+	if err = holder.release(); err != nil {
 		t.Fatal(err)
 	}
 	if totals, statusError := ReservationStatus(context.Background(), reservationRoot); statusError != nil || totals.ActiveOwners != 0 {
@@ -1922,6 +1922,83 @@ func TestSchemaOneEmbeddedOwnershipRetiresAfterHolder(t *testing.T) {
 	}
 }
 
+// unconfirmedRetirementHangLimit only detects a run that never returns. It is
+// not a speed budget: boundedness is proved by returning while the holder is
+// still retained and the termination grace is an hour.
+const unconfirmedRetirementHangLimit = 30 * time.Second
+
+// retainedHolder is a process that inherits lifetime identities and keeps them
+// until the test releases it, so the test, not a fixed child lifetime, decides
+// when ownership retires.
+type retainedHolder struct {
+	command      *exec.Cmd
+	releaseRead  *os.File
+	releaseWrite *os.File
+	once         sync.Once
+	releaseError error
+}
+
+// newRetainedHolder prepares a holder whose release also runs at cleanup, so an
+// assertion that fails early never leaks it.
+func newRetainedHolder(t *testing.T) *retainedHolder {
+	t.Helper()
+	releaseRead, releaseWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	holder := &retainedHolder{
+		command:      exec.Command("/bin/sh", "-c", "read -r released || true"),
+		releaseRead:  releaseRead,
+		releaseWrite: releaseWrite,
+	}
+	holder.command.Stdin = releaseRead
+	t.Cleanup(func() { _ = holder.release() })
+
+	return holder
+}
+
+func (holder *retainedHolder) start(identities ...*os.File) error {
+	for _, identity := range identities {
+		if identity != nil {
+			holder.command.ExtraFiles = append(holder.command.ExtraFiles, identity)
+		}
+	}
+
+	return holder.command.Start()
+}
+
+// release closes the only write end of the holder's input: the holder reads
+// end-of-file, exits, and is reaped, which retires its inherited identities.
+func (holder *retainedHolder) release() error {
+	holder.once.Do(func() {
+		holder.releaseError = holder.releaseWrite.Close()
+		if holder.command.Process != nil {
+			holder.releaseError = errors.Join(holder.releaseError, holder.command.Wait())
+		}
+		holder.releaseError = errors.Join(holder.releaseError, holder.releaseRead.Close())
+	})
+
+	return holder.releaseError
+}
+
+// awaitReservationActivation observes the ledger until Run records the single
+// owner's process group; the hang limit only detects an activation that never
+// happens.
+func awaitReservationActivation(t *testing.T, reservationRoot string) {
+	t.Helper()
+	deadline := time.Now().Add(unconfirmedRetirementHangLimit)
+	for {
+		ledger, ledgerError := readReservationLedger(reservationRoot)
+		if ledgerError == nil && len(ledger.Owners) == 1 && ledger.Owners[0].ProcessGroup > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("reservation did not activate: ledger=%+v error=%v", ledger, ledgerError)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nolint:cyclop,funlen,gocognit,gocyclo // The table verifies every stable exit across reservation, port, holder, and competitor lifecycle assertions.
 	cases := []struct {
 		name     string
@@ -1937,17 +2014,11 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 			reservationRoot := filepath.Join(root, "reservation")
 			portRoot := filepath.Join(root, "ports")
 			started := make(chan struct{})
-			var holder *exec.Cmd
+			holder := newRetainedHolder(t)
 			starter := func(
 				_ context.Context, _ RunConfig, _ string, _ []string, identities ...*os.File,
 			) (*supervisedLifetime, error) {
-				holder = exec.Command("/bin/sh", "-c", "sleep 0.3")
-				for _, identity := range identities {
-					if identity != nil {
-						holder.ExtraFiles = append(holder.ExtraFiles, identity)
-					}
-				}
-				if err := holder.Start(); err != nil {
+				if err := holder.start(identities...); err != nil {
 					return nil, err
 				}
 				close(started)
@@ -1955,11 +2026,13 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 				return &supervisedLifetime{processGroup: os.Getpid(), exited: make(chan error)}, nil
 			}
 			contextValue, cancel := context.WithCancel(context.Background())
-			defer cancel()
 			policyValue := policy.DefaultPolicy()
 			policyValue.AdmissionWindow = 100 * time.Millisecond
 			policyValue.LeaseWait = 10 * time.Millisecond
 			policyValue.SampleInterval = 5 * time.Millisecond
+			// Any wait on retirement, or on a window derived from the grace, would
+			// outlast the hang limit below by orders of magnitude.
+			policyValue.TerminationGrace = time.Hour
 			plan := ReservationPlan{
 				Capacity:  ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 				Requested: ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
@@ -1970,7 +2043,19 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 				err  error
 			}
 			done := make(chan runResult, 1)
+			finished := make(chan struct{})
+			// Registered after the holder, so it runs first: Run has returned
+			// before the holder is released and reaped.
+			t.Cleanup(func() {
+				cancel()
+				select {
+				case <-finished:
+				case <-time.After(unconfirmedRetirementHangLimit):
+					t.Error("run did not return after cleanup cancellation")
+				}
+			})
 			go func() {
+				defer close(finished)
 				code, err := Run(contextValue, RunConfig{
 					Command: "true", TaskClass: policy.TaskEphemeral, EvidenceRoot: reservationRoot,
 					Collector: &controlledRunCollector{}, Policy: policyValue,
@@ -1988,20 +2073,10 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 			case <-started:
 			case result := <-done:
 				t.Fatalf("run exited before lifetime start: code=%d error=%v", result.code, result.err)
-			case <-time.After(time.Second):
+			case <-time.After(unconfirmedRetirementHangLimit):
 				t.Fatal("run did not reach lifetime start")
 			}
-			activationDeadline := time.Now().Add(time.Second)
-			for {
-				ledger, ledgerError := readReservationLedger(reservationRoot)
-				if ledgerError == nil && len(ledger.Owners) == 1 && ledger.Owners[0].ProcessGroup > 0 {
-					break
-				}
-				if time.Now().After(activationDeadline) {
-					t.Fatalf("reservation did not activate: ledger=%+v error=%v", ledger, ledgerError)
-				}
-				time.Sleep(time.Millisecond)
-			}
+			awaitReservationActivation(t, reservationRoot)
 			var ledgerBefore []byte
 			var readError error
 			if fixture.name == "cancellation" {
@@ -2022,9 +2097,12 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 			if err != nil {
 				t.Fatal(err)
 			}
-			startedAt := time.Now()
-			result := <-done
-			if time.Since(startedAt) > 250*time.Millisecond {
+			// The holder retires only when released below, so Run returning at all
+			// proves it did not wait for retirement; the limit only detects a hang.
+			var result runResult
+			select {
+			case result = <-done:
+			case <-time.After(unconfirmedRetirementHangLimit):
 				t.Fatal("unconfirmed retirement did not return boundedly")
 			}
 			ledgerAfter, ledgerError := os.ReadFile(reservationLedgerPath(reservationRoot))
@@ -2051,8 +2129,8 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 			if result.code != callerShedCode(fixture.exitCode) || !errors.Is(result.err, errChildRetirementUnconfirmed) {
 				t.Fatalf("unconfirmed result code=%d error=%v", result.code, result.err)
 			}
-			if waitError := holder.Wait(); waitError != nil {
-				t.Fatal(waitError)
+			if releaseError := holder.release(); releaseError != nil {
+				t.Fatal(releaseError)
 			}
 			if totals, statusError = ReservationStatus(context.Background(), reservationRoot); statusError != nil || totals.ActiveOwners != 0 {
 				t.Fatalf("retired holder reservation remained: totals=%+v error=%v", totals, statusError)
