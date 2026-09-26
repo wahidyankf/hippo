@@ -579,6 +579,8 @@ func ReleaseSession(root string, session *Session) (returnError error) {
 
 var portOwnerPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
 
+const maximumPort = 65535
+
 func openPortLeaseIdentity(path string) (*os.File, error) {
 	identityPath := filepath.Join(path, "identity.lock")
 	identity, err := os.OpenFile(identityPath, os.O_CREATE|os.O_RDWR, 0o600)
@@ -630,14 +632,26 @@ func portLeaseIdentityLive(path string, owner *leaseOwner) (bool, error) {
 	return false, unlockError
 }
 
-// AcquirePortLease obtains one validated port lease and reclaims a stale owner once.
-func AcquirePortLease(root string, port int, ownerName string, minimum, maximum int) (*PortLease, error) { //nolint:gocognit // Creation and stale-owner recovery are one bounded ownership transaction.
+// ValidatePortLeaseRequest checks a port lease request before anything is
+// acquired, so a caller can refuse a request it could never satisfy.
+func ValidatePortLeaseRequest(port int, ownerName string, minimum, maximum int) error {
+	if port < 1 || port > maximumPort {
+		return fmt.Errorf("port must be between 1 and %d", maximumPort)
+	}
 	if port < minimum || port > maximum {
-		return nil, fmt.Errorf("port must be between %d and %d", minimum, maximum)
+		return fmt.Errorf("port %d must be between the lease minimum %d and maximum %d", port, minimum, maximum)
+	}
+	if !portOwnerPattern.MatchString(ownerName) {
+		return errors.New("port lease owner is invalid")
 	}
 
-	if !portOwnerPattern.MatchString(ownerName) {
-		return nil, errors.New("port lease owner is invalid")
+	return nil
+}
+
+// AcquirePortLease obtains one validated port lease and reclaims a stale owner once.
+func AcquirePortLease(root string, port int, ownerName string, minimum, maximum int) (*PortLease, error) { //nolint:gocognit // Creation and stale-owner recovery are one bounded ownership transaction.
+	if err := ValidatePortLeaseRequest(port, ownerName, minimum, maximum); err != nil {
+		return nil, err
 	}
 
 	if err := os.MkdirAll(root, 0o700); err != nil {

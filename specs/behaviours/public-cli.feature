@@ -96,6 +96,16 @@ Feature: Public HIPPO CLI
     When an unknown command is requested
     Then the diagnostic names the command and exits with code 2
 
+  Scenario: A command group refuses an unknown or missing subcommand
+    Given the compiled HIPPO binary
+    When command groups are requested with an unknown or missing subcommand
+    Then each exits 2 naming hippo.args.invalid with its usage on stderr and nothing on stdout
+
+  Scenario: A flag value a command cannot accept is a usage mistake
+    Given the compiled HIPPO binary
+    When run and monitor are requested with flag values they cannot accept
+    Then each exits 2 naming hippo.args.invalid before any payload starts
+
   Scenario: Only usage errors print the command usage block
     Given the compiled HIPPO binary
     When a runtime failure and a usage error are requested

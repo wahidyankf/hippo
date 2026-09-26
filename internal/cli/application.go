@@ -180,6 +180,11 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	// failed invocation goes to stderr, and the root silences Cobra's own
 	// rendering so this function is the only thing that writes it.
 	command.SetErr(application.Stderr)
+	// Cobra adds its completion command only when it executes, so add it here
+	// to hold it to the same rule as every other command group. It binds its
+	// output writer when it is created, so this must follow SetOut.
+	command.InitDefaultCompletionCmd()
+	requireSubcommands(command, execution)
 	command.SilenceErrors = true
 	command.SetFlagErrorFunc(func(failing *cobra.Command, flagError error) error {
 		execution.usage = failing.UsageString()

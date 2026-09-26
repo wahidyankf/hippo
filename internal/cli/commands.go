@@ -162,8 +162,29 @@ func (application Application) rootCommand(execution *commandExecution) *cobra.C
 		application.runCommand(execution),
 		application.releaseCommand(execution),
 	)
-
 	return command
+}
+
+// requireSubcommands makes every command that only groups other commands
+// refuse to run on its own. Left alone, Cobra prints such a command's help to
+// stdout and exits 0 for a missing or unknown subcommand, which tells a script
+// its work ran when nothing did.
+func requireSubcommands(root *cobra.Command, execution *commandExecution) {
+	for _, command := range root.Commands() {
+		if command.HasSubCommands() && !command.Runnable() {
+			group := command
+			group.Args = cobra.ArbitraryArgs
+			group.RunE = func(command *cobra.Command, arguments []string) error {
+				execution.usage = command.UsageString()
+				if len(arguments) == 0 {
+					return status.Fail(status.CodeArgsInvalid, "%s requires a subcommand", command.CommandPath())
+				}
+
+				return status.Fail(status.CodeArgsInvalid, "unknown command %q for %q", arguments[0], command.CommandPath())
+			}
+		}
+		requireSubcommands(command, execution)
+	}
 }
 
 func addConfigFlags(command *cobra.Command, options *configOptions) {
@@ -298,6 +319,10 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 			options.observeChild = func(childStatus int) { execution.childStatus = &childStatus }
 
 			return executeHandler(command, execution, func() (int, error) {
+				if mistake := runArgumentMistake(options); mistake != nil {
+					return 0, mistake
+				}
+
 				return application.run(command.Context(), options)
 			})
 		},

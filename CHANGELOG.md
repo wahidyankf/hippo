@@ -31,6 +31,15 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   silently ignored: a tier sets its own queue deadline, so the run waited up to that deadline
   instead of the one asked for. A caller that passes both should drop `--wait-for-admission` and
   rely on the tier's deadline, or drop the tier to keep the explicit wait.
+- `hippo release` and `hippo completion` given no subcommand, or an unknown one, now exit `2`
+  naming `hippo.args.invalid`, with the usage on stderr. They printed help to stdout and exited
+  `0`, which told a script its work ran. `--help` still exits `0`.
+- `run` refuses a flag value it cannot accept with exit `2` naming `hippo.args.invalid`, before it
+  reads configuration or host evidence: an unknown `--class` or `--resource-tier`, a malformed
+  `--tag` or `--source`, or a `--lease-port` outside `--lease-min`..`--lease-max` or 1–65535, or
+  with an invalid `--lease-owner`. So does `monitor --interval` that is not positive. These exited
+  `125` naming `hippo.supervision.failed` or `hippo.policy.replan-required`, and an unknown tier
+  under schema 1 ran the payload. A caller that branched on `125` for them should branch on `2`.
 - `release monitor` reports a missing or malformed `--health-url` or `--routed-origin`, a missing
   output, summary or deployment root, a negative `--duration-ms`, or an out-of-range
   `--service-port` as a usage mistake: exit `2` naming `hippo.args.invalid`. Each exited `125`

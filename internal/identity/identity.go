@@ -164,6 +164,17 @@ func Validate(value Value) error {
 	return nil
 }
 
+// ValidateOverrides checks invocation overrides without reading any file, so
+// a caller can reject its own mistyped flags before it does any work.
+func ValidateOverrides(sourceOverride string, tagOverrides []string) error {
+	if sourceOverride != "" && (!sourcePattern.MatchString(sourceOverride) || strings.Contains(sourceOverride, "..")) {
+		return fmt.Errorf("identity source %q is invalid or path-like", sourceOverride)
+	}
+	_, err := ParseTags(tagOverrides)
+
+	return err
+}
+
 // Load reads an optional schema-1 file, then applies invocation overrides.
 func Load(path, sourceOverride string, tagOverrides []string) (Value, error) {
 	value := Value{SchemaVersion: SchemaVersion, Tags: map[string]string{}}

@@ -195,8 +195,8 @@ hippo run [flags] -- <command> [arguments...]
 | `--tag <key=value>`               | identity    | Override/add a privacy-safe label; repeatable, last duplicate wins                                                            |
 | `--concurrency-env <NAME>`        | none        | Child variable that receives resolved concurrency; repeatable                                                                 |
 | `--wait-for-admission <duration>` | `0`         | Schema-2 FIFO deadline without a tier; refused beside a tier under schema 2 and always under schema 3; ignored under schema 1 |
-| `--lease-port <n>`                | `0`         | Service port to lease                                                                                                         |
-| `--lease-owner <name>`            | unset       | Service port owner                                                                                                            |
+| `--lease-port <n>`                | `0`         | Service port to lease; 1–65535, within `--lease-min`..`--lease-max`                                                           |
+| `--lease-owner <name>`            | unset       | Service port owner; lowercase letters, digits, and `-`; required with `--lease-port`                                          |
 | `--lease-min <n>`                 | `0`         | Minimum allowed leased port                                                                                                   |
 | `--lease-max <n>`                 | `0`         | Maximum allowed leased port                                                                                                   |
 
@@ -299,7 +299,9 @@ $ hippo completion zsh > "${fpath[1]}/_hippo"
 ## Usage errors
 
 A usage mistake returns exit `2`, naming `hippo.args.invalid`. A mistyped invocation — an unknown
-flag or command, or a missing `--` — also prints the command usage next to its diagnostic. A value or
+flag or command, a missing `--`, or a command group such as `release` or `completion` given no
+subcommand or an unknown one — also prints the command usage on stderr next to its diagnostic, and
+nothing on stdout. A value or
 combination the command rejects after parsing, and any failure after the arguments were accepted,
 print only the diagnostic, so consumer logs keep the real cause instead of a flag list.
 
@@ -315,7 +317,13 @@ $ echo $?
 2
 ```
 
-Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`, diagnostic only). Invalid mapped
+`run` checks its flag values before it reads configuration, host evidence, or coordination state:
+a `--class` other than `ephemeral`, `service`, or `transactional`; a `--resource-tier` other than
+`light`, `standard`, or `heavy`; a malformed `--tag` or `--source`; and a `--lease-port` outside
+1–65535, outside `--lease-min`..`--lease-max`, or without a valid lowercase `--lease-owner` are each
+usage errors (`2`, `hippo.args.invalid`, diagnostic only), as is a non-positive `monitor
+--interval`. Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`,
+diagnostic only). Invalid mapped
 _values_ inherited from the caller's environment are not: they return `125`,
 `hippo.policy.replan-required`. The rules live in
 [Environment variables](./environment-variables.md#name-rules); see also [Exit codes](./exit-codes.md).
