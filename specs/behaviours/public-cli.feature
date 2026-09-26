@@ -145,14 +145,30 @@ Feature: Public HIPPO CLI
   Scenario: Release monitoring requires generic health inputs
     Given release monitor output paths without endpoint inputs
     When release monitoring is requested
-    Then the command rejects a missing generic health URL
+    Then the command exits 2 naming hippo.args.invalid for the missing generic health URL
 
   @e2e-exempt
   Scenario: Release monitoring refuses missing health inputs before its deadline
     Given release monitor output paths without endpoint inputs
     And a monitoring deadline that has already passed
     When the release monitor starts
-    Then the command rejects a missing generic health URL
+    Then the command exits 2 naming hippo.args.invalid for the missing generic health URL
+
+  Scenario Outline: Release monitoring refuses a usage mistake before collecting evidence
+    Given release monitor inputs with <mistake>
+    When release monitoring is requested
+    Then the command exits 2 naming hippo.args.invalid before collecting evidence
+
+    Examples:
+      | mistake                      |
+      | a malformed health URL       |
+      | a malformed routed origin    |
+      | no routed origin             |
+      | no output path               |
+      | no summary path              |
+      | no deployment root           |
+      | a negative duration          |
+      | an out-of-range service port |
 
   @e2e-exempt
   Scenario: Release raw evidence streams to standard output
