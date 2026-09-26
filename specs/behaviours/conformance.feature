@@ -229,3 +229,13 @@ Feature: Generic consumer conformance
     Given a consumer whose declared probe never consults HIPPO
     When conformance saturates that consumer's probe root before running it
     Then conformance rejects it for returning before capacity could free
+
+  Scenario Outline: A signal ends a conformance run with the signal status
+    Given a conformance run whose first consumer gate is still running
+    When hippo-conformance receives <signal>
+    Then hippo-conformance exits <status> and still reports the stopped gate
+
+    Examples:
+      | signal  | status |
+      | SIGINT  | 130    |
+      | SIGTERM | 143    |
