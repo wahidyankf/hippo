@@ -51,8 +51,8 @@ Queue expiry or cancellation writes `state: "never-started"`. Emergency terminat
 `state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
 `pressure-shed` or `storage-shed`.
 
-Let HIPPO wait before launch rather than looping yourself. Schema 3 takes the deadline from the
-tier; schema 2 can set one:
+Let HIPPO wait before launch rather than looping yourself. A tier sets the deadline; under schema 2,
+a run without a tier can set one instead:
 
 ```sh
 hippo run --wait-for-admission 10m -- make test

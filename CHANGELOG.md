@@ -26,6 +26,11 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   command line as one internal status. The status is still `124` and receipts are unchanged. A
   consumer that branched on `capacity-deferred` will now see a shed under its own reason: the
   payload ran, so recover it before repeating anything.
+- `run --resource-tier` beside `--wait-for-admission` under schema 2 now exits `2` naming
+  `hippo.args.invalid`, before enqueue or child launch; schema 3 already refused it. The wait was
+  silently ignored: a tier sets its own queue deadline, so the run waited up to that deadline
+  instead of the one asked for. A caller that passes both should drop `--wait-for-admission` and
+  rely on the tier's deadline, or drop the tier to keep the explicit wait.
 - `release monitor` reports a missing or malformed `--health-url` or `--routed-origin`, a missing
   output, summary or deployment root, a negative `--duration-ms`, or an out-of-range
   `--service-port` as a usage mistake: exit `2` naming `hippo.args.invalid`. Each exited `125`

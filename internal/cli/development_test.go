@@ -296,3 +296,45 @@ func TestPressureShedNamesItsOwnReason(t *testing.T) {
 		t.Fatalf("a pressure shed did not say its payload ran: %q", stderr.String())
 	}
 }
+
+func TestSchemaTwoRejectsATierCombinedWithAnAdmissionWait(t *testing.T) {
+	// A tier carries its own queue deadline. Under schema 2 the wait flag used
+	// to be dropped silently when a tier was given, so the caller waited for the
+	// tier's deadline instead of the one it asked for. Schema 3 already refuses
+	// the combination; schema 2 must refuse it the same way, before enqueue.
+	root := t.TempDir()
+	workingDirectory := t.TempDir()
+	configPath := filepath.Join(workingDirectory, "hippo.local.json")
+	if err := os.WriteFile(configPath, []byte(`{"schemaVersion":2}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	childMarker := filepath.Join(root, "child-started")
+	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	stderr := &bytes.Buffer{}
+	application := Application{
+		Stdout: &bytes.Buffer{}, Stderr: stderr,
+		Environment: []string{"HIPPO_ROOT=" + root, "CHILD_MARKER=" + childMarker},
+		Collector:   stableCollector{sample: stableDevelopmentSample(now)}, Now: func() time.Time { return now },
+		Sleep: func(time.Duration) {},
+	}
+	code, runError := application.Run(context.Background(), []string{
+		"run", "--config", configPath, "--cwd", workingDirectory, "--disk-path", root,
+		"--resource-tier", "light", "--wait-for-admission", "3s",
+		"--", "/bin/sh", "-c", `printf started > "$CHILD_MARKER"`,
+	})
+	if code != status.CallerError {
+		t.Fatalf("a tier with an admission wait was not a usage error: code=%d error=%v stderr=%q",
+			code, runError, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "hippo: ["+string(status.CodeArgsInvalid)+"]") ||
+		!strings.Contains(stderr.String(), "--resource-tier") {
+		t.Fatalf("the refusal did not name the argument mistake: %q", stderr.String())
+	}
+	if _, statError := os.Stat(childMarker); !os.IsNotExist(statError) {
+		t.Fatalf("the refused run started its child: %v", statError)
+	}
+	totals, statusError := guard.ReservationStatus(context.Background(), root)
+	if statusError != nil || totals.ActiveOwners != 0 || totals.WaitingOwners != 0 {
+		t.Fatalf("the refused run touched the ledger: totals=%+v error=%v", totals, statusError)
+	}
+}
