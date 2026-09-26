@@ -247,6 +247,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Concurrent consumers cannot replace a previously verified HIPPO binary", Boundary: consumerHarnessBoundary, Reason: "requires synchronized private gate processes and executable replacement"},
 		{Scenario: "Capacity skip never hides verified-binary integrity failures", Boundary: consumerHarnessBoundary, Reason: "requires a synthetic exit 124 joined with private executable integrity and cleanup faults"},
 		{Scenario: "A protocol mismatch cannot pass as a capacity skip", Boundary: consumerHarnessBoundary, Reason: "requires an allow-capacity-skip manifest with a synthetic protocol-mismatch command"},
+		{Scenario: "A never-started capacity deferral is skipped", Boundary: consumerHarnessBoundary, Reason: "requires an allow-capacity-skip manifest with a synthetic capacity-deferral command and receipt"},
+		{Scenario: "A pressure shed cannot pass as a capacity skip", Boundary: consumerHarnessBoundary, Reason: "requires an allow-capacity-skip manifest with a synthetic pressure-shed command"},
 		{Scenario: "Conformance setup filesystem errors remain private", Boundary: consumerHarnessBoundary, Reason: "requires unavailable private manifest and shared-root filesystem paths"},
 		{Scenario: "HIPPO protocol names cannot be consumer concurrency mappings", Boundary: processControlBoundary, Reason: "requires deterministic reservation mapping validation before isolated child execution"},
 		{Scenario: "Failed cancelled-waiter cleanup retains verifiable FIFO ownership", Boundary: leaseOwnershipBoundary, Reason: "requires holding private coordination across cancellation and a following FIFO waiter"},
