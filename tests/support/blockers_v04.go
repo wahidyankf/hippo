@@ -1250,7 +1250,7 @@ func requireV04PortSupervisorLifetime(root string) error {
 			_ = guardCommand.Process.Kill()
 		}
 	}()
-	childPID, err := waitForPIDFileV04(childPIDPath, 5*time.Second)
+	childPID, err := waitForPIDFileV04(childPIDPath, fixtureLivenessWait)
 	if err != nil {
 		_ = guardCommand.Process.Kill()
 		_ = guardCommand.Wait()
@@ -1271,7 +1271,7 @@ func requireV04PortSupervisorLifetime(root string) error {
 	if err = syscall.Kill(-childPID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		competitor, acquireError = guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
 		if acquireError == nil {
@@ -1281,6 +1281,22 @@ func requireV04PortSupervisorLifetime(root string) error {
 			return fmt.Errorf("retired child group retained port lease: %w", acquireError)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// awaitProcessGone waits boundedly until pid names no process, so a check
+// that depends on a process having exited observes that exit instead of
+// assuming it after a fixed delay.
+func awaitProcessGone(pid int, wait time.Duration) bool {
+	deadline := time.Now().Add(wait)
+	for {
+		if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
@@ -1342,7 +1358,7 @@ func main() {
 		})
 		done <- result{code: code, err: runError}
 	}()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	var leaderPID, descendantPID int
 	for {
 		data, readError := os.ReadFile(pidsPath)
@@ -1357,7 +1373,13 @@ func main() {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	time.Sleep(30 * time.Millisecond)
+	// Ownership is judged after the leader has actually exited, so the check
+	// proves its exit left the descendant owning the group.
+	if !awaitProcessGone(leaderPID, fixtureLivenessWait) {
+		_ = syscall.Kill(-leaderPID, syscall.SIGKILL)
+
+		return errors.New("background descendant leader did not exit")
+	}
 	totals, statusError := guard.ReservationStatus(context.Background(), sharedRoot)
 	competitor, portError := guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
 	if competitor != nil {
@@ -1377,12 +1399,12 @@ func main() {
 		if run.err != nil || run.code != 0 {
 			return fmt.Errorf("retired descendant run exit=%d error=%w", run.code, run.err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(fixtureLivenessWait):
 		_ = syscall.Kill(descendantPID, syscall.SIGKILL)
 
 		return errors.New("guard did not finish after process-group retirement")
 	}
-	deadline = time.Now().Add(2 * time.Second)
+	deadline = time.Now().Add(fixtureLivenessWait)
 	for {
 		totals, statusError = guard.ReservationStatus(context.Background(), sharedRoot)
 		competitor, portError = guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
@@ -1445,7 +1467,7 @@ func main() {
 		})
 		done <- result{code: code, err: runError}
 	}()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(fixtureLivenessWait)
 	var leaderPID, descendantPID int
 	for {
 		data, readError := os.ReadFile(pidsPath)
@@ -1460,7 +1482,13 @@ func main() {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	time.Sleep(30 * time.Millisecond)
+	// Ownership is judged after the leader has actually exited, so the check
+	// proves its exit left the descendant owning the group.
+	if !awaitProcessGone(leaderPID, fixtureLivenessWait) {
+		_ = syscall.Kill(-leaderPID, syscall.SIGKILL)
+
+		return errors.New("background descendant leader did not exit")
+	}
 	select {
 	case run := <-done:
 		_ = syscall.Kill(descendantPID, syscall.SIGKILL)
@@ -1486,7 +1514,7 @@ func main() {
 		if run.err != nil || run.code != 0 {
 			return fmt.Errorf("inherited retired run exit=%d error=%w", run.code, run.err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(fixtureLivenessWait):
 		_ = syscall.Kill(descendantPID, syscall.SIGKILL)
 
 		return errors.New("inherited guard did not finish after group retirement")

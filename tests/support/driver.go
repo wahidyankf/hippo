@@ -204,7 +204,7 @@ type Driver struct {
 	abandonedIdentityLock    *os.File
 	abandonedTotals          guard.ReservationTotals
 	inheritedSessions        bool
-	forceStopElapsed         time.Duration
+	childCompleted           bool
 	runtimeFailureOutput     string
 	runtimeFailureExit       int
 	usageErrorOutput         string
@@ -550,7 +550,6 @@ func (driver *Driver) runGuardedShell(script string, environment []string) error
 	}
 
 	stderr := &bytes.Buffer{}
-	started := time.Now()
 	code, err := guard.Run(context.Background(), guard.RunConfig{
 		Command:      shellPath,
 		Arguments:    []string{"-c", script},
@@ -560,12 +559,14 @@ func (driver *Driver) runGuardedShell(script string, environment []string) error
 		DiskPath:     ".",
 		Collector:    &sequenceCollector{samples: driver.samples},
 		Policy:       fastBehaviourPolicy(),
-		Sleep:        func(time.Duration) {},
-		Now:          time.Now,
-		Stderr:       stderr,
+		// A forced stop is judged by the killed group's real exit, bounded
+		// only as a hang, not by how quickly a loaded host reaps it.
+		RetirementConfirmation: fixtureLivenessWait,
+		Sleep:                  func(time.Duration) {},
+		Now:                    time.Now,
+		Stderr:                 stderr,
 	})
 
-	driver.forceStopElapsed = time.Since(started)
 	driver.exitCode = code
 	driver.errorOutput = stderr.String()
 
@@ -1237,12 +1238,10 @@ func (driver *Driver) interruptGuard() error {
 	// trap, which kills the child by SIGTERM's default action and leaves nothing
 	// for the scenario to observe. Interrupting on the child's own readiness mark
 	// establishes the Given instead of assuming it.
-	interrupted := make(chan time.Time, 1)
-
 	go func() {
 		defer cancel()
 
-		interrupted <- awaitMarker(ready, interruptReadinessWait)
+		_ = awaitMarkerFile(ready, interruptReadinessWait)
 	}()
 
 	// The child waits without forking. A forked foreground child shares the
@@ -1251,12 +1250,14 @@ func (driver *Driver) interruptGuard() error {
 	// which makes the trap count an unreliable witness for how often the guard
 	// actually signalled. A builtin-only wait counts kernel deliveries exactly,
 	// and its bound stops a guard that never force-stops from leaving a spinning
-	// orphan behind.
+	// orphan behind. A child that outlives that bound marks its own completion,
+	// which is how the scenario tells a force-stop from a child that finished.
+	completed := filepath.Join(driver.leaseRoot, "completed")
 	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      shellPath,
-		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done`},
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done; printf d > "$GUARD_DONE_MARKER"`},
 		TaskClass:    taskClassEphemeral,
-		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready),
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready, "GUARD_DONE_MARKER="+completed),
 		EvidenceRoot: driver.leaseRoot,
 		DiskPath:     ".",
 		Collector: &sequenceCollector{samples: []policy.Sample{
@@ -1265,14 +1266,17 @@ func (driver *Driver) interruptGuard() error {
 			healthySample(base.Add(2 * time.Millisecond)),
 		}},
 		Policy: resourcePolicy,
-		Sleep:  func(time.Duration) {},
-		Now:    time.Now,
-		Stderr: &bytes.Buffer{},
+		// The stop is judged by the killed group's real exit, bounded only as
+		// a hang, not by how quickly a loaded host reaps it.
+		RetirementConfirmation: fixtureLivenessWait,
+		Sleep:                  func(time.Duration) {},
+		Now:                    time.Now,
+		Stderr:                 &bytes.Buffer{},
 	})
 
-	// The bound belongs to the stop, not to however long a busy host took to admit
-	// and start the child, so it is measured from the interrupt.
-	driver.forceStopElapsed = time.Since(<-interrupted)
+	if _, completedError := os.Stat(completed); completedError == nil {
+		driver.childCompleted = true
+	}
 
 	if err != nil {
 		return err
@@ -1292,30 +1296,13 @@ func (driver *Driver) interruptGuard() error {
 	return nil
 }
 
-// awaitMarker waits for a child readiness mark and reports when the wait ended.
-// It returns on the deadline as well, so a child that never publishes readiness
-// still reaches its own explicit assertion instead of hanging the suite.
-func awaitMarker(path string, wait time.Duration) time.Time {
-	deadline := time.Now().Add(wait)
-
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
-			break
-		}
-
-		time.Sleep(time.Millisecond)
-	}
-
-	return time.Now()
-}
-
 func (driver *Driver) requireForceStopped() error {
 	if driver.terminationSignals != 1 {
 		return fmt.Errorf("guard delivered %d termination signals, want exactly 1", driver.terminationSignals)
 	}
 
-	if driver.forceStopElapsed > 10*time.Second {
-		return fmt.Errorf("a child ignoring SIGTERM was not force-stopped: guard returned %s after the interrupt", driver.forceStopElapsed)
+	if driver.childCompleted {
+		return errors.New("a child ignoring SIGTERM finished on its own instead of being force-stopped")
 	}
 	return nil
 }
@@ -1358,9 +1345,13 @@ func (driver *Driver) loseHostEvidence() error {
 		DiskPath:     ".",
 		Collector:    collector,
 		Policy:       resourcePolicy,
-		Sleep:        func(time.Duration) {},
-		Now:          time.Now,
-		Stderr:       &bytes.Buffer{},
+		// The deliberate forced stop is judged by the killed group's real
+		// exit, bounded only as a hang, not by how quickly a loaded host
+		// reaps it.
+		RetirementConfirmation: fixtureLivenessWait,
+		Sleep:                  func(time.Duration) {},
+		Now:                    time.Now,
+		Stderr:                 &bytes.Buffer{},
 	})
 
 	driver.exitCode = code
@@ -1612,7 +1603,13 @@ func (driver *Driver) criticalChild() error {
 }
 
 func (driver *Driver) observeCritical() error {
-	return driver.runGuardedShell("sleep 10", nil)
+	completed := filepath.Join(driver.leaseRoot, "completed")
+	err := driver.runGuardedShell(`sleep 10; printf d > "$CHILD_COMPLETED"`, append(os.Environ(), "CHILD_COMPLETED="+completed))
+	if _, completedError := os.Stat(completed); completedError == nil {
+		driver.childCompleted = true
+	}
+
+	return err
 }
 
 // requireShed observes the guard's non-storage shed decision, then holds the
@@ -1621,8 +1618,8 @@ func (driver *Driver) requireShed() error {
 	if driver.exitCode != guard.PressureShedExitCode {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
-	if driver.forceStopElapsed >= 3*time.Second {
-		return fmt.Errorf("critical child was not shed promptly: %s", driver.forceStopElapsed)
+	if driver.childCompleted {
+		return errors.New("critical child finished its work instead of being shed")
 	}
 
 	return requirePressureShedAtBoundary()

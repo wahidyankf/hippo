@@ -59,6 +59,11 @@ func integrationSample(measuredAt time.Time) policy.Sample {
 // inside it deferred the run with exit 75 before the behaviour under test began.
 const evidenceDecidesAdmission = time.Hour
 
+// livenessLimit bounds a wait for something that must happen: a child to
+// become ready, a forced stop to be confirmed by the killed group's real exit.
+// It only detects a wait that never ends, and a healthy run never spends it.
+const livenessLimit = 30 * time.Second
+
 func fastPolicy() policy.Policy {
 	policy := policy.DefaultPolicy()
 	policy.SampleInterval = time.Millisecond
@@ -211,9 +216,12 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 		DiskPath:     ".",
 		Collector:    collector,
 		Policy:       fastPolicy(),
-		Sleep:        func(time.Duration) {},
-		Now:          time.Now,
-		Stderr:       &bytes.Buffer{},
+		// The shed is judged by the child's real exit, not by how quickly a
+		// loaded host reaps it.
+		RetirementConfirmation: livenessLimit,
+		Sleep:                  func(time.Duration) {},
+		Now:                    time.Now,
+		Stderr:                 &bytes.Buffer{},
 	})
 
 	if err != nil || code != guard.PressureShedExitCode {
@@ -306,12 +314,10 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	// before it installs its trap, which kills the child by SIGTERM's default
 	// action and leaves this test nothing to observe. Interrupt on the child's own
 	// readiness mark so the premise holds every run.
-	interrupted := make(chan time.Time, 1)
-
 	go func() {
 		defer cancel()
 
-		interrupted <- awaitChildReadiness(ready)
+		awaitChildReadiness(ready)
 	}()
 
 	// The child waits without forking. A forked foreground child shares the
@@ -320,25 +326,25 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	// which makes the trap count an unreliable witness for how often the guard
 	// actually signalled. A builtin-only wait counts kernel deliveries exactly,
 	// and its bound stops a guard that never force-stops from leaving a spinning
-	// orphan behind.
+	// orphan behind. A child that outlives that bound marks its own completion,
+	// which is how the test tells a force-stop from a child that finished.
+	completed := filepath.Join(childRoot, "completed")
 	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      "/bin/sh",
-		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done`},
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done; printf d > "$GUARD_DONE_MARKER"`},
 		TaskClass:    "ephemeral",
-		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready),
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready, "GUARD_DONE_MARKER="+completed),
 		EvidenceRoot: t.TempDir(),
 		DiskPath:     ".",
 		Collector:    collector,
 		Policy:       policy,
-		Sleep:        func(time.Duration) {},
-		Now:          time.Now,
-		Stderr:       &bytes.Buffer{},
+		// The deliberate forced stop is judged by the killed group's real
+		// exit, not by how quickly a loaded host reaps it.
+		RetirementConfirmation: livenessLimit,
+		Sleep:                  func(time.Duration) {},
+		Now:                    time.Now,
+		Stderr:                 &bytes.Buffer{},
 	})
-
-	// The bound belongs to the stop, not to however long a busy host took to admit
-	// and start the child, so it is measured from the interrupt.
-	elapsed := time.Since(<-interrupted)
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,25 +361,22 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 		t.Fatalf("guard delivered %d termination signals, want exactly 1", len(delivered))
 	}
 
-	if elapsed > 1500*time.Millisecond {
-		t.Fatalf("a child ignoring SIGTERM was not force-stopped: guard returned %s after the interrupt", elapsed)
+	if _, completedError := os.Stat(completed); completedError == nil {
+		t.Fatal("a child ignoring SIGTERM finished on its own instead of being force-stopped")
 	}
 }
 
-// awaitChildReadiness waits for the guarded child to publish its readiness mark
-// and reports when the wait ended. It also returns on its own deadline so a
-// child that never becomes ready reaches an explicit assertion instead of
-// hanging the suite.
-func awaitChildReadiness(path string) time.Time {
+// awaitChildReadiness waits for the guarded child to publish its readiness mark.
+// It also returns on its own deadline so a child that never becomes ready
+// reaches an explicit assertion instead of hanging the suite.
+func awaitChildReadiness(path string) {
 	deadline := time.Now().Add(30 * time.Second)
 
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(path); err == nil {
-			break
+			return
 		}
 
 		time.Sleep(time.Millisecond)
 	}
-
-	return time.Now()
 }

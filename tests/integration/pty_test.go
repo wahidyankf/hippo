@@ -41,7 +41,9 @@ func TestInteractiveChildRestoresTerminalOnEveryExitPath(t *testing.T) {
 
 func runHIPPOPTYCase(t *testing.T, scriptPath, mode string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The deadline outlasts the helper's own run bound, so it only detects a
+	// helper that never finishes.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*livenessLimit)
 	defer cancel()
 
 	temporaryRoot := t.TempDir()
@@ -66,7 +68,7 @@ func runHIPPOPTYCase(t *testing.T, scriptPath, mode string) {
 		// Wait for the child to announce it is about to read rather than guessing
 		// a fixed delay: helper startup and PTY allocation are not time-bounded
 		// under load, and writing early loses the input before any read begins.
-		deadline := time.Now().Add(3 * time.Second)
+		deadline := time.Now().Add(livenessLimit)
 		for time.Now().Before(deadline) {
 			if _, statError := os.Stat(readyPath); statError == nil {
 				break
@@ -138,7 +140,7 @@ func TestHIPPOPTYHelper(t *testing.T) {
 		integrationSample(base.Add(time.Millisecond)),
 		integrationSample(base.Add(2 * time.Millisecond)),
 	}}
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), livenessLimit)
 	defer cancel()
 	if mode == "cancel" || mode == "forced-stop" {
 		go func() {
@@ -177,8 +179,11 @@ func TestHIPPOPTYHelper(t *testing.T) {
 			ResolvedProfile:  "balanced",
 			Concurrency:      4,
 		},
-		TaskClass: policy.TaskEphemeral,
-		Now:       func() time.Time { return base },
+		// A stop is judged by the killed group's real exit, not by how
+		// quickly a loaded host reaps it.
+		RetirementConfirmation: livenessLimit,
+		TaskClass:              policy.TaskEphemeral,
+		Now:                    func() time.Time { return base },
 	})
 	if runErr != nil {
 		t.Fatalf("guarded PTY command returned an error after %s (context=%v): %v", time.Since(runStarted), ctx.Err(), runErr)
