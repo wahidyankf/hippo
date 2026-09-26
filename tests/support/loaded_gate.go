@@ -18,8 +18,13 @@ import (
 // fixtures that it keeps every core busy for the whole gate.
 const loadSaturatedVariable = "HIPPO_LOAD_SATURATED"
 
-// capacityDeferralMessage is the guard's documented refusal when admission never came.
+// capacityDeferralMessage is the guard's progress sentence when admission never
+// came. It is prose for a person reading the log, not the contract.
 const capacityDeferralMessage = "HIPPO deferred task: safe admission was not reached."
+
+// capacityDeferralReason is the closed reason a capacity deferral names on
+// stderr, and the part of the output the exit-status contract promises.
+const capacityDeferralReason = "hippo: [" + string(status.CodeLimitCapacityDeferred) + "]"
 
 // loadedGateSaturation is the only form the declaration may take: set when, and
 // only when, the busy workers cover every core.
@@ -29,13 +34,15 @@ var loadedGateSaturation = regexp.MustCompile(
 
 // acceptsSaturatedDeferralV04 is the whole decision the loaded fixtures make. A
 // deferral passes only on a host the loaded gate declared saturated, only with
-// the documented caller status for a limit (124) and the guard's deferral
-// message, and only for a child that never started, so a child that ran and
-// then failed still fails.
+// the documented caller status for a limit (124) naming
+// hippo.limit.capacity-deferred, and only for a child that never started, so a
+// child that ran and then failed still fails. The reason, not the progress
+// sentence, is what it matches: 124 is also a pressure shed, and only the
+// reason tells the two apart.
 func acceptsSaturatedDeferralV04(declared bool, exitCode int, output []byte, childStarted, neverStartedReceipt bool) bool {
 	return declared && !childStarted && neverStartedReceipt &&
 		exitCode == status.LimitShed &&
-		bytes.Contains(output, []byte(capacityDeferralMessage))
+		bytes.Contains(output, []byte(capacityDeferralReason))
 }
 
 func (driver *Driver) inspectLoadedGate() error {
@@ -120,27 +127,35 @@ func (driver *Driver) markGuardedChildStarted() {
 	driver.guardedChildStarted = true
 }
 
+// capacityDeferralOutput is the stderr a compiled guard writes when host
+// admission never came: its progress sentence, then the closed reason.
+const capacityDeferralOutput = capacityDeferralMessage + "\n" + capacityDeferralReason +
+	" capacity deferred this work; retry when the host is quieter\n"
+
 func (driver *Driver) documentedCapacityDeferral() {
 	driver.deferralAccepted = acceptsSaturatedDeferralV04(
 		driver.loadSaturationDeclared, status.LimitShed,
-		[]byte(capacityDeferralMessage+"\n"), driver.guardedChildStarted, true,
+		[]byte(capacityDeferralOutput), driver.guardedChildStarted, true,
 	)
 }
 
-// otherRefusals tries every near miss of the documented deferral: its message
-// with another exit, and its exit with another message or none.
+// otherRefusals tries every near miss of the documented deferral: its reason
+// with another exit, and its exit with another reason, only the progress
+// sentence, or nothing.
 func (driver *Driver) otherRefusals() {
 	nearMisses := []struct {
 		exitCode            int
 		output              string
 		neverStartedReceipt bool
 	}{
-		{exitCode: 1, output: capacityDeferralMessage, neverStartedReceipt: true},
-		{exitCode: guard.CapacityDeferredExitCode, output: capacityDeferralMessage, neverStartedReceipt: true},
-		{exitCode: status.GuardFailed, output: capacityDeferralMessage, neverStartedReceipt: true},
+		{exitCode: 1, output: capacityDeferralOutput, neverStartedReceipt: true},
+		{exitCode: guard.CapacityDeferredExitCode, output: capacityDeferralOutput, neverStartedReceipt: true},
+		{exitCode: status.GuardFailed, output: capacityDeferralOutput, neverStartedReceipt: true},
 		{exitCode: status.LimitShed, output: "HIPPO stayed deferred across 4 attempts in 1m0s.", neverStartedReceipt: true},
+		{exitCode: status.LimitShed, output: capacityDeferralMessage, neverStartedReceipt: true},
+		{exitCode: status.LimitShed, output: "hippo: [hippo.limit.pressure-shed] host pressure shed this work", neverStartedReceipt: true},
 		{exitCode: status.LimitShed, output: "", neverStartedReceipt: true},
-		{exitCode: status.LimitShed, output: capacityDeferralMessage},
+		{exitCode: status.LimitShed, output: capacityDeferralOutput},
 	}
 
 	driver.deferralAccepted = false
@@ -159,7 +174,8 @@ func (driver *Driver) protocolMismatchRefusal() {
 	driver.deferralAccepted = acceptsSaturatedDeferralV04(
 		driver.loadSaturationDeclared,
 		status.GuardFailed,
-		[]byte("HIPPO protocol mismatch: incompatible peer coordination.\n"),
+		[]byte("HIPPO protocol mismatch: incompatible peer coordination.\n"+
+			"hippo: ["+string(status.CodeCoordinationProtocolMismatch)+"] live peer coordination state this client cannot safely join\n"),
 		driver.guardedChildStarted, true,
 	)
 }
