@@ -52,3 +52,7 @@ if grep -Eq '"(nx|workspaces)"[[:space:]]*:' package.json; then
 	exit 1
 fi
 test "$(sed -n '1p' go.mod)" = 'module github.com/wahidyankf/hippo'
+
+# The pinned ShellCheck wrapper refuses an archive or a platform it cannot
+# verify before any analyser runs.
+./tests/artifacts/shellcheck-pin.sh
