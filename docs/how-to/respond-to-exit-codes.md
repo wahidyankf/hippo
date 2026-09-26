@@ -38,9 +38,13 @@ and `false` for storage, because a caller that retries on a full disk retries fo
 
 A deferral before launch is safe to requeue once. A shed after launch is not.
 
+If `HIPPO_ROOT` is not set in your shell, set it to your state root first; see
+[Shared state root](../reference/state-root.md#location) for each platform's default. `receipts/`
+exists only once a receipt has been written.
+
 ```sh
 hippo history --since 1d --source my-repo --outcome emergency-safety-stop
-ls "${HIPPO_ROOT}/receipts"
+ls "$HIPPO_ROOT/receipts"
 ```
 
 Queue expiry or cancellation writes `state: "never-started"`. Emergency termination writes

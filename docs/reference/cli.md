@@ -57,10 +57,10 @@ graph LR
 
 Every command accepts these, placed before or after the command name.
 
-| Flag              | Default | Meaning                                                                                 |
-| ----------------- | ------- | --------------------------------------------------------------------------------------- |
-| `--color <when>`  | `auto`  | Colour the diagnostic line: `always`, `never`, or `auto`                                |
-| `--output <form>` | `text`  | Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr |
+| Flag              | Default | Meaning                                                                                                    |
+| ----------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `--color <when>`  | `auto`  | Colour the diagnostic line: `always`, `never`, or `auto` (see [Colour](./environment-variables.md#colour)) |
+| `--output <form>` | `text`  | Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr                    |
 
 `release monitor` defines its own `--output` (the raw sample destination), which takes the place of
 the global flag for that command. The failure body is described in
@@ -110,12 +110,16 @@ Takes one host sample, resolves a profile, and reports it. Read-only: it never a
 
 ```console
 $ hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=8 swap=active availableGiB=13.76 diskFreeGiB=78.67 cpu=15.5% owners=2 waiters=7 ownerLimit=2 promotion=insufficient-overlap-runs
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=16.64 diskFreeGiB=63.05 cpu=27.4% owners=2 waiters=1 ownerLimit=2 promotion=insufficient-overlap-runs
+active run=a161efd79fbf2947e02cc76b1f84f865 position=0 source=hippo class=ephemeral tier=standard cpu=4 memoryMiB=6144 deadline=2026-09-26T08:50:52.086019Z
+active run=e58306df9d9abcc729f132fc1a19b081 position=0 source=hippo class=ephemeral tier=light cpu=2 memoryMiB=2048 deadline=2026-09-26T07:50:54.096318Z
+waiting run=fb5b47c58a0287aee14ca7c310499cd0 position=1 source=my-repo class=ephemeral tier=heavy cpu=4 memoryMiB=8192 deadline=2026-09-26T11:20:56.116166Z
 ```
 
-The JSON form includes privacy-safe owner/waiter rows plus the base, maximum, and currently effective
-owner limit. A live exclusive compatibility session appears as a legacy owner, while exclusive
-waiters remain unregistered. Filters change rows, not the global aggregate totals. It is documented in
+The text form prints one privacy-safe row line under the summary for each owner and waiter. The JSON
+form carries the same rows in full, plus the base, maximum, and currently effective owner limit. A
+live exclusive compatibility session appears as a legacy owner, while exclusive waiters remain
+unregistered. Filters change rows, not the global aggregate totals. It is documented in
 [JSON schemas](./json-schemas.md#status---json).
 
 ## `hippo watch`

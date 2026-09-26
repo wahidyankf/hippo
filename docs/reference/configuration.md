@@ -10,7 +10,15 @@ Strongest first:
 1. `--config <path>`
 2. `HIPPO_CONFIG`
 3. `HIPPO_DEFAULT_CONFIG` — set by the `./hippo` bootstrap to the repository-local
-   `hippo.local.json`, if that file exists
+   `hippo.local.json`
+4. `hippo.local.json` in the process's current directory — not `--cwd` — when none of the above
+   is set
+
+The first source that is set wins, and no later one is consulted. A missing file named by
+`--config` or `HIPPO_CONFIG` fails with `hippo.config.unreadable` (exit `125`); a missing file at 3
+or 4 falls back to the no-config default. The bootstrap always sets `HIPPO_DEFAULT_CONFIG`, so 4
+applies only to a binary started directly, such as a release binary: started in a directory that
+holds `hippo.local.json`, it loads that file without being asked.
 
 Start from [`hippo.local.json.example`](../../hippo.local.json.example) and copy it to the ignored
 path `hippo.local.json`.
