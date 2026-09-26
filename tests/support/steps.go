@@ -677,6 +677,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^root command help is requested$`, driver.rootHelp),
 		step(`^help lists the public command tree and exits successfully$`, driver.requireHelp),
 		step(`^help expands HIPPO as Host Infrastructure Pressure and Process Orchestrator$`, driver.requireHIPPOExpansion),
+		step(`^each line of the help's exit block matches the exit-code reference$`, driver.requireHelpExitBlockMatchesReference),
 		step(`^release command help is requested$`, driver.releaseHelp),
 		step(`^help lists the release command tree and exits successfully$`, driver.requireReleaseHelp),
 		step(`^Zsh completion is requested$`, driver.zshCompletion),
