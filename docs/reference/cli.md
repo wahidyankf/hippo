@@ -238,18 +238,18 @@ Silent gate. Exits `0` when a release may proceed, and reports a stable exit cod
 
 ## `hippo release monitor`
 
-Captures release overlap evidence. Both `--health-url` and `--routed-origin` are required; the
-command fails immediately without them.
+Captures release overlap evidence. `--output`, `--summary`, `--deployment-root`, `--health-url`, and
+`--routed-origin` are all required; without any of them the command exits `2` before it samples.
 
-| Flag                       | Default               | Meaning                                                     |
-| -------------------------- | --------------------- | ----------------------------------------------------------- |
-| `--output <path>`          | unset                 | Raw JSONL sample destination; `-` streams to stdout         |
-| `--summary <path>`         | unset                 | Final summary destination; `-` streams to stdout            |
-| `--deployment-root <path>` | unset                 | Deployment root                                             |
-| `--health-url <url>`       | `HIPPO_HEALTH_URL`    | Local health URL (required)                                 |
-| `--routed-origin <origin>` | `HIPPO_ROUTED_ORIGIN` | Bare HTTPS routed origin (required)                         |
-| `--service-port <n>`       | none                  | Service port included in RSS accounting; repeatable         |
-| `--duration-ms <n>`        | `0`                   | Stop after this many milliseconds; `0` runs until cancelled |
+| Flag                       | Default               | Meaning                                                        |
+| -------------------------- | --------------------- | -------------------------------------------------------------- |
+| `--output <path>`          | unset                 | Raw JSONL sample destination; `-` streams to stdout (required) |
+| `--summary <path>`         | unset                 | Final summary destination; `-` streams to stdout (required)    |
+| `--deployment-root <path>` | unset                 | Deployment root (required)                                     |
+| `--health-url <url>`       | `HIPPO_HEALTH_URL`    | Local health URL (required)                                    |
+| `--routed-origin <origin>` | `HIPPO_ROUTED_ORIGIN` | Bare HTTPS routed origin (required)                            |
+| `--service-port <n>`       | none                  | Service port included in RSS accounting; repeatable            |
+| `--duration-ms <n>`        | `0`                   | Stop after this many milliseconds; `0` runs until cancelled    |
 
 `--output -` and `--summary -` cannot both be used in one invocation, because raw and summary
 schemas must never be mixed on one stream:

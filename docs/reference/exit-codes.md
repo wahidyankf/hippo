@@ -95,12 +95,16 @@ Diagnostics go to stderr and results go to stdout, always. A failed invocation l
 hippo run --class ephemeral --resource-tier light --disk-path . -- "$@"
 case $? in
   0)   ;;                                    # it ran and it worked
-  124) echo "shed against a limit; retrying later" ;;
+  124) echo "shed against a limit; the reason says whether a retry can help" >&2; exit 1 ;;
   125) echo "hippo could not run this; see the diagnostic" >&2; exit 1 ;;
   126|127) echo "the command is wrong, not the host" >&2; exit 1 ;;
   *)   exit $? ;;                            # the child's own answer
 esac
 ```
+
+A retry on `124` belongs only to the retryable reasons above, and a pressure shed means the payload
+ran, so recover its effects first. [Respond to exit codes](../how-to/respond-to-exit-codes.md) walks
+each reason.
 
 ## What changed, and when
 

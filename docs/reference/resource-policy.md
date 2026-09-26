@@ -98,14 +98,15 @@ $ hippo status --config reservation.json --json --disk-path . | ...
 ```
 
 `11` is 12 available parallelism minus one safety unit. `30064771072` is 28 GiB — 32 GiB effective
-memory minus the 4 GiB balanced reserve. The automatic `balanced` share of that is one quarter:
+memory minus the 4 GiB balanced reserve. The automatic `balanced` share of that is one quarter, rounded up:
 
 ```console
 $ hippo run --config reservation.json --disk-path . -- sh -c 'echo "cpu=$HIPPO_CONCURRENCY mem=$HIPPO_RESERVED_MEMORY_BYTES"'
 cpu=3 mem=7516192768
 ```
 
-`7516192768` is exactly 7 GiB, one quarter of 28 GiB.
+`7516192768` is exactly 7 GiB, one quarter of 28 GiB. CPU 3 is a quarter of 11 rounded up, so three
+automatic owners fit in 11 CPU and a fourth waits.
 
 An explicit `--reserve-cpu` / `--reserve-memory-mib` may be smaller than the automatic share but
 never below one CPU or 256 MiB.

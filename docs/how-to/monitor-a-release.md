@@ -26,9 +26,13 @@ hippo release monitor \
   --service-port 8080 --service-port 8081
 ```
 
-Both `--health-url` and `--routed-origin` are mandatory:
+`--output`, `--summary`, and `--deployment-root` are mandatory, and so are both `--health-url` and
+`--routed-origin`:
 
 ```console
+$ hippo release monitor --health-url http://127.0.0.1:8080/health --routed-origin https://service.example
+hippo: [hippo.args.invalid] output, summary, and deployment root are required
+
 $ hippo release monitor --output samples.jsonl --summary summary.json --deployment-root .
 hippo: [hippo.args.invalid] HTTP(S) health URL is required for release monitoring
 
@@ -36,7 +40,7 @@ $ hippo release monitor ... --health-url http://127.0.0.1:8080/health
 hippo: [hippo.args.invalid] bare HTTPS routed origin is required for release monitoring
 ```
 
-Both are usage mistakes: they exit `2` before any sample is taken or any endpoint is probed.
+Each is a usage mistake: it exits `2` before any sample is taken or any endpoint is probed.
 
 `--service-port` is repeatable and selects which listeners count toward RSS accounting.
 

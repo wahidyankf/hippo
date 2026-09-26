@@ -17,7 +17,10 @@ We are going to work inside the HIPPO repository itself, using the tracked `./hi
 script compiles the CLI once, caches it, and then hands off to the compiled binary — so the first
 command is slower than the rest.
 
+If you do not have a checkout yet, clone one; otherwise change into the one you have:
+
 ```sh
+git clone https://github.com/wahidyankf/hippo.git
 cd hippo
 ```
 

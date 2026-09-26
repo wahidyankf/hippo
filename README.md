@@ -208,7 +208,7 @@ pushes are refused for every actor. One aggregate `Quality gate` check, defined 
 `.github/workflows/pr-quality-gate.yml`, is required.
 
 ShellCheck and documentation gates are in neither script: they run under
-[RHINO](https://github.com/wahidyankf/rhino) on push, pull request and `main`, pinned by tag and
+[RHINO](https://github.com/wahidyankf/rhino) on push and pull request, pinned by tag and
 SHA-256 in `rhino.lock`; `repo-config.yml` supplies the lifecycle and three native harness
 projections. Regenerate those projections only with `./rhino harness adapters generate` and prove
 them with `./rhino harness adapters validate`. RHINO guards its own builds with a pinned `./hippo`.

@@ -41,7 +41,8 @@ to run an editor, a browser, a window server, and HIPPO itself. Handing out ever
 would reproduce exactly the overload HIPPO exists to prevent, just with better bookkeeping.
 
 Concretely, on a 12-core host with 32 GiB running `balanced`: capacity is 11 CPU and 28 GiB, and the
-automatic share is a quarter of that — 3 CPU and 7 GiB. Four such owners exactly consume the budget.
+automatic share is a quarter of that, rounded up — 3 CPU and 7 GiB. Three such owners fit; a fourth
+would need 12 CPU of 11, so it waits. See [resource policy](../reference/resource-policy.md#reservation-capacity) for the rounding.
 
 ## Why fitting the vector is not the end of the story
 
@@ -53,18 +54,21 @@ started consuming memory.
 The reservation prevents predictable overcommitment. Continued sampling catches the unpredictable
 kind. Both are necessary; neither is sufficient.
 
-## Strict FIFO, and the five-minute wait
+## Strict FIFO, and the wait before `124`
 
 When capacity is temporarily exhausted, a would-be owner joins a strict FIFO queue rather than
 retrying opportunistically. Strict ordering is what prevents starvation: without it, a task wanting
 one core would jump ahead of a task wanting eight indefinitely, and the large task would never run on
 a busy host.
 
-A waiter stays at the FIFO head through a bounded lease interval — five minutes by default — before
-returning `124`. That is a long time to wait silently, and it is intentional: on a machine where four
+Under schema 3, a waiter's deadline comes from its resource tier — 30 minutes for `light` up to four
+hours for `heavy`, per [the tier table](../reference/resource-policy.md#schema-3-resource-tiers).
+Under schema 2, a waiter stays at the FIFO head through a bounded lease interval — five minutes by
+default — before returning `124`. That is a long time to wait silently, and it is intentional: on a machine where four
 builds are legitimately in flight, five minutes is often shorter than the time to fail and be
-manually retried. A caller that would rather decide for itself gets `124` and can act; a caller that
-just wants the work to happen can set `--wait-for-admission`.
+manually retried. A caller that would rather decide for itself gets `124` and can act. Under schema 2, a
+caller that just wants the work to happen can set `--wait-for-admission`; schema 3 rejects that flag,
+because the tier sets the deadline.
 
 ## The effective owner limit is a minimum, not a maximum
 
