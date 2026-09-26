@@ -476,6 +476,32 @@ func runArgumentMistake(options runOptions) error {
 	return nil
 }
 
+// runIdentity resolves the labels a run carries. A run that needs no identity
+// — no labels asked for, no identity file present, schema below 3 — is
+// unlabeled rather than refused.
+func (application Application) runIdentity(options runOptions, schemaVersion int) (identity.Value, int, error) {
+	identityPath := identity.Path(environmentMap(application.Environment), options.workingDir)
+	_, identityStatError := os.Stat(identityPath)
+	identityPresent := identityStatError == nil
+	if schemaVersion < 3 && options.source == "" && len(options.tags) == 0 && !identityPresent {
+		return identity.Value{SchemaVersion: identity.SchemaVersion, Source: "unlabeled", Tags: map[string]string{}}, 0, nil
+	}
+	runIdentity, err := identity.Load(identityPath, options.source, options.tags)
+	if errors.Is(err, identity.ErrSourceRequired) {
+		// Nothing names whose run this is. That is fixed by the invocation,
+		// not by HIPPO's state, so it is a usage mistake.
+		return identity.Value{}, 0, status.Failure{
+			Code: status.CodeArgsInvalid, Field: "--source",
+			Message: "run identity has no source: pass --source or provide a hippo.identity.json identity file",
+		}
+	}
+	if err != nil {
+		return identity.Value{}, policy.ReplanRequiredExitCode, fmt.Errorf("run identity: %w", err)
+	}
+
+	return runIdentity, 0, nil
+}
+
 func (application Application) run(ctx context.Context, options runOptions) (int, error) { //nolint:cyclop,funlen,gocognit,gocyclo // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
 	if options.workingDir != "" {
 		absolute, err := filepath.Abs(options.workingDir)
@@ -502,19 +528,9 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	); waitError != nil {
 		return 0, waitError
 	}
-	environment := environmentMap(application.Environment)
-	identityPath := identity.Path(environment, options.workingDir)
-	runIdentity := identity.Value{
-		SchemaVersion: identity.SchemaVersion, Source: "unlabeled", Tags: map[string]string{},
-	}
-	_, identityStatError := os.Stat(identityPath)
-	identityRequired := configuration.Coordination.SchemaVersion >= 3 || options.source != "" || len(options.tags) > 0 ||
-		identityStatError == nil
-	if identityRequired {
-		runIdentity, configError = identity.Load(identityPath, options.source, options.tags)
-		if configError != nil {
-			return policy.ReplanRequiredExitCode, fmt.Errorf("run identity: %w", configError)
-		}
+	runIdentity, identityCode, identityError := application.runIdentity(options, configuration.Coordination.SchemaVersion)
+	if identityError != nil {
+		return identityCode, identityError
 	}
 
 	probeDiskPath := options.diskPath

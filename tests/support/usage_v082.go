@@ -336,3 +336,22 @@ func (driver *Driver) requireHistoryNamedInEveryBody() error {
 
 	return nil
 }
+
+// requestTagWithoutSource labels a run without saying whose it is. The scratch
+// root holds no identity file and the environment names none.
+func (driver *Driver) requestTagWithoutSource() error {
+	return driver.attemptEach([][]string{{
+		runCommandName, tagFlagName, "a=b", diskPathFlag, ".", "--", shellPath, "-c", "printf " + usageChildOutput,
+	}})
+}
+
+func (driver *Driver) requireSourceNamed() error {
+	if err := driver.requireInvalidFlagValuesRefused(); err != nil {
+		return err
+	}
+	if attempt := driver.usageAttempts[0]; !strings.Contains(attempt.stderr, sourceFlagName) {
+		return fmt.Errorf("the refusal does not name %s: stderr=%q", sourceFlagName, attempt.stderr)
+	}
+
+	return nil
+}

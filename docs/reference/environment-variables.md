@@ -30,6 +30,9 @@ Identity precedence is `HIPPO_IDENTITY`, then the nearest `hippo.identity.json` 
 upward from `--cwd` or the current directory, then `HIPPO_DEFAULT_IDENTITY`. Upward discovery lets a
 contained repository worktree use its own tracked identity while sharing the same machine root and
 configuration. `--source` and repeatable `--tag` values override the loaded identity for one run.
+A run that needs an identity — one given `--tag`, or any run under schema 3 — and finds no source in
+any of these or in `--source` exits `2` naming `hippo.args.invalid`, and the diagnostic names
+`--source`.
 
 Where an environment carries the same variable twice, the **last** occurrence wins. That matches what
 the child observes, because Go's `os/exec` deduplicates its environment keeping the last entry. It

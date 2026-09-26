@@ -23,6 +23,11 @@ const (
 	MaximumJSONBytes = 512
 )
 
+// ErrSourceRequired is an identity that names no source: no file supplied
+// one and no override did. The caller fixes it by naming one, which is why it
+// is distinguishable from an identity that is present and invalid.
+var ErrSourceRequired = errors.New("identity source is required")
+
 var (
 	sourcePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	keyPattern    = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,31}$`)
@@ -137,7 +142,7 @@ func Validate(value Value) error {
 		return fmt.Errorf("unsupported identity schema %d", value.SchemaVersion)
 	}
 	if value.Source == "" {
-		return errors.New("identity source is required")
+		return ErrSourceRequired
 	}
 	if !sourcePattern.MatchString(value.Source) || strings.Contains(value.Source, "..") {
 		return fmt.Errorf("identity source %q is invalid or path-like", value.Source)

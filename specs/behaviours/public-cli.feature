@@ -126,6 +126,11 @@ Feature: Public HIPPO CLI
     When history usage mistakes ask for JSON output before and after the command name
     Then every failure body names hippo history as the command
 
+  Scenario: A run label without any source is a usage mistake
+    Given the compiled HIPPO binary
+    When run is requested with a tag but no source and no identity file
+    Then it exits 2 naming hippo.args.invalid and the --source flag before any payload starts
+
   Scenario: Only usage errors print the command usage block
     Given the compiled HIPPO binary
     When a runtime failure and a usage error are requested
