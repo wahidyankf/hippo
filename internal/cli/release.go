@@ -88,14 +88,16 @@ func validateServicePorts(servicePorts []int) error {
 }
 
 func (application Application) releaseMonitor(ctx context.Context, options releaseMonitorOptions) (int, error) {
+	// Every check before the configuration loads is about the invocation
+	// itself, so each refusal is a usage mistake.
 	if options.durationMs < 0 {
-		return 1, errors.New("duration-ms must be nonnegative")
+		return 0, status.Fail(status.CodeArgsInvalid, "--duration-ms must be nonnegative")
 	}
 	if options.durationMs > math.MaxInt64/int64(time.Millisecond) {
-		return 1, errors.New("duration-ms exceeds the supported range")
+		return 0, status.Fail(status.CodeArgsInvalid, "--duration-ms exceeds the supported range")
 	}
 	if err := validateServicePorts(options.servicePorts); err != nil {
-		return 1, err
+		return 0, status.Fail(status.CodeArgsInvalid, "--service-port: %v", err)
 	}
 	if options.outputPath == "-" && options.summaryPath == "-" {
 		return 0, status.Fail(status.CodeArgsInvalid, "raw evidence and summary cannot both use standard output")
@@ -131,6 +133,9 @@ func (application Application) releaseMonitor(ctx context.Context, options relea
 	}
 
 	err := application.MonitorRelease(monitorContext, monitorConfig)
+	if errors.Is(err, releaseguard.ErrMonitorInput) {
+		return 0, status.Fail(status.CodeArgsInvalid, "%v", err)
+	}
 	if err != nil {
 		return 1, err
 	}

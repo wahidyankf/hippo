@@ -229,7 +229,7 @@ func HTTPProbeArguments(target string, followRedirects bool) []string {
 func localHealth(target string) (func(context.Context) (int, float64), error) {
 	parsed, err := url.Parse(target)
 	if err != nil || parsed.Scheme != "http" && parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
-		return nil, errors.New("HTTP(S) health URL is required for release monitoring")
+		return nil, monitorInputError("HTTP(S) health URL is required for release monitoring")
 	}
 
 	return func(ctx context.Context) (int, float64) { return probeHTTP(ctx, target) }, nil
@@ -244,7 +244,7 @@ func routedHealth(origin string) (func(context.Context) (int, float64), error) {
 		parsed.RawQuery != "" ||
 		parsed.Fragment != "" ||
 		parsed.Path != "" && parsed.Path != "/" {
-		return nil, errors.New("bare HTTPS routed origin is required for release monitoring")
+		return nil, monitorInputError("bare HTTPS routed origin is required for release monitoring")
 	}
 
 	target := strings.TrimSuffix(origin, "/") + "/"
@@ -274,17 +274,30 @@ func oneMinuteLoad(ctx context.Context) float64 {
 	return value
 }
 
+// ErrMonitorInput marks a monitor configuration the caller gave: a missing
+// destination, deployment root, health URL, or routed origin. The command line
+// reports it as a usage mistake rather than a supervision failure.
+var ErrMonitorInput = errors.New("release monitor input")
+
+// monitorInputError carries the caller-facing sentence and matches
+// ErrMonitorInput, so the sentence is not prefixed with the sentinel's text.
+type monitorInputError string
+
+func (failure monitorInputError) Error() string { return string(failure) }
+
+func (monitorInputError) Is(target error) bool { return target == ErrMonitorInput }
+
 func normalizeMonitorConfig(config MonitorConfig) (MonitorConfig, error) {
 	hasRawOutput := config.OutputPath != "" || config.RawOutput != nil
 	hasSummaryOutput := config.SummaryPath != "" || config.SummaryOutput != nil
 	if !hasRawOutput || !hasSummaryOutput || config.DeploymentRoot == "" {
-		return MonitorConfig{}, errors.New("output, summary, and deployment root are required")
+		return MonitorConfig{}, monitorInputError("output, summary, and deployment root are required")
 	}
 
 	hasDuplicateRawOutput := config.OutputPath != "" && config.RawOutput != nil
 	hasDuplicateSummaryOutput := config.SummaryPath != "" && config.SummaryOutput != nil
 	if hasDuplicateRawOutput || hasDuplicateSummaryOutput {
-		return MonitorConfig{}, errors.New("output and summary each require exactly one destination")
+		return MonitorConfig{}, monitorInputError("output and summary each require exactly one destination")
 	}
 	if config.Collector == nil {
 		return MonitorConfig{}, errors.New("host collector is required")
