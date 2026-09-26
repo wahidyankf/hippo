@@ -33,3 +33,5 @@ coordination state or which `HIPPO_*` variables the contributor's shell exports.
 
 - Scrubbing a helper process's own flags would break re-executed test binaries; the marker exists to prevent it.
 - Removing `HIPPO_BIN` would break the adapters that name the binary to test; it stays a harness input.
+- Removing `HIPPO_LOAD_SATURATED` would make the loaded gate reject the deferral it documents as correct; it stays a
+  harness input.

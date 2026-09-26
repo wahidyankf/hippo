@@ -27,19 +27,21 @@ go test ./tests/<package>
 - One helper, `tests/support/isolation.go`, exporting `RunIsolated(m *testing.M) int`; each package's `TestMain` is
   `os.Exit(support.RunIsolated(m))`.
 - Harness inputs are an explicit allowlist: `HIPPO_BIN`, `HIPPO_BDD_ADAPTER`, `HIPPO_E2E_TEMP_PARENT`,
-  `HIPPO_GO_BINARY`. Everything else with the `HIPPO_` prefix is removed, so a variable the product learns to read later
-  is isolated without an edit here.
+  `HIPPO_GO_BINARY`, and `HIPPO_LOAD_SATURATED`, which `scripts/test-loaded.sh` exports and
+  `tests/support/pending_v04.go` reads from the test process. Everything else with the `HIPPO_` prefix is removed, so a
+  variable the product learns to read later is isolated without an edit here.
 - The marker is `HIPPO_TEST_ISOLATED_ROOT`, holding the per-run root. A child started from `os.Environ()` inherits it,
   so a re-executed helper skips the scrub and keeps flags such as `HIPPO_STALE_RESERVATION_HELPER`.
 - Scenarios that already set `HIPPO_ROOT` per scenario keep doing so; the per-run root is only the default.
-- `scripts/test.sh` and `scripts/test-quick.sh` do not change: their `HIPPO_BIN` override stays, and every `go test`
-  they call now isolates itself.
+- `scripts/test.sh` does not change, and `scripts/test-quick.sh` changes only by adding `./tests/support` to its unit
+  line, so the helper's own proofs run in every gate; the `HIPPO_BIN` overrides stay, and every `go test` they call now
+  isolates itself.
 
 ## Specification Changes
 
 None. The Gherkin corpus describes the product; these criteria describe the harness. AC-01 to AC-03 are proved by
-`go test -count=1 ./tests/support`, AC-04 by the guarded `./tests/e2e/run.sh` reproduction, and AC-05 by the diff and
-repository gates.
+`go test -count=1 ./tests/support`, AC-04 by the guarded `./tests/e2e/run.sh` reproduction and the guarded complete
+gate, and AC-05 by the diff and repository gates.
 
 ## File-Impact Analysis
 
@@ -50,6 +52,7 @@ tests/unit/main_test.go                                      [N] TestMain
 tests/integration/main_test.go                               [N] TestMain
 tests/bdd/main_test.go                                       [N] TestMain
 tests/e2e/main_test.go                                       [N] TestMain
+scripts/test-quick.sh                                        [E] ./tests/support joins the unit line
 internal/conformance/conformance.go                          [G] existing product-side scrub, unchanged
 repo-governance/development/end-to-end-testing.md            [E] one sentence on the isolated default, if docs propagation requires it
 plans/backlog/README.md, plans/in-progress/README.md         [E] stage indexes
