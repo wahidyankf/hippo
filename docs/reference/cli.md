@@ -39,30 +39,45 @@ graph LR
     class version,status,watch,history,monitor,run,release,completion,check,assess,rmonitor command
 ```
 
-| Command                 | Does                                       |
-| ----------------------- | ------------------------------------------ |
-| `hippo version`         | Print build version information            |
-| `hippo status`          | Inspect current resource evidence          |
-| `hippo watch`           | Watch resource, admission, and queue state |
-| `hippo history`         | Query bounded shared run summaries         |
-| `hippo monitor`         | Monitor resource-state transitions         |
-| `hippo run`             | Run a command under resource supervision   |
-| `hippo release`         | Check and monitor release resource safety  |
-| `hippo release check`   | Check release admission and stability      |
-| `hippo release assess`  | Assess a release evidence summary          |
-| `hippo release monitor` | Capture release overlap evidence           |
-| `hippo completion`      | Generate a shell autocompletion script     |
+| Command                 | Does                                             |
+| ----------------------- | ------------------------------------------------ |
+| `hippo version`         | Print build version information                  |
+| `hippo status`          | Inspect current resource evidence                |
+| `hippo watch`           | Watch resource, admission, and queue transitions |
+| `hippo history`         | Query bounded shared run summaries               |
+| `hippo monitor`         | Monitor resource-state transitions               |
+| `hippo run`             | Run a command under resource supervision         |
+| `hippo release`         | Check and monitor release resource safety        |
+| `hippo release check`   | Check release admission and stability            |
+| `hippo release assess`  | Assess a release evidence summary                |
+| `hippo release monitor` | Capture release overlap evidence                 |
+| `hippo completion`      | Generate a shell autocompletion script           |
+
+## Global flags
+
+Every command accepts these, placed before or after the command name.
+
+| Flag              | Default | Meaning                                                                                 |
+| ----------------- | ------- | --------------------------------------------------------------------------------------- |
+| `--color <when>`  | `auto`  | Colour the diagnostic line: `always`, `never`, or `auto`                                |
+| `--output <form>` | `text`  | Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr |
+
+`release monitor` defines its own `--output` (the raw sample destination), which takes the place of
+the global flag for that command. The failure body is described in
+[Exit codes](./exit-codes.md#the-machine-readable-body).
+
+The root command also accepts `--version`, which prints the same text as `hippo version` and exits.
 
 ## Shared flags
 
-`status`, `monitor`, `run`, and every `release` subcommand accept these.
+`status`, `watch`, `monitor`, `run`, and every `release` subcommand accept these.
 
 | Flag               | Default | Meaning                                                                              |
 | ------------------ | ------- | ------------------------------------------------------------------------------------ |
 | `--config <path>`  | unset   | Strict local JSON configuration. Overrides `HIPPO_CONFIG` and the bootstrap default. |
 | `--profile <name>` | unset   | Requested resource profile. Resolution may still fall back to a safer profile.       |
 
-`--help` is available on every command. `version` and `completion` take no shared flags.
+`--help` is available on every command. `version`, `history`, and `completion` take no shared flags.
 
 ## `hippo version`
 
@@ -72,8 +87,10 @@ graph LR
 
 ```console
 $ hippo version
+v0.8.2 (<commit>)
 
 $ hippo version --json
+{"schemaVersion":1,"version":"v0.8.2","commit":"<commit>"}
 ```
 
 The text form reports the release followed by its exact source commit. The JSON form carries the
@@ -235,7 +252,9 @@ schemas must never be mixed on one stream:
 
 ```console
 $ hippo release monitor --output - --summary - ...
-Error: raw evidence and summary cannot both use standard output
+hippo: [hippo.args.invalid] raw evidence and summary cannot both use standard output
+$ echo $?
+2
 ```
 
 ## `hippo release assess`
@@ -251,14 +270,16 @@ $ hippo release assess --summary summary.json
 {"accepted":true,"schemaVersion":5}
 ```
 
-Rejected evidence prints `"accepted":false` and returns exit `124`:
+Rejected evidence prints `"accepted":false` and returns exit `124`, naming
+`hippo.limit.capacity-deferred`:
 
 ```console
 $ hippo release assess --summary summary.json
 {"accepted":false,"schemaVersion":5}
 release overlap exhausted resource or routed responsiveness headroom
+hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter
 $ echo $?
-75
+124
 ```
 
 Assessment accepts retained schema 2–5 summaries. New summaries are schema 5.
@@ -273,20 +294,26 @@ $ hippo completion zsh > "${fpath[1]}/_hippo"
 
 ## Usage errors
 
-A usage mistake prints the command usage next to its diagnostic and returns exit `1`. A failure that
-happens after the arguments were accepted prints only the diagnostic, so consumer logs keep the real
-cause instead of a flag list.
+A usage mistake prints the command usage next to its diagnostic and returns exit `2`, naming
+`hippo.args.invalid`. A failure that happens after the arguments were accepted prints only the
+diagnostic, so consumer logs keep the real cause instead of a flag list.
 
 ```console
 $ hippo run --disk-path . echo hi
-Error: run requires -- followed by a command
+hippo: [hippo.args.invalid] run requires -- followed by a command
+
 Usage:
-  hippo run -- <command> [arguments...] [flags]
+  hippo [flags]
+  hippo [command]
 ...
+$ echo $?
+2
 ```
 
-Invalid `--concurrency-env` _names_ are usage errors (`1`). Invalid mapped _values_ inherited from
-the caller's environment are usage mistakes (`2`, `hippo.args.invalid`). See [Exit codes](./exit-codes.md).
+Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`). Invalid mapped
+_values_ inherited from the caller's environment are not: they return `125`,
+`hippo.policy.replan-required`. The rules live in
+[Environment variables](./environment-variables.md#name-rules); see also [Exit codes](./exit-codes.md).
 
 ## Related
 

@@ -7,6 +7,54 @@ published release is never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any
 release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.8.2] — 2026-09-26
+
+### Changed
+
+- A stalled reservation activation now exits `125` and names `hippo.supervision.failed`; it
+  returned `1` with no diagnostic. This is the case where HIPPO launched the child, the shared
+  coordination lock then stayed held past the two-second activation window, and HIPPO stopped the
+  child. The v0.7.2 activation-contention behaviour chose `1`. The exit-status contract adopted in
+  v0.8.0 reserves `1` for a result and gives every failure HIPPO owns before or while starting a
+  child the status `125`, but its remap covered only the retired pre-launch numbers and missed this
+  post-launch case. A caller that branched on `1` here should branch on `125` and read the reason.
+  The failure is still not retryable: the owned cleanup, the `task-failed` summary and the
+  `started-activation-failure` receipt are unchanged, so the receipt still says the payload ran.
+- A child shed under host pressure other than storage now names `hippo.limit.pressure-shed`, as
+  the exit-code reference always said. It exited `124` naming `hippo.limit.capacity-deferred`,
+  the reason a deferral that never started anything gives, because the guard handed both to the
+  command line as one internal status. The status is still `124` and receipts are unchanged. A
+  consumer that branched on `capacity-deferred` will now see a shed under its own reason: the
+  payload ran, so recover it before repeating anything.
+- `release monitor` reports a missing or malformed `--health-url` or `--routed-origin`, a missing
+  output, summary or deployment root, a negative `--duration-ms`, or an out-of-range
+  `--service-port` as a usage mistake: exit `2` naming `hippo.args.invalid`. Each exited `125`
+  naming `hippo.supervision.failed`, although nothing had been supervised.
+
+### Fixed
+
+- A bounded wait that ran out on exhausted capacity could report the wrong reason and skip its
+  receipt. On its last pass the wait asks for the shared root's coordination lock with almost no
+  budget left, and it offered a free lock and an already-expired timer to the same `select`. Go
+  chooses between ready cases at random, so HIPPO sometimes refused a lock nobody held: it still
+  exited `124`, but named "another admission is updating the shared root" instead of the capacity
+  deferral, and wrote no `never-started` receipt, which is what a consumer reads before requeueing.
+  A free lock is now taken before any wait begins, and the timer only bounds a wait for a lock
+  someone holds.
+- `hippo-conformance` could never skip a capacity deferral against a current binary. An
+  allow-capacity-skip check still required the retired exit `75` and a progress sentence the guard
+  does not always print. It now requires exit `124`, the `hippo.limit.capacity-deferred` reason, and
+  a new `never-started` receipt, as before. A pressure shed also exits `124` but writes no
+  `never-started` receipt, so it is not skipped.
+- The specification stated outcomes in the retired numbers. Its scenarios and architecture now use
+  the current contract: `124` for a limit, `125` for HIPPO's own failure, and the reason code. The
+  loaded-gate test harness had the same stale `75` and would have refused every real capacity
+  deferral on a saturated host.
+- Documentation caught up with v0.8.0's exit vocabulary. Several transcripts still showed the
+  retired `Error:` prefix and the old numbers `75`, `76` and `78`. A malformed concurrency name was
+  documented as exit `1` rather than `2`, and a malformed inherited value as exit `2` rather than
+  `125`.
+
 ## [v0.8.1] — 2026-09-23
 
 ### Fixed

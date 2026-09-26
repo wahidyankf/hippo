@@ -8,14 +8,14 @@ For the full definitions see the [exit code reference](../reference/exit-codes.m
 
 ## Decide quickly
 
-| Status | Do this                                                                    |
-| ------ | -------------------------------------------------------------------------- |
-| `1`    | Nothing matched. This is a result, not a failure.                          |
-| `2`    | The invocation is wrong. Read the diagnostic and fix the command.          |
-| `124`  | A limit stopped the work. Read the reason — see below; they differ.        |
-| `125`  | HIPPO itself failed. Read the reason; retrying it unchanged will not help. |
-| `126`  | The command exists and cannot be executed. Fix its permissions.            |
-| `127`  | The command is not there. Fix the path or the spelling.                    |
+| Status | Do this                                                                     |
+| ------ | --------------------------------------------------------------------------- |
+| `1`    | Nothing matched. This is a result, not a failure.                           |
+| `2`    | The invocation is wrong. Read the diagnostic and fix the command.           |
+| `124`  | A limit stopped the work. Read the reason — see below; they differ.         |
+| `125`  | HIPPO failed to start or supervise the work. Read the reason; do not retry. |
+| `126`  | The command exists and cannot be executed. Fix its permissions.             |
+| `127`  | The command is not there. Fix the path or the spelling.                     |
 
 Never respond to any of them by bypassing the guard or by changing `--class` to get admitted.
 Changing a task to `transactional` so it cannot be shed does not make the host any bigger; it makes
@@ -126,6 +126,8 @@ Read `receipts/` before running the payload again: the work may have begun — s
 ## Handle `2`
 
 The invocation itself is unusable: an unknown flag, a missing argument, a value HIPPO cannot accept.
+A fault inside HIPPO, `hippo.internal.failure`, also returns `2`: it is a failure to complete the
+command, not a failure to start or supervise the work, and it is worth reporting as a bug.
 
 ```console
 hippo: [hippo.args.invalid] concurrency environment name "HIPPO_ROOT" is reserved

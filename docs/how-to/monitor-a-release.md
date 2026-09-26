@@ -30,11 +30,13 @@ Both `--health-url` and `--routed-origin` are mandatory:
 
 ```console
 $ hippo release monitor --output samples.jsonl --summary summary.json --deployment-root .
-Error: HTTP(S) health URL is required for release monitoring
+hippo: [hippo.args.invalid] HTTP(S) health URL is required for release monitoring
 
 $ hippo release monitor ... --health-url http://127.0.0.1:8080/health
-Error: bare HTTPS routed origin is required for release monitoring
+hippo: [hippo.args.invalid] bare HTTPS routed origin is required for release monitoring
 ```
+
+Both are usage mistakes: they exit `2` before any sample is taken or any endpoint is probed.
 
 `--service-port` is repeatable and selects which listeners count toward RSS accounting.
 
@@ -56,6 +58,7 @@ Rejected evidence returns exit `124` and says why:
 ```console
 {"accepted":false,"schemaVersion":5}
 release overlap exhausted resource or routed responsiveness headroom
+hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter
 ```
 
 Assessment accepts retained schema 2–5 summaries, so old evidence stays readable after an upgrade.
@@ -90,7 +93,7 @@ Asking for both at once fails immediately:
 
 ```console
 $ hippo release monitor --output - --summary - ...
-Error: raw evidence and summary cannot both use standard output
+hippo: [hippo.args.invalid] raw evidence and summary cannot both use standard output
 ```
 
 File output remains exclusive, private, rotating, and retention-managed. Standard output is
