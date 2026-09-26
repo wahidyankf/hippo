@@ -36,6 +36,11 @@ Feature: Bounded runtime evidence
       | reservation identity directory |
       | session directory              |
 
+  Scenario: Status reports a coordination lock it cannot open as a refused write
+    Given a reservation state root whose coordination lock refuses writes
+    When status is requested with that state root
+    Then status exits 125 naming hippo.evidence.unwritable
+
   Scenario: A refused never-started receipt is reported rather than hidden by the signal
     Given a queued run whose receipt directory refuses writes
     When the queued run receives SIGINT before it is admitted

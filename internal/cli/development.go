@@ -105,7 +105,20 @@ func withAssessmentDecision(resolution policy.Resolution, assessment policy.Asse
 	return resolution
 }
 
+// statusCoordination reads the shared root's coordination summary. Taking the
+// shared lock, and reconciling what it finds, are writes into the state root;
+// one the root refuses names the reason the state root's other refused writes
+// name, since the remedy is the same and nothing was started.
 func statusCoordination(ctx context.Context, root, configuredMode string) (guard.ReservationTotals, error) {
+	totals, err := readStatusCoordination(ctx, root, configuredMode)
+	if err != nil && evidence.WriteRefused(err) {
+		return guard.ReservationTotals{}, status.Fail(status.CodeEvidenceUnwritable, "read coordination status: %v", err)
+	}
+
+	return totals, err
+}
+
+func readStatusCoordination(ctx context.Context, root, configuredMode string) (guard.ReservationTotals, error) {
 	totals := guard.ReservationTotals{SchemaVersion: 5, Mode: configuredMode}
 	if root == "" {
 		return totals, nil
