@@ -45,7 +45,7 @@ scope; never bypass a hook.
       registered once on `worktree/repair-supervision-readiness-race` at `origin/main`. `[AC-03]`
 - [ ] `[AI]` In the worktree, run `npm ci`; acceptance: dependencies install, hooks activate, and
       `git status --porcelain` is empty. `[AC-03]`
-- [ ] `[AI]` Run `npm run test:quick`; acceptance: the baseline pre-push gate exits `0` without a retry. `[AC-03]`
+- [ ] `[AI]` Run `npm run test:quick`; acceptance: the baseline quick gate exits `0` without a retry. `[AC-03]`
 - [ ] `[AI]` Move `plans/backlog/repair-supervision-readiness-race/` to
       `plans/in-progress/repair-supervision-readiness-race/` with `git mv`; acceptance: one in-progress copy exists and
       no backlog copy exists. `[AC-03]`

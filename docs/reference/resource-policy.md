@@ -1,7 +1,8 @@
 # Resource policy
 
 The thresholds and profiles HIPPO uses to classify host evidence and decide admission. These are
-compiled defaults; local configuration may tighten them but never weaken them.
+compiled defaults; local configuration may tighten them but never weaken them. The resource tiers
+are the one exception: under schema 3 the configuration file defines them.
 
 ## Profiles
 
@@ -67,6 +68,10 @@ returning `124`. It is not a hang.
 | `standard` | 2–4             | 3–6 GiB            | 90 minutes    |
 | `heavy`    | 4–8             | 8–16 GiB           | 4 hours       |
 
+These are the compiled tiers, and the values the recommended schema-3 configuration sets. Under
+schema 3, each tier's bounds and `queueDeadline` come from the configuration file, which may set any
+positive deadline and any bounds that fit the pool — see [configuration](./configuration.md#adaptive-schema-3).
+
 The minimum is the admission floor. When the FIFO head fits, HIPPO grants the largest vector up to
 the tier maximum that is safe at that instant. The allocation is fixed for the payload lifetime, so
 a lighter period cannot silently enlarge an existing job and a pressured period cannot resize it
@@ -90,7 +95,8 @@ further.
 Both dimensions must fit _together_, using checked subtraction, so integer overflow cannot turn an
 exhausted vector into an admission.
 
-Worked example from a 12-core host with 32 GiB of memory on the `balanced` profile:
+Worked example from a 12-core host with 32 GiB of memory on the `balanced` profile, captured while
+one owner was live. An idle root reports zero capacity until an owner registers:
 
 ```console
 $ hippo status --config reservation.json --json --disk-path . | ...
