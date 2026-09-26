@@ -12,10 +12,14 @@ Reconcile required and conditional delivery, acceptance, verification, and learn
   checksum-pinned ShellCheck at warning severity over one list the formatter shares.
 - 2026-09-26 — [Neutralize test fixture identifiers](2026-09-26__neutralize-test-fixture-identifiers/README.md): the
   source-override fixture uses a synthetic value instead of a string that named a private repository.
+- 2026-09-26 — [Isolate test coordination state](2026-09-26__isolate-test-coordination-state/README.md): each test
+  package that starts the product removes inherited `HIPPO_*` variables and owns a run-scoped evidence root.
 
 ## Directory Map
 
 - [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the
   shell-lint gate.
+- [Isolate test coordination state](2026-09-26__isolate-test-coordination-state/README.md) is the delivery record for
+  the test-isolation helper.
 - [Neutralize test fixture identifiers](2026-09-26__neutralize-test-fixture-identifiers/README.md) is the delivery
   record for the synthetic identity fixture.
