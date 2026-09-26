@@ -121,6 +121,11 @@ Feature: Guarded process execution
     When the guard observes warning through the grace
     Then the degraded child starts and is terminated with exit 124 naming hippo.limit.pressure-shed
 
+  Scenario: Exclusive coordination refuses an admission wait it cannot apply
+    Given the compiled HIPPO binary
+    When run asks to wait for admission under schema one exclusive coordination
+    Then it exits 2 naming hippo.args.invalid with only its diagnostic before any payload starts
+
   @e2e-exempt
   Scenario: A single registered waiter rides out exhausted capacity
     Given a shared root that defers one owner before capacity frees

@@ -70,7 +70,7 @@ builds are legitimately in flight, five minutes is often shorter than the time t
 manually retried. A caller that would rather decide for itself gets `124` and can act. Under schema 2, a
 caller that runs without a tier and just wants the work to happen can set `--wait-for-admission`.
 Beside a tier, and always under schema 3, the flag is refused with exit `2`, because the tier sets the
-deadline.
+deadline. Schema 1 refuses it too: exclusive coordination has no FIFO queue for it to bound.
 
 ## The effective owner limit is a minimum, not a maximum
 

@@ -108,8 +108,8 @@ Feature: Public HIPPO CLI
 
   Scenario: A flag value a command cannot accept is a usage mistake
     Given the compiled HIPPO binary
-    When run and monitor are requested with flag values they cannot accept
-    Then each exits 2 naming hippo.args.invalid before any payload starts
+    When commands are requested with flag values they cannot accept
+    Then each exits 2 naming hippo.args.invalid with only its diagnostic before any payload starts
 
   Scenario: Arguments after the separator belong to the guarded command
     Given the compiled HIPPO binary
