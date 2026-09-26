@@ -484,27 +484,30 @@ func runArgumentMistake(options runOptions) error {
 // runIdentity resolves the labels a run carries. A run that needs no identity
 // — no labels asked for, no identity file present, schema below 3 — is
 // unlabeled rather than refused.
-func (application Application) runIdentity(options runOptions, schemaVersion int) (identity.Value, int, error) {
+func (application Application) runIdentity(options runOptions, schemaVersion int) (identity.Value, error) {
 	identityPath := identity.Path(environmentMap(application.Environment), options.workingDir)
 	_, identityStatError := os.Stat(identityPath)
 	identityPresent := identityStatError == nil
 	if schemaVersion < 3 && options.source == "" && len(options.tags) == 0 && !identityPresent {
-		return identity.Value{SchemaVersion: identity.SchemaVersion, Source: "unlabeled", Tags: map[string]string{}}, 0, nil
+		return identity.Value{SchemaVersion: identity.SchemaVersion, Source: "unlabeled", Tags: map[string]string{}}, nil
 	}
 	runIdentity, err := identity.Load(identityPath, options.source, options.tags)
 	if errors.Is(err, identity.ErrSourceRequired) {
 		// Nothing names whose run this is. That is fixed by the invocation,
 		// not by HIPPO's state, so it is a usage mistake.
-		return identity.Value{}, 0, status.Failure{
+		return identity.Value{}, status.Failure{
 			Code: status.CodeArgsInvalid, Field: "--source",
 			Message: "run identity has no source: pass --source or provide a hippo.identity.json identity file",
 		}
 	}
 	if err != nil {
-		return identity.Value{}, policy.ReplanRequiredExitCode, fmt.Errorf("run identity: %w", err)
+		// The overrides were validated as usage, so what remains is the
+		// identity file itself: present, but unreadable or invalid.
+		return identity.Value{}, status.Fail(status.CodeIdentityInvalid,
+			"run identity file %s is invalid: %v; fix or remove it", displayedPath(options.workingDir, identityPath), err)
 	}
 
-	return runIdentity, 0, nil
+	return runIdentity, nil
 }
 
 func (application Application) run(ctx context.Context, options runOptions) (int, error) { //nolint:cyclop,funlen,gocognit,gocyclo // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
@@ -533,9 +536,9 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	); waitError != nil {
 		return 0, waitError
 	}
-	runIdentity, identityCode, identityError := application.runIdentity(options, configuration.Coordination.SchemaVersion)
+	runIdentity, identityError := application.runIdentity(options, configuration.Coordination.SchemaVersion)
 	if identityError != nil {
-		return identityCode, identityError
+		return 0, identityError
 	}
 
 	probeDiskPath := options.diskPath
@@ -675,4 +678,19 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		ObserveChildStatus:            options.observeChild,
 	}
 	return guard.Run(ctx, config)
+}
+
+// displayedPath names a file relative to the working directory when it lies
+// beneath or beside it, so a diagnostic points at the file the caller sees.
+func displayedPath(workingDirectory, path string) string {
+	base, err := filepath.Abs(workingDirectory)
+	if err != nil {
+		return path
+	}
+	relative, err := filepath.Rel(base, path)
+	if err != nil {
+		return path
+	}
+
+	return relative
 }

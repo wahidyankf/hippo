@@ -53,6 +53,7 @@ Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] mess
 | `hippo.limit.release-envelope-exceeded` | `124`  | Release evidence left the release envelope             |
 | `hippo.config.unreadable`               | `125`  | The resource configuration could not be read           |
 | `hippo.config.unresolvable`             | `125`  | The configuration was read and is not usable           |
+| `hippo.identity.invalid`                | `125`  | A run identity file is present and cannot be used      |
 | `hippo.policy.replan-required`          | `125`  | No profile admits this request as asked for            |
 | `hippo.coordination.protocol-mismatch`  | `125`  | Live peer state this client cannot safely join         |
 | `hippo.host.unreadable`                 | `125`  | Host evidence could not be collected                   |
@@ -132,8 +133,10 @@ in the same release because the invocation was the problem: a `run` with no iden
 returned `125` naming `hippo.policy.replan-required`, and a `history` filter value no run can carry
 had returned `1` as an empty result.
 
-v0.8.2 also added a reason so that a status no longer names something that did not happen.
+v0.8.2 also added two reasons so that a status no longer names something that did not happen.
 `release assess` over rejected evidence keeps `124` but names `hippo.limit.release-envelope-exceeded`,
 not retryable, where it had named `hippo.limit.capacity-deferred` and invited a retry that could only
 be rejected again; a summary it cannot read at all now returns `125` naming
-`hippo.evidence.unreadable` with no verdict.
+`hippo.evidence.unreadable` with no verdict. A `run` whose `hippo.identity.json` is present and
+invalid keeps `125` but names `hippo.identity.invalid` and the file, where it had named
+`hippo.policy.replan-required`.

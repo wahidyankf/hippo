@@ -83,6 +83,9 @@ const (
 	// release envelope. The assessment ran and turned the release down; nothing
 	// was deferred, and assessing the same evidence again gives the same answer.
 	CodeLimitReleaseEnvelopeExceeded Code = "hippo.limit.release-envelope-exceeded"
+	// CodeIdentityInvalid is a run identity file that is present and cannot be
+	// used: unreadable, malformed, or carrying labels the schema refuses.
+	CodeIdentityInvalid Code = "hippo.identity.invalid"
 	// CodePolicyReplanRequired is strict capacity or configuration that cannot
 	// admit this work as asked for. A different request may succeed.
 	CodePolicyReplanRequired Code = "hippo.policy.replan-required"
@@ -122,6 +125,7 @@ var All = []Code{
 	CodeLimitStorageBlocked,
 	CodeLimitPressureShed,
 	CodeLimitReleaseEnvelopeExceeded,
+	CodeIdentityInvalid,
 	CodePolicyReplanRequired,
 	CodeCoordinationProtocolMismatch,
 	CodeChildNotFound,
@@ -144,6 +148,7 @@ var statuses = map[Code]int{
 	CodeLimitStorageBlocked:          LimitShed,
 	CodeLimitPressureShed:            LimitShed,
 	CodeLimitReleaseEnvelopeExceeded: LimitShed,
+	CodeIdentityInvalid:              GuardFailed,
 	CodePolicyReplanRequired:         GuardFailed,
 	CodeCoordinationProtocolMismatch: GuardFailed,
 	CodeChildNotFound:                ChildNotFound,

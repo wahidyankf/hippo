@@ -47,6 +47,7 @@ const (
 	releaseCheckName      = "check"
 	malformedTag          = "no-equals-sign"
 	malformedSource       = "Not A Source"
+	identityFileName      = "hippo.identity.json"
 )
 
 // commandGroupMistakes are invocations of a command that only groups other
@@ -412,6 +413,46 @@ func failureBodyIn(attempt usageAttempt) (failureBody, error) {
 	}
 
 	return body, nil
+}
+
+// requestInvalidIdentityFile runs from a directory whose tracked identity has a
+// field the schema does not know. The file is HIPPO's input, found without
+// being named on the command line.
+func (driver *Driver) requestInvalidIdentityFile() error {
+	directory, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+	document := `{"schemaVersion":1,"source":"fixture","unexpected":true}`
+	if err = os.WriteFile(filepath.Join(directory, identityFileName), []byte(document), 0o600); err != nil {
+		return err
+	}
+
+	return driver.attemptEach([][]string{{
+		outputFlag, outputJSONValue, runCommandName, "--cwd", directory, diskPathFlag, directory,
+		"--", shellPath, "-c", "printf " + usageChildOutput,
+	}})
+}
+
+func (driver *Driver) requireInvalidIdentityNamed() error {
+	if len(driver.usageAttempts) == 0 {
+		return errors.New("no run was attempted")
+	}
+	attempt := driver.usageAttempts[0]
+	body, err := failureBodyIn(attempt)
+	switch {
+	case err != nil:
+		return err
+	case strings.Contains(attempt.stdout, usageChildOutput):
+		return errors.New("the payload started before the invalid identity was refused")
+	case attempt.exitCode != status.GuardFailed || body.Error.Code != status.CodeIdentityInvalid:
+		return fmt.Errorf("the refusal is not 125 naming %s: exit=%d stderr=%q",
+			status.CodeIdentityInvalid, attempt.exitCode, attempt.stderr)
+	case !strings.Contains(attempt.stderr, identityFileName):
+		return fmt.Errorf("the refusal does not name the identity file: stderr=%q", attempt.stderr)
+	}
+
+	return nil
 }
 
 // unusableSummary writes a summary path whose content is not a release

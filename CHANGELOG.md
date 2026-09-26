@@ -67,7 +67,12 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   now exits `2` naming `hippo.args.invalid`, and the diagnostic names `--source`. It exited `125`
   naming `hippo.policy.replan-required`, which says no profile admits the request, although the
   fix is one flag. A caller that branched on `125` here should branch on `2` and supply a source.
-  An identity file that is present and invalid still exits `125`.
+  An identity file that is present and invalid still exits `125`, now under its own reason.
+- A `run` whose `hippo.identity.json` is present and invalid — unreadable, not JSON, an unknown
+  field, or a malformed source or tag — now names `hippo.identity.invalid`, a new code, still exit
+  `125`, and the diagnostic names the file. It named `hippo.policy.replan-required`, which says no
+  profile admits the request and sent a reader to ask for less. A consumer matching that reason
+  here should match the new code and fix or remove the file.
 - `release assess` over rejected evidence names `hippo.limit.release-envelope-exceeded`, a new code,
   still exit `124`, with `retryable: false`. It named `hippo.limit.capacity-deferred` with
   `retryable: true`, so a retry loop re-ran an assessment that could only be rejected again. A
