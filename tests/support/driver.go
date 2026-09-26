@@ -247,6 +247,7 @@ type Driver struct {
 	exclusiveStatusSession   *guard.Session
 	exclusiveStatusState     map[string][]byte
 	interruption             interruptionScenario
+	ungatedPackages          []string
 }
 
 type failingStream struct {

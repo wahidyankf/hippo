@@ -888,6 +888,8 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^the fixture checkout holds the commit$`, driver.requireFixtureHoldsCommit),
 		step(`^the named repository is unchanged$`, driver.requireNamedRepositoryUnchanged),
 		step(`^gate script Git isolation is inspected$`, driver.inspectGateScriptIsolation),
+		step(`^gate package wiring is inspected$`, driver.inspectGatePackages),
+		step(`^every package that holds tests is run by a gate$`, driver.requireEveryTestPackageGated),
 		step(`^every gate script unsets the redirecting Git variables$`, driver.requireGateScriptsUnsetGitEnvironment),
 		step(`^loaded gate wiring is inspected$`, driver.inspectLoadedGate),
 		step(`^the loaded gate declares the host saturated only when its busy workers cover every core$`, driver.requireSaturationCoversEveryCore),

@@ -15,13 +15,15 @@ Install them with `npm ci`. A worktree whose hooks never ran pushes unverified w
 
 ## The Quick Gate
 
-`scripts/test-quick.sh`, in order: the worktree layout check, formatting, whole-module compilation, strict lint, unit tests, deterministic core coverage at 99%, the three behaviour adapters serially, and artifact policy. Documentation hygiene is not in it; it runs as its own gates on the same surfaces.
+`scripts/test-quick.sh`, in order: the worktree layout check, formatting, whole-module compilation, strict lint, the tests of every package under `./cmd/...` and `./internal/...` plus `tests/support`, the `tests/unit` corpus once under deterministic core coverage at 99%, the three behaviour adapters serially, and artifact policy. Documentation hygiene is not in it; it runs as its own gates on the same surfaces.
+
+Every package holding a `_test.go` file must be run by a `go test` pattern in `scripts/test-quick.sh`, `scripts/test.sh`, or `tests/e2e/run.sh`; the compile-only `-run '^$'` line does not count. The scenario "Every package with tests runs in a gate" holds that list complete, so a new package cannot land with tests that never execute.
 
 Order is deliberate. The cheapest failure to read comes first, so a formatting mistake does not cost a coverage run to discover.
 
 ## The Full Gate
 
-`scripts/test.sh` adds the integration adapter, compiled end-to-end behaviour, a race-detected pass, and `govulncheck`. It is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
+`scripts/test.sh` adds the integration adapter, compiled end-to-end behaviour, a race-detected pass over every `./cmd/...` and `./internal/...` package, `tests/support`, and the unit and integration corpora, and `govulncheck`. It is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
 
 ## In CI
 
