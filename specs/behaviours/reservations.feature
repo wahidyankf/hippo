@@ -295,7 +295,7 @@ Feature: Shared vector reservations
 
   @e2e-exempt
   Scenario: A stalled lifetime activation handshake is bounded
-    Given a lifetime launcher that remains stopped before reporting payload activation
+    Given a lifetime launcher that stalls before reporting payload activation
     When its owning guard reaches the activation deadline
     Then the guard returns boundedly without releasing the launcher's detectable reservation and port ownership
 
