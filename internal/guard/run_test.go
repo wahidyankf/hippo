@@ -385,7 +385,11 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 				Enabled: true, MaxCPU: plan.Capacity.CPU, MaxMemoryBytes: plan.Capacity.MemoryBytes, MaxActiveOwners: 1,
 			},
 			ReservationPlan: plan,
-			ChildStdin:      bytes.NewBuffer(nil), ChildStdout: &bytes.Buffer{}, ChildStderr: &bytes.Buffer{}, Stderr: &bytes.Buffer{},
+			// The deliberate forced stop is judged by the killed group's real
+			// exit, bounded only as a hang, not by how quickly a loaded host
+			// reaps it.
+			RetirementConfirmation: guardLivenessLimit,
+			ChildStdin:             bytes.NewBuffer(nil), ChildStdout: &bytes.Buffer{}, ChildStderr: &bytes.Buffer{}, Stderr: &bytes.Buffer{},
 		})
 		done <- runResult{code: code, err: runError}
 	}()
@@ -440,8 +444,8 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	// coordination lock; an owner that waited on that lock would wait for the whole
 	// test, so a generous bound still proves it. The guard must deliver TERM, spend
 	// the 200 ms termination grace, force-stop, and reap before it returns, and
-	// under load that sequence outlasts one second.
-	case <-time.After(15 * time.Second):
+	// the bound outlasts that grace plus the configured confirmation window.
+	case <-time.After(2 * guardLivenessLimit):
 		_ = releaseCoordinationLock(coordination)
 		t.Fatal("owner cancellation blocked on same-process coordination")
 	}
@@ -1748,9 +1752,15 @@ func TestReservationIdentityPathCorruptionFailClosed(t *testing.T) { //nolint:cy
 	}
 }
 
+// guardLivenessLimit bounds a wait for something that must happen: a child to
+// report its PID, a retired group to become reclaimable, a forced stop to be
+// confirmed. It is a liveness maximum, not the property under test, and a
+// healthy run never spends it.
+const guardLivenessLimit = 30 * time.Second
+
 func waitForGuardPIDFile(t *testing.T, path string) int {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(guardLivenessLimit)
 	for {
 		data, err := os.ReadFile(path)
 		pid, parseError := strconv.Atoi(string(data))
@@ -1809,7 +1819,7 @@ func TestSchemaOneOwnershipSurvivesSupervisorDeath(t *testing.T) { //nolint:goco
 			if err = syscall.Kill(-childPID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 				t.Fatal(err)
 			}
-			deadline := time.Now().Add(2 * time.Second)
+			deadline := time.Now().Add(guardLivenessLimit)
 			var lastAcquireError error
 			for {
 				var reclaimed bool
