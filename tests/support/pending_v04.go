@@ -52,6 +52,13 @@ func v04ReservationSample() policy.Sample {
 	return sample
 }
 
+// evidenceDecidesAdmission is an admission window no runner exhausts, for
+// fixtures whose controlled evidence admits after a fixed number of samples. A
+// short window also timed the runner: one too slow to take those samples inside
+// it deferred the run with "safe admission was not reached" before the
+// behaviour under test began.
+const evidenceDecidesAdmission = time.Hour
+
 func v04FastPolicy() policy.Policy {
 	result := policy.DefaultPolicy()
 	result.SampleInterval = time.Millisecond
