@@ -147,14 +147,29 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 ## Phase 3: Rules, Documentation, and Delivery
 
-- [ ] `[AI]` Apply rules propagation to the adapter change, then update `repository-adapter.md` (shell row, interpreter
+- [x] `[AI]` Apply rules propagation to the adapter change, then update `repository-adapter.md` (shell row, interpreter
       and static-analysis rows, pins) and `quality-gates.md`; record the propagation result here; acceptance: no
       document still describes static analysis as a gap, and the interpreter row names every Bash script. `[AC-05]`
-- [ ] `[AI]` Run docs propagation and record whether `CHANGELOG.md` needs an entry for the `hippo` byte change;
+  - Result: `PASS_CHANGED`. Ledger: the static-analysis row (`OPEN` → `RESOLVED`, now the `shell-lint` gate), the
+    shell pack's status reason (`RESOLVED`, no longer "no static-analysis gate yet"), the interpreter row (`RESOLVED`,
+    now naming `rhino`, `ferret`, `scripts/shellcheck.sh`, `format-staged.sh`, and `check-commit-message.sh` beside the
+    scanner), the version sources (`RESOLVED`, `shellcheck.lock` added), and `quality-gates.md` (`RESOLVED`, the gate
+    named under Locally). `shell-standards.md` stays canonical and unchanged (`NOT_APPLICABLE`); `AGENTS.md` only
+    links. The pre-push surface is the gate run step 4 names; it passes on the delivery head.
+- [x] `[AI]` Run docs propagation and record whether `CHANGELOG.md` needs an entry for the `hippo` byte change;
       acceptance: the decision is recorded. `[AC-05]`
-- [ ] `[AI]` Run `npm run test:quick`; acceptance: exit `0`. `[AC-02]` `[AC-05]`
-- [ ] `[AI]` Inspect the diff and the proposed commit and PR text against data safety, then commit thematically;
+  - Result: `no-change`. A search of `README.md`, `docs/`, `specs/`, and `CHANGELOG.md` for `CDPATH`, ShellCheck,
+    static analysis, and `shfmt` finds nothing stale; `scripts/public-safety/README.md` already describes its copies
+    as clean at this threshold, which stays true. `CHANGELOG.md` gets no entry: its entries are per release, and the
+    `hippo` bootstrap change is behaviour-neutral and ships in no release asset.
+- [x] `[AI]` Run `npm run test:quick`; acceptance: exit `0`. `[AC-02]` `[AC-05]`
+  - Result: exit `0` with the documentation changes in place.
+- [x] `[AI]` Inspect the diff and the proposed commit and PR text against data safety, then commit thematically;
       acceptance: hooks pass, including the new `shell-lint` on push. `[AC-05]`
+  - Result: every added line and commit message was read and screened for credentials, local absolute paths, and
+    private names, with no match; the branch carries the plan repair, the plan start, the pin, the fixes, the gate,
+    and the rules update as separate commits, each passing `public-safety-tree`, `format-staged`,
+    `public-safety-message`, and `commit-message`. `shell-lint` on push is proved by the push itself.
 - [ ] `[AI]` Replay the pull-request surface the `repository-contract` job runs, with
       `./rhino gate run --surface pull-request --base origin/main --head HEAD`; acceptance: exit `0`, and the run lists
       `shell-lint`. `[AC-05]`

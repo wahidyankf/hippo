@@ -7,6 +7,7 @@ What runs, where, and in what order.
 - **`commit-msg`** — commitlint. Conventional Commits, on every commit.
 - **`pre-commit`** — `lint-staged`: `goimports` and `gofumpt` over staged Go, `shfmt` over staged shell, Prettier over staged JSON, Markdown, and YAML.
 - **`pre-push`** — `npm run test:quick`, the whole quick gate, unguarded.
+- **`shell-lint`** — on `pre-push`, in the pull-request replay, and on `main`: the checksum-pinned ShellCheck at `--severity=warning` over every shell file `scripts/shell-files.sh` lists, the same list the format check hands `shfmt`.
 
 Install them with `npm ci`. A worktree whose hooks never ran pushes unverified work — see [integration path](../conventions/integration-path.md).
 
