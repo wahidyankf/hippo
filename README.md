@@ -29,7 +29,7 @@ $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make tes
   works by marking a victim and waiting for that victim's own guard to act.
 - **Fails closed.** Unreadable shared state returns a non-retryable failure and preserves bytes
   rather than guessing and rewriting.
-- **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO started nothing, `126` and
+- **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO itself failed, `126` and
   `127` the command cannot be run, `2` the invocation cannot be used — the numbers `timeout` and
   every POSIX shell already use. Each failure also names a reason, as `hippo: [hippo.area.reason]`.
   Child-owned codes pass through with task-failed evidence.
@@ -140,7 +140,7 @@ further selection, so pressure cannot cascade into emptying the ledger.
 
 **Failure.** Exit `124` means a limit stopped the work; the reason says which. `storage-blocked`
 needs cleanup, `capacity-deferred` may be requeued when its receipt says `never-started`, and
-`pressure-shed` needs payload-specific recovery. Exit `125` means HIPPO started nothing: drain or
+`pressure-shed` needs payload-specific recovery. Exit `125` means HIPPO itself failed: drain or
 upgrade an incompatible peer, change the request, or fix the configuration.
 [Exit codes and error codes](./docs/reference/exit-codes.md) lists both closed vocabularies.
 
