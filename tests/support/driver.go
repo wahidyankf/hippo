@@ -1633,7 +1633,7 @@ func (driver *Driver) observeDegradedWarning() error {
 	resourcePolicy := policy.DefaultPolicy()
 	resourcePolicy.SampleInterval = time.Millisecond
 	resourcePolicy.TrendWindow = 15 * time.Millisecond
-	resourcePolicy.AdmissionWindow = 30 * time.Millisecond
+	resourcePolicy.AdmissionWindow = evidenceDecidesAdmission
 	resourcePolicy.EphemeralWarningGrace = 3 * time.Millisecond
 	resourcePolicy.TerminationGrace = time.Millisecond
 	resourcePolicy.LeaseWait = time.Second

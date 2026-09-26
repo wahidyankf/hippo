@@ -901,7 +901,7 @@ func (driver *Driver) sampleLifetimeOwnerPeakV04() error {
 	collector := &peakReviewCollector{root: driver.evidenceRoot}
 	policySettings := v04FastPolicy()
 	policySettings.SampleInterval = 2 * time.Millisecond
-	policySettings.AdmissionWindow = 100 * time.Millisecond
+	policySettings.AdmissionWindow = evidenceDecidesAdmission
 	exitCode, runError := guard.Run(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", "sleep 0.05"}, TaskClass: policy.TaskEphemeral,
 		EvidenceRoot: driver.evidenceRoot, Collector: collector, Policy: policySettings,

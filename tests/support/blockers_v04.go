@@ -1708,7 +1708,7 @@ func requireV04ReservedHIPPOEnvironmentMappings(root string) error {
 func runEvidenceCleanupGuardV04(root string, class policy.TaskClass) (int, error) {
 	settings := v04FastPolicy()
 	settings.SampleInterval = 2 * time.Millisecond
-	settings.AdmissionWindow = 100 * time.Millisecond
+	settings.AdmissionWindow = evidenceDecidesAdmission
 
 	return guard.Run(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", "sleep 0.02"}, TaskClass: class, EvidenceRoot: root,
