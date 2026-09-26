@@ -32,11 +32,12 @@ Before guarding anything, let's look at the machine through HIPPO's eyes.
 The first run compiles the binary. When it finishes you will see a single line:
 
 ```console
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9% owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
 Read it left to right. The host is in the `normal` state, HIPPO resolved the `balanced` profile, and
-it would tell a guarded command it may use `11` parallel workers.
+it would tell a guarded command it may use `11` parallel workers. The `owners` and `waiters` fields
+count guarded commands that hold or await a reservation; with none running, they read `0`.
 
 **Your numbers will differ**, and that is the point — `concurrency` is derived from your machine, not
 from a constant. If your `state` says `warning` instead of `normal`, that is fine too; the rest of

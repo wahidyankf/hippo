@@ -95,7 +95,7 @@ privacy-safe `coordination` rows and totals, owner-promotion decision, and `conf
     "schemaVersion": 5,
     "mode": "reservation",
     "capacity": { "cpu": 11, "memoryBytes": 30064771072 },
-    "allocated": { "cpu": 2, "memoryBytes": 1073741824 },
+    "allocated": { "cpu": 4, "memoryBytes": 6442450944 },
     "waiting": { "cpu": 0, "memoryBytes": 0 },
     "activeOwners": 1,
     "waitingOwners": 0,
@@ -105,7 +105,7 @@ privacy-safe `coordination` rows and totals, owner-promotion decision, and `conf
     "owners": [
       {
         "runId": "21e8b2...",
-        "state": "owner",
+        "state": "active",
         "class": "ephemeral",
         "profile": "balanced",
         "source": "hippo",
