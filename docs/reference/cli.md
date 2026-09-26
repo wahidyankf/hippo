@@ -228,6 +228,11 @@ launch the payload until admitted. A heartbeat reports that run ID, queue positi
 deadline every 30 seconds. Expiry returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt; HIPPO never
 retries a payload.
 
+A `--lease-port` lease is a directory in `hippo-port-leases` under the temporary directory (`TMPDIR`,
+else `/tmp`), not in the state root. A lease root that refuses that write before launch exits `125`
+naming `hippo.lease.unwritable`; a port another live owner holds exits `124` naming
+`hippo.limit.capacity-deferred`.
+
 ```console
 $ hippo run --class ephemeral --resource-tier light --disk-path . -- sh -c 'echo build-started; echo build-finished'
 build-started

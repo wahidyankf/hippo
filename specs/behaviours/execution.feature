@@ -14,6 +14,11 @@ Feature: Guarded process execution
     Then every compatibility owner is rejected with exit 125 naming hippo.coordination.protocol-mismatch
     And the reservation coordination marker remains unchanged
 
+  Scenario: A port-lease root that refuses writes stops a run before launch
+    Given a port-lease root that refuses writes
+    When a guarded run with a port lease is requested
+    Then it exits 125 naming hippo.lease.unwritable and no child starts
+
   @e2e-exempt
   Scenario: A live heavy lease defers a second owner
     Given another live process owns the heavy lease

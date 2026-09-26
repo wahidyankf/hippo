@@ -39,6 +39,9 @@ type interruptionScenario struct {
 	// holds the directories a refusal scenario made read-only.
 	diskPath string
 	locked   []string
+	// tempDir is the TMPDIR a scenario hands HIPPO when it stages the port
+	// lease root, which HIPPO keeps under the temporary directory.
+	tempDir string
 }
 
 const (
@@ -183,10 +186,15 @@ func signalNamed(name string) syscall.Signal {
 // interruptionEnvironment is the whole environment a compiled HIPPO sees, so
 // no ambient configuration or state root reaches the scenario.
 func (driver *Driver) interruptionEnvironment() []string {
-	return []string{
+	environment := []string{
 		"HIPPO_ROOT=" + driver.interruption.root, "HOME=" + driver.interruption.root,
 		isolatedPath, "CHILD_MARKER=" + driver.interruption.childMarker,
 	}
+	if driver.interruption.tempDir != "" {
+		environment = append(environment, "TMPDIR="+driver.interruption.tempDir)
+	}
+
+	return environment
 }
 
 func (driver *Driver) prepareInterruption(command string) error {

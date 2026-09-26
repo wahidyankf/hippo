@@ -681,6 +681,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		LeaseOwner:             options.leaseOwner,
 		LeaseMinimum:           options.leaseMinimum,
 		LeaseMaximum:           options.leaseMaximum,
+		PortLeaseRoot:          portLeaseRoot(application.Environment),
 		ConcurrencyEnvironment: options.concurrencyEnvironment,
 		Collector:              application.Collector,
 		Policy:                 resolution.Policy,
@@ -716,4 +717,16 @@ func displayedPath(workingDirectory, path string) string {
 	}
 
 	return relative
+}
+
+// portLeaseRoot is where port leases live: under the temporary directory, as
+// the guard would find it, but read from the environment the command was
+// given, so an injected environment chooses it the way a process's own does.
+func portLeaseRoot(environment []string) string {
+	temporary := environmentMap(environment)["TMPDIR"]
+	if temporary == "" {
+		temporary = os.TempDir()
+	}
+
+	return filepath.Join(temporary, "hippo-port-leases")
 }

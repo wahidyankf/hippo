@@ -32,7 +32,7 @@ func (driver *Driver) refusalBindings() []contract.StepBinding {
 		step(`^host evidence that HIPPO cannot read$`, driver.unreadableHostV082),
 		step(`^(status|run|release check) is requested against that host$`, driver.requestAgainstUnreadableHostV082),
 		step(
-			`^it exits 125 naming hippo\.(host\.unreadable|evidence\.unwritable) and no child starts$`,
+			`^it exits 125 naming hippo\.(host\.unreadable|evidence\.unwritable|lease\.unwritable) and no child starts$`,
 			driver.requireRefusedBeforeLaunchV082,
 		),
 		step(`^an admitted child whose host evidence becomes unreadable while it runs$`, driver.hostLostAfterLaunchV082),
@@ -49,6 +49,8 @@ func (driver *Driver) refusalBindings() []contract.StepBinding {
 			`^a state root whose (coordination lock|reservation identity directory|session directory) refuses writes$`,
 			driver.refusedCoordinationStateV082,
 		),
+		step(`^a port-lease root that refuses writes$`, driver.refusedPortLeaseRootV082),
+		step(`^a guarded run with a port lease is requested$`, driver.runWithPortLeaseV082),
 		step(`^a queued run whose receipt directory refuses writes$`, driver.refusedReceiptDirectoryV082),
 		step(`^the queued run receives SIGINT before it is admitted$`, driver.signalQueuedRunV082),
 		step(`^a guarded run that has begun sampling the host$`, driver.samplingRunV082),
@@ -392,4 +394,36 @@ func (driver *Driver) refusedReceiptDirectoryV082() error {
 	}
 
 	return driver.lockDirectory(filepath.Join(driver.interruption.root, "receipts"))
+}
+
+// refusedPortLeaseRootV082 stages a scratch temporary directory whose port
+// lease root HIPPO can list but not create a lease in. The state root stays
+// writable, so only the lease root refuses.
+func (driver *Driver) refusedPortLeaseRootV082() error {
+	if err := driver.prepareInterruption(runCommandName); err != nil {
+		return err
+	}
+	root := driver.interruption.root
+	driver.interruption.diskPath = root
+	driver.interruption.tempDir = filepath.Join(root, "temporary")
+	if err := driver.lockDirectory(filepath.Join(driver.interruption.tempDir, "hippo-port-leases")); err != nil {
+		return err
+	}
+	if driver.mode == contract.E2E {
+		return driver.compiledBinary()
+	}
+
+	return nil
+}
+
+func (driver *Driver) runWithPortLeaseV082() error {
+	const port = "23001"
+
+	return driver.runRefusal(
+		append([]string{
+			runCommandName, sourceFlagName, refusedRunSource, diskPathFlag, driver.interruption.diskPath,
+			"--lease-port", port, "--lease-min", port, "--lease-max", port, "--lease-owner", "fixture",
+		}, driver.payloadArguments()...),
+		&sequenceCollector{samples: driver.samples},
+	)
 }

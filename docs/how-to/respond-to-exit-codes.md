@@ -151,9 +151,14 @@ too, not with `128+N`, because the receipt you read before requeueing is missing
 For either reason, if HIPPO had already begun sampling the host, the run's lifetime summary records
 the outcome `admission-failed`, so `history` does not count it as a deferral.
 
+**`hippo.lease.unwritable`** — the port-lease root refused the write that takes a `--lease-port`
+lease, for the same causes. That root is `hippo-port-leases` under the temporary directory
+(`TMPDIR`, else `/tmp`), not `HIPPO_ROOT`, so fix its permissions or point `TMPDIR` somewhere
+writable. Nothing was started, and retrying unchanged is refused again.
+
 **`hippo.supervision.failed`** — HIPPO failed at a step it does not classify further, possibly after
 the child started. A host or evidence root that fails after the child started lands here, not under
-the two reasons above, because the work may have begun. When the shared coordination lock stays held past the two-second activation
+`hippo.host.unreadable` or `hippo.evidence.unwritable`, because the work may have begun. When the shared coordination lock stays held past the two-second activation
 window, HIPPO stops the child it just launched and writes a `started-activation-failure` receipt.
 Read `receipts/` before running the payload again: the work may have begun — see
 [How to inspect evidence](./inspect-evidence-and-abandoned-groups.md).

@@ -170,6 +170,11 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   update now exits `125` naming `hippo.evidence.unwritable`. It named `hippo.supervision.failed`,
   although `status` supervises nothing. A caller matching `supervision.failed` here should match
   `evidence.unwritable` and fix the permissions of `HIPPO_ROOT`.
+- A `run --lease-port` whose port-lease root refuses the lease write before launch now exits `125`
+  naming `hippo.lease.unwritable`, a new code that is not retryable. It named
+  `hippo.supervision.failed`, although nothing had started. That root is `hippo-port-leases` under
+  the temporary directory, not `HIPPO_ROOT`. A caller matching `supervision.failed` here should
+  match `lease.unwritable` and fix that directory's permissions or point `TMPDIR` somewhere writable.
 - A queued `run` stopped by a signal whose `never-started` receipt is refused now exits `125`
   naming `hippo.evidence.unwritable` instead of `130` or `143`. The receipt is what a caller reads
   before requeueing, so reporting only the signal would hide that it is missing.
