@@ -124,6 +124,13 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   as deferrals. A queued waiter cancelled the same way still writes no summary, because it collects
   no host evidence while it waits. The JSON schema reference now lists every `outcome` value. A
   consumer that counts `capacity-deferred` summaries should count `admission-cancelled` separately.
+- A `run` that HIPPO itself stops after host sampling began and before its child launches now
+  summarizes those samples under a new outcome, `admission-failed`: host evidence it could no longer
+  read, an evidence write it was refused, or a launch that failed. It was summarized as
+  `capacity-deferred`, so a run that exited `125` naming `hippo.host.unreadable` read in `history`
+  as a deferral that would clear on retry. A cancelled run whose `never-started` receipt is refused
+  is also `admission-failed`, matching its `125` exit. A consumer that counts deferrals should count
+  `admission-failed` as HIPPO failing, not the host being busy.
 - `hippo-conformance` stopped by `SIGINT` or `SIGTERM` now exits `130` or `143`. It exited `1`,
   the status for consumers that do not conform, although a stopped run reached no verdict. It
   still retires every started process group, reconciles the checkouts, and prints what it found

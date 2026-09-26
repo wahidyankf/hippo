@@ -145,6 +145,9 @@ lack of permission, a read-only file system, or no space or quota. Nothing was s
 `HIPPO_ROOT` or free its volume. A queued run stopped by a signal whose receipt is refused ends here
 too, not with `128+N`, because the receipt you read before requeueing is missing.
 
+For either reason, if HIPPO had already begun sampling the host, the run's lifetime summary records
+the outcome `admission-failed`, so `history` does not count it as a deferral.
+
 **`hippo.supervision.failed`** — HIPPO failed at a step it does not classify further, possibly after
 the child started. A host or evidence root that fails after the child started lands here, not under
 the two reasons above, because the work may have begun. When the shared coordination lock stays held past the two-second activation

@@ -157,23 +157,27 @@ func TestPromotionRequiresLastHealthyOverlapsAcrossThreeSources(t *testing.T) {
 }
 
 func TestAggregationKeepsACancelledRunApartFromADeferral(t *testing.T) {
-	// A cancellation and a capacity deferral never started anything, but they
-	// are different events, and aggregating the oldest day must not merge them
-	// or the aggregate would report one as the other.
+	// A cancellation, a failed admission, and a capacity deferral never
+	// started anything, but they are different events, and aggregating the
+	// oldest day must not merge them or the aggregate would report one as
+	// another.
 	rows := aggregateHistoryRows([]Summary{
 		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "admission-cancelled"},
 		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "admission-cancelled"},
 		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "capacity-deferred"},
+		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "admission-failed"},
 	})
 	counts := map[string]int{}
 	for _, row := range rows {
 		counts[row.Outcome] += row.AggregateCount
 	}
-	if len(rows) != 2 || counts["admission-cancelled"] != 2 || counts["capacity-deferred"] != 1 {
+	if len(rows) != 3 || counts["admission-cancelled"] != 2 || counts["capacity-deferred"] != 1 ||
+		counts["admission-failed"] != 1 {
 		t.Fatalf("aggregation merged or lost outcomes: %+v", counts)
 	}
 	if !matchesQuery(rows[0], Query{Outcome: rows[0].Outcome}) ||
-		matchesQuery(Summary{Outcome: "admission-cancelled"}, Query{Outcome: "capacity-deferred"}) {
+		matchesQuery(Summary{Outcome: "admission-cancelled"}, Query{Outcome: "capacity-deferred"}) ||
+		matchesQuery(Summary{Outcome: "admission-failed"}, Query{Outcome: "capacity-deferred"}) {
 		t.Fatal("the outcome filter does not separate a cancellation from a deferral")
 	}
 }
