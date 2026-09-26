@@ -124,7 +124,8 @@ waiting run=fb5b47c58a0287aee14ca7c310499cd0 position=1 source=my-repo class=eph
 The text form prints one privacy-safe row line under the summary for each owner and waiter. The JSON
 form carries the same rows in full, plus the base, maximum, and currently effective owner limit. A
 live exclusive compatibility session appears as a legacy owner, while exclusive waiters remain
-unregistered. Filters change rows, not the global aggregate totals. It is documented in
+unregistered. Filters change rows, not the global aggregate totals. A malformed `--tag` is a usage
+mistake (`2`, `hippo.args.invalid`), for `watch` as for `status`. It is documented in
 [JSON schemas](./json-schemas.md#status---json).
 
 ## `hippo watch`
