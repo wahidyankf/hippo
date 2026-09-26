@@ -22,6 +22,8 @@ Adopted from the shared catalog with the software-development agents.
   where trust ends.
 - [programming-golang](programming-golang/SKILL.md) — apply the Go standard while writing or reviewing Go.
 - [programming-shell](programming-shell/SKILL.md) — apply the shell standards while writing or reviewing a script.
+- [building-command-line-interfaces](building-command-line-interfaces/SKILL.md) — choose an exit status, place output on
+  the right stream, and override the runtime defaults the contract needs.
 - [applying-maker-checker-fixer](applying-maker-checker-fixer/SKILL.md) — the judgement inside a make, check, and fix
   loop.
 - [assessing-criticality-confidence](assessing-criticality-confidence/SKILL.md) — rate a finding's criticality and

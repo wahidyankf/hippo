@@ -4,22 +4,24 @@ What runs, where, and in what order.
 
 ## Locally
 
-- **`commit-msg`** — commitlint. Conventional Commits, on every commit.
-- **`pre-commit`** — `lint-staged`: `goimports` and `gofumpt` over staged Go, `shfmt` over staged shell, Prettier over staged JSON, Markdown, and YAML.
-- **`pre-push`** — `npm run test:quick`, the whole quick gate, unguarded.
-- **`shell-lint`** — on `pre-push`, in the pull-request replay, and on `main`: the checksum-pinned ShellCheck at `--severity=warning` over every shell file `scripts/shell-files.sh` lists, the same list the format check hands `shfmt`.
+Each hook runs `./rhino gate run --surface <hook>`; [`repo-config.yml`](../../repo-config.yml) declares the gates each surface runs, and `./rhino gate list` prints them.
+
+- **`commit-msg`** — the public-safety message screen, then commitlint through `scripts/check-commit-message.sh`: Conventional Commits, on every commit.
+- **`pre-commit`** — the public-safety tree screen, then `scripts/format-staged.sh`: `goimports` and `gofumpt` over staged Go, `shfmt` over staged shell, Prettier over staged JSON, Markdown, and YAML.
+- **`pre-push`** — the public-safety range screen, `shell-lint`, the quick gate, repository configuration, and the documentation gates, unguarded.
+- **`shell-lint`** — on `pre-push` and in the pull-request replay: the checksum-pinned ShellCheck at `--severity=warning` over every shell file `scripts/shell-files.sh` lists, the same list the format check hands `shfmt`.
 
 Install them with `npm ci`. A worktree whose hooks never ran pushes unverified work — see [integration path](../conventions/integration-path.md).
 
 ## The Quick Gate
 
-`scripts/test-quick.sh`, in order: formatting, whole-module compilation, strict lint, unit tests, deterministic core coverage at 99%, the three behaviour adapters serially, artifact policy, and documentation hygiene under the pinned RHINO.
+`scripts/test-quick.sh`, in order: the worktree layout check, formatting, whole-module compilation, strict lint, unit tests, deterministic core coverage at 99%, the three behaviour adapters serially, and artifact policy. Documentation hygiene is not in it; it runs as its own gates on the same surfaces.
 
 Order is deliberate. The cheapest failure to read comes first, so a formatting mistake does not cost a coverage run to discover.
 
 ## The Full Gate
 
-`scripts/test.sh` adds the integration adapter, compiled end-to-end behaviour, a race-detected pass, and `govulncheck`. It is the release gate, and it is what CI runs on every supported platform.
+`scripts/test.sh` adds the integration adapter, compiled end-to-end behaviour, a race-detected pass, and `govulncheck`. It is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
 
 ## In CI
 
