@@ -337,6 +337,47 @@ func TestAdmissionDeadlineWritesNeverStartedReceipt(t *testing.T) {
 	}
 }
 
+// The bounded wait's last passes reach the coordination lock with only a
+// sliver of budget left. An uncontended root must still defer on capacity with
+// a never-started receipt, never as a coordination deferral that writes none.
+// The injected clock parks the loop one nanosecond short of its deadline for
+// twenty passes, so a lock that can lose to its own expired timer fails here.
+func TestBoundedWaitDefersOnCapacityWhenBudgetIsNearlySpent(t *testing.T) {
+	root := t.TempDir()
+	owner := acquireReservation(t, root, policy.TaskService, fixedPlan(4, policy.GiB, 4, policy.GiB))
+	defer func() { _ = guard.ReleaseReservation(root, owner) }()
+
+	const wait = 30 * time.Millisecond
+	started := time.Now()
+	deadline := started.Add(wait)
+	clock, parked := started, 0
+	_, err := guard.AcquireReservationWithOptions(
+		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
+		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, wait,
+		guard.ReservationAdmissionOptions{
+			Metadata: guard.ReservationMetadata{Source: "fixture"},
+			Now:      func() time.Time { return clock },
+			Pause: func(context.Context, time.Duration) error {
+				if parked < 20 {
+					parked++
+					clock = deadline.Add(-time.Nanosecond)
+				} else {
+					clock = deadline
+				}
+
+				return nil
+			},
+		},
+	)
+	if !errors.Is(err, guard.ErrReservationDeferred) || guard.IsCoordinationDeferred(err) {
+		t.Fatalf("nearly spent bounded wait returned %v, want a capacity deferral", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("receipt entries=%d error=%v, want one never-started receipt", len(entries), err)
+	}
+}
+
 func TestReservationAdmissionIsAtomicAndFIFO(t *testing.T) {
 	root := t.TempDir()
 	owner := acquireReservation(t, root, policy.TaskService, fixedPlan(2, 512*policy.MiB, 3, 768*policy.MiB))

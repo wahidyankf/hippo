@@ -218,6 +218,23 @@ func TestCoordinationLockSerializesSameProcessByRoot(t *testing.T) {
 	}
 }
 
+// A bounded wait that is already spent when the free gate is examined must
+// still take the gate. The reservation wait loop reaches this state on its
+// last pass, with nanoseconds of budget left, and a lost race there turned a
+// capacity deferral into a coordination deferral with no never-started receipt.
+func TestCoordinationLockGrantsFreeRootWhenBudgetIsNearlySpent(t *testing.T) {
+	root := t.TempDir()
+	for attempt := range 200 {
+		lock, err := acquireCoordinationLock(context.Background(), root, time.Nanosecond)
+		if err != nil {
+			t.Fatalf("attempt %d: uncontended coordination lock refused with a spent budget: %v", attempt, err)
+		}
+		if err = releaseCoordinationLock(lock); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestCoordinationLockAllowsDistinctRootsInParallel(t *testing.T) {
 	first, err := acquireCoordinationLock(context.Background(), t.TempDir(), time.Second)
 	if err != nil {
