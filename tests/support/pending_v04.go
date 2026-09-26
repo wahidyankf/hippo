@@ -713,7 +713,10 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 		return err
 	}
 	sharedRoot := filepath.Join(root, "shared")
-	environment := append(os.Environ(), "HIPPO_ROOT="+sharedRoot)
+	environment, err := driver.quietHostEnvironment(append(os.Environ(), "HIPPO_ROOT="+sharedRoot))
+	if err != nil {
+		return err
+	}
 	// A liveness maximum for a real compiled run, not the property under test. The
 	// guarded binary samples the host and clears admission before it launches
 	// anything, and deferring under pressure is what it is for: a trivial "exit 0"
@@ -723,10 +726,11 @@ func (driver *Driver) requireCompiledSummaryV04(root string) error {
 	// healthy run spends a couple of seconds of this.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	// A saturated host defers admission, and a deferral is not a failure: the
-	// loaded gate reproduced exactly that and this fixture read it as one. Waiting
-	// is the documented response, and it is the behaviour every consumer should
-	// copy from here.
+	// --wait-for-admission bounds the reservation queue, not host admission: a
+	// busy host still defers once the admission window closes, which is how this
+	// scenario failed on macOS with the flag set. The quiet host evidence above
+	// removes that dependency on macOS; on Linux, where the evidence cannot be
+	// fixed, a refusal on the saturated loaded gate is still accepted below.
 	run := exec.CommandContext(
 		ctx, driver.binary, "run", configFlag, configPath,
 		"--wait-for-admission", "60s",
@@ -843,7 +847,12 @@ func (driver *Driver) requireCompiledPTYV04() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, scriptPath, arguments...)
-	command.Env = append(os.Environ(), "HIPPO_ROOT="+root, "HIPPO_PTY_RESULT="+resultPath, "HIPPO_PTY_READY="+readyPath)
+	command.Env, err = driver.quietHostEnvironment(
+		append(os.Environ(), "HIPPO_ROOT="+root, "HIPPO_PTY_RESULT="+resultPath, "HIPPO_PTY_READY="+readyPath),
+	)
+	if err != nil {
+		return err
+	}
 	reader, writer, err := os.Pipe()
 	if err != nil {
 		return err

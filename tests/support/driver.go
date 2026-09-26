@@ -1114,7 +1114,10 @@ func (driver *Driver) childReservedCodeE2E(code int) error {
 			driver.binary, "run", "--profile", profileMinimal, "--class", string(taskClassEphemeral),
 			diskPathFlag, ".", "--", shellPath, "-c", fmt.Sprintf("exit %d", code),
 		)
-		command.Env = environmentWith(map[string]string{hippoRootEnvironment: root})
+		command.Env, err = driver.quietHostEnvironment(environmentWith(map[string]string{hippoRootEnvironment: root}))
+		if err != nil {
+			return err
+		}
 		command.Stderr = stderr
 		runError := command.Run()
 		exit := exitCode(runError)
