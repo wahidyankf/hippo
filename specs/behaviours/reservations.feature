@@ -227,7 +227,7 @@ Feature: Shared vector reservations
   Scenario: Pressure shedding preserves its stable exit while retirement is unconfirmed
     Given selected reserved owners for storage and non-storage pressure whose KILL waits remain unconfirmed
     When each owning guard performs bounded shedding
-    Then each returns exit 124 naming its storage or non-storage limit respectively while reservation and port competitors defer until retirement and then admit
+    Then each returns exit 124 naming hippo.limit.storage-blocked or hippo.limit.pressure-shed respectively while reservation and port competitors defer until retirement and then admit
 
   @e2e-exempt
   Scenario: Port ownership survives supervisor-only death

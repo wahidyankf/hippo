@@ -210,7 +210,7 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 		Stderr:       &bytes.Buffer{},
 	})
 
-	if err != nil || code != guard.CapacityDeferredExitCode {
+	if err != nil || code != guard.PressureShedExitCode {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
 }

@@ -239,3 +239,60 @@ func TestStatusReturnsProtocolMismatchForFutureLedger(t *testing.T) {
 		t.Fatalf("future ledger changed: %q error=%v", after, readError)
 	}
 }
+
+// escalatingCollector reports a healthy host until admission, then critical
+// memory pressure, so the guard admits its child and must shed it.
+type escalatingCollector struct {
+	calls   *int
+	healthy int
+}
+
+func (collector escalatingCollector) Collect(_ context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
+	*collector.calls++
+	sample := policy.Sample{
+		SchemaVersion: 3, MeasuredAt: time.Now().UTC().Format(time.RFC3339Nano), Platform: "darwin",
+		Capabilities:              []string{"compressor", "memory-pressure", "swap"},
+		EffectiveMemoryLimitBytes: 32 * policy.GiB, PhysicalMemoryBytes: 32 * policy.GiB,
+		AvailableMemoryBytes: new(12 * policy.GiB), AvailableNonCompressedEstimateBytes: new(12 * policy.GiB),
+		MemoryPressureLevel: new(1), CompressorAvailable: new(true), CompressorPayloadBytes: new(7 * policy.GiB),
+		AvailableParallelism: 8, CPUUtilizationPercent: new(20.0),
+		DiskFreeBytes: new(40 * policy.GiB), DiskTotalBytes: new(512 * policy.GiB), PageSizeBytes: new(int64(16_384)),
+		SwapIns: new(int64(10)), SwapOuts: new(int64(20)), SwapFreeBytes: new(2 * policy.GiB), SwapState: "idle",
+	}
+	if *collector.calls > collector.healthy {
+		critical := 4
+		sample.MemoryPressureLevel = &critical
+	}
+
+	return policy.Reading{CPUState: previous, Sample: sample}, nil
+}
+
+func TestPressureShedNamesItsOwnReason(t *testing.T) {
+	// Host pressure that stops a started child is a different event from a
+	// capacity deferral that never started one. Both are limits and return
+	// 124, but the reason is what a consumer branches on, so a shed must not
+	// name the deferral.
+	root := t.TempDir()
+	stderr := &bytes.Buffer{}
+	calls := 0
+	application := Application{
+		Stdout: &bytes.Buffer{}, Stderr: stderr,
+		Environment: []string{"HIPPO_ROOT=" + root},
+		Collector:   escalatingCollector{calls: &calls, healthy: 4},
+	}
+	code, runError := application.Run(context.Background(), []string{
+		"run", "--disk-path", root, "--", "/bin/sh", "-c", "sleep 10",
+	})
+	if code != status.LimitShed || runError != nil {
+		t.Fatalf("code=%d error=%v stderr=%q", code, runError, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "hippo: ["+string(status.CodeLimitPressureShed)+"]") {
+		t.Fatalf("a pressure shed did not name %s: %q", status.CodeLimitPressureShed, stderr.String())
+	}
+	if strings.Contains(stderr.String(), string(status.CodeLimitCapacityDeferred)) {
+		t.Fatalf("a pressure shed named the capacity deferral: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "the payload ran") {
+		t.Fatalf("a pressure shed did not say its payload ran: %q", stderr.String())
+	}
+}

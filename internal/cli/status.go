@@ -18,13 +18,14 @@ import (
 const bodySchemaVersion = 1
 
 // internalReasons maps the statuses hippo's guard and policy layers return
-// among themselves to the reason each one meant. Those four numbers — 73, 75,
-// 76, 78 — no longer leave the process; they survive here only as the seam
-// that carries their meaning into the body, so the layers below need no
-// rewrite to gain it.
+// among themselves to the reason each one meant. Those numbers — 73, 74, 75,
+// 76, 78 — never leave the process; they survive here only as the seam that
+// carries their meaning into the body, so the layers below need no rewrite
+// to gain it.
 var internalReasons = map[int]status.Code{
 	guard.StorageBlockedExitCode:    status.CodeLimitStorageBlocked,
 	guard.CapacityDeferredExitCode:  status.CodeLimitCapacityDeferred,
+	guard.PressureShedExitCode:      status.CodeLimitPressureShed,
 	policy.ProtocolMismatchExitCode: status.CodeCoordinationProtocolMismatch,
 	policy.ReplanRequiredExitCode:   status.CodePolicyReplanRequired,
 }
@@ -83,13 +84,15 @@ func classify(execution *commandExecution, err error) *status.Failure {
 // returned no error of its own — which the guard does deliberately, because
 // being shed against a limit is an outcome rather than a fault.
 //
-//nolint:exhaustive // Only the four reasons the internal statuses carried reach here; the default covers the rest.
+//nolint:exhaustive // Only the reasons the internal statuses carry reach here; the default covers the rest.
 func reasonMessage(code status.Code) string {
 	switch code {
 	case status.CodeLimitStorageBlocked:
 		return "the disk floor stopped this work; free space before retrying"
 	case status.CodeLimitCapacityDeferred:
 		return "capacity deferred this work; retry when the host is quieter"
+	case status.CodeLimitPressureShed:
+		return "host pressure shed this work after the payload ran; recover it before repeating anything"
 	case status.CodeCoordinationProtocolMismatch:
 		return "live peer coordination state this client cannot safely join"
 	case status.CodePolicyReplanRequired:

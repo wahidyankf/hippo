@@ -1572,9 +1572,9 @@ func (driver *Driver) observeCritical() error {
 }
 
 // requireShed observes the guard's non-storage shed decision, which the command
-// boundary reports as 124.
+// boundary reports as 124 naming hippo.limit.pressure-shed.
 func (driver *Driver) requireShed() error {
-	if driver.exitCode != guard.CapacityDeferredExitCode {
+	if driver.exitCode != guard.PressureShedExitCode {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
 	if driver.forceStopElapsed >= 3*time.Second {
@@ -1645,7 +1645,7 @@ func (driver *Driver) observeDegradedWarning() error {
 }
 
 func (driver *Driver) requireDegradedShed() error {
-	if driver.exitCode != guard.CapacityDeferredExitCode ||
+	if driver.exitCode != guard.PressureShedExitCode ||
 		!strings.Contains(driver.errorOutput, "admitting") ||
 		!strings.Contains(driver.errorOutput, "shedding") {
 		return fmt.Errorf("exit=%d stderr=%q", driver.exitCode, driver.errorOutput)

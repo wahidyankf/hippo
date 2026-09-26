@@ -159,7 +159,7 @@ func TestRunEmergencyTransactionalStopWritesReceiptWithoutRetry(t *testing.T) {
 		//nolint:nilnil // Two nil results explicitly model a successfully reaped child and supervisor.
 		stopLifetime: func(*supervisedLifetime, time.Duration) (error, error) { return nil, nil },
 	})
-	if err != nil || code != CapacityDeferredExitCode || starts != 1 {
+	if err != nil || code != PressureShedExitCode || starts != 1 {
 		t.Fatalf("emergency result: code=%d starts=%d error=%v", code, starts, err)
 	}
 	receipts, err := os.ReadDir(filepath.Join(root, "receipts"))
@@ -2048,7 +2048,7 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 				t.Fatalf("unconfirmed ownership was not detectable: totals=%+v status=%v port=%v reservation=%v",
 					totals, statusError, portAcquireError, reservationAcquireError)
 			}
-			if result.code != fixture.exitCode || !errors.Is(result.err, errChildRetirementUnconfirmed) {
+			if result.code != callerShedCode(fixture.exitCode) || !errors.Is(result.err, errChildRetirementUnconfirmed) {
 				t.Fatalf("unconfirmed result code=%d error=%v", result.code, result.err)
 			}
 			if waitError := holder.Wait(); waitError != nil {
