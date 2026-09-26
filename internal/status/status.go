@@ -41,8 +41,9 @@ const (
 	// `timeout` returns for the same situation, and it is retryable in the
 	// sense that the limit can lift.
 	LimitShed = 124
-	// GuardFailed is hippo being unable to do its job, with no child started.
-	// Retrying it unchanged will fail the same way.
+	// GuardFailed is hippo failing to start or supervise the work: before a
+	// child starts, or after one started and hippo lost it. Retrying it
+	// unchanged will fail the same way.
 	GuardFailed = 125
 	// ChildNotExecutable is a child that exists and cannot be run.
 	ChildNotExecutable = 126
@@ -55,7 +56,7 @@ const (
 type Code string
 
 // The closed code vocabulary. Every failure hippo reports names exactly one of
-// these, and docs/reference/error-codes.md publishes the same list; a unit
+// these, and docs/reference/exit-codes.md publishes the same list; a unit
 // case asserts the two agree in both directions, so neither can drift.
 const (
 	// CodeArgsInvalid is an invocation hippo could not parse or accept.
@@ -100,7 +101,7 @@ const (
 	CodeInternalFailure Code = "hippo.internal.failure"
 )
 
-// All is the published vocabulary in the order docs/reference/error-codes.md
+// All is the published vocabulary in the order docs/reference/exit-codes.md
 // lists it.
 var All = []Code{
 	CodeArgsInvalid,

@@ -811,3 +811,36 @@ func TestCommandLineInterfaceContract(t *testing.T) {
 		t.Logf("  known gap   %s: %s", id, reason)
 	}
 }
+
+// TestHelpExitBlockAgreesWithTheReference holds --help to the published table.
+// The exit block is the one place a caller reads the contract without the
+// documentation, so a meaning that drifted from docs/reference/exit-codes.md
+// would teach every such caller something the binary no longer does.
+func TestHelpExitBlockAgreesWithTheReference(t *testing.T) {
+	root := moduleRoot(t)
+	binary := filepath.Join(t.TempDir(), "hippo")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/hippo")
+	build.Dir = root
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build HIPPO: %s: %v", output, err)
+	}
+	document, err := os.ReadFile(filepath.Join(root, "docs", "reference", "exit-codes.md"))
+	if err != nil {
+		t.Fatalf("reading the exit reference failed: %v", err)
+	}
+	help := invoke(t, binary, "--help").stdout
+
+	for _, status := range []string{"0", "1", "2", "124", "125", "126", "127"} {
+		row := regexp.MustCompile("(?m)^\\| `" + status + "` +\\| ([^|]+?) +\\|").FindStringSubmatch(string(document))
+		if row == nil {
+			t.Fatalf("exit-codes.md has no row for %s", status)
+		}
+		line := regexp.MustCompile(`(?m)^\s+` + status + `\s+(.+)$`).FindStringSubmatch(help)
+		if line == nil {
+			t.Fatalf("--help has no line for %s", status)
+		}
+		if !strings.HasPrefix(strings.ToLower(line[1]), strings.ToLower(row[1])) {
+			t.Errorf("--help says %s %q; exit-codes.md says %q", status, line[1], row[1])
+		}
+	}
+}
