@@ -9,7 +9,9 @@ fails at the first 20 ms supervision sample, and HIPPO then waits the 50 ms term
 child that publishes within roughly 70 ms still wins. `sleep 0.2` outlasts both windows and failed five of five. The
 technical design's 0.05 s figure was a guess at the race window rather than a measurement of it.
 
-Status: Pending routing.
+Status: Resolved (2026-09-26). The fact is specific to this fixture's windows, so it stays with the fixture: the
+comment above the delayed PID write in `tests/support/driver.go::loseHostEvidence` names both windows it must outlast.
+No general rule is changed.
 
 ## Learning 2: The delivery run guarded HIPPO's own commands
 
@@ -17,4 +19,5 @@ Observed 2026-09-26, execution record. The combined branch's delivery instructio
 through `./hippo`, while this plan and resource-aware development say HIPPO cannot guard HIPPO. The runs completed, but
 the conflict between the two instructions belongs to the owner, not to this plan.
 
-Status: Pending routing.
+Status: Resolved (2026-09-26). Routed through the delivery hand-back; the answer was that this repository's rule
+wins, so later gate runs ran directly. The rule is unchanged.

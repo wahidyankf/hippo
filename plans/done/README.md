@@ -8,6 +8,8 @@ Reconcile required and conditional delivery, acceptance, verification, and learn
 
 ## Completed Plans
 
+- 2026-09-26 — [Repair supervision readiness race](2026-09-26__repair-supervision-readiness-race/README.md): the
+  collector-failure fixture waits for the child-published PID before it injects the failure.
 - 2026-09-26 — [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md): shell scripts are gated on a
   checksum-pinned ShellCheck at warning severity over one list the formatter shares.
 - 2026-09-26 — [Neutralize test fixture identifiers](2026-09-26__neutralize-test-fixture-identifiers/README.md): the
@@ -23,3 +25,5 @@ Reconcile required and conditional delivery, acceptance, verification, and learn
   the test-isolation helper.
 - [Neutralize test fixture identifiers](2026-09-26__neutralize-test-fixture-identifiers/README.md) is the delivery
   record for the synthetic identity fixture.
+- [Repair supervision readiness race](2026-09-26__repair-supervision-readiness-race/README.md) is the delivery record
+  for the PID readiness barrier.
