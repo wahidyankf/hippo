@@ -39,6 +39,12 @@ Feature: Public HIPPO CLI
     Then only the matching privacy-safe summary is returned
 
   @e2e-exempt
+  Scenario: An unreadable history archive is not reported as a refused write
+    Given a history archive that is not valid gzip
+    When history is queried for thirty days
+    Then it exits 125 naming hippo.evidence.unreadable and leaves the archive bytes unchanged
+
+  @e2e-exempt
   Scenario: Watch emits only changed admission snapshots
     Given stable host and queue state for watch
     When JSON watch observes two unchanged snapshots

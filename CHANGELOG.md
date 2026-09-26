@@ -30,6 +30,10 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   output, summary or deployment root, a negative `--duration-ms`, or an out-of-range
   `--service-port` as a usage mistake: exit `2` naming `hippo.args.invalid`. Each exited `125`
   naming `hippo.supervision.failed`, although nothing had been supervised.
+- `history` reports an archive it cannot read as `hippo.evidence.unreadable`, a new code, still
+  exit `125`. It named `hippo.evidence.unwritable`, which means the evidence root refused a write,
+  so a reader was sent to fix permissions for what is a corrupt file. The archive is left untouched
+  for inspection. A consumer matching `evidence.unwritable` on `history` should match the new code.
 - `--help` describes `125` as HIPPO failing before, while, or after starting the work, and `2` as
   also covering an internal fault, matching the exit-code reference. A test now holds every line of
   the help's exit block to that reference.
