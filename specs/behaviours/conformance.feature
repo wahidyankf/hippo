@@ -208,6 +208,23 @@ Feature: Generic consumer conformance
     Then conformance keeps the mismatch fatal and does not run later gates
 
   @e2e-exempt
+  Scenario: A never-started capacity deferral is skipped
+    Given an allow-capacity-skip coordination check that exits 124 naming hippo.limit.capacity-deferred with a new never-started receipt
+    When conformance classifies the capacity deferral
+    Then conformance skips that check instead of failing
+
+  @e2e-exempt
+  Scenario Outline: A pressure shed cannot pass as a capacity skip
+    Given an allow-capacity-skip coordination check that exits 124 naming hippo.limit.pressure-shed <receipt>
+    When conformance classifies the pressure shed
+    Then conformance keeps the shed fatal and does not run later gates
+
+    Examples:
+      | receipt                            |
+      | without a never-started receipt    |
+      | beside a new never-started receipt |
+
+  @e2e-exempt
   Scenario: A probe that never reaches admission cannot pass by returning early
     Given a consumer whose declared probe never consults HIPPO
     When conformance saturates that consumer's probe root before running it

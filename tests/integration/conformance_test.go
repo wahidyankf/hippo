@@ -609,6 +609,51 @@ func TestCompiledConformanceProtocolMismatchIsNotCapacitySkip(t *testing.T) {
 	}
 }
 
+// A pressure shed exits 124 like a capacity deferral, but it stopped a child
+// that had started, so it is never a skip. With a never-started receipt beside
+// it only the reason can refuse it, which is the case that proves the runner
+// reads the reason rather than the status.
+func TestCompiledConformancePressureShedIsNotCapacitySkip(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		writeReceipt bool
+	}{
+		{name: "without_receipt"},
+		{name: "with_receipt", writeReceipt: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := t.TempDir()
+			runner := buildConformanceBinary(t, root)
+			hippoBinary := filepath.Join(root, "hippo-source")
+			if err := os.WriteFile(hippoBinary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			manifest, manifestPath := compiledConformanceManifest(t, root, hippoBinary)
+			script := `printf 'hippo: [hippo.limit.pressure-shed] host pressure shed this work after the payload ran; recover it before repeating anything\n' >&2; exit 124`
+			if testCase.writeReceipt {
+				script = `mkdir -p "$HIPPO_ROOT/receipts"; printf '%s\n' '{"schemaVersion":1,"state":"never-started"}' > "$HIPPO_ROOT/receipts/conformance.json"; ` + script
+			}
+			gateMarker := filepath.Join(root, "later-gate-started")
+			manifest.CoordinationChecks = []conformance.Check{{
+				Consumer: manifest.Consumers[0].Name, AllowCapacitySkip: true,
+				Command: conformance.Command{Arguments: []string{"/bin/sh", "-c", script}},
+			}}
+			manifest.Consumers[0].Gates = []conformance.Command{{Arguments: []string{
+				"/bin/sh", "-c", `printf started > "$1"`, "conformance", gateMarker,
+			}}}
+			writeCompiledConformanceManifest(t, manifestPath, manifest)
+
+			output, runError := exec.Command(runner, manifestPath).CombinedOutput()
+			if runError == nil || strings.Contains(string(output), "skipped") {
+				t.Fatalf("a pressure shed passed as a capacity skip: %s: %v", output, runError)
+			}
+			if _, statError := os.Stat(gateMarker); !errors.Is(statError, os.ErrNotExist) {
+				t.Fatalf("a later gate ran after a pressure shed: %v", statError)
+			}
+		})
+	}
+}
+
 func TestCompiledConformanceCapacitySkipRequiresNewNeverStartedReceipt(t *testing.T) {
 	for _, testCase := range []struct {
 		name         string

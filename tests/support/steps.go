@@ -446,6 +446,16 @@ func (driver *Driver) conformanceBindings() []contract.StepBinding { //nolint:fu
 		step(`^an allow-capacity-skip consumer whose coordination check exits 125$`, prepare("conformance protocol mismatch", requireV10ConformanceProtocolMismatch)),
 		step(`^conformance classifies the protocol mismatch$`, driver.exerciseReservationScenarioV04),
 		step(`^conformance keeps the mismatch fatal and does not run later gates$`, assert("conformance protocol mismatch")),
+		step(`^an allow-capacity-skip coordination check that exits 124 naming hippo\.limit\.capacity-deferred with a new never-started receipt$`, prepare("conformance capacity skip", requireConformanceCapacitySkip)),
+		step(`^conformance classifies the capacity deferral$`, driver.exerciseReservationScenarioV04),
+		step(`^conformance skips that check instead of failing$`, assert("conformance capacity skip")),
+		step(`^an allow-capacity-skip coordination check that exits 124 naming hippo\.limit\.pressure-shed (without a never-started receipt|beside a new never-started receipt)$`, func(receipt string) error {
+			return driver.prepareReservationScenarioV04("conformance pressure shed", func(string) error {
+				return requireConformancePressureShedFatal(receipt)
+			})
+		}),
+		step(`^conformance classifies the pressure shed$`, driver.exerciseReservationScenarioV04),
+		step(`^conformance keeps the shed fatal and does not run later gates$`, assert("conformance pressure shed")),
 		step(`^a consumer whose declared probe never consults HIPPO$`, func() error {
 			return driver.declareDeferralProbe(probeNeverConsultsHIPPO)
 		}),
