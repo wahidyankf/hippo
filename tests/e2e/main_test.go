@@ -7,6 +7,7 @@ import (
 	"github.com/wahidyankf/hippo/tests/support"
 )
 
-// TestMain keeps inherited HIPPO_ variables and the shared evidence root away
-// from the binary under test; see support.RunIsolated.
-func TestMain(m *testing.M) { os.Exit(support.RunIsolated(m)) }
+// TestMain chooses a test-stamped binary of this working tree, then keeps
+// inherited HIPPO_ variables and the shared evidence root away from it; see
+// support.RunCompiled and support.RunIsolated.
+func TestMain(m *testing.M) { os.Exit(support.RunCompiled(m)) }

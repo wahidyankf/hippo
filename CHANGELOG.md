@@ -208,6 +208,13 @@ quieter`, although nothing was deferred. The diagnostic is now one line that say
   guarded child writing to an output that is not a file, such as an in-memory buffer, shared that
   writer with HIPPO's own lines without a lock. Such outputs are now written one at a time. Output
   to a terminal, file or pipe was never affected.
+- A contributor's `go test ./...` could not pass the end-to-end adapter. With no `HIPPO_BIN` set,
+  every scenario that runs the binary failed on `HIPPO_BIN is required`. Under a guarded shell,
+  whose guard exports its own binary as `HIPPO_BIN`, the adapter tested that unstamped build
+  instead of the working tree, and "Version identifies the exact build" failed on `dev`. The
+  adapter now keeps an inherited `HIPPO_BIN` only when it reports the test stamp `v0.0.0-test`, as
+  the one `tests/e2e/run.sh` builds does; otherwise it builds the working tree with that stamp
+  itself. The gates are unchanged, and nobody needs to set `HIPPO_BIN` by hand.
 
 ## [v0.8.1] — 2026-09-23
 

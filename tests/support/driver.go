@@ -155,6 +155,7 @@ type Driver struct {
 	binary, summaryPath      string
 	temporaryPaths           []string
 	lifecycleOK              bool
+	e2eSelection             e2eBinarySelection
 	cacheRoot                string
 	historicalCaches         []string
 	lintConfiguration        string
