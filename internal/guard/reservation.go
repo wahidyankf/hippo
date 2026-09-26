@@ -1277,7 +1277,7 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 func neverStartedAtCoordinationLock(
 	root, runID string, metadata ReservationMetadata, class policy.TaskClass, now time.Time, lockError error,
 ) error {
-	reason := ""
+	var reason string
 	switch {
 	case errors.Is(lockError, errCoordinationDeferred):
 		reason = "admission-deadline"
