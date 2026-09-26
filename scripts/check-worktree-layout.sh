@@ -16,8 +16,11 @@ if [ "$root" != "$repository_location" ]; then
 	esac
 fi
 
+# A prescription names the sibling directory as the place to work: a command
+# that creates or enters it, or prose that puts the worktree at, in, or under
+# it. Naming the directory to forbid it, as the convention does, is not one.
 if git -C "$root" grep -n -E \
-	'git worktree add \.\./[^ ]*-worktrees|cd \.\./[^ ]*-worktrees|Worktree path:.*-worktrees' \
+	'git worktree add \.\./[^ ]*-worktrees|cd \.\./[^ ]*-worktrees|Worktree path:.*-worktrees|(at|in|into|under|beside) `?\.\./[^ `]*-worktrees' \
 	-- '*.md' '*.yml' '*.yaml'; then
 	echo "tracked instructions still prescribe a sibling *-worktrees layout" >&2
 	failed=1

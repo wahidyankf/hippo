@@ -10,7 +10,7 @@ A change to this tree propagates nowhere automatically. The siblings hold their 
 
 Where a rule discovered here genuinely applies elsewhere, change it here with its reason, say in the pull-request body which repositories may want it and why, and let each decide in its own change with its own evidence. A rule copied without that step arrives without the reason that justified it, and the first reader to find it inconvenient will delete it correctly.
 
-A rule that fits one repository is not thereby owed to another. [Worktree location](../conventions/worktree-location.md) is the worked example: containment inside the checkout is right for a Cargo project and breaks `go build`, and adopting it here because a sibling had it would have been the blind propagation this workflow exists to prevent.
+A rule that fits one repository is not thereby owed to another. [Worktree location](../conventions/worktree-location.md) is the worked example: worktrees below the checkout were adopted here only after this repository's own Go release provenance was checked, not because a sibling had the layout; adopting it on that ground alone would have been the blind propagation this workflow exists to prevent.
 
 Three phrasings of one rule across three repositories is three repositories having decided, not one having decayed. Divergence is never a finding here; where it _is_ decay, grooming catches it.
 

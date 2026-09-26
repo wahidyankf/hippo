@@ -56,3 +56,7 @@ test "$(sed -n '1p' go.mod)" = 'module github.com/wahidyankf/hippo'
 # The pinned ShellCheck wrapper refuses an archive or a platform it cannot
 # verify before any analyser runs.
 ./tests/artifacts/shellcheck-pin.sh
+
+# The worktree layout check refuses every wording that prescribes a sibling
+# *-worktrees directory, and passes the convention that forbids one.
+./tests/artifacts/worktree-layout.sh
