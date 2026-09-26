@@ -1635,7 +1635,11 @@ func (driver *Driver) observeDegradedWarning() error {
 	resourcePolicy.TrendWindow = 15 * time.Millisecond
 	resourcePolicy.AdmissionWindow = evidenceDecidesAdmission
 	resourcePolicy.EphemeralWarningGrace = 3 * time.Millisecond
-	resourcePolicy.TerminationGrace = time.Millisecond
+	// The shed child exits on TERM, so a grace it never spends lets the guard
+	// confirm the stop from the child's own exit. A one-millisecond grace forced
+	// the kill path on a loaded host, where the fixed post-kill confirmation
+	// window then timed the host instead of the shed decision.
+	resourcePolicy.TerminationGrace = fixtureLivenessWait
 	resourcePolicy.LeaseWait = time.Second
 
 	samples := stableWarningSamples(base, time.Millisecond)
