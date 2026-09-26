@@ -27,6 +27,12 @@ import (
 // forcedStopExitCode is the shell convention for a child killed by SIGKILL.
 const forcedStopExitCode = 137
 
+// evidenceDecidesAdmission is an admission window no runner exhausts, for tests
+// whose controlled evidence admits. A short window also timed the runner: one
+// too slow to take the consecutive samples inside it deferred the run before
+// the lifetime under test ever started.
+const evidenceDecidesAdmission = time.Hour
+
 type controlledRunCollector struct{}
 
 func (*controlledRunCollector) Collect(context.Context, policy.CPUState, string) (policy.Reading, error) {
@@ -350,7 +356,7 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	settings := policy.DefaultPolicy()
-	settings.AdmissionWindow = 100 * time.Millisecond
+	settings.AdmissionWindow = evidenceDecidesAdmission
 	settings.LeaseWait = 50 * time.Millisecond
 	settings.SampleInterval = 2 * time.Millisecond
 	settings.TerminationGrace = 200 * time.Millisecond
@@ -484,7 +490,7 @@ func TestCompiledGuardHelper(t *testing.T) {
 		return
 	}
 	policyValue := policy.DefaultPolicy()
-	policyValue.AdmissionWindow = 100 * time.Millisecond
+	policyValue.AdmissionWindow = evidenceDecidesAdmission
 	policyValue.LeaseWait = 100 * time.Millisecond
 	policyValue.SampleInterval = 10 * time.Millisecond
 	policyValue.TerminationGrace = 50 * time.Millisecond
@@ -1091,7 +1097,7 @@ func TestPayloadCannotInheritLifetimeIdentityDescriptors(t *testing.T) { //nolin
 				"HIPPO_LIFETIME_PRIVATE_ROOTS="+reservationRoot+string(os.PathListSeparator)+portRoot,
 			)
 			policyValue := policy.DefaultPolicy()
-			policyValue.AdmissionWindow = 100 * time.Millisecond
+			policyValue.AdmissionWindow = evidenceDecidesAdmission
 			policyValue.LeaseWait = 50 * time.Millisecond
 			policyValue.SampleInterval = 10 * time.Millisecond
 			port := 23_760 + index
@@ -1421,7 +1427,7 @@ func TestRunFailedActivationReportRetainsLauncherIdentity(t *testing.T) { //noli
 		return lifetime, errors.New("lifetime launcher could not activate the payload")
 	}
 	policyValue := policy.DefaultPolicy()
-	policyValue.AdmissionWindow = 100 * time.Millisecond
+	policyValue.AdmissionWindow = evidenceDecidesAdmission
 	policyValue.LeaseWait = 50 * time.Millisecond
 	policyValue.SampleInterval = 10 * time.Millisecond
 	plan := ReservationPlan{
@@ -1853,7 +1859,7 @@ func TestSchemaOneEmbeddedOwnershipRetiresAfterHolder(t *testing.T) {
 		return &supervisedLifetime{processGroup: os.Getpid(), exited: make(chan error)}, nil
 	}
 	policyValue := policy.DefaultPolicy()
-	policyValue.AdmissionWindow = 100 * time.Millisecond
+	policyValue.AdmissionWindow = evidenceDecidesAdmission
 	policyValue.LeaseWait = 50 * time.Millisecond
 	policyValue.SampleInterval = 10 * time.Millisecond
 	type runResult struct {
@@ -2027,7 +2033,7 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 			}
 			contextValue, cancel := context.WithCancel(context.Background())
 			policyValue := policy.DefaultPolicy()
-			policyValue.AdmissionWindow = 100 * time.Millisecond
+			policyValue.AdmissionWindow = evidenceDecidesAdmission
 			policyValue.LeaseWait = 10 * time.Millisecond
 			policyValue.SampleInterval = 5 * time.Millisecond
 			// Any wait on retirement, or on a window derived from the grace, would
@@ -2292,7 +2298,7 @@ func contendedReservationConfig(t *testing.T, root string, hold func(string)) Ru
 	t.Helper()
 	settings := policy.DefaultPolicy()
 	settings.SampleInterval = 10 * time.Millisecond
-	settings.AdmissionWindow = time.Second
+	settings.AdmissionWindow = evidenceDecidesAdmission
 	settings.LeaseWait = time.Second
 	settings.TerminationGrace = 50 * time.Millisecond
 
