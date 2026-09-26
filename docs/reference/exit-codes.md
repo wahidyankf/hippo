@@ -22,11 +22,27 @@ wrong. The reasons have no such limit, so that is where the detail lives.
 | `125`   | HIPPO failed before, while, or after starting the work           | No — read the reason                     |
 | `126`   | The command exists and could not be executed                     | No — fix the permissions                 |
 | `127`   | The command was not found                                        | No — fix the path                        |
-| _other_ | A started child's own status, or `128+N` when a signal ended it  | Depends on the child                     |
+| _other_ | A started child's own status, or `128+N` when a signal ended it  | Depends on the child or the signal       |
 
 `124` and `125` are the statuses `timeout` returns for the same two situations, and `126` and `127`
 are the ones every POSIX shell returns. A caller who has never read this page still reads them
 correctly, which is the whole reason for choosing them.
+
+### When a signal stops HIPPO
+
+`SIGINT` or `SIGTERM` sent to HIPPO ends it with `128+N`, the status a shell reports for any process
+a signal ended: `130` for `SIGINT`, `143` for `SIGTERM`. HIPPO catches the signal only to finish
+cleanly, and writes no `hippo:` line and no JSON body, because an interruption is neither a result
+nor HIPPO failing.
+
+- `watch`, `monitor`, and `release monitor` run until they are stopped, so a signal is their usual
+  end, and they end with `128+N` wherever it lands, including while a sample is being collected.
+  `release monitor` still writes its summary first; ending at its own `--duration-ms` exits `0`.
+- A `run` still waiting in the queue, or still sampling the host before its child starts, writes a
+  `never-started` receipt with reason `admission-cancelled`, then exits `128+N`.
+- A `run` whose child already started stops that child, and the child's own status passes through
+  as usual. A failure HIPPO hits while stopping, such as a receipt it cannot write, is still
+  reported under its reason.
 
 ### Telling HIPPO's status from a child's
 
@@ -140,3 +156,8 @@ be rejected again; a summary it cannot read at all now returns `125` naming
 `hippo.evidence.unreadable` with no verdict. A `run` whose `hippo.identity.json` is present and
 invalid keeps `125` but names `hippo.identity.invalid` and the file, where it had named
 `hippo.policy.replan-required`.
+
+Also in v0.8.2, a signal to HIPPO itself stopped being reported as a result or as HIPPO's failure.
+`watch`, `monitor`, and `release monitor` exited `0` when stopped between samples, and `watch` and
+`monitor` exited `125` when stopped during one; a queued or sampling `run` exited `125` naming
+`hippo.supervision.failed`. All of them now exit `128+N`.

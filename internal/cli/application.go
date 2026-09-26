@@ -210,6 +210,14 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	if execution.childStatus != nil {
 		return *execution.childStatus, nil
 	}
+	// A signal the process entry caught ends the invocation the way a shell
+	// reports any signal-ended process: 128+N, with nothing on stderr. Catching
+	// it only bought the time to leave a receipt or stop a child cleanly; it is
+	// not hippo failing and not a finished result. A failure hippo classified
+	// while stopping, such as a receipt it could not write, is still reported.
+	if interruption, interrupted := status.Interrupted(ctx); interrupted && endedByInterruption(err) {
+		return interruption.Status(), nil
+	}
 
 	failure := classify(execution, err)
 	// The usage block belongs to a mistyped invocation and nothing else. A

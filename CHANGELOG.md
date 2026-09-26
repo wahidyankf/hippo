@@ -103,6 +103,20 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 - `--help` describes `125` as HIPPO failing before, while, or after starting the work, and `2` as
   also covering an internal fault, matching the exit-code reference. A test now holds every line of
   the help's exit block to that reference.
+- `watch`, `monitor`, and `release monitor` stopped by `SIGINT` or `SIGTERM` now exit `130` or
+  `143`, the status a shell reports for a process a signal ended, and write no diagnostic. Stopped
+  between samples they exited `0`, which read an interrupted run as a finished one; `watch` and
+  `monitor` stopped while a sample was being collected exited `125` naming
+  `hippo.supervision.failed`, which blamed HIPPO for a stop the caller asked for. `release monitor`
+  still writes its summary before exiting, and one that reaches its own `--duration-ms` still exits
+  `0`. A script that stops one of them with a signal and required `0` should accept `130` or `143`,
+  or give `release monitor` a `--duration-ms` where it needs `0`.
+- A `run` stopped by `SIGINT` or `SIGTERM` before its child started now exits `130` or `143` with no
+  diagnostic, and keeps its `never-started` receipt. A run waiting in the reservation queue exited
+  `125` naming `hippo.supervision.failed` with `context canceled`, which told the caller HIPPO had
+  failed when the caller had cancelled work that never began. A caller that branched on `125` here
+  should branch on `128+N` and, as before, read the `never-started` receipt before requeueing once.
+  A run whose child had started still passes the child's own status through.
 
 ### Fixed
 
@@ -127,6 +141,9 @@ foo`, printed the root `Usage: hippo [flags]` block beneath a diagnostic naming 
 quieter`, although nothing was deferred. The diagnostic is now one line that says what happened:
   `release evidence rejected: <why>`, and the failure body's message carries the same sentence. The
   status is still `124`; the reason it names is described under Changed.
+- A `run` stopped by a signal while it was still sampling the host before admission now writes a
+  `never-started` receipt with reason `admission-cancelled`, as a queued waiter already did. It
+  wrote none, so a caller reading receipts could not tell that the work never started.
 - A bounded wait that ran out on exhausted capacity could report the wrong reason and skip its
   receipt. On its last pass the wait asks for the shared root's coordination lock with almost no
   budget left, and it offered a free lock and an already-expired timer to the same `select`. Go

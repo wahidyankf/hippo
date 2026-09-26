@@ -30,7 +30,8 @@ hippo monitor --interval 1s --disk-path .
 ```
 
 `monitor` prints the initial state and then **only transitions** — a quiet pane means the host is
-stable, not that monitoring stopped. It runs until you cancel it.
+stable, not that monitoring stopped. It runs until you stop it; `Ctrl-C` ends it with `130`, the
+status a shell reports for an interrupt, and so does `watch`.
 
 A busy host produces a trail:
 

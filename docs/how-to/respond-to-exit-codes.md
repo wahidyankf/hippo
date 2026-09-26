@@ -16,6 +16,7 @@ For the full definitions see the [exit code reference](../reference/exit-codes.m
 | `125`  | HIPPO failed to start or supervise the work. Read the reason; do not retry. |
 | `126`  | The command exists and cannot be executed. Fix its permissions.             |
 | `127`  | The command is not there. Fix the path or the spelling.                     |
+| `130`  | A signal (`128+N`) stopped HIPPO or the child. See below.                   |
 
 Never respond to any of them by bypassing the guard or by changing `--class` to get admitted.
 Changing a task to `transactional` so it cannot be shed does not make the host any bigger; it makes
@@ -49,7 +50,8 @@ hippo history --since 1d --source my-repo --outcome emergency-safety-stop
 ls "$HIPPO_ROOT/receipts"
 ```
 
-Queue expiry or cancellation writes `state: "never-started"`. Emergency termination writes
+Queue expiry or cancellation writes `state: "never-started"`; a signal before launch records the
+reason `admission-cancelled`. Emergency termination writes
 `state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
 `pressure-shed` or `storage-shed`.
 
@@ -136,6 +138,18 @@ the child started. When the shared coordination lock stays held past the two-sec
 window, HIPPO stops the child it just launched and writes a `started-activation-failure` receipt.
 Read `receipts/` before running the payload again: the work may have begun — see
 [How to inspect evidence](./inspect-evidence-and-abandoned-groups.md).
+
+## Handle `128+N`
+
+`130` is `SIGINT` and `143` is `SIGTERM`. HIPPO writes no `hippo:` line for either, because it did
+not fail: someone stopped it.
+
+- For `watch`, `monitor`, or `release monitor`, this is the ordinary end. `release monitor` has
+  already written its summary; `--duration-ms` ends it with `0` instead.
+- For a `run` whose child never started, a `never-started` receipt with reason
+  `admission-cancelled` says so, and the same invocation may be requeued once.
+- For a `run` whose child started, the status is the child's own; it was stopped, so recover its
+  effects before repeating it.
 
 ## Handle `2`
 

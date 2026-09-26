@@ -24,7 +24,12 @@
 // machine-readable body, for a caller that wants to branch on it.
 package status
 
-import "fmt"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"syscall"
+)
 
 // The closed exit vocabulary. Nothing else is ever returned, except a status
 // the operating system produced: a started child's own status passes through
@@ -221,3 +226,33 @@ func (failure Failure) Status() int { return Status(failure.Code) }
 
 // Retryable reports whether waiting and trying again is worth anything.
 func (failure Failure) Retryable() bool { return Retryable(failure.Code) }
+
+// Interruption is the cancellation cause the process entry attaches when a
+// signal asks hippo to stop. Catching the signal is what lets a queued waiter
+// leave its receipt and a guard stop its child, but it must not change what the
+// caller sees: a shell reports a process that signal N ended as 128+N, and so
+// does hippo. Reporting 0 or 125 instead would read an interrupted invocation
+// as a finished one or as hippo's own failure.
+//
+//nolint:errname // "Interruption" is the event; InterruptionError would call a stop someone asked for an error.
+type Interruption struct {
+	Signal syscall.Signal
+}
+
+// Error names the signal, the way context.Cause reports it.
+func (interruption Interruption) Error() string {
+	return interruption.Signal.String() + " signal received"
+}
+
+// Status is the exit status a signal-ended process reports: 128+N.
+func (interruption Interruption) Status() int { return 128 + int(interruption.Signal) }
+
+// Interrupted reports the interruption that cancelled ctx, if a signal did.
+// A context cancelled for any other reason reports none.
+func Interrupted(ctx context.Context) (Interruption, bool) {
+	if ctx.Err() == nil {
+		return Interruption{}, false
+	}
+
+	return errors.AsType[Interruption](context.Cause(ctx))
+}

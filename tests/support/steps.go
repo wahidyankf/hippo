@@ -28,6 +28,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.qualityGateBindings(),
 		driver.portabilityBindings(),
 		driver.conformanceBindings(),
+		driver.interruptionBindings(),
 	)
 }
 
@@ -663,8 +664,8 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^history is queried for thirty days$`, driver.queryHistory),
 		step(`^it exits 125 naming hippo\.evidence\.unreadable and leaves the archive bytes unchanged$`, driver.requireUnreadableHistory),
 		step(`^stable host and queue state for watch$`, driver.stableWatchV05),
-		step(`^JSON watch observes two unchanged snapshots$`, driver.jsonWatchV05),
-		step(`^only one schema five status snapshot is emitted$`, driver.requireJSONWatchV05),
+		step(`^JSON watch observes two unchanged snapshots and is then interrupted by SIGINT$`, driver.jsonWatchV05),
+		step(`^only one schema five status snapshot is emitted before watch exits 130$`, driver.requireJSONWatchV05),
 		step(`^the compiled HIPPO binary with corrupt reservation coordination state$`, driver.corruptStatusCoordinationV04),
 		step(`^JSON status is requested for that coordination root$`, driver.requestCorruptCoordinationStatusV04),
 		step(`^status reports the coordination error instead of schema five zero totals$`, driver.requireCorruptCoordinationStatusV04),

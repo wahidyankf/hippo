@@ -791,14 +791,29 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	var previous policy.CPUState
 	samples := []policy.Sample{}
 	admitted, degraded := false, false
+	// A caller that cancels while the host is still being sampled cancels
+	// work that never started, exactly as one that cancels a queued waiter
+	// does, and leaves the same receipt so it may requeue once.
+	cancelledBeforeLaunch := func(cause error) (int, error) {
+		receiptError := writeSafetyReceipt(
+			config.EvidenceRoot, writer.summary.RunID, "never-started", "admission-cancelled",
+			config.ReservationMetadata, config.TaskClass, config.Now(),
+		)
+
+		return 1, errors.Join(cause, receiptError)
+	}
 
 	for {
 		if err := ctx.Err(); err != nil {
-			return 1, err
+			return cancelledBeforeLaunch(err)
 		}
 
 		reading, collectError := config.Collector.Collect(ctx, previous, config.DiskPath)
 		if collectError != nil {
+			if ctx.Err() != nil {
+				return cancelledBeforeLaunch(ctx.Err())
+			}
+
 			return 1, collectError
 		}
 
@@ -840,7 +855,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		}
 
 		if err := waitForContext(ctx, config.Policy.SampleInterval, config.Sleep); err != nil {
-			return 1, err
+			return cancelledBeforeLaunch(err)
 		}
 	}
 
