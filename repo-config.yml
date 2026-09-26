@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.4.0/schemas/repo-config/v2.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.7.0/schemas/repo-config/v2.schema.json
 # HIPPO owns this consumer policy. RHINO owns the schema and renderer; the
 # repository declares only its lifecycle, canonical harness, and validators.
 
