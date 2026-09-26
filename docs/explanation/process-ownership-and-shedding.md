@@ -35,7 +35,10 @@ ask.
 ### Selection order
 
 Newest ephemeral owner first. Then, only when no eligible ephemeral remains, the newest service
-owner. Transactional owners are **never** shed after admission.
+owner. Ordinary shedding never selects a transactional owner. Only at the schema-3 emergency floor,
+or equivalent critical non-storage pressure, does transactional work become the last eligible
+victim; HIPPO then records an `emergency-safety-stop` receipt and never retries that payload
+automatically.
 
 Newest-first is a deliberate fairness choice: the work that has been running longest has the most
 sunk cost and is closest to finishing. Protecting transactional owners is a correctness choice —

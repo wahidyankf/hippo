@@ -27,11 +27,10 @@ $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make tes
   run prints nothing extra.
 - **Safe by construction.** A guard signals only the process group it started. Pressure shedding
   works by marking a victim and waiting for that victim's own guard to act.
-- **Fails closed.** Unreadable shared state returns a non-retryable failure and preserves bytes
-  rather than guessing and rewriting.
-- **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO failed to start or supervise it, `126` and
-  `127` the command cannot be run, `2` the invocation cannot be used — the numbers `timeout` and
-  every POSIX shell already use. Each failure also names a reason, as `hippo: [hippo.area.reason]`.
+- **Fails closed.** Unreadable shared state fails without retry and keeps its bytes untouched.
+- **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO failed to start or
+  supervise it, `126` and `127` the command cannot be run, `2` the invocation cannot be used — the
+  numbers `timeout` and POSIX shells use. Each failure names a reason: `hippo: [hippo.area.reason]`.
   Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters,
   promotion state, and bounded run outcomes without exposing commands or paths.
@@ -85,7 +84,7 @@ Ask what the host looks like:
 
 ```console
 $ hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9% owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
 Guard a command. Schema 3 requires a resource tier. Everything after `--` belongs to the child, so
@@ -140,8 +139,8 @@ further selection, so pressure cannot cascade into emptying the ledger.
 
 **Failure.** Exit `124` means a limit stopped the work; the reason says which. `storage-blocked`
 needs cleanup, `capacity-deferred` may be requeued when its receipt says `never-started`, and
-`pressure-shed` needs payload-specific recovery. Exit `125` means HIPPO failed to start or supervise the work: drain or
-upgrade an incompatible peer, change the request, or fix the configuration.
+`pressure-shed` needs payload recovery. Exit `125` means HIPPO failed to start or supervise the
+work: drain or upgrade an incompatible peer, change the request, or fix the configuration.
 [Exit codes and error codes](./docs/reference/exit-codes.md) lists both closed vocabularies.
 
 | Mode                     | Behavior                                                                                         |
