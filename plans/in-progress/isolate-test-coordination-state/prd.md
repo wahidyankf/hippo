@@ -35,7 +35,7 @@ Feature: Test runs own their coordination state
     And HIPPO_ROOT names a directory created for this run
 
   Scenario: [AC-02] Harness inputs survive
-    Given the invoking environment sets HIPPO_BIN, HIPPO_BDD_ADAPTER, HIPPO_E2E_TEMP_PARENT, and HIPPO_GO_BINARY
+    Given the invoking environment sets HIPPO_BIN, HIPPO_BDD_ADAPTER, HIPPO_E2E_TEMP_PARENT, HIPPO_GO_BINARY, and HIPPO_LOAD_SATURATED
     When a test package starts
     Then each keeps its value
 
