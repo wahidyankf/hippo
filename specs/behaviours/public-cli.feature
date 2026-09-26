@@ -156,6 +156,11 @@ Feature: Public HIPPO CLI
     When release summary assessment is requested
     Then the release evidence is accepted
 
+  Scenario: Release summary assessment says why it rejected evidence
+    Given a release summary with one health failure
+    When release summary assessment is requested through the command line
+    Then the diagnostic says the release evidence was rejected rather than deferred
+
   Scenario: Release summary assessment accepts standard input
     Given a healthy release summary on standard input
     When release summary assessment is requested from standard input

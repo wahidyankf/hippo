@@ -69,9 +69,9 @@ func (application Application) releaseAssess(_ context.Context, options releaseA
 	}
 
 	if err != nil {
-		_, _ = fmt.Fprintln(application.Stderr, err)
-
-		return guard.CapacityDeferredExitCode, nil
+		// The assessment ran and turned the evidence down; nothing was
+		// deferred, so the diagnostic says what was decided and why.
+		return 0, status.Fail(status.CodeLimitCapacityDeferred, "release evidence rejected: %v", err)
 	}
 
 	return 0, nil

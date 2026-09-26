@@ -94,6 +94,11 @@ foo`, printed the root `Usage: hippo [flags]` block beneath a diagnostic naming 
   after the command named `hippo history`, and `hippo release bogus` named `hippo release bogus`.
   It now names the command that ran — `hippo history`, `hippo release` — wherever the flags sit.
   A consumer that parsed `command` needs no change unless it matched those wrong values.
+- `release assess` over rejected evidence printed the rejection on a bare line and then
+  `hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is
+quieter`, although nothing was deferred. The diagnostic is now one line that says what happened:
+  `release evidence rejected: <why>`, and the failure body's message carries the same sentence. The
+  status and reason are unchanged, `124` naming `hippo.limit.capacity-deferred`.
 - A bounded wait that ran out on exhausted capacity could report the wrong reason and skip its
   receipt. On its last pass the wait asks for the shared root's coordination lock with almost no
   budget left, and it offered a free lock and an already-expired timer to the same `select`. Go

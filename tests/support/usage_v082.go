@@ -355,3 +355,26 @@ func (driver *Driver) requireSourceNamed() error {
 
 	return nil
 }
+
+// requestRejectedAssessment runs the assessment through the command line in
+// every adapter, because the sentence under test is the one the command writes.
+func (driver *Driver) requestRejectedAssessment() error {
+	return driver.attemptEach([][]string{{releaseCommandName, releaseAssessName, summaryFlag, driver.summaryPath}})
+}
+
+func (driver *Driver) requireRejectionNamed() error {
+	if len(driver.usageAttempts) == 0 {
+		return errors.New("no release assessment was attempted")
+	}
+	attempt := driver.usageAttempts[0]
+	switch {
+	case !strings.Contains(attempt.stdout, `"accepted":false`):
+		return fmt.Errorf("the evidence was not rejected: exit=%d stdout=%q", attempt.exitCode, attempt.stdout)
+	case !strings.Contains(attempt.stderr, "release evidence rejected"):
+		return fmt.Errorf("the diagnostic does not say the evidence was rejected: stderr=%q", attempt.stderr)
+	case strings.Contains(attempt.stderr, "capacity deferred"):
+		return fmt.Errorf("the diagnostic claims a capacity deferral: stderr=%q", attempt.stderr)
+	}
+
+	return nil
+}
