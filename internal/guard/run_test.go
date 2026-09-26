@@ -587,14 +587,27 @@ func TestStalledLifetimeHandshakeRetainsOwnershipUntilLauncherExit(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The launcher stalls on a read of its standard input and exits only once
+	// the test closes the other end. End of file is level-triggered: it reaches
+	// the launcher however late the host schedules its shell, so nothing here
+	// depends on observing the launcher's state before releasing it. A stop
+	// signal answered by a continue was edge-triggered, which forced the test to
+	// poll the process table against a wall-clock deadline before it could
+	// safely send the continue.
+	release, holdOpen, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = holdOpen.Close() }()
 	launcher := filepath.Join(root, "stalled-launcher")
-	if err = os.WriteFile(launcher, []byte("#!/bin/sh\nkill -STOP $$\nexit 0\n"), 0o700); err != nil {
+	if err = os.WriteFile(launcher, []byte("#!/bin/sh\nread -r _\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	lifetime, launchError := startSupervisedLifetimeWithLauncher(
-		context.Background(), RunConfig{}, "/bin/true", os.Environ(), launcher, 10*time.Millisecond,
+		context.Background(), RunConfig{ChildStdin: release}, "/bin/true", os.Environ(), launcher, 10*time.Millisecond,
 		session.identityLock, lease.identityLock,
 	)
+	_ = release.Close()
 	if lifetime == nil || launchError == nil {
 		t.Fatalf("stalled launcher result lifetime=%v error=%v", lifetime, launchError)
 	}
@@ -613,24 +626,14 @@ func TestStalledLifetimeHandshakeRetainsOwnershipUntilLauncherExit(t *testing.T)
 		_ = ReleasePortLease(portRoot, competitor)
 		t.Fatal("stalled launcher port was released")
 	}
-	// A SIGCONT sent before the launcher stops itself is lost, so wait until
-	// the kernel reports the launcher stopped. Both bounds only limit a
-	// failing run: a loaded host can take well over a second to schedule the
-	// launcher's shell.
-	deadline := time.Now().Add(stalledLauncherBound)
-	for !processStopped(lifetime.command.Process.Pid) {
-		if time.Now().After(deadline) {
-			t.Fatal("launcher did not reach its stopped state")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	if err = lifetime.command.Process.Signal(syscall.SIGCONT); err != nil {
+	// Releasing the launcher is the only way it exits, so its exit is awaited
+	// without a deadline of its own: a hang is reported by the test binary's
+	// timeout, and no scheduling delay can turn a correct run into a failure.
+	if err = holdOpen.Close(); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-lifetime.exited:
-	case <-time.After(stalledLauncherBound):
-		t.Fatal("resumed launcher did not exit")
+	if exitError := <-lifetime.exited; exitError != nil {
+		t.Fatalf("released launcher did not exit cleanly: %v", exitError)
 	}
 	if totals, statusError := ReservationStatus(context.Background(), reservationRoot); statusError != nil || totals.ActiveOwners != 0 {
 		t.Fatalf("exited launcher reservation was not reclaimed: totals=%+v error=%v", totals, statusError)
@@ -642,16 +645,6 @@ func TestStalledLifetimeHandshakeRetainsOwnershipUntilLauncherExit(t *testing.T)
 	if err = ReleasePortLease(portRoot, competitor); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// stalledLauncherBound limits how long a failing stalled-launcher run waits.
-const stalledLauncherBound = 30 * time.Second
-
-// processStopped reports whether the kernel shows pid in the stopped state.
-func processStopped(pid int) bool {
-	output, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
-
-	return err == nil && strings.HasPrefix(strings.TrimSpace(string(output)), "T")
 }
 
 func TestLifetimeLauncherRequiresParentCapability(t *testing.T) {
