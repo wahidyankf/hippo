@@ -11,14 +11,14 @@ Feature: Guarded process execution
   Scenario: Reservation coordination rejects every compatibility class as a protocol mismatch
     Given the shared root advertises reservation coordination
     When every compatibility task class requests a guarded session
-    Then every compatibility owner is rejected with exit 76
+    Then every compatibility owner is rejected with exit 125 naming hippo.coordination.protocol-mismatch
     And the reservation coordination marker remains unchanged
 
   @e2e-exempt
   Scenario: A live heavy lease defers a second owner
     Given another live process owns the heavy lease
     When a second owner waits for the lease
-    Then the second owner is deferred with exit 75
+    Then the second owner is deferred with exit 124 naming hippo.limit.capacity-deferred
     And the deferral names the process holding the lease
 
   @e2e-exempt
@@ -89,7 +89,7 @@ Feature: Guarded process execution
   Scenario: A service port held by a live owner defers the contender
     Given a service port already leased by a live owner
     When another service requests that same port
-    Then the contender is deferred with exit 75 instead of failing
+    Then the contender is deferred with exit 124 naming hippo.limit.capacity-deferred instead of failing
 
   @e2e-exempt
   Scenario: Stopping an exited but unreaped child group is not a supervision failure
@@ -113,13 +113,13 @@ Feature: Guarded process execution
   Scenario: Critical pressure sheds eligible work
     Given an admitted ephemeral child encounters critical pressure
     When the guard observes the critical sample
-    Then the guard terminates its child and exits with code 75
+    Then the guard terminates its child and exits with code 124
 
   @e2e-exempt
   Scenario: Worsening warning sheds degraded work
     Given an admitted degraded ephemeral child encounters growing compressor pressure
     When the guard observes warning through the grace
-    Then the degraded child starts and is terminated with exit 75
+    Then the degraded child starts and is terminated with exit 124
 
   @e2e-exempt
   Scenario: A single registered waiter rides out exhausted capacity
@@ -131,7 +131,7 @@ Feature: Guarded process execution
   Scenario: Waiting for admission still surrenders when the budget is spent
     Given a shared root whose capacity never frees
     When an owner waits for admission within a bounded budget
-    Then it stops waiting before launch and reports the deferral as exit 75
+    Then it stops waiting before launch and reports the deferral as exit 124 naming hippo.limit.capacity-deferred
 
   @e2e-exempt
   Scenario: A caller waiting for admission reports one queue and deferral receipt

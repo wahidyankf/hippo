@@ -72,7 +72,7 @@ Feature: HIPPO quality gates
   @e2e-exempt
   Scenario: A protocol mismatch is never accepted as a capacity skip
     Given the loaded gate has declared the host saturated
-    When a compiled guarded run ends in protocol mismatch exit 76
+    When a compiled guarded run ends in protocol mismatch exit 125
     Then the fixture refuses the run as a non-capacity failure
 
   @e2e-exempt

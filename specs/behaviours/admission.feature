@@ -41,7 +41,7 @@ Feature: Resource-aware admission
   Scenario: Exhausted storage requires cleanup
     Given a host sample below the 256 MiB disk floor
     When development admission is assessed
-    Then admission is storage blocked with exit 73
+    Then admission is storage blocked with exit 124 naming hippo.limit.storage-blocked
 
   @e2e-exempt
   Scenario: Swap-out growth is normalized to the policy window
@@ -59,4 +59,4 @@ Feature: Resource-aware admission
   Scenario: A strict transaction does not silently downgrade
     Given a strict transactional task that does not fit its requested profile
     When development admission is assessed
-    Then admission requires replanning with exit 78
+    Then admission requires replanning with exit 125 naming hippo.policy.replan-required

@@ -147,7 +147,7 @@ sequenceDiagram
     CLI->>Child: stop own group
     Child-->>CLI: reaped
     CLI->>Store: finalize and release
-    CLI-->>Caller: child code, 73, 75, 76, 78, or failure
+    CLI-->>Caller: child status verbatim, else 124 limit, 125 refusal, or 126/127 launch, each naming a hippo reason
 ```
 
 Admission failures return before child creation. Schema 2 derives a safe vector from host parallelism and effective memory, applies optional caps, and divides automatic requests by profile shares of four, two, or one. Schema 3 requires light, standard, or heavy tier bounds and grants the largest launch-time vector that fits between the chosen minimum and maximum. Explicit dimensions cannot cross one CPU or 256 MiB or leave their schema-3 tier. Checked subtraction verifies both dimensions without integer wrap. Impossible requests replan immediately; temporary exhaustion holds one stable strict-FIFO identity until admission or its tier deadline. No payload retry loop exists. The effective active-owner limit is the conservative live minimum. Schema 3 defaults to two owners and opens a third only after the configured newest overlapping runs pass the multi-source memory, pressure, CPU p95, swap, and shedding criteria. Inheritance reuses the token's fixed allocation without a second owner. Host thresholds remain authoritative after budget fit.
