@@ -16,8 +16,6 @@ Check first that the plan still matches the repository. A plan queued two months
 
 ## Directory Map
 
-- [Gate shell static analysis](gate-shell-static-analysis/README.md) closes the recorded shell-analysis gap with a
-  pinned ShellCheck gate over one shared script list.
 - [Isolate test coordination state](isolate-test-coordination-state/README.md) keeps inherited `HIPPO_*` variables and
   the shared evidence root away from the binary under test.
 - [Neutralize test fixture identifiers](neutralize-test-fixture-identifiers/README.md) replaces a fixture string that
