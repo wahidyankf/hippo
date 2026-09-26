@@ -67,7 +67,7 @@ hippo status --disk-path .
 ```
 
 ```console
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=13.76 diskFreeGiB=78.67 cpu=15.5%
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=13.76 diskFreeGiB=78.67 cpu=15.5% owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
 ```sh
