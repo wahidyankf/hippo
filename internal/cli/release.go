@@ -71,6 +71,10 @@ func (application Application) releaseAssess(_ context.Context, options releaseA
 	} else {
 		summary, err = releaseguard.AssessFile(options.summaryPath)
 	}
+	if err != nil && !errors.Is(err, releaseguard.ErrHeadroomExhausted) {
+		// Nothing was assessed, so no verdict is printed.
+		return 0, status.Fail(status.CodeEvidenceUnreadable, "release summary is unusable: %v", err)
+	}
 	accepted := err == nil
 
 	encoded, marshalError := json.Marshal(map[string]any{"accepted": accepted, "schemaVersion": summary.SchemaVersion})
@@ -84,7 +88,7 @@ func (application Application) releaseAssess(_ context.Context, options releaseA
 	if err != nil {
 		// The assessment ran and turned the evidence down; nothing was
 		// deferred, so the diagnostic says what was decided and why.
-		return 0, status.Fail(status.CodeLimitCapacityDeferred, "release evidence rejected: %v", err)
+		return 0, status.Fail(status.CodeLimitReleaseEnvelopeExceeded, "release evidence rejected: %v", err)
 	}
 
 	return 0, nil

@@ -156,10 +156,15 @@ Feature: Public HIPPO CLI
     When release summary assessment is requested
     Then the release evidence is accepted
 
-  Scenario: Release summary assessment says why it rejected evidence
+  Scenario: Release summary assessment names rejected evidence as its own limit
     Given a release summary with one health failure
     When release summary assessment is requested through the command line
-    Then the diagnostic says the release evidence was rejected rather than deferred
+    Then it exits 124 naming hippo.limit.release-envelope-exceeded, not retryable, and says the evidence was rejected
+
+  Scenario: Release summary assessment reports an unusable summary as unreadable evidence
+    Given a release summary file that is not a summary
+    When release summary assessment is requested through the command line
+    Then it exits 125 naming hippo.evidence.unreadable with nothing on standard output
 
   Scenario: Release summary assessment accepts standard input
     Given a healthy release summary on standard input

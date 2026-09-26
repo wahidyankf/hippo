@@ -68,6 +68,15 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   naming `hippo.policy.replan-required`, which says no profile admits the request, although the
   fix is one flag. A caller that branched on `125` here should branch on `2` and supply a source.
   An identity file that is present and invalid still exits `125`.
+- `release assess` over rejected evidence names `hippo.limit.release-envelope-exceeded`, a new code,
+  still exit `124`, with `retryable: false`. It named `hippo.limit.capacity-deferred` with
+  `retryable: true`, so a retry loop re-ran an assessment that could only be rejected again. A
+  consumer matching `capacity-deferred` or `retryable` here should match the new code and change
+  the release instead of retrying.
+- `release assess` over a summary it cannot read, or one that is not a valid summary, now exits
+  `125` naming `hippo.evidence.unreadable` and prints no verdict. It printed `"accepted":false`
+  and exited `124` as though the evidence had been assessed and rejected. A caller should
+  regenerate the summary.
 - `release check` reports a failed stability check on one line that names its own reason. Memory
   pressure or CPU use that does not settle still exits `124` naming
   `hippo.limit.capacity-deferred`. A disk below the release reserve now names
@@ -112,7 +121,7 @@ foo`, printed the root `Usage: hippo [flags]` block beneath a diagnostic naming 
   `hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is
 quieter`, although nothing was deferred. The diagnostic is now one line that says what happened:
   `release evidence rejected: <why>`, and the failure body's message carries the same sentence. The
-  status and reason are unchanged, `124` naming `hippo.limit.capacity-deferred`.
+  status is still `124`; the reason it names is described under Changed.
 - A bounded wait that ran out on exhausted capacity could report the wrong reason and skip its
   receipt. On its last pass the wait asks for the shared root's coordination lock with almost no
   budget left, and it offered a free lock and an already-expired timer to the same `select`. Go
