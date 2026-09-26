@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -205,6 +206,7 @@ type Driver struct {
 	abandonedTotals          guard.ReservationTotals
 	inheritedSessions        bool
 	childCompleted           bool
+	stops                    []func()
 	runtimeFailureOutput     string
 	runtimeFailureExit       int
 	usageErrorOutput         string
@@ -307,6 +309,11 @@ func (driver *Driver) Reset() {
 }
 
 func (driver *Driver) cleanup() {
+	// Fixture servers a scenario started end first, before their paths go.
+	for _, stop := range slices.Backward(driver.stops) {
+		stop()
+	}
+	driver.stops = nil
 	if driver.exclusiveStatusSession != nil && driver.evidenceRoot != "" {
 		_ = guard.ReleaseSession(driver.evidenceRoot, driver.exclusiveStatusSession)
 		driver.exclusiveStatusSession = nil
