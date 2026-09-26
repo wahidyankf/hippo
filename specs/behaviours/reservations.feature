@@ -226,6 +226,7 @@ Feature: Shared vector reservations
     When the guarded run receives SIGTERM before its child starts
     Then the run exits 143 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
     And its lifetime summary records the outcome admission-cancelled
+    And history filtered to the outcome admission-cancelled lists that run
 
   @e2e-exempt
   Scenario: Failed cancelled-waiter cleanup retains verifiable FIFO ownership

@@ -97,6 +97,10 @@ func (driver *Driver) interruptionBindings() []contract.StepBinding {
 		),
 		step(`^its lifetime summary records the outcome admission-cancelled$`, driver.requireCancelledSummaryV082),
 		step(`^no lifetime summary is written, because a queued waiter collects no host evidence$`, driver.requireNoSummaryV082),
+		step(
+			`^history filtered to the outcome (admission-cancelled|admission-failed) lists that run$`,
+			driver.requireHistoryOutcomeV082,
+		),
 	}
 }
 
@@ -134,6 +138,35 @@ func (driver *Driver) requireNoSummaryV082() error {
 	}
 	if len(outcomes) != 0 {
 		return fmt.Errorf("a queued waiter that collected no evidence wrote summaries: %v", outcomes)
+	}
+
+	return nil
+}
+
+// requireHistoryOutcomeV082 asks history for the one outcome the stopped
+// run's summary carries. A filter history refuses as a value no run can carry
+// would hide the run behind a usage mistake, so it must answer 0 and list it.
+func (driver *Driver) requireHistoryOutcomeV082(outcome string) error {
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	code, err := (cli.Application{
+		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
+	}).Run(context.Background(), []string{historyCommandName, "--outcome", outcome, "--jsonl"})
+	if code != 0 || err != nil {
+		return fmt.Errorf("history --outcome %s exited %d (%w): %q", outcome, code, err, stderr.String())
+	}
+	var listed []string
+	for line := range strings.Lines(stdout.String()) {
+		var row evidence.Summary
+		if decodeError := json.Unmarshal([]byte(line), &row); decodeError != nil {
+			return decodeError
+		}
+		if row.Outcome != outcome {
+			return fmt.Errorf("history --outcome %s listed a %s row", outcome, row.Outcome)
+		}
+		listed = append(listed, row.Source)
+	}
+	if len(listed) != 1 || (listed[0] != interruptedRunSource && listed[0] != refusedRunSource) {
+		return fmt.Errorf("history --outcome %s listed sources %v, want the stopped run", outcome, listed)
 	}
 
 	return nil
