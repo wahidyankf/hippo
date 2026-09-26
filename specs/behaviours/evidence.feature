@@ -35,6 +35,7 @@ Feature: Bounded runtime evidence
     Given a guarded run that has begun sampling the host
     When <failure> before its child starts
     Then it exits 125 naming <reason>, its child never starts, and its lifetime summary records the outcome admission-failed
+    And history filtered to the outcome admission-failed lists that run
 
     Examples:
       | failure                                                    | reason                    |

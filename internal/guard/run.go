@@ -54,7 +54,7 @@ const (
 func RunOutcomes() []string {
 	return []string{
 		"passed", outcomeTaskFailed, outcomeSupervisionFailed, outcomePressureShed, outcomeStorageShed,
-		outcomeEmergencyStop, "capacity-deferred", "storage-blocked",
+		outcomeEmergencyStop, "capacity-deferred", "storage-blocked", outcomeAdmissionCancelled, outcomeAdmissionFailed,
 	}
 }
 

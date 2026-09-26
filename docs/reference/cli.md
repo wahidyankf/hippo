@@ -165,7 +165,7 @@ A filter value no recorded run can carry is a usage mistake (`2`, `hippo.args.in
 empty result: `--class` takes `ephemeral`, `service`, `transactional`, or `release`;
 `--resource-tier` takes `light`, `standard`, or `heavy`; and `--outcome` takes `passed`,
 `task-failed`, `supervision-failed`, `pressure-shed`, `storage-shed`, `emergency-safety-stop`,
-`capacity-deferred`, or `storage-blocked`. A valid filter that matches nothing exits `1`.
+`capacity-deferred`, `storage-blocked`, `admission-cancelled`, or `admission-failed`. A valid filter that matches nothing exits `1`.
 
 ## `hippo monitor`
 
