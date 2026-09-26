@@ -16,5 +16,4 @@ Check first that the plan still matches the repository. A plan queued two months
 
 ## Directory Map
 
-- [Repair supervision readiness race](repair-supervision-readiness-race/README.md) makes the collector-failure fixture
-  establish child PID readiness before it asserts supervision cleanup.
+This stage holds no plan folder, so this README has no siblings to map.

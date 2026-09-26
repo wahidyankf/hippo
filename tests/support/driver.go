@@ -94,6 +94,24 @@ type sequenceCollector struct {
 	failureFrom int
 	cancel      context.CancelFunc
 	cancelAfter int
+	// beforeFailure, when set, runs at the failure boundary before the injected
+	// failure, and its error is returned in the injected failure's place.
+	beforeFailure func() error
+}
+
+// errChildPIDNotReady reports a guarded child that never published its PID.
+var errChildPIDNotReady = errors.New("guarded child PID was not ready before host evidence failure")
+
+// childPIDReadiness waits boundedly for the child-published PID marker, so an
+// injected failure cannot overtake the Given it depends on.
+func childPIDReadiness(pidPath string, wait time.Duration) func() error {
+	return func() error {
+		if !awaitMarkerFile(pidPath, wait) {
+			return errChildPIDNotReady
+		}
+
+		return nil
+	}
 }
 
 func (collector *sequenceCollector) Collect(ctx context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
@@ -101,6 +119,12 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 		return policy.Reading{}, err
 	}
 	if collector.failureFrom > 0 && collector.index >= collector.failureFrom {
+		if collector.beforeFailure != nil {
+			if err := collector.beforeFailure(); err != nil {
+				return policy.Reading{}, err
+			}
+		}
+
 		return policy.Reading{}, errors.New("injected host evidence failure")
 	}
 	if len(collector.samples) == 0 {
@@ -1308,12 +1332,15 @@ func (driver *Driver) loseHostEvidence() error {
 			healthySample(base.Add(time.Millisecond)),
 			healthySample(base.Add(2 * time.Millisecond)),
 		},
-		failureFrom: 3,
+		failureFrom:   3,
+		beforeFailure: childPIDReadiness(pidPath, interruptReadinessWait),
 	}
 
 	code, runError := guard.Run(context.Background(), guard.RunConfig{
-		Command:      shellPath,
-		Arguments:    []string{"-c", `trap '' TERM; printf '%s' "$$" > "$GUARD_CHILD_PID"; while :; do sleep 1; done`},
+		Command: shellPath,
+		// The delayed PID write outlasts the first supervision sample plus the
+		// termination grace, so only the readiness barrier keeps this Given true.
+		Arguments:    []string{"-c", `trap '' TERM; sleep 0.2; printf '%s' "$$" > "$GUARD_CHILD_PID"; while :; do sleep 1; done`},
 		TaskClass:    policy.TaskEphemeral,
 		Environment:  append(os.Environ(), "GUARD_CHILD_PID="+pidPath),
 		EvidenceRoot: driver.leaseRoot,
