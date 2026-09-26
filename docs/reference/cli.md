@@ -132,7 +132,8 @@ mistake (`2`, `hippo.args.invalid`), for `watch` as for `status`. It is document
 
 Runs `status` repeatedly and prints only changed snapshots. This is the operator view for owners,
 FIFO position, admission deadline, and promotion state; `monitor` remains the lower-level resource
-transition stream.
+transition stream. It runs until it is stopped: `SIGINT` ends it with `130` and `SIGTERM` with
+`143`, whether the signal lands between snapshots or while one is being collected.
 
 | Flag                    | Default | Meaning                                            |
 | ----------------------- | ------- | -------------------------------------------------- |
@@ -168,7 +169,8 @@ empty result: `--class` takes `ephemeral`, `service`, `transactional`, or `relea
 
 ## `hippo monitor`
 
-Prints the initial state, then one line per state or profile transition. Runs until cancelled.
+Prints the initial state, then one line per state or profile transition. Runs until it is stopped,
+and a signal ends it with `128+N`: `130` for `SIGINT`, `143` for `SIGTERM`.
 
 | Flag                    | Default | Meaning                                      |
 | ----------------------- | ------- | -------------------------------------------- |
@@ -273,7 +275,10 @@ Captures release overlap evidence. `--output`, `--summary`, `--deployment-root`,
 | `--health-url <url>`       | `HIPPO_HEALTH_URL`    | Local health URL (required)                                    |
 | `--routed-origin <origin>` | `HIPPO_ROUTED_ORIGIN` | Bare HTTPS routed origin (required)                            |
 | `--service-port <n>`       | none                  | Service port included in RSS accounting; repeatable            |
-| `--duration-ms <n>`        | `0`                   | Stop after this many milliseconds; `0` runs until cancelled    |
+| `--duration-ms <n>`        | `0`                   | Stop after this many milliseconds; `0` runs until a signal     |
+
+Either way the summary is written before HIPPO exits. Reaching `--duration-ms` exits `0`; a signal
+exits `128+N`, `130` for `SIGINT` and `143` for `SIGTERM`.
 
 `--output -` and `--summary -` cannot both be used in one invocation, because raw and summary
 schemas must never be mixed on one stream:

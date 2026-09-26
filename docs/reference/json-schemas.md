@@ -306,7 +306,9 @@ for owner promotion.
 
 `state` distinguishes `never-started` queue expiry/cancellation from `started-safety-stop`
 emergency pressure and `started-activation-failure` after a launched child could not be activated in
-the ledger. Only `never-started` authorizes automatic requeue. Receipts contain no command or path
+the ledger. A `never-started` receipt names `admission-deadline` when the queue deadline passed,
+`host-admission` when host sampling never became safe, and `admission-cancelled` when a signal
+stopped the run first. Only `never-started` authorizes automatic requeue. Receipts contain no command or path
 and are retained for 30 days under a 128 MiB cap.
 
 ## Release raw record

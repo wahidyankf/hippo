@@ -47,8 +47,10 @@ Each is a usage mistake: it prints the one diagnostic line and exits `2` before 
 
 `--service-port` is repeatable and selects which listeners count toward RSS accounting.
 
-Without `--duration-ms`, monitoring continues until cancellation. A positive value ends the capture
-after that many milliseconds — useful in CI where the window is known.
+Without `--duration-ms`, monitoring continues until a signal stops it; the summary is still written,
+and the command exits `130` for `SIGINT` or `143` for `SIGTERM`. A positive value ends the capture
+after that many milliseconds and exits `0` — useful in CI where the window is known, and the form to
+use when a script needs `0` from a completed capture.
 
 ## Assess the result
 

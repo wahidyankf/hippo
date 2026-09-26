@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -134,6 +135,9 @@ func (application Application) watch(ctx context.Context, options watchOptions) 
 		view := application
 		view.Stdout = output
 		code, err := view.status(ctx, options.statusOptions)
+		if stoppedByCaller(ctx, err) {
+			return 0, nil
+		}
 		if err != nil || code != 0 {
 			return code, err
 		}
@@ -144,12 +148,25 @@ func (application Application) watch(ctx context.Context, options watchOptions) 
 			prior = output.String()
 		}
 		if err = waitForContext(ctx, options.interval, application.Sleep); err != nil {
-			if ctx.Err() != nil {
-				//nolint:nilerr // Cancellation is the successful termination contract for watch.
+			if stoppedByCaller(ctx, err) {
 				return 0, nil
 			}
 
 			return 1, err
 		}
 	}
+}
+
+// stoppedByCaller reports whether an observer loop failed only because its
+// caller cancelled it. watch and monitor run until they are stopped, so a
+// stop is their end wherever it lands: while waiting, or while a sample is
+// being collected. The entry point turns a signal-caused stop into 128+N; a
+// failure hippo classified while stopping is still its own answer.
+func stoppedByCaller(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() == nil {
+		return false
+	}
+	_, classified := errors.AsType[status.Failure](err)
+
+	return !classified
 }

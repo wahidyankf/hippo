@@ -12,9 +12,11 @@ package e2e_test
 // it never exercised produces a green result that means nothing.
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +26,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // What this executable declares about itself, which decides the assertions that
@@ -206,6 +209,81 @@ func invokeWithClosedReader(t *testing.T, binary string, arguments ...string) ob
 	return observed{status: status, stderr: errOut.String()}
 }
 
+// probeInterrupt interrupts watch, which runs until it is stopped, so the
+// signal cannot outrun the command it is measuring.
+func probeInterrupt(t *testing.T, binary string) outcome {
+	t.Helper()
+	result := interruptAfterFirstLine(t, binary, syscall.SIGINT, "watch", "--interval", "1h")
+	switch {
+	case result.status != 130:
+		return fail("expected exit 130 on an interrupt, observed %d: %q", result.status, firstLine(result.stderr))
+	case result.stderr != "":
+		return fail("expected a silent stderr, observed %q", firstLine(result.stderr))
+	}
+	return pass()
+}
+
+// interruptAfterFirstLine starts a long-running command in an isolated state
+// root, waits until it has written its first line to stdout -- proof that it is
+// running rather than still starting -- and then sends it the signal, reporting
+// the status a shell would see.
+func interruptAfterFirstLine(t *testing.T, binary string, signal syscall.Signal, arguments ...string) observed {
+	t.Helper()
+	command := exec.Command(binary, arguments...)
+	command.Stdin = nil
+	command.Env = []string{"HIPPO_ROOT=" + t.TempDir()}
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "HIPPO_") {
+			command.Env = append(command.Env, entry)
+		}
+	}
+	var errOut strings.Builder
+	command.Stderr = &errOut
+	pipe, pipeError := command.StdoutPipe()
+	if pipeError != nil {
+		t.Fatalf("opening a pipe on stdout failed: %v", pipeError)
+	}
+	if startError := command.Start(); startError != nil {
+		t.Fatalf("starting the executable failed: %v", startError)
+	}
+	lines := make(chan string, 1)
+	go func() {
+		line, _ := bufio.NewReader(pipe).ReadString('\n')
+		lines <- line
+		_, _ = io.Copy(io.Discard, pipe)
+	}()
+	var first string
+	select {
+	case first = <-lines:
+	case <-time.After(time.Minute):
+		_ = command.Process.Kill()
+		_ = command.Wait()
+		t.Fatalf("%s wrote nothing within a minute: %q", strings.Join(arguments, " "), firstLine(errOut.String()))
+	}
+	if signalError := command.Process.Signal(signal); signalError != nil {
+		t.Fatalf("signalling the executable failed: %v", signalError)
+	}
+
+	status := 0
+	if waitError := command.Wait(); waitError != nil {
+		var exitError *exec.ExitError
+		switch {
+		case errors.As(waitError, &exitError):
+			waitStatus, ok := exitError.Sys().(syscall.WaitStatus)
+			switch {
+			case ok && waitStatus.Signaled():
+				status = 128 + int(waitStatus.Signal())
+			default:
+				status = exitError.ExitCode()
+			}
+		default:
+			t.Fatalf("waiting on the executable failed: %v", waitError)
+		}
+	}
+
+	return observed{status: status, stdout: first, stderr: errOut.String()}
+}
+
 // shedByLimit reports whether HIPPO stopped this invocation against one of its
 // own limits, which says nothing about the behaviour a probe was measuring.
 //
@@ -332,7 +410,7 @@ func probeExit(t *testing.T, binary, assertionID string) (outcome, bool) {
 		return pass(), true
 
 	case "cli.exit.interrupt-is-one-three-zero":
-		return unmeasured("a signal cannot be raced reliably against a run this short"), true
+		return probeInterrupt(t, binary), true
 
 	case "cli.exit.timeout-is-one-two-four", "cli.exit.refusal-before-launch-is-one-two-five":
 		return unmeasured(

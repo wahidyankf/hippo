@@ -246,6 +246,7 @@ type Driver struct {
 	v04Scenario              string
 	exclusiveStatusSession   *guard.Session
 	exclusiveStatusState     map[string][]byte
+	interruption             interruptionScenario
 }
 
 type failingStream struct {
@@ -313,6 +314,10 @@ func (driver *Driver) cleanup() {
 		_ = guard.ReleaseReservation(driver.leaseRoot, driver.admissionSession)
 		driver.admissionSession = nil
 	}
+	for _, holder := range driver.interruption.holders {
+		_ = guard.ReleaseReservation(driver.interruption.root, holder)
+	}
+	driver.interruption.holders = nil
 	for _, writer := range driver.evidenceWriters {
 		_ = writer.Close()
 	}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,6 +79,20 @@ func classify(execution *commandExecution, err error) *status.Failure {
 	default:
 		return &status.Failure{Code: status.CodeSupervisionFailed, Message: err.Error()}
 	}
+}
+
+// endedByInterruption reports whether a handler's result is only the
+// cancellation a signal caused: no error, or the cancellation itself. A
+// classified failure is hippo's own answer and outranks the signal.
+func endedByInterruption(err error) bool {
+	if err == nil {
+		return true
+	}
+	if _, classified := errors.AsType[status.Failure](err); classified {
+		return false
+	}
+
+	return errors.Is(err, context.Canceled)
 }
 
 // reasonMessage is the sentence a reason carries when the layer that decided

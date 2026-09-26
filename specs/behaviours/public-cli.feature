@@ -47,8 +47,40 @@ Feature: Public HIPPO CLI
   @e2e-exempt
   Scenario: Watch emits only changed admission snapshots
     Given stable host and queue state for watch
-    When JSON watch observes two unchanged snapshots
-    Then only one schema five status snapshot is emitted
+    When JSON watch observes two unchanged snapshots and is then interrupted by SIGINT
+    Then only one schema five status snapshot is emitted before watch exits 130
+
+  Scenario Outline: A signal ends watch with the signal status
+    Given watch has printed its first status snapshot
+    When watch receives <signal> while it waits for the next snapshot
+    Then watch exits <status> with no hippo diagnostic
+
+    Examples:
+      | signal  | status |
+      | SIGINT  | 130    |
+      | SIGTERM | 143    |
+
+  @e2e-exempt
+  Scenario Outline: A signal while an observer collects a sample ends it with the signal status
+    Given stable host state for <command> sampling
+    When <command> is interrupted by SIGINT while it collects a host sample
+    Then <command> exits 130 with no hippo diagnostic
+
+    Examples:
+      | command |
+      | watch   |
+      | monitor |
+
+  @e2e-exempt
+  Scenario Outline: Release monitoring reports a signal but not its own duration
+    Given a release capture that runs until it is stopped
+    When the release capture is ended by <end>
+    Then release monitoring finishes its capture and exits <status>
+
+    Examples:
+      | end          | status |
+      | SIGTERM      | 143    |
+      | its duration | 0      |
 
   Scenario: JSON status fails closed on corrupt coordination state
     Given the compiled HIPPO binary with corrupt reservation coordination state

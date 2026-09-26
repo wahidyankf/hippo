@@ -113,6 +113,7 @@ const exitStatusHelp = `Exit statuses:
   126  the command exists and could not be executed
   127  the command was not found
   N    a started command's own status, or 128+N when a signal ended it
+       or interrupted hippo
 
 Every failure also names a reason, as hippo: [hippo.area.reason] on
 stderr and as error.code in the JSON body beneath it.`

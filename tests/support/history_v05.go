@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/cli"
@@ -158,8 +159,8 @@ func (driver *Driver) stableWatchV05() error {
 }
 
 func (driver *Driver) jsonWatchV05() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, interrupt := context.WithCancelCause(context.Background())
+	defer interrupt(nil)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	sleeps := 0
 	code, err := (cli.Application{
@@ -168,7 +169,7 @@ func (driver *Driver) jsonWatchV05() error {
 		Sleep: func(time.Duration) {
 			sleeps++
 			if sleeps == 2 {
-				cancel()
+				interrupt(status.Interruption{Signal: syscall.SIGINT})
 			}
 		},
 	}).Run(ctx, []string{"watch", jsonFlag, "--interval", "1s"})
@@ -178,8 +179,8 @@ func (driver *Driver) jsonWatchV05() error {
 }
 
 func (driver *Driver) requireJSONWatchV05() error {
-	if driver.exitCode != 0 || driver.errorOutput != "" {
-		return fmt.Errorf("watch exit=%d stderr=%s", driver.exitCode, driver.errorOutput)
+	if driver.exitCode != 130 || driver.errorOutput != "" {
+		return fmt.Errorf("watch exit=%d stderr=%s, want 130 and no diagnostic", driver.exitCode, driver.errorOutput)
 	}
 	trimmed := strings.TrimSpace(driver.output)
 	if strings.Count(trimmed, "\n") != 0 || !strings.Contains(trimmed, `"schemaVersion":5`) {

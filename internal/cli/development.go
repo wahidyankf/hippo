@@ -388,6 +388,10 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 	}
 
 	if err := observe(); err != nil {
+		if stoppedByCaller(ctx, err) {
+			return 0, nil
+		}
+
 		return 1, err
 	}
 
@@ -411,6 +415,12 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 			}
 
 			if err := observe(); err != nil {
+				// A stop can also land while a probe is running, and a probe
+				// its cancelled context killed reports its own error.
+				if stoppedByCaller(ctx, err) {
+					return 0, nil
+				}
+
 				return 1, err
 			}
 		}

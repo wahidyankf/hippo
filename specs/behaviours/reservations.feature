@@ -214,6 +214,17 @@ Feature: Shared vector reservations
     When its acquisition context is cancelled before the lock is released
     Then bounded cleanup removes the waiter without blocking the FIFO queue
 
+  Scenario: A signal to a queued run ends it with the signal status and keeps its receipt
+    Given a reservation root whose live owners fill its capacity and owner limit
+    When a queued guarded run receives SIGINT before it is admitted
+    Then the run exits 130 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
+
+  @e2e-exempt
+  Scenario: A signal during host admission sampling keeps a never-started receipt
+    Given a granted run still sampling the host before admission
+    When the guarded run receives SIGTERM before its child starts
+    Then the run exits 143 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
+
   @e2e-exempt
   Scenario: Failed cancelled-waiter cleanup retains verifiable FIFO ownership
     Given a queued reservation waiter whose coordination lock remains held past its fresh cleanup deadline
