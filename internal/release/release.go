@@ -21,6 +21,18 @@ import (
 
 const maximumProbeLatencyMs = 3000.0
 
+// The ways a release stability check turns a release down. Each is a verdict
+// on the host rather than a fault in the check, so the command line can name
+// the limit that stopped the release; any other error is the check failing.
+var (
+	// ErrMemoryHeadroom is memory pressure that leaves no safe release headroom.
+	ErrMemoryHeadroom = errors.New("memory pressure does not leave safe release headroom")
+	// ErrDiskReserve is free disk below the release reserve.
+	ErrDiskReserve = errors.New("release disk reserve is unavailable")
+	// ErrCPUHeadroom is CPU use that never settled inside the release budget.
+	ErrCPUHeadroom = errors.New("CPU use does not leave release and safety headroom")
+)
+
 // Check requires consecutive CPU samples plus release memory and disk reserves.
 func Check(ctx context.Context, collector policy.Collector, diskPath string, pause func(time.Duration)) error {
 	return CheckWithPolicy(ctx, collector, diskPath, pause, policy.DefaultPolicy())
@@ -48,10 +60,10 @@ func CheckWithPolicy(ctx context.Context, collector policy.Collector, diskPath s
 		previous = reading.CPUState
 
 		if policy.MemoryState(reading.Sample, resourcePolicy) != policy.StateNormal {
-			return errors.New("memory pressure does not leave safe release headroom")
+			return ErrMemoryHeadroom
 		}
 		if reading.Sample.DiskFreeBytes == nil || *reading.Sample.DiskFreeBytes < resourcePolicy.DiskWarningBytes {
-			return errors.New("release disk reserve is unavailable")
+			return ErrDiskReserve
 		}
 
 		if policy.CPUAdmissionReady(reading.Sample, resourcePolicy) {
@@ -71,7 +83,7 @@ func CheckWithPolicy(ctx context.Context, collector policy.Collector, diskPath s
 		}
 	}
 
-	return errors.New("CPU use does not leave release and safety headroom")
+	return ErrCPUHeadroom
 }
 
 func waitForContext(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {

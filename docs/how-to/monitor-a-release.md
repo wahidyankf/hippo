@@ -12,7 +12,10 @@ guess them.
 hippo release check --disk-path /path/to/deployment
 ```
 
-Silent success means the host has the headroom to proceed. A stable exit code means it does not.
+Silent success means the host has the headroom to proceed. A stable exit code means it does not, and
+one diagnostic line says why: `124` naming `hippo.limit.capacity-deferred` when memory or CPU did not
+settle, so a later retry can pass; `124` naming `hippo.limit.storage-blocked` when the deployment disk
+is below the release reserve, so free space first; `125` when host evidence could not be collected.
 
 ## Capture evidence during the window
 

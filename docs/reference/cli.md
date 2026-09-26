@@ -248,6 +248,18 @@ Silent gate. Exits `0` when a release may proceed, and reports a stable exit cod
 | -------------------- | ------- | --------------- |
 | `--disk-path <path>` | `.`     | Deployment path |
 
+A failed check writes one diagnostic line naming its reason. Memory pressure or CPU use that does not settle defers the
+release, exit `124` naming `hippo.limit.capacity-deferred`, and a retry can succeed. A disk below the release reserve
+exits `124` naming `hippo.limit.storage-blocked`; free space first. Host evidence that cannot be collected exits `125`
+naming `hippo.supervision.failed`.
+
+```console
+$ hippo release check --disk-path /srv/app
+hippo: [hippo.limit.capacity-deferred] release check deferred: CPU use does not leave release and safety headroom
+$ echo $?
+124
+```
+
 ## `hippo release monitor`
 
 Captures release overlap evidence. `--output`, `--summary`, `--deployment-root`, `--health-url`, and

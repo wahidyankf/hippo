@@ -68,6 +68,16 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   naming `hippo.policy.replan-required`, which says no profile admits the request, although the
   fix is one flag. A caller that branched on `125` here should branch on `2` and supply a source.
   An identity file that is present and invalid still exits `125`.
+- `release check` reports a failed stability check on one line that names its own reason. Memory
+  pressure or CPU use that does not settle still exits `124` naming
+  `hippo.limit.capacity-deferred`. A disk below the release reserve now names
+  `hippo.limit.storage-blocked`, as `run` does for the same threshold, and host evidence that stops
+  arriving exits `125` naming `hippo.supervision.failed`. Every one of these printed the bare
+  reason and then a second line claiming a capacity deferral, `124`, whatever had failed. A caller
+  retrying every `124` from `release check` should retry only the retryable reason.
+- `status --source` and `watch --source` with a malformed value, such as `'Bad Source'`, now exit
+  `2` naming `hippo.args.invalid` before configuration is read; `history --source` does the same.
+  They exited `0` or `1` as though the filter matched nothing. A caller should correct the value.
 - `release monitor` reports a missing or malformed `--health-url` or `--routed-origin`, a missing
   output, summary or deployment root, a negative `--duration-ms`, or an out-of-range
   `--service-port` as a usage mistake: exit `2` naming `hippo.args.invalid`. Each exited `125`

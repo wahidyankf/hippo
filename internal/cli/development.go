@@ -165,7 +165,10 @@ func filterCoordinationRows(totals guard.ReservationTotals, source string, tags 
 
 func (application Application) status(ctx context.Context, options statusOptions) (int, error) {
 	// A malformed filter is the caller's mistake, found before anything is
-	// read, exactly as run and history report their own malformed --tag.
+	// read, exactly as run and history report their own malformed filters.
+	if err := identity.ValidateOverrides(options.source, nil); err != nil {
+		return 0, status.Fail(status.CodeArgsInvalid, "--source: %v", err)
+	}
 	filterTags, filterError := identity.ParseTags(options.tags)
 	if filterError != nil {
 		return 0, status.Fail(status.CodeArgsInvalid, "--tag: %v", filterError)

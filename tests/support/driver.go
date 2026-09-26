@@ -209,6 +209,7 @@ type Driver struct {
 	runtimeFailureExit       int
 	usageErrorOutput         string
 	usageAttempts            []usageAttempt
+	releaseCheckFailureFrom  int
 	terminationSignals       int
 	supervisionFailure       error
 	childReaped              bool

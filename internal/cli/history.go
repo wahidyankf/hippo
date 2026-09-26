@@ -41,6 +41,9 @@ var historyTaskClasses = []string{
 // empty answer to it would read as "nothing matched" when the question could
 // never have matched anything, which hides a typo behind a valid result.
 func historyFilterMistake(options historyOptions) error {
+	if err := identity.ValidateOverrides(options.source, nil); err != nil {
+		return status.Fail(status.CodeArgsInvalid, "--source: %v", err)
+	}
 	if options.taskClass != "" && !slices.Contains(historyTaskClasses, options.taskClass) {
 		return status.Fail(status.CodeArgsInvalid, "--class must be one of %s", strings.Join(historyTaskClasses, ", "))
 	}
