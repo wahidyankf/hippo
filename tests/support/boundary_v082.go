@@ -70,7 +70,7 @@ func runGuardedAtBoundary(root, configDocument string, samples []policy.Sample, 
 		Stdin:       strings.NewReader(""),
 		Stdout:      &bytes.Buffer{},
 		Stderr:      stderr,
-		Environment: []string{hippoRootEnvironment + "=" + root, "CHILD_MARKER=" + marker, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"},
+		Environment: []string{hippoRootEnvironment + "=" + root, "CHILD_MARKER=" + marker, isolatedPath},
 		Collector:   &sequenceCollector{samples: samples},
 		Sleep:       func(time.Duration) {},
 	}).Run(context.Background(), command)
