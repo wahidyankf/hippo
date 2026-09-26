@@ -13,16 +13,16 @@ wrong. The reasons have no such limit, so that is where the detail lives.
 
 ## Exit statuses
 
-| Status  | Meaning                                                         | Retry?                   |
-| ------- | --------------------------------------------------------------- | ------------------------ |
-| `0`     | The work ran and the answer is affirmative                      | n/a                      |
-| `1`     | The work ran and the answer is negative                         | No — the answer is empty |
-| `2`     | The invocation could not be used                                | No — fix the command     |
-| `124`   | A limit stopped the work                                        | Yes, once it lifts       |
-| `125`   | HIPPO failed before or while starting the work                  | No — read the reason     |
-| `126`   | The command exists and could not be executed                    | No — fix the permissions |
-| `127`   | The command was not found                                       | No — fix the path        |
-| _other_ | A started child's own status, or `128+N` when a signal ended it | Depends on the child     |
+| Status  | Meaning                                                          | Retry?                                   |
+| ------- | ---------------------------------------------------------------- | ---------------------------------------- |
+| `0`     | The work ran and the answer is affirmative                       | n/a                                      |
+| `1`     | The work ran and the answer is negative                          | No — the answer is empty                 |
+| `2`     | The invocation could not be used, or HIPPO hit an internal fault | No — fix the command or report the fault |
+| `124`   | A limit stopped the work                                         | Yes, once it lifts                       |
+| `125`   | HIPPO failed before, while, or after starting the work           | No — read the reason                     |
+| `126`   | The command exists and could not be executed                     | No — fix the permissions                 |
+| `127`   | The command was not found                                        | No — fix the path                        |
+| _other_ | A started child's own status, or `128+N` when a signal ended it  | Depends on the child                     |
 
 `124` and `125` are the statuses `timeout` returns for the same two situations, and `126` and `127`
 are the ones every POSIX shell returns. A caller who has never read this page still reads them

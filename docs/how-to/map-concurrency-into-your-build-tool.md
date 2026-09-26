@@ -60,14 +60,9 @@ allocation; exclusive mode passes it through untouched.
 
 Under a fixed reservation allocation the existing value is read as a request and reconciled against
 the allocation. In schema 3, the selected tier supplies a minimum and maximum; HIPPO grants the
-largest vector that fits when the FIFO head is admitted and exports that fixed CPU allocation.
-
-| Your value                   | Result                           |
-| ---------------------------- | -------------------------------- |
-| unset                        | Receives the allocated CPU       |
-| positive, below allocation   | Survives unchanged               |
-| positive, above allocation   | Clamped down to the allocation   |
-| zero, negative, or malformed | Exit `2` before the child starts |
+largest vector that fits when the FIFO head is admitted and exports that fixed CPU allocation. The
+[value rules](../reference/environment-variables.md#value-rules-in-reservation-mode) list the result
+for each kind of value.
 
 ```console
 $ BUILD_WORKERS=1 hippo run --config reservation.json --reserve-cpu 4 --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
@@ -109,27 +104,33 @@ Degraded admission is the one exclusive-mode case that does overwrite an existin
 
 Two different failures look similar. Check the exit code.
 
-**Exit `1` — the name is wrong.** Rejected before anything runs.
+**Exit `2`, `hippo.args.invalid` — the name is wrong.** Rejected before anything runs.
 
 ```console
 $ hippo run --concurrency-env '1BAD-NAME' -- true
-Error: concurrency environment name "1BAD-NAME" is not a POSIX identifier
+hippo: [hippo.args.invalid] concurrency environment name "1BAD-NAME" is not a POSIX identifier
+$ echo $?
+2
 
 $ hippo run --concurrency-env HIPPO_CONCURRENCY -- true
-Error: concurrency environment name "HIPPO_CONCURRENCY" is reserved
+hippo: [hippo.args.invalid] concurrency environment name "HIPPO_CONCURRENCY" is reserved
+$ echo $?
+2
 ```
 
 Use a POSIX identifier that is not one of HIPPO's own `HIPPO_*` protocol variables.
 
-**Exit `2` — the inherited value is wrong.** Reservation mode only; exclusive mode does not
-inspect the value.
+**Exit `125`, `hippo.policy.replan-required` — the inherited value is wrong.** Reservation mode
+only; exclusive mode does not inspect the value.
 
 ```console
 $ BUILD_WORKERS=0 hippo run --config reservation.json --concurrency-env BUILD_WORKERS -- true
-Error: concurrency environment "BUILD_WORKERS" must be a positive integer
+hippo: [hippo.policy.replan-required] concurrency environment "BUILD_WORKERS" must be a positive integer
+$ echo $?
+125
 ```
 
-Something upstream is exporting `0`, an empty string, or a non-number. Fix the source rather than
+Something upstream is exporting `0`, a negative number, or a non-number. Fix the source rather than
 dropping the mapping — a `0` reaching a build tool is usually a bug on its own.
 
 ## Note on degraded admission
