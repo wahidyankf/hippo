@@ -190,6 +190,11 @@ func (driver *Driver) liveGuardOwner() error {
 	if err != nil {
 		return err
 	}
+	// The session's identity lock is what makes this guard live. Held only by a
+	// local, it becomes garbage when this step returns, and the file's finalizer
+	// closes it and drops the flock whenever a collection runs, so status would
+	// reconcile the owner away. The driver keeps it until cleanup releases it.
+	driver.admissionSession = session
 
 	payload := exec.Command(shellPath, "-c", "while :; do sleep 0.05; done")
 	payload.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
