@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/cli"
+	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 	releaseguard "github.com/wahidyankf/hippo/internal/release"
@@ -94,7 +95,48 @@ func (driver *Driver) interruptionBindings() []contract.StepBinding {
 			`^the run exits (130|143) with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled$`,
 			driver.requireInterruptedRunV082,
 		),
+		step(`^its lifetime summary records the outcome admission-cancelled$`, driver.requireCancelledSummaryV082),
+		step(`^no lifetime summary is written, because a queued waiter collects no host evidence$`, driver.requireNoSummaryV082),
 	}
+}
+
+// interruptedSummaries reads the lifetime summaries the interrupted run's
+// root holds, by source.
+func (driver *Driver) interruptedSummaries() (map[string]string, error) {
+	rows, err := evidence.ReadHistory(driver.interruption.root, evidence.Query{})
+	if err != nil {
+		return nil, err
+	}
+	outcomes := map[string]string{}
+	for _, row := range rows {
+		outcomes[row.Source] = row.Outcome
+	}
+
+	return outcomes, nil
+}
+
+func (driver *Driver) requireCancelledSummaryV082() error {
+	outcomes, err := driver.interruptedSummaries()
+	if err != nil {
+		return err
+	}
+	if len(outcomes) != 1 || outcomes[interruptedRunSource] != admissionCancelled {
+		return fmt.Errorf("the cancelled run summarized as %v, want %s=%s", outcomes, interruptedRunSource, admissionCancelled)
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireNoSummaryV082() error {
+	outcomes, err := driver.interruptedSummaries()
+	if err != nil {
+		return err
+	}
+	if len(outcomes) != 0 {
+		return fmt.Errorf("a queued waiter that collected no evidence wrote summaries: %v", outcomes)
+	}
+
+	return nil
 }
 
 func signalNamed(name string) syscall.Signal {

@@ -250,6 +250,29 @@ have rotated away.
 | Resolved policy     | `requestedProfile`, `resolvedProfile`, `fallbackChain`, `concurrency`, `configHash`                                                                                                                                                                                       |
 | Reservation         | `requestedCpu`, `requestedMemoryBytes`, `allocatedCpu`, `allocatedMemoryBytes`, `reservationWaitMilliseconds`, `peakOwnerCount`, `budgetOutcome`                                                                                                                          |
 
+`outcome` is one of these values, and no other:
+
+| `outcome`               | Child started? | Meaning                                                                              |
+| ----------------------- | -------------- | ------------------------------------------------------------------------------------ |
+| `passed`                | Yes            | The child exited `0`                                                                 |
+| `task-failed`           | Yes            | The child exited nonzero, was stopped by a signal to HIPPO, or failed its activation |
+| `pressure-shed`         | Yes            | HIPPO shed the child under host pressure other than storage                          |
+| `storage-shed`          | Yes            | HIPPO shed the child because the disk floor was crossed                              |
+| `emergency-safety-stop` | Yes            | HIPPO stopped transactional work past the emergency floor                            |
+| `supervision-failed`    | Yes            | HIPPO lost supervision of a running child and stopped it                             |
+| `capacity-deferred`     | No             | Safe host admission was not reached before the admission deadline                    |
+| `storage-blocked`       | No             | The disk floor refused the run before launch                                         |
+| `admission-cancelled`   | No             | A signal or other cancellation stopped the run while it sampled the host             |
+
+A summary exists only for a run that reached host sampling. A run cancelled while it waited in the
+reservation queue collected no host evidence, so it writes no summary; its `never-started` receipt
+with reason `admission-cancelled` is its whole record. `admission-cancelled` is new in v0.8.2;
+before it, a run cancelled during host sampling was summarized as `capacity-deferred`.
+
+A run that HIPPO itself stops before launch after sampling began, because host evidence became
+unreadable, an evidence write was refused, or the launch failed, is also summarized as
+`capacity-deferred`. Its exit status and reason say which; the outcome does not.
+
 Schema-4 fields keep their meanings; labels and timestamps are the schema-5 addition.
 `peakOwnerCount` is raised atomically by every admission event during the child's lifetime, so an
 owner that was admitted and released between host-sampling ticks is still counted.

@@ -158,7 +158,9 @@ What to look at:
 - **`requestedCpu` vs `allocatedCpu`** — whether you got what you asked for.
 - **`fallbackChain`** — the profiles HIPPO tried before settling. A chain longer than one entry means
   the host could not support the profile you requested.
-- **`outcome`** and **`budgetOutcome`** — how the session ended.
+- **`outcome`** and **`budgetOutcome`** — how the session ended. The
+  [outcome list](../reference/json-schemas.md#development-lifetime-summary) says whether the child
+  started.
 
 Same-day raw `.jsonl` chunks hold one host sample per line for finer-grained analysis. Prior-day raw
 streams are gzip-compressed under `raw/`; use `gzip -dc`. Prior-day summaries are under

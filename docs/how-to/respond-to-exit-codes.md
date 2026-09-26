@@ -160,7 +160,8 @@ not fail: someone stopped it.
 - For `watch`, `monitor`, or `release monitor`, this is the ordinary end. `release monitor` has
   already written its summary; `--duration-ms` ends it with `0` instead.
 - For a `run` whose child never started, a `never-started` receipt with reason
-  `admission-cancelled` says so, and the same invocation may be requeued once.
+  `admission-cancelled` says so, and the same invocation may be requeued once. If it had begun
+  sampling the host, its lifetime summary carries the same word as its outcome.
 - For a `run` whose child started, the status is the child's own; it was stopped, so recover its
   effects before repeating it.
 

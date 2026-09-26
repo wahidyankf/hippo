@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 	releaseguard "github.com/wahidyankf/hippo/internal/release"
@@ -249,6 +250,11 @@ func TestInterruptedQueuedRunExitsWithTheSignalStatusAndKeepsItsReceipt(t *testi
 		t.Fatalf("the interrupted waiter started its child: %v", statError)
 	}
 	requireNeverStartedReceipt(t, root, "waiter", "admission-cancelled")
+	// A waiter collects no host evidence while it queues, so it has no
+	// lifetime to summarize; the receipt is its whole record.
+	if outcomes := summaryOutcomes(t, root); len(outcomes) != 0 {
+		t.Fatalf("a waiter that collected no evidence wrote summaries: %v", outcomes)
+	}
 }
 
 func TestInterruptedHostAdmissionWaitKeepsANeverStartedReceipt(t *testing.T) {
@@ -281,6 +287,27 @@ func TestInterruptedHostAdmissionWaitKeepsANeverStartedReceipt(t *testing.T) {
 		t.Fatalf("the interrupted admission wait started its child: %v", statError)
 	}
 	requireNeverStartedReceipt(t, root, "sampler", "admission-cancelled")
+	// The samples it took are summarized under the outcome its receipt names:
+	// a cancellation, not a capacity deferral.
+	if outcomes := summaryOutcomes(t, root); len(outcomes) != 1 || outcomes["sampler"] != "admission-cancelled" {
+		t.Fatalf("the interrupted admission wait summarized as %v, want sampler=admission-cancelled", outcomes)
+	}
+}
+
+// summaryOutcomes reads the lifetime summaries under root, by source.
+func summaryOutcomes(t *testing.T, root string) map[string]string {
+	t.Helper()
+
+	rows, err := evidence.ReadHistory(root, evidence.Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcomes := map[string]string{}
+	for _, row := range rows {
+		outcomes[row.Source] = row.Outcome
+	}
+
+	return outcomes
 }
 
 // requireNeverStartedReceipt finds the one receipt source wrote and checks it
