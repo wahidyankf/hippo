@@ -5,20 +5,22 @@ Both sets are fixed: HIPPO compiles in no build-tool or product-specific names.
 
 ## Read by HIPPO
 
-| Variable                 | Purpose                                                                                                                        |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `HIPPO_ROOT`             | Shared coordination, lease, and evidence root. See [State root](./state-root.md).                                              |
-| `HIPPO_CONFIG`           | Configuration path. Overridden by `--config`; overrides the bootstrap default.                                                 |
-| `HIPPO_DEFAULT_CONFIG`   | Bootstrap-only fallback set by `./hippo` to the repository-local `hippo.local.json`. Skips the current-directory file.         |
-| `HIPPO_IDENTITY`         | Explicit schema-1 run identity path. Stronger than discovery and the bootstrap default.                                        |
-| `HIPPO_DEFAULT_IDENTITY` | Bootstrap-only fallback identity path after upward `hippo.identity.json` discovery.                                            |
-| `HIPPO_BUILD_CACHE`      | Overrides the `./hippo` bootstrap's compiled-binary cache directory.                                                           |
-| `HIPPO_SESSION`          | Inherited session token. A child that inherits one reuses the existing fixed allocation and never creates or expands an owner. |
-| `HIPPO_HEALTH_URL`       | Default for `release monitor --health-url`.                                                                                    |
-| `HIPPO_ROUTED_ORIGIN`    | Default for `release monitor --routed-origin`.                                                                                 |
-| `HIPPO_COLOR`            | Set to `1` to let `--color auto` colour the diagnostic line. See [Colour](#colour).                                            |
-| `NO_COLOR`               | Present with any value, even empty: `--color auto` never colours.                                                              |
-| `TERM`                   | Unset or `dumb`: `--color auto` never colours.                                                                                 |
+| Variable                 | Purpose                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HIPPO_ROOT`             | Shared coordination, lease, and evidence root. See [State root](./state-root.md).                                                                       |
+| `HIPPO_CONFIG`           | Configuration path. Overridden by `--config`; overrides the bootstrap default.                                                                          |
+| `HIPPO_DEFAULT_CONFIG`   | Bootstrap-only fallback set by `./hippo` to the repository-local `hippo.local.json`. Skips the current-directory file.                                  |
+| `HIPPO_IDENTITY`         | Explicit schema-1 run identity path. Stronger than discovery and the bootstrap default.                                                                 |
+| `HIPPO_DEFAULT_IDENTITY` | Bootstrap-only fallback identity path after upward `hippo.identity.json` discovery.                                                                     |
+| `HIPPO_BUILD_CACHE`      | Overrides the `./hippo` bootstrap's compiled-binary cache directory.                                                                                    |
+| `HIPPO_SESSION`          | Inherited session token. A child that inherits one reuses the existing fixed allocation and never creates or expands an owner.                          |
+| `HIPPO_HEALTH_URL`       | Default for `release monitor --health-url`.                                                                                                             |
+| `HIPPO_ROUTED_ORIGIN`    | Default for `release monitor --routed-origin`.                                                                                                          |
+| `HIPPO_COLOR`            | Set to `1` to let `--color auto` colour the diagnostic line. See [Colour](#colour).                                                                     |
+| `NO_COLOR`               | Present with any value, even empty: `--color auto` never colours.                                                                                       |
+| `TERM`                   | Unset or `dumb`: `--color auto` never colours.                                                                                                          |
+| `XDG_STATE_HOME`         | Linux only, when `HIPPO_ROOT` is unset: picks the default state root, and so the shared ledger HIPPO joins. See [State root](./state-root.md#location). |
+| `HOME`                   | When `HIPPO_ROOT` is unset: the base of the default state root. See [State root](./state-root.md#location).                                             |
 
 Configuration precedence, strongest first: `--config`, then `HIPPO_CONFIG`, then
 `HIPPO_DEFAULT_CONFIG`, then `hippo.local.json` in the current directory. See
@@ -50,13 +52,13 @@ $ TERM=xterm HIPPO_COLOR=1 hippo --config missing.json status 2>&1 | cat -v
 
 ## Exported to a guarded child
 
-| Variable                      | Always?               | Value                                                                        |
-| ----------------------------- | --------------------- | ---------------------------------------------------------------------------- |
-| `HIPPO_PROFILE`               | Yes                   | The resolved profile: `balanced`, `constrained`, or `minimal`                |
-| `HIPPO_CONCURRENCY`           | Yes                   | Canonical concurrency. In reservation mode this is exactly the allocated CPU |
-| `HIPPO_RESERVED_MEMORY_BYTES` | Reservation mode only | Allocated memory in bytes                                                    |
-| `HIPPO_SESSION`               | Yes                   | The run's session token, which a nested invocation inherits                  |
-| `HIPPO_BIN`                   | Yes                   | Absolute path of the running HIPPO executable, for nested invocations        |
+| Variable                      | Always?               | Value                                                                                                                                                      |
+| ----------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HIPPO_PROFILE`               | Yes                   | The resolved profile's name: a built-in `balanced`, `constrained`, or `minimal`, or a [configured profile](./configuration.md#profiles) under its own name |
+| `HIPPO_CONCURRENCY`           | Yes                   | Canonical concurrency. In reservation mode this is exactly the allocated CPU                                                                               |
+| `HIPPO_RESERVED_MEMORY_BYTES` | Reservation mode only | Allocated memory in bytes                                                                                                                                  |
+| `HIPPO_SESSION`               | Yes                   | The run's session token, which a nested invocation inherits                                                                                                |
+| `HIPPO_BIN`                   | Yes                   | Absolute path of the running HIPPO executable, for nested invocations                                                                                      |
 
 ```console
 $ hippo run --disk-path . -- sh -c 'echo "profile=$HIPPO_PROFILE concurrency=$HIPPO_CONCURRENCY reserved=${HIPPO_RESERVED_MEMORY_BYTES:-<unset>}"'
