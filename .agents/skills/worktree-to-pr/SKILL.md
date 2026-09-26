@@ -9,7 +9,7 @@ The authoritative procedure is [`repo-governance/workflows/worktree-to-pull-requ
 
 ## Order
 
-1. **Provision** at `../hippo-worktrees/<name>`, beside the checkout — never inside it. Then `npm ci`, which activates the hooks.
+1. **Provision** below the repository location with the command in the workflow's Provision step, per [worktree location](../../../repo-governance/conventions/worktree-location.md). Then `npm ci`, which activates the hooks.
 2. **Sync** with `git fetch origin && git rebase origin/main`. Never auto-stash, discard, or auto-resolve.
 3. **Work**, in thematic commits, each verified locally and each diff inspected for prohibited data.
 4. **Push and open as a draft**, with a body carrying why, what was decided, and how it was proved.
@@ -19,7 +19,7 @@ The authoritative procedure is [`repo-governance/workflows/worktree-to-pull-requ
 
 ## Traps
 
-- A worktree inside the repository breaks `go build`. The reason is in [worktree location](../../../repo-governance/conventions/worktree-location.md), and it is not negotiable.
+- A sibling `*-worktrees/` directory is forbidden, and `scripts/check-worktree-layout.sh` fails the quick gate when a worktree or a tracked instruction uses one.
 - `pre-push` runs the whole quick gate and takes minutes. A push that returns quickly probably did not push; read the captured output rather than the exit code.
 - Exit `124` from the guard means a limit stopped the work, and on a workstation that usually means it was busy. The reason on stderr says which limit. Retry the same invocation once it clears; it is not a failure of the change.
 - Never `--no-verify`. Fix the cause.
