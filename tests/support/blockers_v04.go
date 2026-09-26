@@ -446,7 +446,6 @@ func requireV04CustomProfileReservation(root string) error {
 	}
 	concurrencyPath := filepath.Join(root, "concurrency")
 	settings := v04FastPolicy()
-	settings.AdmissionWindow = time.Second
 	exit, runError := guard.Run(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", `printf '%s' "$HIPPO_CONCURRENCY" > "$CONCURRENCY_PATH"`},
 		TaskClass: policy.TaskEphemeral, Environment: append(os.Environ(), "CONCURRENCY_PATH="+concurrencyPath), EvidenceRoot: filepath.Join(root, "shared"),
@@ -1529,7 +1528,6 @@ func requireV04ShortOverlapPeak(root string) error {
 	finish := filepath.Join(scenarioRoot, "child-finish")
 	settings := v04FastPolicy()
 	settings.SampleInterval = 5 * time.Second
-	settings.AdmissionWindow = time.Second
 	type result struct {
 		code int
 		err  error

@@ -56,13 +56,14 @@ func v04ReservationSample() policy.Sample {
 // fixtures whose controlled evidence admits after a fixed number of samples. A
 // short window also timed the runner: one too slow to take those samples inside
 // it deferred the run with "safe admission was not reached" before the
-// behaviour under test began.
+// behaviour under test began. A fixture that asserts a deferral sets its own
+// tight window instead.
 const evidenceDecidesAdmission = time.Hour
 
 func v04FastPolicy() policy.Policy {
 	result := policy.DefaultPolicy()
 	result.SampleInterval = time.Millisecond
-	result.AdmissionWindow = time.Second
+	result.AdmissionWindow = evidenceDecidesAdmission
 	result.TerminationGrace = time.Millisecond
 	result.LeaseWait = time.Second
 

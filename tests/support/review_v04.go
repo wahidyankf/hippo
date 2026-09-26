@@ -463,14 +463,13 @@ func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
 	ready := filepath.Join(root, "owner-ready")
 	settings := v04FastPolicy()
 	settings.SampleInterval = 2 * time.Millisecond
-	// The bounds below are liveness maxima, not the property under test. This
+	// The grace below is a liveness maximum, not the property under test. This
 	// scenario asserts that the owning guard delivers TERM before its bounded KILL,
 	// returns the selected exit, and releases the owner. The child proves TERM by
 	// running a shell trap, so a grace shorter than the host's scheduling jitter
 	// force-stops a correct child before its handler runs and reports a correct
-	// guard as broken. A healthy run never spends these maxima.
+	// guard as broken. A healthy run never spends this maximum.
 	settings.TerminationGrace = 5 * time.Second
-	settings.AdmissionWindow = 5 * time.Second
 	type runResult struct {
 		code int
 		err  error
