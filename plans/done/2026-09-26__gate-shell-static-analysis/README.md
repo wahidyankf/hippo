@@ -1,6 +1,6 @@
 # Gate Shell Static Analysis
 
-Status: In progress
+Status: Done (2026-09-26)
 
 ## Context
 

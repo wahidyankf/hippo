@@ -8,5 +8,4 @@ Work finishes only when every required outcome, acceptance condition, verificati
 
 ## Directory Map
 
-- [Gate shell static analysis](gate-shell-static-analysis/README.md) closes the recorded shell-analysis gap with a
-  pinned ShellCheck gate over one shared script list.
+This stage holds no plan folder, so this README has no siblings to map.

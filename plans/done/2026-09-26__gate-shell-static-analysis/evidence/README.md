@@ -6,3 +6,4 @@ Recorded results this plan's gates produced, each with its command, commit, time
 ## Directory Map
 
 - [Plan quality gate](plan-quality-gate.md) records the pre-execution verdict and its repair cycle.
+- [Execution check](execution-check.md) records the post-execution verdict that permits archival.
