@@ -705,6 +705,8 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^every failure body names hippo history as the command$`, driver.requireHistoryNamedInEveryBody),
 		step(`^run is requested with a tag but no source and no identity file$`, driver.requestTagWithoutSource),
 		step(`^it exits 2 naming hippo\.args\.invalid and the --source flag before any payload starts$`, driver.requireSourceNamed),
+		step(`^release summary assessment is requested through the command line$`, driver.requestRejectedAssessment),
+		step(`^the diagnostic says the release evidence was rejected rather than deferred$`, driver.requireRejectionNamed),
 		step(`^the diagnostic names the command and exits with code 2$`, driver.requireCobraDiagnostic),
 		step(`^run is requested without a command separator$`, driver.invalidRun),
 		step(`^the command fails with a useful validation error$`, driver.requireValidation),

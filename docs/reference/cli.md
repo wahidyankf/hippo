@@ -286,13 +286,12 @@ $ hippo release assess --summary summary.json
 ```
 
 Rejected evidence prints `"accepted":false` and returns exit `124`, naming
-`hippo.limit.capacity-deferred`:
+`hippo.limit.capacity-deferred`, with a diagnostic that says the evidence was rejected and why:
 
 ```console
 $ hippo release assess --summary summary.json
 {"accepted":false,"schemaVersion":5}
-release overlap exhausted resource or routed responsiveness headroom
-hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter
+hippo: [hippo.limit.capacity-deferred] release evidence rejected: release overlap exhausted resource or routed responsiveness headroom
 $ echo $?
 124
 ```

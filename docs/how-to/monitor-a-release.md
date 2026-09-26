@@ -61,8 +61,7 @@ Rejected evidence returns exit `124` and says why:
 
 ```console
 {"accepted":false,"schemaVersion":5}
-release overlap exhausted resource or routed responsiveness headroom
-hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter
+hippo: [hippo.limit.capacity-deferred] release evidence rejected: release overlap exhausted resource or routed responsiveness headroom
 ```
 
 Assessment accepts retained schema 2–5 summaries, so old evidence stays readable after an upgrade.
