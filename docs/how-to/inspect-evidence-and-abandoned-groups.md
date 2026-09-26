@@ -114,8 +114,9 @@ streams are gzip-compressed under `raw/`; use `gzip -dc`. Prior-day summaries ar
 
 Safety receipts under `receipts/` answer the operationally important question after exit `124`:
 `never-started` means no payload launched; `started-safety-stop` means emergency pressure stopped a
-running payload. `started-activation-failure` accompanies exit `1` when ledger activation still
-failed after its two-second contention window. Never blindly retry either started state.
+running payload. `started-activation-failure` accompanies exit `125` (`hippo.supervision.failed`)
+when ledger activation still failed after its two-second contention window. Never blindly retry
+either started state.
 
 ## Investigate an abandoned process group
 

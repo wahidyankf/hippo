@@ -19,7 +19,7 @@ wrong. The reasons have no such limit, so that is where the detail lives.
 | `1`     | The work ran and the answer is negative                         | No — the answer is empty |
 | `2`     | The invocation could not be used                                | No — fix the command     |
 | `124`   | A limit stopped the work                                        | Yes, once it lifts       |
-| `125`   | HIPPO could not do its job and started nothing                  | No — read the reason     |
+| `125`   | HIPPO failed before or while starting the work                  | No — read the reason     |
 | `126`   | The command exists and could not be executed                    | No — fix the permissions |
 | `127`   | The command was not found                                       | No — fix the path        |
 | _other_ | A started child's own status, or `128+N` when a signal ended it | Depends on the child     |
@@ -115,4 +115,6 @@ no reason, and no consumer branched on them. They are gone.
 | `78` | `125` | `hippo.policy.replan-required` or a `hippo.config.*` reason    |
 | `1`  | `2`   | `hippo.args.invalid`, when the invocation was the problem      |
 
-`1` still means an empty result, which is the only thing it ever should have meant.
+`1` still means an empty result, which is the only thing it ever should have meant. The same rule
+reached one more case in v0.8.2: activation contention that outlives its deadline after the child
+started had kept `1`, and now returns `125` naming `hippo.supervision.failed`.

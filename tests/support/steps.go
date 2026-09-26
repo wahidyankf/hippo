@@ -131,7 +131,7 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		step(`^a peer holds the shared coordination lock past the activation deadline after the child starts$`,
 			prepare("stalled activation contention", requireV072StalledActivationContention)),
 		step(`^the guard attempts to activate its reservation$`, driver.exerciseReservationScenarioV04),
-		step(`^activation returns exit 1 after owned cleanup with a started-failure receipt$`, assert("stalled activation contention")),
+		step(`^activation returns exit 125 naming hippo\.supervision\.failed after owned cleanup with a started-failure receipt$`, assert("stalled activation contention")),
 		step(`^a running reserved owner and a coordination mutation lock held by another goroutine in the same process$`, prepare("bounded owner cancellation", requireV04BoundedOwnerCancellation)),
 		step(`^its owning guard is cancelled and reaps the child$`, driver.exerciseReservationScenarioV04),
 		step(`^cleanup defers boundedly without a caller failure, with exact ledger bytes and an externally locked identity until a later atomic retry after lock release$`, assert("bounded owner cancellation")),

@@ -73,12 +73,13 @@ attempt also fails.
 ## Lock contention is normal, not a failure
 
 Every repository on a host shares one coordination root, so its lock is routinely held by a peer for
-a bounded transaction. That contention is never a supervision failure — but it resolves differently
+a bounded transaction. Ordinary contention is never a supervision failure — but it resolves differently
 depending on when it happens:
 
 - **Before admission**, it returns `124` and no child has run.
 - **At activation**, it waits up to two seconds for ordinary peer transactions. If contention
-  outlives that deadline, it returns `1` and stops the child it already started. The lifetime
+  outlives that deadline, it stops the child it already started and returns `125`, naming
+  `hippo.supervision.failed`, because HIPPO failed while starting the work. The lifetime
   summary says `task-failed`, and a `started-activation-failure` receipt proves the payload ran.
   Activation records the supervised process group, and critical-pressure shedding can only select
   an owner whose group was recorded. A child that could not be recorded would be unsheddable, so

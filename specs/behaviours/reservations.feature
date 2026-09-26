@@ -191,7 +191,7 @@ Feature: Shared vector reservations
   Scenario: Stalled activation contention fails safely after launch
     Given a peer holds the shared coordination lock past the activation deadline after the child starts
     When the guard attempts to activate its reservation
-    Then activation returns exit 1 after owned cleanup with a started-failure receipt
+    Then activation returns exit 125 naming hippo.supervision.failed after owned cleanup with a started-failure receipt
 
   @e2e-exempt
   Scenario: Owner cancellation remains bounded when release coordination is held

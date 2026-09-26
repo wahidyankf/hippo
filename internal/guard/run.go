@@ -435,14 +435,15 @@ func resolveActivationFailure(
 	)
 	// The payload already started, so lock contention is not a retryable
 	// admission deferral. Owned cleanup completes before a stable failure
-	// is returned and the receipt records that launch occurred.
-	if errors.Is(activationError, errCoordinationDeferred) && stopError == nil {
-		_, _ = fmt.Fprintf(config.Stderr, "HIPPO failed task after launch: %s.\n", activationError)
+	// is returned and the receipt records that launch occurred. HIPPO failed
+	// while starting the child, so the caller gets HIPPO's own failure status
+	// and reason rather than 1, which only ever reports a result.
+	failure := status.Fail(
+		status.CodeSupervisionFailed, "task failed after launch: %v",
+		errors.Join(activationError, stopError, receiptError),
+	)
 
-		return 1, receiptError
-	}
-
-	return 1, errors.Join(activationError, stopError, receiptError)
+	return failure.Status(), failure
 }
 
 // noteDeferralf reports why admission was deferred. The run returns after this

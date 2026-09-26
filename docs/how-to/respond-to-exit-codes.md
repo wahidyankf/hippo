@@ -8,14 +8,14 @@ For the full definitions see the [exit code reference](../reference/exit-codes.m
 
 ## Decide quickly
 
-| Status | Do this                                                                      |
-| ------ | ---------------------------------------------------------------------------- |
-| `1`    | Nothing matched. This is a result, not a failure.                            |
-| `2`    | The invocation is wrong. Read the diagnostic and fix the command.            |
-| `124`  | A limit stopped the work. Read the reason — see below; they differ.          |
-| `125`  | HIPPO started nothing. Read the reason; retrying it unchanged will not help. |
-| `126`  | The command exists and cannot be executed. Fix its permissions.              |
-| `127`  | The command is not there. Fix the path or the spelling.                      |
+| Status | Do this                                                                    |
+| ------ | -------------------------------------------------------------------------- |
+| `1`    | Nothing matched. This is a result, not a failure.                          |
+| `2`    | The invocation is wrong. Read the diagnostic and fix the command.          |
+| `124`  | A limit stopped the work. Read the reason — see below; they differ.        |
+| `125`  | HIPPO itself failed. Read the reason; retrying it unchanged will not help. |
+| `126`  | The command exists and cannot be executed. Fix its permissions.            |
+| `127`  | The command is not there. Fix the path or the spelling.                    |
 
 Never respond to any of them by bypassing the guard or by changing `--class` to get admitted.
 Changing a task to `transactional` so it cannot be shed does not make the host any bigger; it makes
@@ -95,7 +95,8 @@ halfway through with a partial artifact.
 
 ## Handle `125`
 
-HIPPO could not do its job, and no child was started. The reason says which part failed.
+HIPPO could not do its job. The reason says which part failed, and all but one of them mean no
+child was started.
 
 **`hippo.coordination.protocol-mismatch`** — the shared root contains a live incompatible
 coordination epoch. Do not send this through a capacity retry loop and do not delete state to force
@@ -115,6 +116,12 @@ hippo: [hippo.config.unreadable] resource configuration: maximum memory weakens 
 ```
 
 Retrying any of these produces the same answer. The request or the configuration has to change.
+
+**`hippo.supervision.failed`** — HIPPO failed at a step it does not classify further, possibly after
+the child started. When the shared coordination lock stays held past the two-second activation
+window, HIPPO stops the child it just launched and writes a `started-activation-failure` receipt.
+Read `receipts/` before running the payload again: the work may have begun — see
+[How to inspect evidence](./inspect-evidence-and-abandoned-groups.md).
 
 ## Handle `2`
 

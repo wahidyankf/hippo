@@ -19,6 +19,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 	"golang.org/x/sys/unix" //nolint:depguard // Kernel-lock fixtures must exercise the same flock implementation as production.
 )
 
@@ -2328,12 +2329,15 @@ func TestStalledActivationContentionFailsAfterOwnedCleanup(t *testing.T) {
 	})
 	config.ReservationMetadata = ReservationMetadata{Source: "activation-test"}
 
+	// HIPPO failed while starting the child, so the caller gets HIPPO's own
+	// failure status and reason. Status 1 is a result, never a failure.
 	code, err := Run(context.Background(), config)
-	if err != nil {
-		t.Fatalf("stalled activation exited %d and reported %v", code, err)
+	failure, isFailure := errors.AsType[status.Failure](err)
+	if !isFailure || failure.Code != status.CodeSupervisionFailed {
+		t.Fatalf("stalled activation exited %d and reported %v, want %s", code, err, status.CodeSupervisionFailed)
 	}
-	if code != 1 {
-		t.Fatalf("stalled activation exited %d, want 1", code)
+	if code != status.GuardFailed {
+		t.Fatalf("stalled activation exited %d, want %d", code, status.GuardFailed)
 	}
 	summaryPaths, globError := filepath.Glob(filepath.Join(root, "*.summary.json"))
 	if globError != nil || len(summaryPaths) != 1 {
