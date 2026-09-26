@@ -2420,23 +2420,27 @@ func (driver *Driver) runReleaseMonitoring(ctx context.Context) {
 	if collector == nil {
 		collector = &sequenceCollector{samples: []policy.Sample{healthySample(base)}}
 	}
-	code, err := (cli.Application{
+	stderr := &bytes.Buffer{}
+	code, _ := (cli.Application{
 		Stdout:      &bytes.Buffer{},
-		Stderr:      &bytes.Buffer{},
+		Stderr:      stderr,
 		Environment: []string{},
 		Collector:   collector,
 	}).Run(ctx, arguments)
 
+	// What the caller reads is stderr, so that is what the assertions read.
 	driver.exitCode = code
-	if err != nil {
-		driver.errorOutput = err.Error()
-	}
+	driver.errorOutput = stderr.String()
 }
 
 func (driver *Driver) requireMissingHealthURL() error {
-	if driver.exitCode == 0 || !strings.Contains(driver.errorOutput, "health URL") {
-		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
+	if driver.exitCode != status.CallerError ||
+		!strings.Contains(driver.errorOutput, "hippo: ["+string(status.CodeArgsInvalid)+"]") ||
+		!strings.Contains(driver.errorOutput, "health URL") {
+		return fmt.Errorf("exit=%d stderr=%q, want exit %d naming %s for the health URL",
+			driver.exitCode, driver.errorOutput, status.CallerError, status.CodeArgsInvalid)
 	}
+
 	return nil
 }
 
