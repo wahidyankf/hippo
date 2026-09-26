@@ -121,8 +121,9 @@ legitimately.
 
 The recommended schema-3 emergency floor is 6 GiB available memory. Ordinary shedding protects
 transactional work. At the emergency floor, or equivalent critical non-storage pressure,
-transactional work becomes the last eligible victim after ephemeral and service work. HIPPO records
-an `emergency-safety-stop` receipt and never auto-retries that payload.
+transactional work becomes the last eligible victim after ephemeral and service work. HIPPO writes
+a `started-safety-stop` receipt with reason `emergency-pressure`, records the lifetime outcome
+`emergency-safety-stop`, and never auto-retries that payload.
 
 ## Degraded admission on macOS
 

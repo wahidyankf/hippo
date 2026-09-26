@@ -84,15 +84,17 @@ This next command is a completely separate HIPPO process. It has no connection t
 except the shared state root.
 
 ```sh
-./hippo status --config local-tmp/tutorial.json --json --disk-path . | grep -o '"coordination":{[^}]*}[^}]*}[^}]*}[^}]*}'
+./hippo status --config local-tmp/tutorial.json --json --disk-path . | grep -o '"coordination":{[^}]*}[^}]*}[^}]*}[^}]*"source":"[^"]*"'
 ```
 
 ```console
-"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":11,"memoryBytes":30064771072},"allocated":{"cpu":2,"memoryBytes":1073741824},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":1,"waitingOwners":0,"ephemeral":1,"service":0,"transactional":0,"owners":[{"runId":"a49cd18ac284f507c229e29996dd58ae","state":"active","class":"ephemeral","profile":"balanced","source":"unlabeled","requested":{"cpu":2,"memoryBytes":1073741824}
+"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":11,"memoryBytes":30064771072},"allocated":{"cpu":2,"memoryBytes":1073741824},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":1,"waitingOwners":0,"ephemeral":1,"service":0,"transactional":0,"owners":[{"runId":"7d7f9d4609ff45eade9945e0b61d9858","state":"active","class":"ephemeral","profile":"balanced","source":"hippo"
 ```
 
 There is a lot in that line. This time it ends partway through an `owners` array, one entry per live
-owner, because the `grep` pattern stops at the fourth closing brace. Read three things:
+owner, because the `grep` pattern stops at the owner's `source`. That label is `hippo` because the
+checkout's tracked [run identity](../reference/json-schemas.md#run-identity) file names it. Read three
+things:
 
 - **`capacity`** is now populated: `11` CPU and `30064771072` bytes. That is this machine's 12-way
   parallelism minus one safety unit, and 28 GiB — its 32 GiB of memory minus the balanced profile's

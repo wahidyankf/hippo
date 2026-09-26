@@ -8,13 +8,10 @@ when_to_use: >-
 
 # Command-Line Interface Conformance Corpus
 
-`assertions.json` is the machine-readable form of the `command-line-interface` structure convention published in the
-governance catalog. One assertion per obligation, each with the invocation that exercises it, the observation that
-satisfies it, the source it rests on, and its verification status.
-
-This copy deliberately names the convention rather than linking it: the convention is not adopted into this repository
-yet, and a link to a document that is not here would be a broken link rather than a reference. When it is adopted, the
-link replaces this paragraph.
+`assertions.json` is the machine-readable form of the
+[command-line interface convention](../../../repo-governance/conventions/command-line-interface.md). One assertion per
+obligation, each with the invocation that exercises it, the observation that satisfies it, the source it rests on, and
+its verification status.
 
 ## The Copy Is Owned Locally
 

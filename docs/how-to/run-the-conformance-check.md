@@ -55,29 +55,22 @@ mid-run is a failure rather than a silent substitution.
 go run ./cmd/hippo-conformance /path/to/manifest.json
 ```
 
+The harness itself prints little: one line per passed deferral probe, one per capacity skip, and the
+closing line. Everything else on the terminal is your consumer commands' own output, interleaved
+because the four lanes run concurrently. A passing run ends with:
+
 ```console
-consumer-c bootstrap ok
-consumer-b bootstrap ok
-consumer-a bootstrap ok
-consumer-d bootstrap ok
-consumer-a overlap ok
-consumer-b gate ok
-consumer-d gate ok
-consumer-a gate ok
-consumer-c gate ok
 four-consumer conformance passed with unchanged checkouts
 ```
-
-Bootstrap output arrives out of order because the four consumer lanes run concurrently. That is
-expected.
 
 ## Understand the phases
 
 1. **Bootstrap** — sequential within one consumer, concurrent across all four lanes. Any bootstrap
    failure is aggregated deterministically and blocks later phases.
-2. **Coordination checks** — a barrier. These are where you exercise genuine cross-repository
+2. **Deferral probes** — for each consumer that declares one, see below.
+3. **Coordination checks** — a barrier. These are where you exercise genuine cross-repository
    overlap.
-3. **Gates** — concurrent across consumers, once coordination has passed.
+4. **Gates** — concurrent across consumers, once coordination has passed.
 
 Before any command runs, the harness snapshots every checkout's `HEAD` and its complete dirty-path
 set. The closing line `with unchanged checkouts` is that reconciliation passing.
@@ -96,6 +89,31 @@ session its nested work inherits.
 Every started process group must retire completely — after normal, nonzero, or cancelled leader exit
 — before its phase can finish. Cancellation prevents the next sequential command from starting,
 applies bounded TERM/KILL observation, and reconciliation then runs on a fresh deadline.
+
+## Prove a consumer retries a deferral
+
+A consumer that reads a capacity deferral as an admission would oversubscribe the host, so the
+harness can test that one contract directly. Give the consumer a `deferralRetryProbe` command:
+
+```json
+{
+  "name": "consumer-a",
+  "path": "/path/to/consumer-a",
+  "deferralRetryProbe": { "arguments": ["./probe-deferral-retry"] },
+  "gates": [{ "arguments": ["./run-gate"] }]
+}
+```
+
+The harness runs the probe with `HIPPO_ROOT` pointing at a fresh root that it holds saturated for two
+seconds, marked by a `conformance-capacity-held` file beside a `never-started` receipt in
+`conformance-never-started-receipt.json`. The probe passes only if it exits `0` after the hold
+lifts, and fails if it exits early or gives up on the deferral:
+
+```console
+consumer "consumer-a" retried a capacity deferral instead of reading it as an admission
+```
+
+A consumer without a probe is not checked for this, and nothing says so at run time.
 
 ## Allow a capacity skip
 
