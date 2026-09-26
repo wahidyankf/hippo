@@ -183,22 +183,22 @@ command's own arguments are never parsed as hippo flags.
 hippo run [flags] -- <command> [arguments...]
 ```
 
-| Flag                              | Default     | Meaning                                                                        |
-| --------------------------------- | ----------- | ------------------------------------------------------------------------------ |
-| `--class <name>`                  | `ephemeral` | Task class: `ephemeral`, `service`, or `transactional`                         |
-| `--cwd <path>`                    | unset       | Child working directory                                                        |
-| `--disk-path <path>`              | unset       | Path whose free space is measured                                              |
-| `--reserve-cpu <n>`               | `0`         | Fixed CPU reservation; `0` selects the automatic fair share                    |
-| `--reserve-memory-mib <n>`        | `0`         | Fixed memory reservation in MiB; `0` selects the automatic fair share          |
-| `--resource-tier <name>`          | unset       | `light`, `standard`, or `heavy`; required by schema 3                          |
-| `--source <label>`                | identity    | Override the discovered `hippo.identity.json` source                           |
-| `--tag <key=value>`               | identity    | Override/add a privacy-safe label; repeatable, last duplicate wins             |
-| `--concurrency-env <NAME>`        | none        | Child variable that receives resolved concurrency; repeatable                  |
-| `--wait-for-admission <duration>` | `0`         | Schema-2 FIFO deadline without a tier; refused beside a tier or under schema 3 |
-| `--lease-port <n>`                | `0`         | Service port to lease                                                          |
-| `--lease-owner <name>`            | unset       | Service port owner                                                             |
-| `--lease-min <n>`                 | `0`         | Minimum allowed leased port                                                    |
-| `--lease-max <n>`                 | `0`         | Maximum allowed leased port                                                    |
+| Flag                              | Default     | Meaning                                                                                                                       |
+| --------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--class <name>`                  | `ephemeral` | Task class: `ephemeral`, `service`, or `transactional`                                                                        |
+| `--cwd <path>`                    | unset       | Child working directory                                                                                                       |
+| `--disk-path <path>`              | unset       | Path whose free space is measured                                                                                             |
+| `--reserve-cpu <n>`               | `0`         | Fixed CPU reservation; `0` selects the automatic fair share                                                                   |
+| `--reserve-memory-mib <n>`        | `0`         | Fixed memory reservation in MiB; `0` selects the automatic fair share                                                         |
+| `--resource-tier <name>`          | unset       | `light`, `standard`, or `heavy`; required by schema 3                                                                         |
+| `--source <label>`                | identity    | Override the discovered `hippo.identity.json` source                                                                          |
+| `--tag <key=value>`               | identity    | Override/add a privacy-safe label; repeatable, last duplicate wins                                                            |
+| `--concurrency-env <NAME>`        | none        | Child variable that receives resolved concurrency; repeatable                                                                 |
+| `--wait-for-admission <duration>` | `0`         | Schema-2 FIFO deadline without a tier; refused beside a tier under schema 2 and always under schema 3; ignored under schema 1 |
+| `--lease-port <n>`                | `0`         | Service port to lease                                                                                                         |
+| `--lease-owner <name>`            | unset       | Service port owner                                                                                                            |
+| `--lease-min <n>`                 | `0`         | Minimum allowed leased port                                                                                                   |
+| `--lease-max <n>`                 | `0`         | Maximum allowed leased port                                                                                                   |
 
 The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A normal
 child exit code is passed through unchanged. Capacity waiting creates one FIFO identity and does not
@@ -298,9 +298,10 @@ $ hippo completion zsh > "${fpath[1]}/_hippo"
 
 ## Usage errors
 
-A usage mistake prints the command usage next to its diagnostic and returns exit `2`, naming
-`hippo.args.invalid`. A failure that happens after the arguments were accepted prints only the
-diagnostic, so consumer logs keep the real cause instead of a flag list.
+A usage mistake returns exit `2`, naming `hippo.args.invalid`. A mistyped invocation — an unknown
+flag or command, or a missing `--` — also prints the command usage next to its diagnostic. A value or
+combination the command rejects after parsing, and any failure after the arguments were accepted,
+print only the diagnostic, so consumer logs keep the real cause instead of a flag list.
 
 ```console
 $ hippo run --disk-path . echo hi
@@ -314,7 +315,7 @@ $ echo $?
 2
 ```
 
-Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`). Invalid mapped
+Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`, diagnostic only). Invalid mapped
 _values_ inherited from the caller's environment are not: they return `125`,
 `hippo.policy.replan-required`. The rules live in
 [Environment variables](./environment-variables.md#name-rules); see also [Exit codes](./exit-codes.md).

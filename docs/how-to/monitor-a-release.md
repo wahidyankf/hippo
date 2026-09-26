@@ -40,7 +40,7 @@ $ hippo release monitor ... --health-url http://127.0.0.1:8080/health
 hippo: [hippo.args.invalid] bare HTTPS routed origin is required for release monitoring
 ```
 
-Each is a usage mistake: it exits `2` before any sample is taken or any endpoint is probed.
+Each is a usage mistake: it prints the one diagnostic line and exits `2` before any sample is taken or any endpoint is probed.
 
 `--service-port` is repeatable and selects which listeners count toward RSS accounting.
 
