@@ -58,7 +58,7 @@ carries `capacity`, the per-class counts, every field of each owner and waiter r
 }
 ```
 
-Three questions this answers:
+Five questions this answers:
 
 - **Is anything holding capacity?** `activeOwners` and `allocated`.
 - **Is anything queued behind it?** `waitingOwners` and `waiting`.
@@ -118,6 +118,10 @@ For a same-day run, the summary file covers the whole session even after older r
 ```sh
 cat "$HIPPO_ROOT/development-transactional-1788757259105-13633.summary.json"
 ```
+
+Abridged to the fields this page reads; the real file also carries timing, platform, capability, and
+capacity fields, all listed under
+[development lifetime summary](../reference/json-schemas.md#development-lifetime-summary):
 
 ```json
 {

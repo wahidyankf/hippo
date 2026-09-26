@@ -111,7 +111,7 @@ privacy-safe `coordination` rows and totals, owner-promotion decision, and `conf
         "source": "hippo",
         "tags": { "checkout": "worktree", "plan": "maximize-hippo" },
         "tier": "standard",
-        "requested": { "cpu": 2, "memoryBytes": 3221225472 },
+        "requested": { "cpu": 4, "memoryBytes": 6442450944 },
         "allocated": { "cpu": 4, "memoryBytes": 6442450944 },
         "minimum": { "cpu": 2, "memoryBytes": 3221225472 },
         "maximum": { "cpu": 4, "memoryBytes": 6442450944 },
