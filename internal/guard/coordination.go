@@ -132,28 +132,32 @@ func acquireCoordinationProcessGate(ctx context.Context, lock *os.File, wait tim
 		}
 		coordinationProcessGates.Unlock()
 	}
+	holdGate := func() {
+		coordinationProcessGates.Lock()
+		coordinationProcessGates.held[lock] = gate
+		coordinationProcessGates.Unlock()
+	}
+	// A free gate is taken before any wait begins. A select that offered it
+	// beside an already-expired timer would choose between them at random, so
+	// a nearly spent budget could refuse a gate nobody held.
+	select {
+	case <-gate.available:
+		holdGate()
+
+		return nil
+	default:
+	}
 	if wait <= 0 {
-		select {
-		case <-gate.available:
-			coordinationProcessGates.Lock()
-			coordinationProcessGates.held[lock] = gate
-			coordinationProcessGates.Unlock()
+		releaseReference()
 
-			return nil
-		default:
-			releaseReference()
-
-			return fmt.Errorf("%w: another admission is updating the shared root", errCoordinationDeferred)
-		}
+		return fmt.Errorf("%w: another admission is updating the shared root", errCoordinationDeferred)
 	}
 
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-gate.available:
-		coordinationProcessGates.Lock()
-		coordinationProcessGates.held[lock] = gate
-		coordinationProcessGates.Unlock()
+		holdGate()
 
 		return nil
 	case <-ctx.Done():
