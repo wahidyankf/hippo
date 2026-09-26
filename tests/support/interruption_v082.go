@@ -50,6 +50,9 @@ const (
 	queuedNotice           = "HIPPO queued run="
 	interruptionTimeLimit  = time.Minute
 	interruptionConfigName = "hippo.machine.json"
+	// isolatedPath is the whole PATH a scenario that runs HIPPO in isolation
+	// hands it, so no caller tool shadows a system one.
+	isolatedPath = "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
 )
 
 // interruptionConfig is a schema-3 reservation configuration whose base owner
@@ -107,7 +110,7 @@ func signalNamed(name string) syscall.Signal {
 func (driver *Driver) interruptionEnvironment() []string {
 	return []string{
 		"HIPPO_ROOT=" + driver.interruption.root, "HOME=" + driver.interruption.root,
-		"PATH=/usr/bin:/bin:/usr/sbin:/sbin", "CHILD_MARKER=" + driver.interruption.childMarker,
+		isolatedPath, "CHILD_MARKER=" + driver.interruption.childMarker,
 	}
 }
 

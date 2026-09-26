@@ -132,7 +132,7 @@ func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
 		return usageAttempt{}, err
 	}
 	attempt := usageAttempt{arguments: arguments}
-	environment := []string{"HIPPO_ROOT=" + root, "HOME=" + root, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+	environment := []string{"HIPPO_ROOT=" + root, "HOME=" + root, isolatedPath}
 	// watch and monitor run until cancelled once they accept their arguments,
 	// so an invocation that should have been refused and was not would hang
 	// the suite. The bound turns that into an ordinary failed assertion.
