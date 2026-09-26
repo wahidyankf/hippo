@@ -113,6 +113,10 @@ const (
 	// longer read, such as a corrupt history archive. The bytes are left as
 	// they are for inspection.
 	CodeEvidenceUnreadable Code = "hippo.evidence.unreadable"
+	// CodeLeaseUnwritable is the port-lease root refusing the write that takes
+	// a port lease before launch. That root sits under the temporary
+	// directory, outside the state root, so it has a code of its own.
+	CodeLeaseUnwritable Code = "hippo.lease.unwritable"
 	// CodeSupervisionFailed is hippo losing the ability to supervise a child it
 	// had already started.
 	CodeSupervisionFailed Code = "hippo.supervision.failed"
@@ -140,6 +144,7 @@ var All = []Code{
 	CodeHostUnreadable,
 	CodeEvidenceUnwritable,
 	CodeEvidenceUnreadable,
+	CodeLeaseUnwritable,
 	CodeSupervisionFailed,
 	CodeInternalFailure,
 }
@@ -163,6 +168,7 @@ var statuses = map[Code]int{
 	CodeHostUnreadable:               GuardFailed,
 	CodeEvidenceUnwritable:           GuardFailed,
 	CodeEvidenceUnreadable:           GuardFailed,
+	CodeLeaseUnwritable:              GuardFailed,
 	CodeSupervisionFailed:            GuardFailed,
 	CodeInternalFailure:              CallerError,
 }

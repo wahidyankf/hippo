@@ -41,6 +41,10 @@ lack of permission, a read-only file system, or no space or quota, exits `125` n
 does `status` when it cannot open `coordination.lock` to read coordination. See
 [Exit codes](./exit-codes.md#error-codes).
 
+Port leases taken with `run --lease-port` are not kept in the state root. They live in
+`hippo-port-leases` under the temporary directory (`TMPDIR`, else `/tmp`), and a write refused there
+before launch names `hippo.lease.unwritable` instead.
+
 ### Evidence
 
 Development streams are named `development-<class>-<epochMillis>-<pid>`.

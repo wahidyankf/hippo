@@ -726,6 +726,11 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 			return CapacityDeferredExitCode, nil
 		}
+		if err != nil && evidence.WriteRefused(err) {
+			// Nothing has started, and the lease root is not the state root,
+			// so a refused lease write has its own reason.
+			return 1, status.Fail(status.CodeLeaseUnwritable, "acquiring the port lease: %v", err)
+		}
 		if err != nil {
 			return 1, err
 		}

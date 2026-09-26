@@ -76,6 +76,7 @@ Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] mess
 | `hippo.host.unreadable`                 | `125`  | Host evidence could not be collected                   |
 | `hippo.evidence.unwritable`             | `125`  | The evidence root refused a write HIPPO needs          |
 | `hippo.evidence.unreadable`             | `125`  | Evidence HIPPO recorded earlier can no longer be read  |
+| `hippo.lease.unwritable`                | `125`  | The port-lease root refused a write HIPPO needs        |
 | `hippo.supervision.failed`              | `125`  | HIPPO failed at a step it did not classify further     |
 | `hippo.child.not-executable`            | `126`  | The command exists and cannot be executed              |
 | `hippo.child.not-found`                 | `127`  | The command is not on `PATH` and not at the path given |
@@ -91,6 +92,11 @@ identities and session records the root keeps, and `status` opening that lock to
 A refused receipt outranks the signal that stopped a queued run, so that run exits `125` rather
 than `128+N`. Once a child has started, either failure is HIPPO losing supervision of work that
 began, and it names `hippo.supervision.failed`.
+
+`hippo.lease.unwritable` is a pre-launch reason too: the port-lease root refused the write that
+takes a `--lease-port` lease, for the same causes. That root is `hippo-port-leases` under the
+temporary directory (`TMPDIR`, else `/tmp`), outside the state root, so it has its own code: fixing
+`HIPPO_ROOT` does not clear it. Nothing was started.
 
 `error.retryable` in the body is `true` for `hippo.limit.capacity-deferred` and
 `hippo.limit.pressure-shed`, and `false` for the rest. `hippo.limit.storage-blocked` is not
@@ -179,3 +185,5 @@ v0.8.2 also made `hippo.host.unreadable` and `hippo.evidence.unwritable` reachab
 here but never returned: an unreadable host and a refused evidence root before launch named
 `hippo.supervision.failed`, and `release check` on an unreadable host exited `124` naming
 `hippo.limit.capacity-deferred`. The status is still `125` in every case but that last one.
+v0.8.2 added `hippo.lease.unwritable`: a port-lease root that refused a write before launch named
+`hippo.supervision.failed`, with the same `125`.
