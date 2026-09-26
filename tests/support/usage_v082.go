@@ -35,6 +35,8 @@ const (
 	sourceFlagName        = "--source"
 	leaseOwnerFlagName    = "--lease-owner"
 	leasePortFlagName     = "--lease-port"
+	leaseMinimumFlagName  = "--lease-min"
+	leaseMaximumFlagName  = "--lease-max"
 	waitForAdmissionFlag  = "--wait-for-admission"
 	watchCommandName      = "watch"
 	missingGuardedCommand = "/nonexistent/guarded-command"
@@ -74,14 +76,14 @@ func invalidFlagValues() [][]string {
 		append([]string{runCommandName, leasePortFlagName, "8080", leaseOwnerFlagName, leaseOwnerName}, payload...),
 		append([]string{
 			runCommandName, leasePortFlagName, "8080", leaseOwnerFlagName, "Bad Owner",
-			"--lease-min", "8000", "--lease-max", "9000",
+			leaseMinimumFlagName, "8000", leaseMaximumFlagName, "9000",
 		}, payload...),
 		append([]string{runCommandName, tagFlagName, malformedTag}, payload...),
 		append([]string{runCommandName, "--resource-tier", unknownSubcommand}, payload...),
 		append([]string{runCommandName, sourceFlagName, malformedSource}, payload...),
 		append([]string{runCommandName, waitForAdmissionFlag, "-1s"}, payload...),
-		append([]string{runCommandName, "--lease-min", "8000"}, payload...),
-		append([]string{runCommandName, "--lease-max", "9000"}, payload...),
+		append([]string{runCommandName, leaseMinimumFlagName, "8000"}, payload...),
+		append([]string{runCommandName, leaseMaximumFlagName, "9000"}, payload...),
 		append([]string{runCommandName, leaseOwnerFlagName, leaseOwnerName}, payload...),
 		{monitorCommandName, intervalFlagName, "0s"},
 		{statusCommandName, tagFlagName, malformedTag},
