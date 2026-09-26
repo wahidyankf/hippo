@@ -84,10 +84,11 @@ Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] mess
 only when nothing was started. The first is host evidence HIPPO cannot read, such as a denied
 `/proc` or `sysctl` read or a `--disk-path` it cannot inspect, and `release check` returns it instead
 of a deferral. The second is the evidence root refusing a write for lack of permission, a read-only
-file system, or no space or quota: creating the state root, recording a sample or summary, or
-writing a `never-started` receipt. A refused receipt outranks the signal that stopped a queued run,
-so that run exits `125` rather than `128+N`. Once a child has started, either failure is HIPPO
-losing supervision of work that began, and it names `hippo.supervision.failed`.
+file system, or no space or quota: creating the state root, recording a sample or summary,
+writing a `never-started` receipt, or joining coordination through the lock, ledger, reservation
+identities and session records the state root keeps. A refused receipt outranks the signal that
+stopped a queued run, so that run exits `125` rather than `128+N`. Once a child has started, either
+failure is HIPPO losing supervision of work that began, and it names `hippo.supervision.failed`.
 
 `error.retryable` in the body is `true` for `hippo.limit.capacity-deferred` and
 `hippo.limit.pressure-shed`, and `false` for the rest. `hippo.limit.storage-blocked` is not

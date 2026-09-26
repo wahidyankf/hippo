@@ -35,6 +35,10 @@ read the documented raw samples and summaries instead — see [JSON schemas](./j
 `reservations.json` and `coordination-mode.json` exist only while an epoch is live. An idle root
 legitimately has neither.
 
+A `run` that cannot write any of these before its child starts, for lack of permission, a read-only
+file system, or no space or quota, exits `125` naming `hippo.evidence.unwritable`, as it does for
+the evidence files below. See [Exit codes](./exit-codes.md#error-codes).
+
 ### Evidence
 
 Development streams are named `development-<class>-<epochMillis>-<pid>`.

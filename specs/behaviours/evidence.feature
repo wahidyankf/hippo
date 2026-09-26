@@ -25,6 +25,17 @@ Feature: Bounded runtime evidence
     When a guarded run is requested with that state root
     Then it exits 125 naming hippo.evidence.unwritable and no child starts
 
+  Scenario Outline: A refused coordination write stops a run before launch
+    Given a state root whose <coordination state> refuses writes
+    When a guarded run is requested with that state root
+    Then it exits 125 naming hippo.evidence.unwritable and no child starts
+
+    Examples:
+      | coordination state             |
+      | coordination lock              |
+      | reservation identity directory |
+      | session directory              |
+
   Scenario: A refused never-started receipt is reported rather than hidden by the signal
     Given a queued run whose receipt directory refuses writes
     When the queued run receives SIGINT before it is admitted
