@@ -7,7 +7,7 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
 - On `main`, synced with `origin/main`, in a worktree like any other work. A release is not a reason to prefer one checkout over another, and "synced" means reconciled by the [integration path](../conventions/integration-path.md), not assumed.
 - The working tree is clean **including untracked files**. `scripts/build-release.sh` verifies this itself and refuses otherwise.
 - `scripts/test.sh` — the full gate — passes.
-- A [docs quality gate](docs-quality-gate.md) run with scope `all` passes, so `CHANGELOG.md`, `README.md`, and `docs/` are true to the binary being cut.
+- A [docs quality gate](docs-quality-gate.md) run with scope `all` ends `pass` — two consecutive clear audits — so `CHANGELOG.md`, `README.md`, and `docs/` are true to the binary being cut.
 - The tag name and the notes the release will publish pass the screen in [data safety](../conventions/public-repository-data-safety.md). `release.yml` generates those notes from merged pull requests, so screen the text `gh api repos/<owner>/<repo>/releases/generate-notes -f tag_name=<version> --jq .body` returns before tagging.
 - The cut is [authorized](../conventions/commit-authorization.md).
 

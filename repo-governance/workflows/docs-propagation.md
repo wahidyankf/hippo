@@ -2,7 +2,7 @@
 
 Carrying one change into every human-facing document it affects, in one bounded pass: stale facts corrected, obsolete documents removed, each fact kept in its one home, and the result readable by someone new to the repository.
 
-Apply it automatically before committing any change that alters what a document's reader relies on, when a document is added, moved, or deleted, or when an explicitly requested [docs quality gate](docs-quality-gate.md) hands over findings. No separate request is needed; whoever makes the change runs it as part of the work. Edits made inside one run do not start another.
+Apply it automatically before committing any change that alters what a document's reader relies on, when a document is added, moved, or deleted, or when an audit of an explicitly requested [docs quality gate](docs-quality-gate.md) hands over findings. No separate request is needed; whoever makes the change runs it as part of the work. Edits made inside one run do not start another; the gate's own loop decides whether to audit again.
 
 Propagation is the sole writer of documents. The gate finds; only this workflow edits, so every document edit is made in one bounded place.
 
