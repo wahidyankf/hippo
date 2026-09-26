@@ -110,8 +110,8 @@ A live coordination check can legitimately fail on a host too small to reproduce
 }
 ```
 
-Exit `124` is recorded as an explicit capacity skip only when the command emits the documented
-`HIPPO deferred task: safe admission was not reached.` diagnostic and creates a new schema-1 safety
+Exit `124` is recorded as an explicit capacity skip only when the command emits the
+`hippo: [hippo.limit.capacity-deferred]` diagnostic and creates a new schema-1 safety
 receipt whose state is `never-started`. Bare `124`, a diagnostic without that receipt, a protocol
 mismatch, every other exit code, and every consumer-gate failure remain failures.
 

@@ -543,14 +543,14 @@ func TestCompiledConformanceCapacitySkipDoesNotHideIntegrity(t *testing.T) {
 			name: "pinned_binary_tamper",
 			command: `mkdir -p "$HIPPO_ROOT/receipts"; printf '%s\n' '{"schemaVersion":1,"state":"never-started"}' > "$HIPPO_ROOT/receipts/integrity.json"; ` +
 				`directory=$(dirname "$HIPPO_BIN"); chmod 700 "$directory" "$HIPPO_BIN"; ` +
-				`printf '#!/bin/sh\nexit 9\n' > "$HIPPO_BIN"; printf 'HIPPO deferred task: safe admission was not reached.\n' >&2; exit 75`,
+				`printf '#!/bin/sh\nexit 9\n' > "$HIPPO_BIN"; printf 'hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter\n' >&2; exit 124`,
 		},
 		{
 			name: "verified_cleanup_failure", requiredOutput: "verified HIPPO binary cleanup failed",
 			command: `mkdir -p "$HIPPO_ROOT/receipts"; printf '%s\n' '{"schemaVersion":1,"state":"never-started"}' > "$HIPPO_ROOT/receipts/integrity.json"; ` +
 				`directory=$(dirname "$HIPPO_BIN"); chmod 700 "$directory"; rm -f "$HIPPO_BIN"; ` +
 				`rmdir "$directory"; ln -s "$1-missing-target" "$directory"; ` +
-				`printf 'HIPPO deferred task: safe admission was not reached.\n' >&2; exit 75`,
+				`printf 'hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter\n' >&2; exit 124`,
 		},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -593,7 +593,7 @@ func TestCompiledConformanceProtocolMismatchIsNotCapacitySkip(t *testing.T) {
 	gateMarker := filepath.Join(root, "later-gate-started")
 	manifest.CoordinationChecks = []conformance.Check{{
 		Consumer: manifest.Consumers[0].Name, AllowCapacitySkip: true,
-		Command: conformance.Command{Arguments: []string{"/bin/sh", "-c", "exit 76"}},
+		Command: conformance.Command{Arguments: []string{"/bin/sh", "-c", "printf 'hippo: [hippo.coordination.protocol-mismatch] live peer coordination state this client cannot safely join\\n' >&2; exit 125"}},
 	}}
 	manifest.Consumers[0].Gates = []conformance.Command{{Arguments: []string{
 		"/bin/sh", "-c", `printf started > "$1"`, "conformance", gateMarker,
@@ -626,7 +626,7 @@ func TestCompiledConformanceCapacitySkipRequiresNewNeverStartedReceipt(t *testin
 				t.Fatal(err)
 			}
 			manifest, manifestPath := compiledConformanceManifest(t, root, hippoBinary)
-			script := `printf 'HIPPO deferred task: safe admission was not reached.\n' >&2; exit 75`
+			script := `printf 'hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter\n' >&2; exit 124`
 			if testCase.writeReceipt {
 				script = `mkdir -p "$HIPPO_ROOT/receipts"; printf '%s\n' '{"schemaVersion":1,"state":"never-started"}' > "$HIPPO_ROOT/receipts/conformance.json"; ` + script
 			}

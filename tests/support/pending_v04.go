@@ -987,7 +987,7 @@ func (driver *Driver) requirePendingConformanceV04() error {
 		{
 			Consumer: manifest.Consumers[1].Name,
 			Command: conformance.Command{Arguments: []string{
-				shellPath, "-c", "mkdir -p \"$HIPPO_ROOT/receipts\"; printf '%s\\n' '{\"schemaVersion\":1,\"state\":\"never-started\"}' > \"$HIPPO_ROOT/receipts/conformance.json\"; printf 'HIPPO deferred task: safe admission was not reached.\\n' >&2; exit 75",
+				shellPath, "-c", "mkdir -p \"$HIPPO_ROOT/receipts\"; printf '%s\\n' '{\"schemaVersion\":1,\"state\":\"never-started\"}' > \"$HIPPO_ROOT/receipts/conformance.json\"; printf 'hippo: [hippo.limit.capacity-deferred] capacity deferred this work; retry when the host is quieter\\n' >&2; exit 124",
 			}},
 			AllowCapacitySkip: true,
 		},

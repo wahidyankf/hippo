@@ -424,7 +424,7 @@ func (driver *Driver) conformanceBindings() []contract.StepBinding { //nolint:fu
 		step(`^one gate pauses after verification while another gate overwrites their provided HIPPO binary$`, prepare("parallel pinned conformance binary", requireV04ParallelPinnedBinary)),
 		step(`^the paused gate invokes its already-verified binary path$`, driver.exerciseReservationScenarioV04),
 		step(`^only verified bytes execute and the replacement attempt remains observable$`, assert("parallel pinned conformance binary")),
-		step(`^an allow-capacity-skip coordination check that returns exit 75 with a new never-started receipt after (pinned binary tamper|verified cleanup failure)$`, func(failure string) error {
+		step(`^an allow-capacity-skip coordination check that returns exit 124 with a new never-started receipt after (pinned binary tamper|verified cleanup failure)$`, func(failure string) error {
 			return driver.prepareReservationScenarioV04("capacity skip integrity", func(string) error {
 				return requireV04CapacitySkipIntegrity(failure)
 			})
@@ -434,10 +434,10 @@ func (driver *Driver) conformanceBindings() []contract.StepBinding { //nolint:fu
 		step(`^a consumer whose declared probe waits for capacity to free$`, func() error {
 			return driver.declareDeferralProbe(probeWaitsForCapacity)
 		}),
-		step(`^a consumer whose declared probe treats a verified never-started exit 75 as final$`, func() error {
+		step(`^a consumer whose declared probe treats a verified never-started exit 124 as final$`, func() error {
 			return driver.declareDeferralProbe(probeTreatsDeferralAsFinal)
 		}),
-		step(`^an allow-capacity-skip consumer whose coordination check exits 76$`, prepare("conformance protocol mismatch", requireV10ConformanceProtocolMismatch)),
+		step(`^an allow-capacity-skip consumer whose coordination check exits 125$`, prepare("conformance protocol mismatch", requireV10ConformanceProtocolMismatch)),
 		step(`^conformance classifies the protocol mismatch$`, driver.exerciseReservationScenarioV04),
 		step(`^conformance keeps the mismatch fatal and does not run later gates$`, assert("conformance protocol mismatch")),
 		step(`^a consumer whose declared probe never consults HIPPO$`, func() error {

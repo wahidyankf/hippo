@@ -18,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 const (
@@ -27,12 +29,16 @@ const (
 	// and reaping the group, including descendants it reparents first. That
 	// latency belongs to the host, not to the grace a cooperating child is
 	// given, so it gets its own window.
-	commandReapGrace           = 2 * time.Second
-	commandGroupPoll           = 5 * time.Millisecond
-	reconciliationLimit        = 5 * time.Second
-	commandCancelled           = "cancelled"
-	commandReapTimedOut        = "force-stop reap timed out"
-	capacityDeferralDiagnostic = "HIPPO deferred task: safe admission was not reached."
+	commandReapGrace    = 2 * time.Second
+	commandGroupPoll    = 5 * time.Millisecond
+	reconciliationLimit = 5 * time.Second
+	commandCancelled    = "cancelled"
+	commandReapTimedOut = "force-stop reap timed out"
+	// capacityDeferralDiagnostic is the closed reason a capacity deferral
+	// names on stderr. The reason, not a progress sentence, is the contract a
+	// consumer matches. It alone does not prove nothing started: the
+	// never-started receipt cleanCapacitySkip also requires does that.
+	capacityDeferralDiagnostic = "hippo: [" + string(status.CodeLimitCapacityDeferred) + "]"
 	maximumReceiptBytes        = 64 * 1024
 )
 
@@ -655,7 +661,7 @@ func cleanCapacitySkip(err error, output []byte, verifiedNeverStartedReceipt boo
 	}
 	failure, ok := err.(*commandError) //nolint:errorlint // Capacity skip intentionally rejects wrapped or joined errors.
 
-	return ok && failure.category == "exited" && failure.exitCode == 75 && failure.cause == nil &&
+	return ok && failure.category == "exited" && failure.exitCode == status.LimitShed && failure.cause == nil &&
 		bytes.Contains(output, []byte(capacityDeferralDiagnostic)) && verifiedNeverStartedReceipt
 }
 
@@ -903,7 +909,7 @@ var neverStartedReceiptDocument = []byte("{\"schemaVersion\":1,\"state\":\"never
 //
 // The probe root is saturated before the command starts and freed only after
 // deferralProbeHold, so success is unreachable until capacity frees. A consumer
-// that treats 75 as final exits immediately and fails here. The elapsed check
+// that treats 124 as final exits immediately and fails here. The elapsed check
 // closes the other hole: a probe that never went through admission at all would
 // otherwise pass by exiting zero straight away.
 func verifyDeferralRetry(
@@ -961,7 +967,7 @@ func verifyDeferralRetry(
 
 	if executeError != nil {
 		return fmt.Errorf(
-			"consumer %q did not survive a capacity deferral, so it would read exit 75 as an admission: %w",
+			"consumer %q did not survive a capacity deferral, so it would read exit 124 as an admission: %w",
 			consumer.Name,
 			executeError,
 		)
@@ -1095,7 +1101,7 @@ func executeManifestCommands(
 		return err
 	}
 	// Probe the deferral contract before the coordination checks, because a
-	// consumer that misreads exit 75 makes every later overlap result untrustworthy.
+	// consumer that misreads exit 124 makes every later overlap result untrustworthy.
 	for _, consumer := range manifest.Consumers {
 		if err := verifyDeferralRetry(ctx, consumer, environment, output, identity); err != nil {
 			return err

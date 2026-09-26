@@ -133,7 +133,7 @@ Feature: Generic consumer conformance
 
   @e2e-exempt
   Scenario Outline: Capacity skip never hides verified-binary integrity failures
-    Given an allow-capacity-skip coordination check that returns exit 75 with a new never-started receipt after <integrity_failure>
+    Given an allow-capacity-skip coordination check that returns exit 124 with a new never-started receipt after <integrity_failure>
     When conformance classifies the joined coordination outcome
     Then the integrity failure remains fatal and private instead of being skipped
 
@@ -197,13 +197,13 @@ Feature: Generic consumer conformance
 
   @e2e-exempt
   Scenario: A consumer that reads a capacity deferral as final fails its probe
-    Given a consumer whose declared probe treats a verified never-started exit 75 as final
+    Given a consumer whose declared probe treats a verified never-started exit 124 as final
     When conformance saturates that consumer's probe root before running it
     Then conformance rejects it rather than trusting any later overlap result
 
   @e2e-exempt
   Scenario: A protocol mismatch cannot pass as a capacity skip
-    Given an allow-capacity-skip consumer whose coordination check exits 76
+    Given an allow-capacity-skip consumer whose coordination check exits 125
     When conformance classifies the protocol mismatch
     Then conformance keeps the mismatch fatal and does not run later gates
 

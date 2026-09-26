@@ -243,7 +243,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Completed commands retire background descendants before reconciliation", Boundary: consumerHarnessBoundary, Reason: "requires controlled zero and nonzero leaders with private late-writing descendants"},
 		{Scenario: "A consumer cannot replace its provided verified HIPPO binary between commands", Boundary: consumerHarnessBoundary, Reason: "requires deliberate mutation of private per-command executable storage"},
 		{Scenario: "Concurrent consumers cannot replace a previously verified HIPPO binary", Boundary: consumerHarnessBoundary, Reason: "requires synchronized private gate processes and executable replacement"},
-		{Scenario: "Capacity skip never hides verified-binary integrity failures", Boundary: consumerHarnessBoundary, Reason: "requires a synthetic exit 75 joined with private executable integrity and cleanup faults"},
+		{Scenario: "Capacity skip never hides verified-binary integrity failures", Boundary: consumerHarnessBoundary, Reason: "requires a synthetic exit 124 joined with private executable integrity and cleanup faults"},
 		{Scenario: "A protocol mismatch cannot pass as a capacity skip", Boundary: consumerHarnessBoundary, Reason: "requires an allow-capacity-skip manifest with a synthetic protocol-mismatch command"},
 		{Scenario: "Conformance setup filesystem errors remain private", Boundary: consumerHarnessBoundary, Reason: "requires unavailable private manifest and shared-root filesystem paths"},
 		{Scenario: "HIPPO protocol names cannot be consumer concurrency mappings", Boundary: processControlBoundary, Reason: "requires deterministic reservation mapping validation before isolated child execution"},

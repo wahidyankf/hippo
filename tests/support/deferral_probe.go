@@ -23,7 +23,7 @@ import (
 const (
 	probeWaitsForCapacity      = `while [ -f "$HIPPO_ROOT/conformance-capacity-held" ]; do sleep 0.05; done`
 	probeTreatsDeferralAsFinal = `if [ -f "$HIPPO_ROOT/conformance-capacity-held" ] && ` +
-		`grep -q '"state":"never-started"' "$HIPPO_ROOT/conformance-never-started-receipt.json"; then exit 75; fi`
+		`grep -q '"state":"never-started"' "$HIPPO_ROOT/conformance-never-started-receipt.json"; then exit 124; fi`
 	probeNeverConsultsHIPPO = `exit 0`
 )
 
@@ -118,9 +118,9 @@ func (driver *Driver) requireDeferralProbeAccepted() error {
 
 func (driver *Driver) requireDeferralProbeRejectedForSurrender() error {
 	if driver.deferralProbeError == nil {
-		return errors.New("a consumer that read exit 75 as final was accepted")
+		return errors.New("a consumer that read exit 124 as final was accepted")
 	}
-	if !strings.Contains(driver.deferralProbeError.Error(), "would read exit 75 as an admission") {
+	if !strings.Contains(driver.deferralProbeError.Error(), "would read exit 124 as an admission") {
 		return fmt.Errorf("rejected for the wrong reason: %w", driver.deferralProbeError)
 	}
 
