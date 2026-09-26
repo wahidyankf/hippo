@@ -145,32 +145,44 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
     and the `public-safety-tree`, `format-staged`, `public-safety-message`, and `commit-message` hooks passed. The
     branch was rebased onto `main` twice before its first push, as the shell static-analysis and fixture-identifier
     plans landed; only the stage indexes conflicted, and `shell-lint` passed on the edited gate script.
-- [ ] `[AI]` Push and open the pull request as a draft with a screened body recording every RED and GREEN;
+- [x] `[AI]` Push and open the pull request as a draft with a screened body recording every RED and GREEN;
       acceptance: the draft exists at the pushed head. `[AC-05]`
+  - Result: the pre-push gate passed, `shell-lint` included; draft pull request #72 opened at `ce8ce7e` after the
+    outbound preflight reported the title and body clean.
 
 ### Phase 2 Gate
 
-- [ ] `[AI]` Read the pull-request quality gate on the pushed head; acceptance: every check passes. `[AC-04]` `[AC-05]`
+- [x] `[AI]` Read the pull-request quality gate on the pushed head; acceptance: every check passes. `[AC-04]` `[AC-05]`
+  - Result: all seven checks passed on `ce8ce7e`, `Quality gate` included, on both `ubuntu-24.04` and `macos-15`.
 
 > **Pause Safety**: the draft is green. Safe to stop. To resume: `gh pr checks` on the draft, no faster than every three
 > minutes.
 
 ## Phase 3: Execution Review and Knowledge Capture
 
-- [ ] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-05 and record its verdict;
+- [x] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-05 and record its verdict;
       acceptance: `PASS`. `[AC-05]`
-- [ ] `[AI]` Route every `learnings.md` entry to one durable owner or discard it with a reason, filing code follow-ups
+  - Result: `PASS`; see [the record](evidence/execution-check.md).
+- [x] `[AI]` Route every `learnings.md` entry to one durable owner or discard it with a reason, filing code follow-ups
       as backlog plans; acceptance: no unresolved entry remains. `[AC-05]`
+  - Result: L1 promoted to a code comment, L2 to the quick gate, L3 and L4 discarded with reasons; no follow-up plan
+    was needed.
 
 ### Phase 3 Gate
 
-- [ ] `[AI]` Confirm no product, specification, or public-contract path changed; acceptance: the review permits
+- [x] `[AI]` Confirm no product, specification, or public-contract path changed; acceptance: the review permits
       archival. `[AC-05]`
+  - Result: outside `plans/`, only `tests/` and `scripts/test-quick.sh` changed; nothing under `cmd/`, `internal/`, or
+    `specs/`. The review permits archival.
 
 > **Pause Safety**: substantive work is terminal. Safe to stop. To resume: `git log --oneline origin/main..HEAD`.
 
 ## Plan Archival
 
-- [ ] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__isolate-test-coordination-state/` with the completion date and
+- [x] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__isolate-test-coordination-state/` with the completion date and
       update both stage indexes; acceptance: one done copy exists. `[AC-05]`
-- [ ] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance: no rule fails and the gate exits `0`. `[AC-05]`
+  - Result: moved with `git mv` to `plans/done/2026-09-26__isolate-test-coordination-state/`, after confirming the
+    destination did not exist; the in-progress index is empty again and the done index lists the plan.
+- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance: no rule fails and the gate exits `0`. `[AC-05]`
+  - Result: 0 structural findings; the internal-link and directory-map checks reported no findings; the quick gate
+    exited `0` with `./tests/support` in it.

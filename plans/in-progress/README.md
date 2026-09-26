@@ -8,5 +8,4 @@ Work finishes only when every required outcome, acceptance condition, verificati
 
 ## Directory Map
 
-- [Isolate test coordination state](isolate-test-coordination-state/README.md) keeps inherited `HIPPO_*` variables and
-  the shared evidence root away from the binary under test.
+This stage holds no plan folder, so this README has no siblings to map.

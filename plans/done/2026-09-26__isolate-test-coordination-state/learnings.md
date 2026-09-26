@@ -26,3 +26,14 @@ and ran once requeued unchanged.
 
 **Disposition:** discarded as the product working. A never-started deferral is requeued as the public contract says; no
 rule or test is missing.
+
+## L4 — One empty run root outlived its run
+
+After the guarded runs, one empty `hippo-root-*` directory remained in the temporary directory, created during the
+guarded end-to-end GREEN; every other run removed its root. `RunIsolated` removes the root after `m.Run` returns, so a
+test process that ends first — by a signal, or an `os.Exit` inside a test — leaves it behind. Which process did so was
+not established.
+
+**Disposition:** discarded as bounded. The leftover is an empty directory in the operating system's temporary
+directory, which the system reclaims; it holds no coordination state, and a failed removal is already reported rather
+than failed, as the helper's comment says. It was removed with `rmdir`.
