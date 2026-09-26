@@ -149,7 +149,7 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		step(`^cancellation returns boundedly while reservation and port competitors remain deferred until later retirement and then admit$`, assert("bounded cancellation retirement")),
 		step(`^selected reserved owners for storage and non-storage pressure whose KILL waits remain unconfirmed$`, prepare("bounded shedding retirement", requireV04BoundedGuardShedding)),
 		step(`^each owning guard performs bounded shedding$`, driver.exerciseReservationScenarioV04),
-		step(`^each returns exit 124 naming its storage or non-storage limit respectively while reservation and port competitors defer until retirement and then admit$`, assert("bounded shedding retirement")),
+		step(`^each returns exit 124 naming hippo\.limit\.storage-blocked or hippo\.limit\.pressure-shed respectively while reservation and port competitors defer until retirement and then admit$`, assert("bounded shedding retirement")),
 		step(`^a guarded child holding a real leased port through a kernel lifetime identity$`, prepare("port supervisor lifetime", requireV04PortSupervisorLifetime)),
 		step(`^only its HIPPO supervisor is killed$`, driver.exerciseReservationScenarioV04),
 		step(`^a competitor cannot reclaim the port until the child group exits$`, assert("port supervisor lifetime")),
@@ -578,10 +578,10 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^the child is signalled once and force-stopped within the grace$`, driver.requireForceStopped),
 		step(`^an admitted ephemeral child encounters critical pressure$`, driver.criticalChild),
 		step(`^the guard observes the critical sample$`, driver.observeCritical),
-		step(`^the guard terminates its child and exits with code 124$`, driver.requireShed),
+		step(`^the guard terminates its child and exits with code 124 naming hippo\.limit\.pressure-shed$`, driver.requireShed),
 		step(`^an admitted degraded ephemeral child encounters growing compressor pressure$`, driver.degradedGrowthChild),
 		step(`^the guard observes warning through the grace$`, driver.observeDegradedWarning),
-		step(`^the degraded child starts and is terminated with exit 124$`, driver.requireDegradedShed),
+		step(`^the degraded child starts and is terminated with exit 124 naming hippo\.limit\.pressure-shed$`, driver.requireDegradedShed),
 		step(`^a service port already leased by a live owner$`, func() error {
 			return driver.prepareReservationScenarioV04("held service port", requireV04HeldPortDefersContender)
 		}),

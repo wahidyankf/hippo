@@ -22,7 +22,14 @@ const (
 	// StorageBlockedExitCode indicates cleanup is required before retrying.
 	StorageBlockedExitCode = 73
 	// CapacityDeferredExitCode indicates transient pressure that should be retried.
+	// It is also the shed cause the reservation ledger records for pressure
+	// other than storage.
 	CapacityDeferredExitCode = 75
+	// PressureShedExitCode reports a started child shed under host pressure
+	// other than storage. Like the others it never leaves the process: the
+	// command-line boundary turns it into 124 naming hippo.limit.pressure-shed,
+	// so a shed is never mistaken for a deferral that started nothing.
+	PressureShedExitCode     = 74
 	outcomeTaskFailed        = "task-failed"
 	outcomeSupervisionFailed = "supervision-failed"
 	outcomeEmergencyStop     = "emergency-safety-stop"
@@ -912,7 +919,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 						))
 					}
 
-					return selectedExit, stopError
+					return callerShedCode(selectedExit), stopError
 				}
 			}
 			reading, collectError := config.Collector.Collect(ctx, previous, config.DiskPath)
@@ -1050,10 +1057,22 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					))
 				}
 
-				return shedCode, stopError
+				return callerShedCode(shedCode), stopError
 			}
 		}
 	}
+}
+
+// callerShedCode turns the shed cause the ledger records into the status the
+// guard returns for a child it stopped. Storage keeps its own status; any
+// other pressure is a shed, not the capacity deferral the ledger shares a code
+// with.
+func callerShedCode(shedCode int) int {
+	if shedCode == CapacityDeferredExitCode {
+		return PressureShedExitCode
+	}
+
+	return shedCode
 }
 
 func executableGuardPath() string {

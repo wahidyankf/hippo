@@ -113,13 +113,13 @@ Feature: Guarded process execution
   Scenario: Critical pressure sheds eligible work
     Given an admitted ephemeral child encounters critical pressure
     When the guard observes the critical sample
-    Then the guard terminates its child and exits with code 124
+    Then the guard terminates its child and exits with code 124 naming hippo.limit.pressure-shed
 
   @e2e-exempt
   Scenario: Worsening warning sheds degraded work
     Given an admitted degraded ephemeral child encounters growing compressor pressure
     When the guard observes warning through the grace
-    Then the degraded child starts and is terminated with exit 124
+    Then the degraded child starts and is terminated with exit 124 naming hippo.limit.pressure-shed
 
   @e2e-exempt
   Scenario: A single registered waiter rides out exhausted capacity

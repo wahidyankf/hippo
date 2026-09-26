@@ -520,8 +520,12 @@ func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
 	}
 	run := <-result
 	finished = true
-	if (run.err != nil || run.code != selectedExit) && driver.v04Error == nil {
-		driver.v04Error = fmt.Errorf("owner-side shedding exit=%d want=%d error=%w", run.code, selectedExit, run.err)
+	want := selectedExit
+	if want == guard.CapacityDeferredExitCode {
+		want = guard.PressureShedExitCode // The ledger records the cause; the caller is told it was shed.
+	}
+	if (run.err != nil || run.code != want) && driver.v04Error == nil {
+		driver.v04Error = fmt.Errorf("owner-side shedding exit=%d want=%d error=%w", run.code, want, run.err)
 	}
 	if _, statError := os.Stat(marker); statError != nil && driver.v04Error == nil {
 		driver.v04Error = fmt.Errorf("owning guard did not deliver TERM before bounded KILL: %w", statError)
