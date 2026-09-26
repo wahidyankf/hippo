@@ -118,8 +118,7 @@ privacy-safe `coordination` rows and totals, owner-promotion decision, and `conf
         "registeredAt": "2026-09-17T04:01:00Z",
         "deadline": "2026-09-17T05:31:00Z"
       }
-    ],
-    "waiters": []
+    ]
   },
   "promotion": {
     "eligible": false,

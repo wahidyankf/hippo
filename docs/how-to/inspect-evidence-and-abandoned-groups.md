@@ -9,8 +9,53 @@ find out why.
 hippo status --json --disk-path . | jq '{coordination, promotion}'
 ```
 
+With two owners and one waiter, the output looks like this. It is abridged: the real output also
+carries `capacity`, the per-class counts, every field of each owner and waiter row, and the rest of
+`promotion`.
+
 ```console
-{"coordination":{"schemaVersion":5,"mode":"reservation","activeOwners":1,"waitingOwners":7,"owners":[{"runId":"21e8...","source":"hippo","tier":"standard"}],"waiters":[{"runId":"31ad...","position":1,"source":"rhino","tier":"heavy"}]},"promotion":{"baseOwners":2,"maximumOwners":3,"effectiveOwners":2,"reason":"insufficient-overlap-runs"}}
+{
+  "coordination": {
+    "schemaVersion": 5,
+    "mode": "reservation",
+    "allocated": {
+      "cpu": 6,
+      "memoryBytes": 8589934592
+    },
+    "waiting": {
+      "cpu": 4,
+      "memoryBytes": 8589934592
+    },
+    "activeOwners": 2,
+    "waitingOwners": 1,
+    "owners": [
+      {
+        "runId": "a161efd79fbf2947e02cc76b1f84f865",
+        "source": "hippo",
+        "tier": "standard"
+      },
+      {
+        "runId": "e58306df9d9abcc729f132fc1a19b081",
+        "source": "hippo",
+        "tier": "light"
+      }
+    ],
+    "waiters": [
+      {
+        "runId": "fb5b47c58a0287aee14ca7c310499cd0",
+        "position": 1,
+        "source": "my-repo",
+        "tier": "heavy"
+      }
+    ]
+  },
+  "promotion": {
+    "reason": "insufficient-overlap-runs",
+    "baseOwners": 2,
+    "maximumOwners": 3,
+    "effectiveOwners": 2
+  }
+}
 ```
 
 Three questions this answers:
@@ -33,9 +78,15 @@ waiting task to start at once.
 Evidence lives under the state root — `~/Library/Application Support/hippo` on macOS,
 `${XDG_STATE_HOME:-$HOME/.local/state}/hippo` on Linux, or wherever `HIPPO_ROOT` points.
 
+If `HIPPO_ROOT` is not set in your shell, set it to that root first.
+
 ```sh
-ls "${HIPPO_ROOT:-$HOME/Library/Application Support/hippo}"
+ls -1A "$HIPPO_ROOT"
 ```
+
+The listing below is illustrative. Your stream names carry your own timestamps and process IDs, and
+some directories appear only later, as [Shared state root](../reference/state-root.md#evidence)
+explains.
 
 ```console
 .writers.lock
@@ -47,10 +98,7 @@ development-service-1788757256450-12687.summary.json
 development-transactional-1788757259105-13633.jsonl
 development-transactional-1788757259105-13633.summary.json
 reservation-identities
-owner-metadata
-raw
-history
-receipts
+sessions
 ```
 
 Streams are named `development-<class>-<epochMillis>-<pid>`.
@@ -68,7 +116,7 @@ hippo history --since 30d --resource-tier heavy --outcome pressure-shed --json
 For a same-day run, the summary file covers the whole session even after older raw chunks rotated.
 
 ```sh
-cat "${HIPPO_ROOT:-$HOME/Library/Application Support/hippo}/development-transactional-1788757259105-13633.summary.json"
+cat "$HIPPO_ROOT/development-transactional-1788757259105-13633.summary.json"
 ```
 
 ```json

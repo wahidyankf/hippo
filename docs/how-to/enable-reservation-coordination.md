@@ -28,8 +28,9 @@ Confirm it took effect:
 "mode":"reservation"
 ```
 
-If you are invoking a release binary rather than the bootstrap, point at the file explicitly with
-`--config`, or export `HIPPO_CONFIG`.
+A release binary started directly, rather than through the bootstrap, loads `hippo.local.json` from
+its current directory only. To use the file from anywhere else, point at it with `--config` or
+export `HIPPO_CONFIG`. See [Configuration](../reference/configuration.md#precedence).
 
 ## Migrate a host that is still in exclusive mode
 

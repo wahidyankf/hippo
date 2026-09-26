@@ -50,24 +50,25 @@ Development streams are named `development-<class>-<epochMillis>-<pid>`.
 | `history/YYYY-MM-DD.jsonl.gz`           | Daily-compacted queryable summary rows                     |
 | `receipts/*.json`                       | Never-started and started safety/failure receipts          |
 
-An idle root after a few guarded runs looks like this:
+An idle root after three same-day guarded runs in exclusive mode, one per class, looks like this:
 
 ```console
-$ ls "$HIPPO_ROOT"
+$ ls -1A "$HIPPO_ROOT"
 .writers.lock
 coordination.lock
-development-ephemeral-1788757253723-12070.jsonl
-development-ephemeral-1788757253723-12070.summary.json
-development-service-1788757256450-12687.jsonl
-development-service-1788757256450-12687.summary.json
-development-transactional-1788757259105-13633.jsonl
-development-transactional-1788757259105-13633.summary.json
+development-ephemeral-1790407212123-33551.jsonl
+development-ephemeral-1790407212123-33551.summary.json
+development-service-1790407214289-34312.jsonl
+development-service-1790407214289-34312.summary.json
+development-transactional-1790407216441-34983.jsonl
+development-transactional-1790407216441-34983.summary.json
 reservation-identities
-owner-metadata
-raw
-history
-receipts
+sessions
 ```
+
+The other directories appear only once something writes them: `owner-metadata/` when reservation
+mode admits an owner, `receipts/` when a receipt is written, and `raw/` and `history/` when a
+previous day's completed streams are compacted.
 
 ## Evidence budget
 
