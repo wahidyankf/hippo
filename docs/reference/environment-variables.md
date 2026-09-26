@@ -22,6 +22,14 @@ Both sets are fixed: HIPPO compiles in no build-tool or product-specific names.
 | `XDG_STATE_HOME`         | Linux only, when `HIPPO_ROOT` is unset: picks the default state root, and so the shared ledger HIPPO joins. See [State root](./state-root.md#location). |
 | `HOME`                   | When `HIPPO_ROOT` is unset: the base of the default state root. See [State root](./state-root.md#location).                                             |
 
+### Test builds only
+
+A build that carries the repository's test identity, `v0.0.0-test`, which the repository's own test
+harness stamps at build time, also reads `HIPPO_TEST_LINUX_EVIDENCE_ROOT`. When it names an absolute
+directory, the Linux collector reads `/proc` and `/sys/fs/cgroup` evidence beneath it instead of from
+the live host. Compiled end-to-end runs use it to sample a fixed idle host rather than the runner's
+load. A release build carries its tag and a plain `go build` carries `dev`, so neither reads it.
+
 Configuration precedence, strongest first: `--config`, then `HIPPO_CONFIG`, then
 `HIPPO_DEFAULT_CONFIG`, then `hippo.local.json` in the current directory. See
 [Configuration](./configuration.md#precedence).

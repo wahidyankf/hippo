@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,6 +24,28 @@ var Version = "dev"
 
 // Commit is replaced by release builds through ldflags.
 var Commit = "unknown"
+
+// testBuildVersion is the identity only the repository's own test builds
+// stamp through ldflags. A release build carries its tag and a plain build
+// carries "dev", so neither can take it by accident.
+const testBuildVersion = "v0.0.0-test"
+
+// linuxEvidenceRootEnvironment names a directory whose proc and sys trees a
+// test build reads in place of the live host's, so a compiled end-to-end run
+// samples fixed Linux evidence instead of the runner's load. Only a build
+// carrying testBuildVersion honours it, and only for an absolute path.
+const linuxEvidenceRootEnvironment = "HIPPO_TEST_LINUX_EVIDENCE_ROOT"
+
+// defaultCollector samples the live host, except in a test build given an
+// absolute Linux evidence root.
+func defaultCollector(version string, environment []string) host.SystemCollector {
+	root := environmentMap(environment)[linuxEvidenceRootEnvironment]
+	if version != testBuildVersion || !filepath.IsAbs(root) {
+		return host.SystemCollector{}
+	}
+
+	return host.SystemCollector{ReadFile: host.RootedFileReader(root)}
+}
 
 // Application supplies the command's injectable host and I/O dependencies.
 type Application struct {
@@ -96,9 +119,6 @@ func (application Application) defaults() Application {
 		application.Environment = os.Environ()
 	}
 
-	if application.Collector == nil {
-		application.Collector = host.SystemCollector{}
-	}
 	if application.MonitorRelease == nil {
 		application.MonitorRelease = releaseguard.RunMonitor
 	}
@@ -112,6 +132,9 @@ func (application Application) defaults() Application {
 	}
 	if application.Commit == "" {
 		application.Commit = Commit
+	}
+	if application.Collector == nil {
+		application.Collector = defaultCollector(application.Version, application.Environment)
 	}
 
 	return application
