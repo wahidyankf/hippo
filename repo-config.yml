@@ -293,6 +293,12 @@ gates:
         pull-request:
           bind:
             message: { source: explicit-range, range: explicit }
+    - id: shell-lint
+      type: check
+      command:
+        executable: sh
+        args: [{ literal: scripts/shell-lint.sh }]
+      run-on: { pre-push: {}, pull-request: {}, main: {} }
     - id: quick
       type: check
       command:

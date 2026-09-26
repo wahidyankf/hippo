@@ -105,22 +105,42 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 ## Phase 2: Clean, Then Gate
 
-- [ ] `[AI]` **RED**: add `scripts/shell-files.sh` and `scripts/shell-lint.sh`; run `scripts/shell-lint.sh`;
+- [x] `[AI]` **RED**: add `scripts/shell-files.sh` and `scripts/shell-lint.sh`; run `scripts/shell-lint.sh`;
       acceptance: it exits non-zero with the 14 findings the README table records. `[AC-02]` `[AC-04]`
-- [ ] `[AI]` **GREEN**: apply the SC1007, SC2115, and SC2148 fixes from `tech-docs.md`; run `scripts/shell-lint.sh`;
+  - Result: exit `1` with exactly 14 lines — SC2148 on the three hooks, SC1007 at `hippo:4`,
+    `scripts/build-release.sh:18,55`, and line 4 of `check-worktree-layout.sh`, `format-check.sh`, `test-loaded.sh`,
+    `test-quick.sh`, `test.sh`, `tests/artifacts/run.sh`, and `tests/e2e/run.sh`, and
+    `hippo:107:14: warning: Use "${var:?}" to ensure this never expands to / . [SC2115]`. The list names 39 files once
+    the new scripts are tracked.
+- [x] `[AI]` **GREEN**: apply the SC1007, SC2115, and SC2148 fixes from `tech-docs.md`; run `scripts/shell-lint.sh`;
       acceptance: exit `0`. `[AC-02]`
-- [ ] `[AI]` **REFACTOR**: point `scripts/format-check.sh` at `scripts/shell-files.sh`; run
+  - Result: exit `0` with no output. `CDPATH= cd` became `CDPATH='' cd` in ten places, `hippo:107` guards its prefix
+    with `${platform_cache:?}`, and each hook starts with `# shellcheck shell=sh`.
+- [x] `[AI]` **REFACTOR**: point `scripts/format-check.sh` at `scripts/shell-files.sh`; run
       `./scripts/format-check.sh`; acceptance: exit `0`, and `ferret` is now among the formatter's inputs. `[AC-04]`
-- [ ] `[AI]` **RED** (mutation): revert `hippo:107` to the unguarded form, run `scripts/shell-lint.sh`, record the
+  - Result: exit `0`. Both scripts read the list into positional parameters the same way, so neither word-splits
+    it. A deliberate mis-indent in `ferret` then made `./scripts/format-check.sh` exit `1` with a `shfmt` diff for
+    `ferret`, which the old directory arguments never covered; restoring it cleared the diff.
+- [x] `[AI]` **RED** (mutation): revert `hippo:107` to the unguarded form, run `scripts/shell-lint.sh`, record the
       SC2115 output here, then restore the fix; acceptance: the mutation fails naming `hippo` and SC2115, and the
       restored tree exits `0`. `[AC-03]`
-- [ ] `[AI]` Add the `shell-lint` entry to `repo-config.yml` on `pre-push`, `pull-request`, and `main`; run
+  - Result: the unguarded line made `scripts/shell-lint.sh` exit `1` with
+    `hippo:107:14: warning: Use "${var:?}" to ensure this never expands to / . [SC2115]`; the restored line exits `0`.
+- [x] `[AI]` Add the `shell-lint` entry to `repo-config.yml` on `pre-push`, `pull-request`, and `main`; run
       `./rhino repo-config validate` and `./rhino gate run --surface pre-push`; acceptance: both exit `0` and the
       pre-push run lists `shell-lint`. `[AC-05]`
+  - Result: `repo-config validate` and `gate validate` report no findings; `gate list` places `shell-lint` on
+    `pre-push`, `pull-request`, and `main`. The pre-push surface, fed one simulated push update on standard input as
+    the hook does, passed all nine gates, `shell-lint` second.
 
 ### Phase 2 Gate
 
-- [ ] `[AI]` Run `npm test`; acceptance: exit `0`, proving every fixed script still behaves. `[AC-02]` `[AC-05]`
+- [x] `[AI]` Run `npm test`; acceptance: exit `0`, proving every fixed script still behaves. `[AC-02]` `[AC-05]`
+  - Result: the first run exited `1` in four end-to-end scenarios with `hippo.args.invalid` "schema 3 requires
+    --resource-tier", because the executing shell exported a workstation `HIPPO_CONFIG` into the binary under test —
+    the leak the [isolate test coordination state](../../backlog/isolate-test-coordination-state/README.md) plan owns,
+    unrelated to this change. With that one variable unset, `npm test` exited `0`: quick, integration, end-to-end,
+    race, and `govulncheck` (0 reachable vulnerabilities).
 
 > **Pause Safety**: the repository is clean and the gate is registered. Safe to stop. To resume:
 > `scripts/shell-lint.sh`.
