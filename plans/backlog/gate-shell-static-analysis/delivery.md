@@ -32,8 +32,11 @@ One branch and pull request deliver one outcome: shell static analysis is a gate
 because a gate turned on before the clean-up fails every push, and a clean-up without the gate decays. Rollback reverts
 the delivery commits together.
 
-The worktree-to-PR workflow owns commit, push, draft, exact-head quality, leak review, rebase merge, main
-reconciliation, and cleanup. Fix every gate failure at its cause; never bypass a hook.
+The archival commit rides in the same pull request as the delivery, by the owner's decision of 2026-09-26, so the
+branch that merges carries the finished record. The worktree-to-PR workflow owns push, draft, exact-head quality, leak
+review, rebase merge, main reconciliation, and the worktree and branch clean-up; their evidence is the pull request
+itself — its `Quality gate` check, its leak-review record, and its merge commit — because every one of them post-dates
+the archived copy of this checklist. Fix every gate failure at its cause; never bypass a hook.
 
 ## Phase 0: Environment Setup and Baseline
 
@@ -95,25 +98,24 @@ reconciliation, and cleanup. Fix every gate failure at its cause; never bypass a
 
 ## Phase 3: Rules, Documentation, and Delivery
 
-- [ ] `[AI]` Apply rules propagation to the adapter change, then update `repository-adapter.md` (shell row, deviation
-      row, pins) and `quality-gates.md`; record the propagation result here; acceptance: no document still describes
-      static analysis as a gap. `[AC-05]`
+- [ ] `[AI]` Apply rules propagation to the adapter change, then update `repository-adapter.md` (shell row, interpreter
+      and static-analysis rows, pins) and `quality-gates.md`; record the propagation result here; acceptance: no
+      document still describes static analysis as a gap, and the interpreter row names every Bash script. `[AC-05]`
 - [ ] `[AI]` Run docs propagation and record whether `CHANGELOG.md` needs an entry for the `hippo` byte change;
       acceptance: the decision is recorded. `[AC-05]`
 - [ ] `[AI]` Run `npm run test:quick`; acceptance: exit `0`. `[AC-02]` `[AC-05]`
 - [ ] `[AI]` Inspect the diff and the proposed commit and PR text against data safety, then commit thematically;
       acceptance: hooks pass, including the new `shell-lint` on push. `[AC-05]`
-- [ ] `[AI]` Push, open the pull request as a draft with a screened body carrying the RED, mutation, and GREEN outputs,
-      then mark it ready; acceptance: the `repository-contract` job runs `shell-lint` on the exact head. `[AC-05]`
-- [ ] `[AI]` Post one exact-head leak review and rebase-merge once every merge precondition holds, then reconcile
-      primary `main`; acceptance: `git rev-list --left-right --count main...origin/main` prints `0 0`. `[AC-05]`
+- [ ] `[AI]` Replay the pull-request surface the `repository-contract` job runs, with
+      `./rhino gate run --surface pull-request --base origin/main --head HEAD`; acceptance: exit `0`, and the run lists
+      `shell-lint`. `[AC-05]`
 
 ### Phase 3 Gate
 
 - [ ] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-05 and record its verdict;
       acceptance: `PASS`. `[AC-05]`
 
-> **Pause Safety**: the gate is live on `main`. Safe to stop. To resume: `scripts/shell-lint.sh`.
+> **Pause Safety**: the gate is committed on the branch. Safe to stop. To resume: `scripts/shell-lint.sh`.
 
 ## Phase 4: Knowledge Capture
 
@@ -131,7 +133,5 @@ reconciliation, and cleanup. Fix every gate failure at its cause; never bypass a
 - [ ] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__gate-shell-static-analysis/` with the completion date and update
       both stage indexes; acceptance: one done copy exists. `[AC-05]`
 - [ ] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance: no rule fails and the gate exits `0`. `[AC-05]`
-- [ ] `[AI]` Deliver the archival commit through its own pull request under the same merge preconditions; acceptance:
-      GitHub reports it merged. `[AC-05]`
-- [ ] `[AI]` Run dev artifact clean-up; acceptance: the worktree and both branch copies are absent and `main` equals
-      `origin/main`. `[AC-05]`
+- [ ] `[AI]` Commit the archival move onto the delivery branch; acceptance: the commit is on the head the pull request
+      will merge, and publication, merge, and clean-up proceed under the Delivery Unit above. `[AC-05]`

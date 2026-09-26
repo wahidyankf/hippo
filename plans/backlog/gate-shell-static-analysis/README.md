@@ -40,8 +40,11 @@ Rejected alternatives:
 
 ## Decision Gate Record
 
-- Filed on 2026-09-26 as a knowledge-capture follow-up. No owner gate has been held; activation needs the owner's
-  approval of the decision above.
+- Filed on 2026-09-26 as a knowledge-capture follow-up.
+- 2026-09-26: the owner approved the decision above and directed execution now, with the plan archived in the same pull
+  request as the delivery rather than in a second one.
+- 2026-09-26: the plan quality gate returned `PASS_WITH_FINDINGS`; the four findings were repaired in one cycle. See
+  [the verdict](evidence/plan-quality-gate.md).
 
 ## Scope
 
@@ -71,3 +74,4 @@ another language, and changes to `shfmt` settings.
 - [Technical design](tech-docs.md)
 - [Delivery checklist](delivery.md)
 - [Execution learnings](learnings.md)
+- [Evidence](evidence/README.md) holds the recorded verdicts and gate outputs.
