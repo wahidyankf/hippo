@@ -56,6 +56,7 @@ Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] mess
 | `hippo.coordination.protocol-mismatch` | `125`  | Live peer state this client cannot safely join         |
 | `hippo.host.unreadable`                | `125`  | Host evidence could not be collected                   |
 | `hippo.evidence.unwritable`            | `125`  | The evidence root refused a write HIPPO needs          |
+| `hippo.evidence.unreadable`            | `125`  | Evidence HIPPO recorded earlier can no longer be read  |
 | `hippo.supervision.failed`             | `125`  | HIPPO failed at a step it did not classify further     |
 | `hippo.child.not-executable`           | `126`  | The command exists and cannot be executed              |
 | `hippo.child.not-found`                | `127`  | The command is not on `PATH` and not at the path given |

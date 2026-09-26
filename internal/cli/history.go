@@ -45,7 +45,7 @@ func (application Application) history(options historyOptions) (int, error) {
 		Class: options.taskClass, Tier: options.resourceTier, Outcome: options.outcome,
 	})
 	if err != nil {
-		return 0, status.Fail(status.CodeEvidenceUnwritable, "reading run history: %v", err)
+		return 0, status.Fail(status.CodeEvidenceUnreadable, "reading run history: %v", err)
 	}
 	// An empty history is an answer, and `1` is how this contract says a run
 	// completed with nothing to report. A caller scripting against it can tell

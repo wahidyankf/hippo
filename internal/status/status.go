@@ -92,6 +92,10 @@ const (
 	// CodeEvidenceUnwritable is the evidence root refusing a write hippo needs
 	// to make before it can admit work.
 	CodeEvidenceUnwritable Code = "hippo.evidence.unwritable"
+	// CodeEvidenceUnreadable is evidence hippo recorded earlier that it can no
+	// longer read, such as a corrupt history archive. The bytes are left as
+	// they are for inspection.
+	CodeEvidenceUnreadable Code = "hippo.evidence.unreadable"
 	// CodeSupervisionFailed is hippo losing the ability to supervise a child it
 	// had already started.
 	CodeSupervisionFailed Code = "hippo.supervision.failed"
@@ -116,6 +120,7 @@ var All = []Code{
 	CodeChildNotExecutable,
 	CodeHostUnreadable,
 	CodeEvidenceUnwritable,
+	CodeEvidenceUnreadable,
 	CodeSupervisionFailed,
 	CodeInternalFailure,
 }
@@ -136,6 +141,7 @@ var statuses = map[Code]int{
 	CodeChildNotExecutable:           ChildNotExecutable,
 	CodeHostUnreadable:               GuardFailed,
 	CodeEvidenceUnwritable:           GuardFailed,
+	CodeEvidenceUnreadable:           GuardFailed,
 	CodeSupervisionFailed:            GuardFailed,
 	CodeInternalFailure:              CallerError,
 }

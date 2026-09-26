@@ -12,6 +12,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 type stableCollector struct {
@@ -99,5 +100,33 @@ func TestWatchEmitsOnlyChangedStatusSnapshots(t *testing.T) {
 	if err != nil || code != 0 || strings.Count(strings.TrimSpace(output.String()), "\n") != 0 ||
 		!strings.Contains(output.String(), `"schemaVersion":5`) {
 		t.Fatalf("code=%d output=%q sleeps=%d error=%v", code, output.String(), sleeps, err)
+	}
+}
+
+func TestHistoryReportsAnUnreadableArchiveAsUnreadable(t *testing.T) {
+	// Reading the evidence root and writing to it fail for different reasons
+	// and are fixed differently, so a corrupt archive must not be reported as
+	// a refused write.
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "history"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "history", "2026-09-16.jsonl.gz"), []byte("not gzip"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	stderr := &bytes.Buffer{}
+	application := Application{
+		Stdout: &bytes.Buffer{}, Stderr: stderr,
+		Environment: []string{"HIPPO_ROOT=" + root}, Now: func() time.Time { return now },
+	}
+	code, _ := application.Run(context.Background(), []string{"history", "--since", "30d"})
+	if code != status.GuardFailed {
+		t.Fatalf("exit %d, want %d: %q", code, status.GuardFailed, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "hippo: [hippo.evidence.unreadable] reading run history:") {
+		t.Fatalf("an unreadable archive was not reported as hippo.evidence.unreadable: %q", stderr.String())
 	}
 }
