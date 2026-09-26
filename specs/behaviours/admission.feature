@@ -60,3 +60,20 @@ Feature: Resource-aware admission
     Given a strict transactional task that does not fit its requested profile
     When development admission is assessed
     Then admission requires replanning with exit 125 naming hippo.policy.replan-required
+
+  Scenario Outline: Unreadable host evidence names its own reason
+    Given host evidence that HIPPO cannot read
+    When <command> is requested against that host
+    Then it exits 125 naming hippo.host.unreadable and no child starts
+
+    Examples:
+      | command       |
+      | status        |
+      | run           |
+      | release check |
+
+  @e2e-exempt
+  Scenario: A host lost after launch stays a supervision failure
+    Given an admitted child whose host evidence becomes unreadable while it runs
+    When the guard samples the host after launch
+    Then it exits 125 naming hippo.supervision.failed after the child started

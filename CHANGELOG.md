@@ -117,6 +117,21 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   failed when the caller had cancelled work that never began. A caller that branched on `125` here
   should branch on `128+N` and, as before, read the `never-started` receipt before requeueing once.
   A run whose child had started still passes the child's own status through.
+- Host evidence HIPPO cannot read before launch now names `hippo.host.unreadable`, still exit
+  `125`: a denied `/proc` or `sysctl` read, a failed memory or process probe, or a `--disk-path` it
+  cannot inspect. `status` and `run` named `hippo.supervision.failed`, and `release check` exited
+  `124` naming `hippo.limit.capacity-deferred`, which sent a caller to retry into the same
+  unreadable host. The reference listed the code, but nothing returned it. A caller that retried
+  `release check` on `124` should treat `125` as a host to repair, not a host to wait for.
+- An evidence root that refuses a write before launch now names `hippo.evidence.unwritable`, still
+  exit `125`: a state root HIPPO cannot create, or a sample, summary or `never-started` receipt it
+  cannot write for lack of permission, a read-only file system, or no space or quota. These named
+  `hippo.supervision.failed`, which the reference listed but nothing returned. A caller matching
+  `supervision.failed` for them should match the new code; nothing was started. After launch both
+  failures still name `hippo.supervision.failed`, because the work may have begun.
+- A queued `run` stopped by a signal whose `never-started` receipt is refused now exits `125`
+  naming `hippo.evidence.unwritable` instead of `130` or `143`. The receipt is what a caller reads
+  before requeueing, so reporting only the signal would hide that it is missing.
 
 ### Fixed
 

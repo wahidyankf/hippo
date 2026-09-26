@@ -84,8 +84,8 @@ func applyDarwinSwap(sample *policy.Sample, output []byte, err error) {
 	}
 }
 
-// Collect gathers one macOS reading while treating compressor and swap as capabilities.
-func (collector SystemCollector) Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
+// collect gathers one macOS reading while treating compressor and swap as capabilities.
+func (collector SystemCollector) collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
 	if err := ctx.Err(); err != nil {
 		return Reading{}, err
 	}

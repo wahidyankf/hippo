@@ -1,11 +1,17 @@
 package unit_test
 
 import (
+	"context"
+	"errors"
+	"io/fs"
 	"math"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/wahidyankf/hippo/internal/host"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 func TestMacOSMetricParsers(t *testing.T) {
@@ -76,5 +82,49 @@ func TestCPUParsersAndEvidenceRoot(t *testing.T) {
 
 	if root := host.DefaultEvidenceRoot(map[string]string{"HIPPO_ROOT": "/generic/root"}); root != "/generic/root" {
 		t.Fatalf("unexpected root %q", root)
+	}
+}
+
+// refusedHostProbe is a host file or probe the operating system will not let
+// hippo read, the way an unreadable /proc entry or a denied sysctl fails.
+func refusedHostProbe(path string) error {
+	return &fs.PathError{Op: "open", Path: path, Err: syscall.EACCES}
+}
+
+func TestUnreadableHostEvidenceNamesItsReason(t *testing.T) {
+	// A host hippo cannot read leaves it nothing to admit against. That is its
+	// own published reason, not a supervision failure, and a caller's stop that
+	// cut a probe short is not an unreadable host.
+	collector := host.SystemCollector{
+		ReadFile: func(path string) ([]byte, error) { return nil, refusedHostProbe(path) },
+		Run: func(_ context.Context, name string, _ ...string) ([]byte, error) {
+			return nil, refusedHostProbe(name)
+		},
+	}
+	_, err := collector.Collect(context.Background(), nil, t.TempDir())
+	failure, classified := errors.AsType[status.Failure](err)
+	if !classified || failure.Code != status.CodeHostUnreadable || failure.Status() != status.GuardFailed {
+		t.Fatalf("unreadable host evidence reported %v, want %s", err, status.CodeHostUnreadable)
+	}
+	if !strings.HasPrefix(failure.Message, "collecting host evidence: ") {
+		t.Fatalf("the reason does not say what could not be read: %q", failure.Message)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stopping := host.SystemCollector{
+		ReadFile: func(path string) ([]byte, error) {
+			cancel()
+
+			return nil, refusedHostProbe(path)
+		},
+		Run: func(_ context.Context, name string, _ ...string) ([]byte, error) {
+			cancel()
+
+			return nil, refusedHostProbe(name)
+		},
+	}
+	_, err = stopping.Collect(ctx, nil, t.TempDir())
+	if _, classified = errors.AsType[status.Failure](err); classified || !errors.Is(err, context.Canceled) {
+		t.Fatalf("a probe cut short by cancellation reported %v, want the cancellation", err)
 	}
 }

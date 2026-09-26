@@ -29,6 +29,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.portabilityBindings(),
 		driver.conformanceBindings(),
 		driver.interruptionBindings(),
+		driver.refusalBindings(),
 	)
 }
 

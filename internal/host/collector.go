@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 type (
@@ -28,6 +29,24 @@ type SystemCollector struct {
 	Run      CommandRunner
 	ReadFile FileReader
 	Now      func() time.Time
+}
+
+// Collect gathers one reading of this host. Evidence the host will not give
+// up -- an unreadable kernel file, a probe that fails, a measured path that
+// cannot be statted -- names hippo.host.unreadable, because a guard with no
+// reading has nothing to admit against. A collection the caller's
+// cancellation cut short is that cancellation, not an unreadable host, so it
+// comes back as the context's own error.
+func (collector SystemCollector) Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
+	reading, err := collector.collect(ctx, previous, diskPath)
+	if err == nil {
+		return reading, nil
+	}
+	if cancelled := ctx.Err(); cancelled != nil {
+		return Reading{}, cancelled
+	}
+
+	return Reading{}, status.Fail(status.CodeHostUnreadable, "collecting host evidence: %v", err)
 }
 
 var (

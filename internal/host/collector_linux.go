@@ -44,8 +44,8 @@ func linuxMemoryPressure(read FileReader, cgroup string) (*float64, *float64, in
 	return some, full, pressureLevel
 }
 
-// Collect gathers one Linux reading from procfs, cgroup v2, PSI, and statfs.
-func (collector SystemCollector) Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
+// collect gathers one Linux reading from procfs, cgroup v2, PSI, and statfs.
+func (collector SystemCollector) collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
 	if err := ctx.Err(); err != nil {
 		return Reading{}, err
 	}
