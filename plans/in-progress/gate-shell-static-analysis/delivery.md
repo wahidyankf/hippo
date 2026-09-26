@@ -76,19 +76,30 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 ## Phase 1: Pinned Analyser
 
-- [ ] `[AI]` **RED**: add `tests/artifacts/shellcheck-pin.sh` asserting that `scripts/shellcheck.sh` exits `125`
+- [x] `[AI]` **RED**: add `tests/artifacts/shellcheck-pin.sh` asserting that `scripts/shellcheck.sh` exits `125`
       against a pin whose digest does not match and against a platform the pin omits, and call it from
       `tests/artifacts/run.sh`; run `./tests/artifacts/run.sh`; acceptance: it fails because the wrapper does not
       exist. `[AC-01]`
-- [ ] `[AI]` **GREEN**: add `shellcheck.lock` and `scripts/shellcheck.sh` as `tech-docs.md` specifies; run
+  - Result: exit `1`, from the test's own setup:
+    `cp: …/scripts/shellcheck.sh: No such file or directory`. The test copies the wrapper into a scratch tree, plants a
+    stand-in analyser that records being executed, pins every supported platform to a digest the cached archive lacks,
+    and then pins a version with no platform at all.
+- [x] `[AI]` **GREEN**: add `shellcheck.lock` and `scripts/shellcheck.sh` as `tech-docs.md` specifies; run
       `./tests/artifacts/run.sh` and `scripts/shellcheck.sh --version`; acceptance: the refusal cases pass and the
       version matches the pin. `[AC-01]`
-- [ ] `[AI]` **REFACTOR**: align the wrapper's comments and refusal messages with `ferret`; run
+  - Result: `./tests/artifacts/run.sh` exits `0`, both refusals exiting `125` with the stand-in never run; the first
+    `scripts/shellcheck.sh --version` fetched, verified, and reported `version: 0.11.0`, and a cached run takes about
+    0.2 s.
+- [x] `[AI]` **REFACTOR**: align the wrapper's comments and refusal messages with `ferret`; run
       `go tool shfmt -d scripts/shellcheck.sh tests/artifacts/shellcheck-pin.sh`; acceptance: no diff. `[AC-01]`
+  - Result: the header, the `[shellcheck]` refusal prefix, and the lock parser already follow `ferret` and `rhino`, so
+    no edit was needed; `shfmt -d` prints nothing, and the pinned ShellCheck reports nothing on either file at any
+    severity.
 
 ### Phase 1 Gate
 
-- [ ] `[AI]` Run `./tests/artifacts/run.sh`; acceptance: exit `0`. `[AC-01]`
+- [x] `[AI]` Run `./tests/artifacts/run.sh`; acceptance: exit `0`. `[AC-01]`
+  - Result: exit `0`.
 
 > **Pause Safety**: the pin verifies. Safe to stop. To resume: `./tests/artifacts/run.sh`.
 
