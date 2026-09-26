@@ -1240,7 +1240,7 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 			if receiptError := writeSafetyReceipt(
 				root, value, "never-started", "admission-deadline", options.Metadata, class, current,
 			); receiptError != nil {
-				return nil, receiptError
+				return nil, refusedEvidenceWrite("writing the never-started receipt", receiptError)
 			}
 			return nil, ErrReservationDeferred
 		}
@@ -1261,7 +1261,7 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 			if receiptError := writeSafetyReceipt(
 				root, value, "never-started", "admission-cancelled", options.Metadata, class, now(),
 			); receiptError != nil {
-				return nil, errors.Join(err, receiptError)
+				return nil, errors.Join(err, refusedEvidenceWrite("writing the never-started receipt", receiptError))
 			}
 			return nil, err
 		}

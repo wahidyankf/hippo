@@ -23,9 +23,10 @@ import (
 	"github.com/wahidyankf/hippo/tests/contract"
 )
 
-// interruptionScenario is the state the signal scenarios share: which
-// observer is under test, the isolated root, the reservation holders that
-// keep a run queued, and whether a release capture finished before exiting.
+// interruptionScenario is the state the signal and refusal scenarios share:
+// which observer is under test, the isolated root, the reservation holders
+// that keep a run queued, and whether a release capture finished before
+// exiting.
 type interruptionScenario struct {
 	command         string
 	root            string
@@ -33,6 +34,10 @@ type interruptionScenario struct {
 	childMarker     string
 	holders         []*guard.Session
 	captureFinished bool
+	// diskPath is the measured path when it differs from root, and locked
+	// holds the directories a refusal scenario made read-only.
+	diskPath string
+	locked   []string
 }
 
 const (

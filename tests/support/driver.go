@@ -318,6 +318,10 @@ func (driver *Driver) cleanup() {
 		_ = guard.ReleaseReservation(driver.interruption.root, holder)
 	}
 	driver.interruption.holders = nil
+	for _, path := range driver.interruption.locked {
+		_ = os.Chmod(path, 0o700)
+	}
+	driver.interruption.locked = nil
 	for _, writer := range driver.evidenceWriters {
 		_ = writer.Close()
 	}

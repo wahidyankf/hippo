@@ -3,6 +3,7 @@ package evidence
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -182,6 +183,15 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error { //nol
 	}
 
 	return nil
+}
+
+// WriteRefused reports whether err is the evidence root refusing a write:
+// permission denied, a read-only file system, or no space or quota left. Those
+// are fixed on the root, not by retrying, and are distinct from evidence that
+// was written earlier and can no longer be read.
+func WriteRefused(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EROFS) ||
+		errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT)
 }
 
 // Cleanup removes expired evidence and prunes inactive files to the global cap.

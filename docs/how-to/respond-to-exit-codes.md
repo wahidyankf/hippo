@@ -133,8 +133,21 @@ hippo: [hippo.identity.invalid] run identity file hippo.identity.json is invalid
 
 Retrying any of these produces the same answer. The request, the configuration, or the identity file has to change.
 
+**`hippo.host.unreadable`** — HIPPO could not read the host evidence it admits against: a denied
+`/proc` or `sysctl` read, a failed memory or process probe, or a `--disk-path` it cannot inspect.
+Nothing was started. Check the path you passed and the permissions of the process running HIPPO;
+retrying unchanged reads the same host. `release check` names it too, rather than deferring, because
+a host HIPPO cannot read is not a busy host.
+
+**`hippo.evidence.unwritable`** — the evidence root refused a write HIPPO needs before launch: the
+state root cannot be created, or a sample, summary or `never-started` receipt cannot be written for
+lack of permission, a read-only file system, or no space or quota. Nothing was started. Fix
+`HIPPO_ROOT` or free its volume. A queued run stopped by a signal whose receipt is refused ends here
+too, not with `128+N`, because the receipt you read before requeueing is missing.
+
 **`hippo.supervision.failed`** — HIPPO failed at a step it does not classify further, possibly after
-the child started. When the shared coordination lock stays held past the two-second activation
+the child started. A host or evidence root that fails after the child started lands here, not under
+the two reasons above, because the work may have begun. When the shared coordination lock stays held past the two-second activation
 window, HIPPO stops the child it just launched and writes a `started-activation-failure` receipt.
 Read `receipts/` before running the payload again: the work may have begun — see
 [How to inspect evidence](./inspect-evidence-and-abandoned-groups.md).

@@ -465,6 +465,28 @@ func resolveActivationFailure(
 	return failure.Status(), failure
 }
 
+// refusedEvidenceWrite names a write the evidence root refused before any child
+// started with its published reason, so the caller fixes the root rather than
+// reading a supervision failure. Any other failure keeps its own shape.
+func refusedEvidenceWrite(action string, err error) error {
+	if err == nil || !evidence.WriteRefused(err) {
+		return err
+	}
+
+	return status.Fail(status.CodeEvidenceUnwritable, "%s: %v", action, err)
+}
+
+// lostAfterLaunch keeps a failure after the child started the supervision
+// failure it is. The reasons for an unreadable host or a refused evidence
+// write say that nothing was started, and here something was.
+func lostAfterLaunch(err error) error {
+	if failure, classified := errors.AsType[status.Failure](err); classified {
+		return errors.New(failure.Message)
+	}
+
+	return err
+}
+
 // noteDeferralf reports why admission was deferred. The run returns after this
 // notice; callers use the recorded receipt to decide whether a later retry is
 // safe instead of blindly replaying a 124 naming hippo.limit.capacity-deferred.
@@ -541,7 +563,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 
 	if err := evidence.Cleanup(config.EvidenceRoot, config.Now()); err != nil {
-		return 1, err
+		return 1, refusedEvidenceWrite("preparing the evidence root", err)
 	}
 
 	var session *Session
@@ -736,7 +758,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		config.EvidenceLimits,
 	)
 	if err != nil {
-		return 1, err
+		return 1, refusedEvidenceWrite("opening the evidence stream", err)
 	}
 
 	writer.SetIdentity(config.ReservationMetadata)
@@ -757,7 +779,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		writer.SetReservationContext(session, totals.ActiveOwners, "admitted")
 	}
 	outcome := "capacity-deferred"
-	finalized := false
+	launched, finalized := false, false
 	finalize := func() error { //nolint:contextcheck // Evidence finalization deliberately uses the bounded ownership lifecycle, not caller cancellation.
 		if finalized {
 			return nil
@@ -783,6 +805,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	defer func() {
 		if finalizeError := finalize(); returnError == nil && finalizeError != nil {
 			returnError = finalizeError
+			if !launched {
+				returnError = refusedEvidenceWrite("recording the lifetime summary", finalizeError)
+			}
 			exitCode = 1
 		}
 	}()
@@ -800,7 +825,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			config.ReservationMetadata, config.TaskClass, config.Now(),
 		)
 
-		return 1, errors.Join(cause, receiptError)
+		return 1, errors.Join(cause, refusedEvidenceWrite("writing the never-started receipt", receiptError))
 	}
 
 	for {
@@ -820,7 +845,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		previous = reading.CPUState
 		samples = append(samples, reading.Sample)
 		if appendError := writer.Append(reading.Sample); appendError != nil {
-			return 1, appendError
+			return 1, refusedEvidenceWrite("recording a host sample", appendError)
 		}
 
 		assessment := policy.ResourceAssessment(samples, config.Policy)
@@ -865,7 +890,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			config.EvidenceRoot, writer.summary.RunID, "never-started", "host-admission",
 			config.ReservationMetadata, config.TaskClass, config.Now(),
 		); receiptError != nil {
-			return 1, receiptError
+			return 1, refusedEvidenceWrite("writing the never-started receipt", receiptError)
 		}
 
 		return CapacityDeferredExitCode, nil
@@ -879,6 +904,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 		return 1, launchError
 	}
+	launched = true
 	ownershipRetired = false
 	stopLifetime := func() (error, error) {
 		waitError, stopError := stopConfiguredLifetime(config, lifetime)
@@ -965,7 +991,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				outcome = outcomeSupervisionFailed
 				_, stopError := stopLifetime()
 
-				return 1, errors.Join(collectError, stopError)
+				return 1, errors.Join(lostAfterLaunch(collectError), stopError)
 			}
 
 			previous = reading.CPUState
