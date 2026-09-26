@@ -17,6 +17,10 @@ scripts/format-check.sh                   hands the same list to shfmt -d
 - `scripts/shellcheck.sh` follows the verify-before-execute contract in `ferret`: Bash, `set -euo pipefail`, cache
   under the ignored `/.cache/`, re-digest on every run, publish by atomic rename, and exit `125` on a malformed pin, a
   digest mismatch, or an unpinned platform.
+- The cache keeps the verified release archive, not only the executable. Every run re-digests that archive against the
+  pin and re-derives the executable from it, so a cached archive whose digest differs is refused with `125` rather than
+  silently replaced: something changed it, and a fresh download would hide that. `SHELLCHECK_INSTALL_CACHE` redirects
+  the cache for tests without weakening any check, as `RHINO_INSTALL_CACHE` does.
 - `scripts/shell-files.sh` prints the list once, NUL-free and sorted, so `format-check.sh` and `shell-lint.sh` cannot
   drift; `ferret` joins the `shfmt` input as a consequence.
 - Fixes: `CDPATH= cd` becomes `CDPATH='' cd` (SC1007); `hippo:107` becomes `rm -rf -- "${platform_cache:?}/$candidate"`
