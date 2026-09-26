@@ -1,6 +1,6 @@
 # Gate Shell Static Analysis
 
-Status: Backlog
+Status: In progress
 
 ## Context
 

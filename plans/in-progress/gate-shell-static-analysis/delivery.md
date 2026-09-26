@@ -40,18 +40,36 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 ## Phase 0: Environment Setup and Baseline
 
-- [ ] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at
+- [x] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at
       `origin/main` and `git status --porcelain` is empty. `[AC-05]`
-- [ ] `[AI]` Run `npm run test:quick`; acceptance: the baseline exits `0`. `[AC-02]`
-- [ ] `[AI]` Move the plan to `plans/in-progress/gate-shell-static-analysis/` with `git mv` and update both stage
+  - Result (2026-09-26): registered once at `837ad5f` on `worktree/gate-shell-static-analysis`; `npm ci` installed
+    the hooks and the status was empty.
+- [x] `[AI]` Run `npm run test:quick`; acceptance: the baseline exits `0`. `[AC-02]`
+  - Result: exit `0` at `837ad5f`, with the selected core coverage at 99.07%.
+- [x] `[AI]` Move the plan to `plans/in-progress/gate-shell-static-analysis/` with `git mv` and update both stage
       indexes; acceptance: only the in-progress index links it. `[AC-05]`
-- [ ] `[AI]` Confirm the current ShellCheck release, its per-platform asset names, and their SHA-256 digests from the
+  - Result: moved after the quality-gate repair commit; the backlog index no longer names it.
+- [x] `[AI]` Confirm the current ShellCheck release, its per-platform asset names, and their SHA-256 digests from the
       upstream release page, and record them here; acceptance: four platforms are recorded, or the missing one is
       named and the pin refuses it. `[AC-01]`
+  - Result: `v0.11.0` (published 2025-08-04) is still the latest release. The four `.tar.gz` assets and their SHA-256
+    digests, each recomputed locally from a download and equal to the digest the release publishes:
+
+    | Key              | Asset                                      | SHA-256                                                            |
+    | ---------------- | ------------------------------------------ | ------------------------------------------------------------------ |
+    | `darwin.aarch64` | `shellcheck-v0.11.0.darwin.aarch64.tar.gz` | `339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f` |
+    | `darwin.x86_64`  | `shellcheck-v0.11.0.darwin.x86_64.tar.gz`  | `c2c15e08df0e8fbc374c335b230a7ee958c313fa5714817a59aa59f1aa594f51` |
+    | `linux.aarch64`  | `shellcheck-v0.11.0.linux.aarch64.tar.gz`  | `68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc` |
+    | `linux.x86_64`   | `shellcheck-v0.11.0.linux.x86_64.tar.gz`   | `b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6` |
+
+    Each archive carries the executable at `shellcheck-v0.11.0/shellcheck`. Running it at `--severity=warning` over the
+    enumerated list at `837ad5f` reproduced the README's 14 findings exactly.
 
 ### Phase 0 Gate
 
-- [ ] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-05]`
+- [x] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-05]`
+  - Result: no structural rule fails in the in-progress location; the link check and the directory-map check report no
+    findings.
 
 > **Pause Safety**: a clean worktree holds the active plan and recorded digests. Safe to stop. To resume:
 > `./rhino md internal-link validate`.
