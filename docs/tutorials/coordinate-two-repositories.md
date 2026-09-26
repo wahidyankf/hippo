@@ -14,8 +14,9 @@ Every repository on a host that shares a state root coordinates through the same
 exactly the behavior we want to observe — but for a tutorial we want it isolated, so let's point
 HIPPO somewhere temporary for this shell only.
 
+Work from the root of the checkout you used in the first tutorial:
+
 ```sh
-cd hippo
 export HIPPO_ROOT="$(mktemp -d)/hippo-tutorial"
 echo "$HIPPO_ROOT"
 ```

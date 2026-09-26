@@ -146,8 +146,10 @@ before the single payload launch:
 hippo run --wait-for-admission 10m -- make test
 ```
 
-This creates one FIFO waiter and launches the payload at most once. Schema 3 rejects this flag and
-uses the selected tier's 30-minute, 90-minute, or four-hour deadline instead.
+This creates one FIFO waiter and launches the payload at most once. A run with `--resource-tier`
+rejects this flag with exit `2`, under schema 2 as under schema 3, and uses the selected tier's
+configured deadline instead — 30 minutes, 90 minutes, or four hours in the
+recommended configuration.
 
 ## Related
 

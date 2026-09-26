@@ -55,7 +55,8 @@ Out of scope:
 ## Dependencies
 
 - [Repo-grounded] `tests/support/review_v04.go` already provides bounded marker-wait helpers in the same package.
-- [Repo-grounded] `npm run test:quick` is the pre-push gate and `npm test` is the complete repository gate.
+- [Repo-grounded] `npm run test:quick` runs the quick gate, one of the gates `pre-push` runs, and `npm test` runs the full
+  test gate; `./rhino gate list` names every gate on each surface.
 - [Repo-grounded] HIPPO does not guard its own compute, so its repository commands run directly.
 
 ## Directory Map
