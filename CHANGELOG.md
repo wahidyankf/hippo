@@ -31,6 +31,13 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   silently ignored: a tier sets its own queue deadline, so the run waited up to that deadline
   instead of the one asked for. A caller that passes both should drop `--wait-for-admission` and
   rely on the tier's deadline, or drop the tier to keep the explicit wait.
+- Requested help now wins over a flag HIPPO cannot parse. `hippo --help --no-such-flag`,
+  `hippo run --help --lease-port abc`, and the same with `-h` or with the help flag last, print that
+  command's help to stdout and exit `0`. They exited `2` naming `hippo.args.invalid`, while a value
+  checked after parsing, such as `--help --color bogus`, already printed help and exited `0`. A
+  caller that relied on `2` from such a line should drop `--help` to get the usage check; without
+  `--help` every one of these mistakes still exits `2`, and a `--help` after `--` still belongs to
+  the guarded command.
 - `hippo release` and `hippo completion` given no subcommand, or an unknown one, now exit `2`
   naming `hippo.args.invalid`, with the usage on stderr. They printed help to stdout and exited
   `0`, which told a script its work ran. `--help` still exits `0`.
