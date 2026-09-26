@@ -23,7 +23,7 @@ because two reasons under one status need opposite responses.
   recovery. For `hippo.limit.storage-blocked`, clean storage and then proceed — waiting does not
   free disk. Never create a second waiter, duplicate a payload, change the task class to get in
   sooner, or weaken a gate.
-- **Exit `125`** — HIPPO failed before, while, or after starting the work. Only `hippo.supervision.failed` can follow a started child, and then a `started-activation-failure` receipt says so; the other reasons fail before anything starts.
+- **Exit `125`** — HIPPO failed before, while, or after starting the work. Only `hippo.supervision.failed` can follow a started child: after an activation failure a `started-activation-failure` receipt says so, and after a mid-run supervision failure the lifetime summary's outcome is `supervision-failed`. The other reasons fail before anything starts.
   `hippo.coordination.protocol-mismatch` means draining the incompatible live epoch or upgrading
   every client sharing the root, and never a capacity retry loop.
   `hippo.policy.replan-required` and the `hippo.config.*` reasons mean the request or the
