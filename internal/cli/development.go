@@ -338,7 +338,7 @@ func writeMonitorTransition(
 
 func (application Application) monitor(ctx context.Context, options monitorOptions) (int, error) {
 	if options.interval <= 0 {
-		return 1, errors.New("interval must be positive")
+		return 0, status.Fail(status.CodeArgsInvalid, "interval must be positive")
 	}
 
 	configuration, configError := application.loadConfig(options.configPath)
@@ -430,6 +430,36 @@ func admissionWaitConflict(schemaVersion int, resourceTier string, wait time.Dur
 	default:
 		return nil
 	}
+}
+
+// runArgumentMistake refuses flag values run can never accept. Each is the
+// caller's mistake, so it is found here, before any configuration, host
+// evidence, or coordination state is read, and reported as a usage mistake
+// rather than as HIPPO failing.
+func runArgumentMistake(options runOptions) error {
+	switch policy.TaskClass(options.class) {
+	case "", policy.TaskEphemeral, policy.TaskService, policy.TaskTransactional:
+	case policy.TaskRelease:
+		// Release work is guarded by the release commands, never by run.
+		fallthrough
+	default:
+		return status.Fail(status.CodeArgsInvalid, "class must be ephemeral, service, or transactional")
+	}
+	if _, known := guard.DefaultResourceTiers()[options.resourceTier]; options.resourceTier != "" && !known {
+		return status.Fail(status.CodeArgsInvalid, "resource tier must be light, standard, or heavy")
+	}
+	if options.leasePort != 0 {
+		if err := guard.ValidatePortLeaseRequest(
+			options.leasePort, options.leaseOwner, options.leaseMinimum, options.leaseMaximum,
+		); err != nil {
+			return status.Fail(status.CodeArgsInvalid, "--lease-port: %v", err)
+		}
+	}
+	if err := identity.ValidateOverrides(options.source, options.tags); err != nil {
+		return status.Fail(status.CodeArgsInvalid, "%v", err)
+	}
+
+	return nil
 }
 
 func (application Application) run(ctx context.Context, options runOptions) (int, error) { //nolint:cyclop,funlen,gocognit,gocyclo // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
