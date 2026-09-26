@@ -86,6 +86,7 @@ That is another repository's guarded work. Wait for it.
 
 ```console
 $ hippo run --disk-path /Volumes/Small -- echo should-not-run
+HIPPO decision=cleanup requested=balanced resolved=balanced.
 hippo: [hippo.limit.storage-blocked] the disk floor stopped this work; free space before retrying
 $ echo $?
 124

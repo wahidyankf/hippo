@@ -34,7 +34,7 @@ export `HIPPO_CONFIG`. See [Configuration](../reference/configuration.md#precede
 
 ## Migrate a host that is still in exclusive mode
 
-The two modes cannot be mixed within one state root. While any exclusive session is live, a v0.7
+The two modes cannot be mixed within one state root. While any exclusive session is live, a
 reservation client reports protocol mismatch instead of taking over:
 
 ```console
