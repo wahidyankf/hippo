@@ -53,10 +53,16 @@ func integrationSample(measuredAt time.Time) policy.Sample {
 	}
 }
 
+// evidenceDecidesAdmission is an admission window no runner exhausts. Every
+// test here feeds evidence that admits after a fixed number of samples, and a
+// one-second window also timed the runner: one too slow to take those samples
+// inside it deferred the run with exit 75 before the behaviour under test began.
+const evidenceDecidesAdmission = time.Hour
+
 func fastPolicy() policy.Policy {
 	policy := policy.DefaultPolicy()
 	policy.SampleInterval = time.Millisecond
-	policy.AdmissionWindow = time.Second
+	policy.AdmissionWindow = evidenceDecidesAdmission
 	policy.TerminationGrace = time.Millisecond
 	policy.LeaseWait = time.Second
 

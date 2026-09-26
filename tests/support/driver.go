@@ -525,7 +525,7 @@ func (driver *Driver) temporaryRoot() (string, error) {
 func fastBehaviourPolicy() policy.Policy {
 	policy := policy.DefaultPolicy()
 	policy.SampleInterval = time.Millisecond
-	policy.AdmissionWindow = time.Second
+	policy.AdmissionWindow = evidenceDecidesAdmission
 	policy.TerminationGrace = time.Millisecond
 	policy.LeaseWait = time.Second
 
@@ -1218,7 +1218,7 @@ func (driver *Driver) interruptGuard() error {
 	base := time.Now()
 	resourcePolicy := policy.DefaultPolicy()
 	resourcePolicy.SampleInterval = time.Millisecond
-	resourcePolicy.AdmissionWindow = time.Second
+	resourcePolicy.AdmissionWindow = evidenceDecidesAdmission
 	// The child records each delivered TERM from a shell trap, so the grace must
 	// outlast the host's scheduling jitter or a correct guard force-stops a correct
 	// child before it can witness the signal. The grace is a maximum that a healthy
