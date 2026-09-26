@@ -81,6 +81,11 @@ Feature: Public HIPPO CLI
     When root command help is requested
     Then help expands HIPPO as Host Infrastructure Pressure and Process Orchestrator
 
+  Scenario: Help states the exit-code contract
+    Given the compiled HIPPO binary
+    When root command help is requested
+    Then each line of the help's exit block matches the exit-code reference
+
   Scenario: Release discovery uses grouped help
     Given the compiled HIPPO binary
     When release command help is requested
