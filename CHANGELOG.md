@@ -58,6 +58,10 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   with exit `2` naming `hippo.args.invalid` and the accepted values. It returned `1`, the empty
   result, so a misspelt filter read as "nothing matched". A caller that branched on `1` for such a
   value should correct the value; a valid filter that matches nothing still exits `1`.
+- `status --tag` and `watch --tag` with a malformed filter now exit `2` naming
+  `hippo.args.invalid`, before configuration is read, as `run` and `history` already did. They
+  exited `125` naming `hippo.policy.replan-required`, which says no profile admits the request. A
+  caller that branched on `125` here should branch on `2` and correct the filter.
 - A `run` whose identity has no source — `--tag` given, or schema 3 in force, with no `--source` and
   no `hippo.identity.json` through `HIPPO_IDENTITY`, upward discovery, or `HIPPO_DEFAULT_IDENTITY` —
   now exits `2` naming `hippo.args.invalid`, and the diagnostic names `--source`. It exited `125`

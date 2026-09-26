@@ -164,13 +164,15 @@ func filterCoordinationRows(totals guard.ReservationTotals, source string, tags 
 }
 
 func (application Application) status(ctx context.Context, options statusOptions) (int, error) {
+	// A malformed filter is the caller's mistake, found before anything is
+	// read, exactly as run and history report their own malformed --tag.
+	filterTags, filterError := identity.ParseTags(options.tags)
+	if filterError != nil {
+		return 0, status.Fail(status.CodeArgsInvalid, "--tag: %v", filterError)
+	}
 	configuration, configError := application.loadConfig(options.configPath)
 	if configError != nil {
 		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
-	}
-	filterTags, filterError := identity.ParseTags(options.tags)
-	if filterError != nil {
-		return policy.ReplanRequiredExitCode, filterError
 	}
 	first, err := application.Collector.Collect(ctx, nil, options.diskPath)
 	if err != nil {

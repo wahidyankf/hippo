@@ -44,6 +44,7 @@ const (
 	sinceFlagName         = "--since"
 	outputJSONValue       = "json"
 	releaseCheckName      = "check"
+	malformedTag          = "no-equals-sign"
 )
 
 // commandGroupMistakes are invocations of a command that only groups other
@@ -72,7 +73,7 @@ func invalidFlagValues() [][]string {
 			runCommandName, leasePortFlagName, "8080", leaseOwnerFlagName, "Bad Owner",
 			"--lease-min", "8000", "--lease-max", "9000",
 		}, payload...),
-		append([]string{runCommandName, tagFlagName, "no-equals-sign"}, payload...),
+		append([]string{runCommandName, tagFlagName, malformedTag}, payload...),
 		append([]string{runCommandName, "--resource-tier", unknownSubcommand}, payload...),
 		append([]string{runCommandName, sourceFlagName, "Not A Source"}, payload...),
 		append([]string{runCommandName, waitForAdmissionFlag, "-1s"}, payload...),
@@ -80,6 +81,8 @@ func invalidFlagValues() [][]string {
 		append([]string{runCommandName, "--lease-max", "9000"}, payload...),
 		append([]string{runCommandName, leaseOwnerFlagName, leaseOwnerName}, payload...),
 		{monitorCommandName, intervalFlagName, "0s"},
+		{statusCommandName, tagFlagName, malformedTag},
+		{watchCommandName, tagFlagName, malformedTag},
 		{historyCommandName, "--class", unknownSubcommand},
 		{historyCommandName, "--outcome", unknownSubcommand},
 		{historyCommandName, "--resource-tier", unknownSubcommand},
