@@ -148,9 +148,9 @@ func (application Application) rootCommand(execution *commandExecution) *cobra.C
 		},
 	}
 	command.Flags().BoolVar(&showVersion, "version", false, "print build version information and exit")
-	command.PersistentFlags().StringVar(&colour, "color", "auto",
+	command.PersistentFlags().StringVar(&colour, colourFlagName, colourAuto,
 		"colour diagnostics: always, never, or auto")
-	command.PersistentFlags().StringVar(&outputFormat, "output", "text",
+	command.PersistentFlags().StringVar(&outputFormat, outputFlagName, outputText,
 		"diagnostic format: text, or json to add a machine-readable failure body on stderr")
 
 	command.AddCommand(
@@ -164,6 +164,14 @@ func (application Application) rootCommand(execution *commandExecution) *cobra.C
 	)
 	return command
 }
+
+const (
+	colourFlagName = "color"
+	colourAuto     = "auto"
+	outputFlagName = "output"
+	outputText     = "text"
+	outputJSON     = "json"
+)
 
 // requireSubcommands makes every command that only groups other commands
 // refuse to run on its own. Left alone, Cobra prints such a command's help to

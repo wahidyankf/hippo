@@ -45,11 +45,12 @@ type commandExecution struct {
 	// body, because any reason hippo attached would be a guess about someone
 	// else's program.
 	childStatus *int
-	// handlerRan records that a command's own handler was entered. It is what
+	// accepted records that Cobra parsed the invocation and handed it to the
+	// command: its global flag check or its own handler was entered. It is what
 	// separates a mistyped invocation from a command that ran and then
 	// rejected its arguments: only the first deserves the usage block, and the
 	// exit status alone cannot tell them apart.
-	handlerRan bool
+	accepted bool
 	// usage is the help block the failing command would print. It is captured
 	// when the invocation is rejected so the boundary can put it after the
 	// diagnostic rather than before it: a caller reading stderr should meet
@@ -129,7 +130,7 @@ func executeHandler(command *cobra.Command, execution *commandExecution, handler
 	// those reads as though the caller mistyped the command and buries the real
 	// diagnostic under a flag list in consumer logs.
 	command.SilenceUsage = true
-	execution.handlerRan = true
+	execution.accepted = true
 	exitCode, err := handler()
 	execution.exitCode = exitCode
 
@@ -150,10 +151,10 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	// Cobra propagates ExecuteContext to every RunE callback through
 	// command.Context; contextcheck cannot follow that framework boundary.
 	command := application.rootCommand(execution) //nolint:contextcheck // Cobra carries ExecuteContext through command.Context.
-
-	environment := environmentMap(application.Environment)
-	execution.colour = wantsColour(colourRequest(arguments), environment)
-	execution.machineReadable = flagRequest(arguments, "--output") == "json"
+	// invoked is the command the caller named, which the failure body reports
+	// and whose usage a mistyped invocation prints. It starts as the root so a
+	// fault before the command tree is complete still names something true.
+	invoked := command
 
 	// A fault in hippo is still hippo's answer to give. Without this the
 	// runtime writes a stack trace to stderr and exits 2 on its own terms,
@@ -166,7 +167,7 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 		}
 
 		failure := status.Fail(status.CodeInternalFailure, "hippo failed internally: %v", recovered)
-		report(application.Stderr, commandPath(arguments), failure, failure.Status(), execution)
+		report(application.Stderr, invoked.CommandPath(), failure, failure.Status(), execution)
 		exitCode, runError = failure.Status(), failure
 	}()
 
@@ -192,7 +193,19 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 		return flagError
 	})
 
-	err := command.ExecuteContext(ctx)
+	// Cobra finds the command by the same rule it executes with, so the
+	// command named here is the one that runs, wherever the global flags sit.
+	if found, _, findError := command.Find(arguments); findError == nil {
+		invoked = found
+	}
+	environment := environmentMap(application.Environment)
+	execution.colour = wantsColour(globalFlagRequest(arguments, invoked, colourFlagName), environment)
+	execution.machineReadable = globalFlagRequest(arguments, invoked, outputFlagName) == outputJSON
+
+	executed, err := command.ExecuteContextC(ctx)
+	if executed != nil {
+		invoked = executed
+	}
 
 	if execution.childStatus != nil {
 		return *execution.childStatus, nil
@@ -203,12 +216,12 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	// handler that rejects its arguments after Cobra accepted them has a
 	// precise complaint to make, and burying it under a flag list would be the
 	// same unhelpfulness this contract exists to remove.
-	if failure != nil && execution.usage == "" && !execution.handlerRan {
-		execution.usage = command.UsageString()
+	if failure != nil && execution.usage == "" && !execution.accepted {
+		execution.usage = invoked.UsageString()
 	}
 
 	if failure != nil {
-		report(application.Stderr, commandPath(arguments), *failure, failure.Status(), execution)
+		report(application.Stderr, invoked.CommandPath(), *failure, failure.Status(), execution)
 		if execution.usage != "" {
 			_, _ = fmt.Fprint(application.Stderr, "\n", execution.usage)
 		}
@@ -226,46 +239,35 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	return execution.exitCode, err
 }
 
-// colourRequest reads --color before Cobra parses anything, so a failure that
-// happens during parsing is rendered the way the caller asked for.
-func colourRequest(arguments []string) string {
-	if value := flagRequest(arguments, "--color"); value != "" {
-		return value
-	}
-
-	return "auto"
-}
-
-// flagRequest reads one persistent flag's value straight from argv. Cobra
+// globalFlagRequest reads one global flag's value straight from argv. Cobra
 // cannot supply it when the failure being reported is Cobra refusing to parse
 // argv at all, and a caller that asked for JSON deserves it most in exactly
 // that case.
-func flagRequest(arguments []string, name string) string {
+//
+// It stops at --, because everything after it belongs to the guarded command:
+// a child's own --output json must not add hippo's body, nor its --color
+// always colour hippo's line. A command that defines the same name for itself
+// — release monitor's --output is a file path — has no global flag of that
+// name to read, since Cobra gives that command's own flag the value.
+func globalFlagRequest(arguments []string, invoked *cobra.Command, name string) string {
+	if invoked.LocalNonPersistentFlags().Lookup(name) != nil {
+		return ""
+	}
+
+	flag := "--" + name
 	for index, argument := range arguments {
-		if value, found := strings.CutPrefix(argument, name+"="); found {
+		if argument == "--" {
+			break
+		}
+		if value, found := strings.CutPrefix(argument, flag+"="); found {
 			return value
 		}
-		if argument == name && index+1 < len(arguments) {
+		if argument == flag && index+1 < len(arguments) {
 			return arguments[index+1]
 		}
 	}
 
 	return ""
-}
-
-// commandPath is the subcommand the caller asked for, for the body's command
-// field. It is the leading non-flag arguments, which is what hippo's own
-// commands are; it reports "hippo" when there are none.
-func commandPath(arguments []string) string {
-	path := []string{"hippo"}
-	for _, argument := range arguments {
-		if strings.HasPrefix(argument, "-") {
-			break
-		}
-		path = append(path, argument)
-	}
-
-	return strings.Join(path, " ")
 }
 
 // Execute runs the production application. Cobra owns diagnostics so each

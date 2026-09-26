@@ -58,7 +58,7 @@ func (driver *Driver) filteredLabeledStatusV05() error {
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 		Collector: &sequenceCollector{samples: driver.samples}, Sleep: func(time.Duration) {},
 	}).Run(context.Background(), []string{
-		"status", jsonFlag, "--source", hippoFixtureName, "--tag", "checkout=worktree",
+		"status", jsonFlag, "--source", hippoFixtureName, tagFlagName, "checkout=worktree",
 	})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
@@ -123,7 +123,7 @@ func (driver *Driver) filteredHistoryV05() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code, err := (cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
-	}).Run(context.Background(), []string{historyCommandName, "--since", "30d", "--source", hippoFixtureName, jsonFlag})
+	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, "30d", "--source", hippoFixtureName, jsonFlag})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
 	return err
@@ -256,7 +256,7 @@ func (driver *Driver) queryHistory() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code, _ := (cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
-	}).Run(context.Background(), []string{historyCommandName, "--since", "30d"})
+	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, "30d"})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
 	return nil

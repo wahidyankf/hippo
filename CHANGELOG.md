@@ -54,6 +54,22 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
 
 ### Fixed
 
+- HIPPO read `--output` and `--color` from the guarded command's own arguments. `hippo run -- tool
+--output json` added HIPPO's failure body beneath its diagnostic, and a child's `--color always`
+  coloured it, although the documentation says HIPPO interprets nothing after `--`. It now reads
+  those flags only before `--`. A caller that wanted the body places `--output json` before `--`.
+- `release monitor --output json` wrote a failure body, because the global flag was read from argv
+  although the command's own `--output` — a raw sample path — had taken its place. It no longer
+  does, wherever the flag is placed.
+- A positional argument a command does not take, such as `hippo history extra` or `hippo status
+foo`, printed the root `Usage: hippo [flags]` block beneath a diagnostic naming the right command.
+  It prints that command's own usage; so does `run` without `--`. The status is still `2` naming
+  `hippo.args.invalid`.
+- The failure body's `command` field depended on where the global flags sat:
+  `hippo --output json history --since nope` named `hippo`, while the same mistake with the flag
+  after the command named `hippo history`, and `hippo release bogus` named `hippo release bogus`.
+  It now names the command that ran — `hippo history`, `hippo release` — wherever the flags sit.
+  A consumer that parsed `command` needs no change unless it matched those wrong values.
 - A bounded wait that ran out on exhausted capacity could report the wrong reason and skip its
   receipt. On its last pass the wait asks for the shared root's coordination lock with almost no
   budget left, and it offered a free lock and an already-expired timer to the same `select`. Go
