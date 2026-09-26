@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
 repository_location=$(dirname -- "$common")
 failed=0

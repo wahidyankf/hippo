@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 set -e
 
 # Rhino proves Git supplied this worktree's canonical COMMIT_EDITMSG path before

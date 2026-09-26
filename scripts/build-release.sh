@@ -15,7 +15,7 @@ fi
 version=$1
 commit=$2
 output_dir=$3
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 
 # Release identity is embedded in every binary and must be unambiguous before
 # any output directory is touched.
@@ -52,7 +52,7 @@ if [ -n "$checkout_status" ]; then
 fi
 
 mkdir -p "$output_dir"
-output_dir=$(CDPATH= cd -- "$output_dir" && pwd)
+output_dir=$(CDPATH='' cd -- "$output_dir" && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/hippo-release.XXXXXX")
 materialization=
 cleanup() {
