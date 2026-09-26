@@ -2,6 +2,8 @@ package host
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -47,6 +49,15 @@ func (collector SystemCollector) Collect(ctx context.Context, previous CPUState,
 	}
 
 	return Reading{}, status.Fail(status.CodeHostUnreadable, "collecting host evidence: %v", err)
+}
+
+// RootedFileReader reads each kernel evidence path beneath root instead of
+// the live filesystem, so /proc/stat is read from root/proc/stat. A path is
+// cleaned as absolute first, so it cannot climb out of root.
+func RootedFileReader(root string) FileReader {
+	return func(path string) ([]byte, error) {
+		return os.ReadFile(filepath.Join(root, filepath.Clean("/"+path)))
+	}
 }
 
 var (

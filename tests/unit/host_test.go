@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io/fs"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -126,5 +128,26 @@ func TestUnreadableHostEvidenceNamesItsReason(t *testing.T) {
 	_, err = stopping.Collect(ctx, nil, t.TempDir())
 	if _, classified = errors.AsType[status.Failure](err); classified || !errors.Is(err, context.Canceled) {
 		t.Fatalf("a probe cut short by cancellation reported %v, want the cancellation", err)
+	}
+}
+
+func TestRootedFileReaderReadsKernelPathsBeneathItsRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "proc", "meminfo"), []byte("rooted"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	read := host.RootedFileReader(root)
+
+	if data, err := read("/proc/meminfo"); err != nil || string(data) != "rooted" {
+		t.Fatalf("rooted read returned %q error=%v", data, err)
+	}
+	if _, err := read("/proc/stat"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("evidence absent beneath the root must stay absent, got %v", err)
+	}
+	if data, err := read("/../proc/meminfo"); err != nil || string(data) != "rooted" {
+		t.Fatalf("a path climbing above / escaped the root: %q error=%v", data, err)
 	}
 }
