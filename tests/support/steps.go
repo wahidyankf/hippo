@@ -188,7 +188,7 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		step(`^an inherited reserved session that spawns a background descendant without an inherited unknown file descriptor$`, prepare("inherited descendant lifetime", requireV04InheritedDescendantLifetime)),
 		step(`^the inherited direct leader exits zero$`, driver.exerciseReservationScenarioV04),
 		step(`^its reservation and port evidence remain until the inherited process group retires$`, assert("inherited descendant lifetime")),
-		step(`^a lifetime launcher that remains stopped before reporting payload activation$`, prepare("bounded lifetime handshake", requireV04BoundedLifetimeHandshake)),
+		step(`^a lifetime launcher that stalls before reporting payload activation$`, prepare("bounded lifetime handshake", requireV04BoundedLifetimeHandshake)),
 		step(`^its owning guard reaches the activation deadline$`, driver.exerciseReservationScenarioV04),
 		step(`^the guard returns boundedly without releasing the launcher's detectable reservation and port ownership$`, assert("bounded lifetime handshake")),
 		step(`^a compiled (ordinary|inherited) reserved child with reservation and port identity locks$`, func(mode string) error {
