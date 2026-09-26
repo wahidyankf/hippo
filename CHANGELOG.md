@@ -180,6 +180,13 @@ quieter`, although nothing was deferred. The diagnostic is now one line that say
   retired `Error:` prefix and the old numbers `75`, `76` and `78`. A malformed concurrency name was
   documented as exit `1` rather than `2`, and a malformed inherited value as exit `2` rather than
   `125`.
+- The tests of `internal/cli`, `internal/conformance`, `internal/guard` and `internal/identity` now
+  run in the quick gate and CI, and every internal package runs under the race detector in the full
+  gate. They compiled but never executed, so their failures could not stop a change. A scenario now
+  fails when any package holding tests falls outside the gates. Running them exposed a data race: a
+  guarded child writing to an output that is not a file, such as an in-memory buffer, shared that
+  writer with HIPPO's own lines without a lock. Such outputs are now written one at a time. Output
+  to a terminal, file or pipe was never affected.
 
 ## [v0.8.1] — 2026-09-23
 

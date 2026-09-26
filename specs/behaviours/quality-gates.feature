@@ -46,6 +46,11 @@ Feature: HIPPO quality gates
     Then every gate script unsets the redirecting Git variables
 
   @e2e-exempt
+  Scenario: Every package with tests runs in a gate
+    When gate package wiring is inspected
+    Then every package that holds tests is run by a gate
+
+  @e2e-exempt
   Scenario: The loaded gate declares saturation only when every core is busy
     When loaded gate wiring is inspected
     Then the loaded gate declares the host saturated only when its busy workers cover every core

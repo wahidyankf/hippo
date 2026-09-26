@@ -220,6 +220,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Contributor gate wiring is complete", Boundary: repositoryConfigBoundary, Reason: "hooks and CI configuration are outside the compiled binary boundary"},
 		{Scenario: "Stable lifecycle wiring is complete", Boundary: repositoryConfigBoundary, Reason: "gate script and workflow text are outside the compiled binary boundary"},
 		{Scenario: "Gate scripts clear the redirecting Git environment", Boundary: repositoryConfigBoundary, Reason: "gate script text is outside the compiled binary boundary"},
+		{Scenario: "Every package with tests runs in a gate", Boundary: repositoryConfigBoundary, Reason: "gate script text and the package tree are outside the compiled binary boundary"},
 		{Scenario: "The loaded gate declares saturation only when every core is busy", Boundary: repositoryConfigBoundary, Reason: "gate script and product source text are outside the compiled binary boundary"},
 		{Scenario: "A saturated host deferral is accepted only as documented", Boundary: testHarnessBoundary, Reason: saturatedDeferralReason},
 		{Scenario: "A deferral stays a failure where saturation is undeclared", Boundary: testHarnessBoundary, Reason: saturatedDeferralReason},

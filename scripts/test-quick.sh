@@ -23,7 +23,10 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 ./scripts/format-check.sh
 go test -run '^$' ./...
 go tool golangci-lint run
-go test -count=1 ./internal/evidence ./internal/release ./tests/support ./tests/unit
+# Every package's own tests. The scenario "Every package with tests runs in a
+# gate" fails if a package holding tests falls outside these patterns.
+go test -count=1 ./cmd/... ./internal/... ./tests/support
+# The unit corpus runs once, under coverage: a failing test fails this line.
 mkdir -p coverage
 go test -count=1 -coverpkg=./internal/policy,./internal/config,./internal/host,./internal/evidence -coverprofile=coverage/unit.out ./tests/unit
 go run ./tests/coverage --profile coverage/unit.out --directories internal/policy,internal/config --files internal/host/collector.go,internal/host/linux_parsers.go,internal/evidence/histogram.go --minimum 99
