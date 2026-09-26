@@ -90,20 +90,30 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
       diff against data safety; acceptance: hooks pass and only declared paths are committed. `[AC-02]` `[AC-03]`
   - Result: `test(identity): prove the source override with a synthetic value` holds only the test file; the
     `public-safety-tree`, `format-staged`, `public-safety-message`, and `commit-message` hooks passed.
-- [ ] `[AI]` Push and open the pull request as a draft with a screened body; acceptance: the draft exists at the
+- [x] `[AI]` Push and open the pull request as a draft with a screened body; acceptance: the draft exists at the
       pushed head. `[AC-03]`
+  - Result: the pre-push gate passed; draft pull request #69 opened at `ca0de3d` after the outbound preflight reported
+    the title and body clean. Once #69 was green, `main` gained the shell static-analysis plan and #69 conflicted in the
+    done index. Updating #69 needed a force push this execution held no approval for, so the three commits were replayed
+    onto `5bc7150` on `worktree/neutralize-test-fixture-identifiers-r2`, the conflict was resolved by listing both done
+    plans, and a replacement pull request carries them; #69 was closed unmerged.
 
 ### Phase 2 Gate
 
-- [ ] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-03 and route every
+- [x] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-03 and route every
       `learnings.md` entry; acceptance: `PASS` and no unresolved entry. `[AC-03]`
+  - Result: `PASS`; see [the record](evidence/execution-check.md).
 
 > **Pause Safety**: the change is committed and the draft is open. Safe to stop. To resume:
 > `git log --oneline origin/main..HEAD`.
 
 ## Plan Archival
 
-- [ ] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__neutralize-test-fixture-identifiers/` with the completion date
+- [x] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__neutralize-test-fixture-identifiers/` with the completion date
       and update both stage indexes; acceptance: one done copy exists. `[AC-03]`
-- [ ] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`;
+  - Result: moved with `git mv` to `plans/done/2026-09-26__neutralize-test-fixture-identifiers/`, after confirming the
+    destination did not exist; the in-progress index is empty again and the done index lists the plan.
+- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`;
       acceptance: no rule fails and the gate exits `0`. `[AC-03]`
+  - Result: 0 structural findings; the internal-link and directory-map checks reported no findings; the quick gate
+    exited `0`.

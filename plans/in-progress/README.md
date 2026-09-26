@@ -8,5 +8,4 @@ Work finishes only when every required outcome, acceptance condition, verificati
 
 ## Directory Map
 
-- [Neutralize test fixture identifiers](neutralize-test-fixture-identifiers/README.md) replaces a fixture string that
-  names a private repository with a synthetic value.
+This stage holds no plan folder, so this README has no siblings to map.

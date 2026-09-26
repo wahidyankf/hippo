@@ -1,6 +1,6 @@
 # Neutralize Test Fixture Identifiers
 
-Status: In progress
+Status: Done (2026-09-26)
 
 ## Context
 

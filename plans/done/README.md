@@ -10,8 +10,12 @@ Reconcile required and conditional delivery, acceptance, verification, and learn
 
 - 2026-09-26 — [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md): shell scripts are gated on a
   checksum-pinned ShellCheck at warning severity over one list the formatter shares.
+- 2026-09-26 — [Neutralize test fixture identifiers](2026-09-26__neutralize-test-fixture-identifiers/README.md): the
+  source-override fixture uses a synthetic value instead of a string that named a private repository.
 
 ## Directory Map
 
 - [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the
   shell-lint gate.
+- [Neutralize test fixture identifiers](2026-09-26__neutralize-test-fixture-identifiers/README.md) is the delivery
+  record for the synthetic identity fixture.
