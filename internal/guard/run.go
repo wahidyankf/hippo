@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -538,6 +539,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	if config.ChildStderr == nil {
 		config.ChildStderr = os.Stderr
 	}
+	serializeWriters(&config)
 	if config.Environment == nil {
 		config.Environment = os.Environ()
 	}
@@ -1136,4 +1138,30 @@ func executableGuardPath() string {
 	}
 
 	return path
+}
+
+// serialWriter is one of several writers that share a single lock.
+type serialWriter struct {
+	lock   *sync.Mutex
+	writer io.Writer
+}
+
+func (writer serialWriter) Write(data []byte) (int, error) {
+	writer.lock.Lock()
+	defer writer.lock.Unlock()
+
+	return writer.writer.Write(data)
+}
+
+// serializeWriters puts every output that is not a file behind one lock. A
+// child writes a file directly, but reaches any other writer through a copying
+// goroutine, which would otherwise write the same writer hippo's own lines go
+// to at the same moment.
+func serializeWriters(config *RunConfig) {
+	lock := &sync.Mutex{}
+	for _, target := range []*io.Writer{&config.Stderr, &config.ChildStdout, &config.ChildStderr} {
+		if _, file := (*target).(*os.File); !file {
+			*target = serialWriter{lock: lock, writer: *target}
+		}
+	}
 }
