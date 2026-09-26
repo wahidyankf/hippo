@@ -8,7 +8,7 @@ Heavy local work in the Open Sharia Enterprise repositories runs under the check
 
 Here the wrapper builds this same tool from the working tree. A gate run beneath it would be arbitrated by the change under test, so a change that broke the guard could hang, shed, or wave through the very gate meant to catch it. So `.husky/pre-push`, `scripts/test-quick.sh`, and `scripts/test.sh` all run directly.
 
-CI is unguarded for a second, independent reason: a GitHub runner is dedicated and ephemeral and has no competing work, so the guard would add a download, a checksum verification, and an exit-`124` path that cannot occur and therefore cannot be tested.
+CI is unguarded for a second, independent reason: a GitHub runner is dedicated and ephemeral and has no competing work, so the guard would add a source build and an exit-`124` path that cannot occur and therefore cannot be tested.
 
 ## The Contract This Repository Implements
 
@@ -23,7 +23,7 @@ because two reasons under one status need opposite responses.
   recovery. For `hippo.limit.storage-blocked`, clean storage and then proceed — waiting does not
   free disk. Never create a second waiter, duplicate a payload, change the task class to get in
   sooner, or weaken a gate.
-- **Exit `125`** — HIPPO failed before, while, or after starting the work; the receipt says whether anything started.
+- **Exit `125`** — HIPPO failed before, while, or after starting the work. Only `hippo.supervision.failed` can follow a started child, and then a `started-activation-failure` receipt says so; the other reasons fail before anything starts.
   `hippo.coordination.protocol-mismatch` means draining the incompatible live epoch or upgrading
   every client sharing the root, and never a capacity retry loop.
   `hippo.policy.replan-required` and the `hippo.config.*` reasons mean the request or the
