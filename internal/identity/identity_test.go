@@ -39,11 +39,11 @@ func TestLoadAndMerge(t *testing.T) {
 func TestOverrideSourceWithoutFile(t *testing.T) {
 	t.Parallel()
 
-	got, err := identity.Load(filepath.Join(t.TempDir(), "missing.json"), "wkf-devbox", []string{"group=local"})
+	got, err := identity.Load(filepath.Join(t.TempDir(), "missing.json"), "fixture-source", []string{"group=local"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Source != "wkf-devbox" || got.Tags["group"] != "local" {
+	if got.Source != "fixture-source" || got.Tags["group"] != "local" {
 		t.Fatalf("unexpected identity: %#v", got)
 	}
 }
