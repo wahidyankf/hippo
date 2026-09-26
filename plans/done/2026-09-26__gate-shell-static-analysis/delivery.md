@@ -170,32 +170,42 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
     private names, with no match; the branch carries the plan repair, the plan start, the pin, the fixes, the gate,
     and the rules update as separate commits, each passing `public-safety-tree`, `format-staged`,
     `public-safety-message`, and `commit-message`. `shell-lint` on push is proved by the push itself.
-- [ ] `[AI]` Replay the pull-request surface the `repository-contract` job runs, with
+- [x] `[AI]` Replay the pull-request surface the `repository-contract` job runs, with
       `./rhino gate run --surface pull-request --base origin/main --head HEAD`; acceptance: exit `0`, and the run lists
       `shell-lint`. `[AC-05]`
+  - Result: against the merge base `837ad5f` and head `92d00ea`, exit `0`; all fourteen pull-request gates passed,
+    `shell-lint` seventh. `origin/main` had not moved.
 
 ### Phase 3 Gate
 
-- [ ] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-05 and record its verdict;
+- [x] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-05 and record its verdict;
       acceptance: `PASS`. `[AC-05]`
+  - Result: `PASS`, recorded in [the execution check](evidence/execution-check.md). It ran once Phase 4 had made the
+    one learning terminal, because its sixth step reads `learnings.md`.
 
 > **Pause Safety**: the gate is committed on the branch. Safe to stop. To resume: `scripts/shell-lint.sh`.
 
 ## Phase 4: Knowledge Capture
 
-- [ ] `[AI]` Route every `learnings.md` entry to one durable owner or discard it with a reason; acceptance: no
+- [x] `[AI]` Route every `learnings.md` entry to one durable owner or discard it with a reason; acceptance: no
       unresolved entry remains. `[AC-05]`
+  - Result: one entry, discarded as already covered by the isolate-test-coordination-state plan.
 
 ### Phase 4 Gate
 
-- [ ] `[AI]` Read `learnings.md` end to end; acceptance: every entry is terminal. `[AC-05]`
+- [x] `[AI]` Read `learnings.md` end to end; acceptance: every entry is terminal. `[AC-05]`
+  - Result: the one entry is terminal.
 
 > **Pause Safety**: every learning is terminal. Safe to stop.
 
 ## Plan Archival
 
-- [ ] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__gate-shell-static-analysis/` with the completion date and update
+- [x] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__gate-shell-static-analysis/` with the completion date and update
       both stage indexes; acceptance: one done copy exists. `[AC-05]`
-- [ ] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance: no rule fails and the gate exits `0`. `[AC-05]`
-- [ ] `[AI]` Commit the archival move onto the delivery branch; acceptance: the commit is on the head the pull request
+  - Result: moved to `plans/done/2026-09-26__gate-shell-static-analysis/`; the in-progress index maps nothing, the done
+    index lists it, and no live reference to the old path remains.
+- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance: no rule fails and the gate exits `0`. `[AC-05]`
+  - Result: the `done/` slug carries its date and occupies one root; the directory-map and link checks report nothing;
+    `npm run test:quick` exits `0` from the archived state.
+- [x] `[AI]` Commit the archival move onto the delivery branch; acceptance: the commit is on the head the pull request
       will merge, and publication, merge, and clean-up proceed under the Delivery Unit above. `[AC-05]`

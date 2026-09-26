@@ -8,8 +8,10 @@ Reconcile required and conditional delivery, acceptance, verification, and learn
 
 ## Completed Plans
 
-No plan has completed in this repository yet.
+- 2026-09-26 — [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md): shell scripts are gated on a
+  checksum-pinned ShellCheck at warning severity over one list the formatter shares.
 
 ## Directory Map
 
-This stage holds no plan folder, so this README has no siblings to map.
+- [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the
+  shell-lint gate.
