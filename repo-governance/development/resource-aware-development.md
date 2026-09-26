@@ -6,7 +6,7 @@ Heavy local work in the Open Sharia Enterprise repositories runs under the check
 
 ## Why Not Here
 
-The wrapper resolves a pinned _release_ of this same tool. A gate run beneath it would be exercising the released binary rather than the change under test, and a change that broke the guard could still pass a gate the old guard was arbitrating. So `.husky/pre-push`, `scripts/test-quick.sh`, and `scripts/test.sh` all run directly.
+Here the wrapper builds this same tool from the working tree. A gate run beneath it would be arbitrated by the change under test, so a change that broke the guard could hang, shed, or wave through the very gate meant to catch it. So `.husky/pre-push`, `scripts/test-quick.sh`, and `scripts/test.sh` all run directly.
 
 CI is unguarded for a second, independent reason: a GitHub runner is dedicated and ephemeral and has no competing work, so the guard would add a download, a checksum verification, and an exit-`124` path that cannot occur and therefore cannot be tested.
 
@@ -23,7 +23,7 @@ because two reasons under one status need opposite responses.
   recovery. For `hippo.limit.storage-blocked`, clean storage and then proceed — waiting does not
   free disk. Never create a second waiter, duplicate a payload, change the task class to get in
   sooner, or weaken a gate.
-- **Exit `125`** — HIPPO could not do its job and started nothing.
+- **Exit `125`** — HIPPO failed before, while, or after starting the work; the receipt says whether anything started.
   `hippo.coordination.protocol-mismatch` means draining the incompatible live epoch or upgrading
   every client sharing the root, and never a capacity retry loop.
   `hippo.policy.replan-required` and the `hippo.config.*` reasons mean the request or the
