@@ -15,6 +15,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/internal/status"
 )
 
 const (
@@ -122,7 +123,7 @@ func (driver *Driver) filteredHistoryV05() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code, err := (cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
-	}).Run(context.Background(), []string{"history", "--since", "30d", "--source", hippoFixtureName, jsonFlag})
+	}).Run(context.Background(), []string{historyCommandName, "--since", "30d", "--source", hippoFixtureName, jsonFlag})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
 	return err
@@ -228,4 +229,51 @@ func requireEmergencyPressureV05(root string) error {
 	}
 
 	return runInternalGuardRegressionV04("TestRunEmergencyTransactionalStopWritesReceiptWithoutRetry")
+}
+
+// corruptHistoryArchiveBytes is what the corrupt archive holds, so the
+// assertion can prove the query left it exactly as it was.
+const (
+	corruptHistoryArchiveBytes = "not gzip"
+	historyArchiveDirectory    = "history"
+)
+
+func (driver *Driver) corruptHistoryArchive() error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+	driver.leaseRoot = root
+	if err = os.Mkdir(filepath.Join(root, historyArchiveDirectory), 0o700); err != nil {
+		return err
+	}
+	archive := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly) + ".jsonl.gz"
+
+	return os.WriteFile(filepath.Join(root, historyArchiveDirectory, archive), []byte(corruptHistoryArchiveBytes), 0o600)
+}
+
+func (driver *Driver) queryHistory() error {
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	code, _ := (cli.Application{
+		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
+	}).Run(context.Background(), []string{historyCommandName, "--since", "30d"})
+	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
+
+	return nil
+}
+
+func (driver *Driver) requireUnreadableHistory() error {
+	if driver.exitCode != status.GuardFailed || !strings.Contains(driver.errorOutput, "hippo: [hippo.evidence.unreadable]") {
+		return fmt.Errorf("exit=%d stderr=%q", driver.exitCode, driver.errorOutput)
+	}
+	archives, err := filepath.Glob(filepath.Join(driver.leaseRoot, historyArchiveDirectory, "*.jsonl.gz"))
+	if err != nil || len(archives) != 1 {
+		return fmt.Errorf("archives=%v error=%w", archives, err)
+	}
+	data, err := os.ReadFile(archives[0])
+	if err != nil || string(data) != corruptHistoryArchiveBytes {
+		return fmt.Errorf("the query changed the corrupt archive: %q error=%w", data, err)
+	}
+
+	return nil
 }

@@ -37,6 +37,7 @@ const (
 	profileMinimal                = "minimal"
 	jsonFlag                      = "--json"
 	statusCommandName             = "status"
+	historyCommandName            = "history"
 	monitorCommandName            = "monitor"
 	runCommandName                = "run"
 	usageBlockMarker              = "Usage:"
@@ -1829,7 +1830,7 @@ func (driver *Driver) rootHelp() error {
 }
 
 func (driver *Driver) requireHelp() error {
-	commands := []string{"completion", "history", monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName, "watch"}
+	commands := []string{"completion", historyCommandName, monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName, "watch"}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}

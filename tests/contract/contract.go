@@ -143,6 +143,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Runtime inputs remain canonical across consumer commands", Boundary: consumerHarnessBoundary, Reason: "requires temporary checkout symlinks and inherited process environment control"},
 		{Scenario: "Status exposes privacy-safe labeled owner rows", Boundary: leaseOwnershipBoundary, Reason: "requires a labeled private reservation owner and direct owner-row inspection"},
 		{Scenario: "History filters current labeled summaries", Boundary: evidenceFilesystemBoundary, Reason: "requires synthetic private summary files from multiple labeled sources"},
+		{Scenario: "An unreadable history archive is not reported as a refused write", Boundary: evidenceFilesystemBoundary, Reason: "requires a deliberately corrupt private history archive"},
 		{Scenario: "Watch emits only changed admission snapshots", Boundary: hostEvidenceBoundary, Reason: "requires injected stable host samples and deterministic cancellation timing"},
 		{Scenario: "Consumer coordination never inherits the conformance caller session", Boundary: consumerHarnessBoundary, Reason: "requires one private live caller reservation plus independent overlapping consumer ownership"},
 		{Scenario: "A validated checkout directory cannot be replaced between phases", Boundary: consumerHarnessBoundary, Reason: "requires replacing a private checkout directory with an identical Git state between harness phases"},
