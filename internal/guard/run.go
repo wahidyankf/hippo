@@ -455,7 +455,7 @@ func resolveActivationFailure(
 
 // noteDeferralf reports why admission was deferred. The run returns after this
 // notice; callers use the recorded receipt to decide whether a later retry is
-// safe instead of blindly replaying exit 75.
+// safe instead of blindly replaying a 124 naming hippo.limit.capacity-deferred.
 func (config RunConfig) noteDeferralf(format string, arguments ...any) {
 	_, _ = fmt.Fprintf(config.Stderr, format, arguments...)
 }
@@ -732,7 +732,8 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	if config.ReservationPolicy.Enabled {
 		totals, statusError := ReservationStatus(ctx, config.EvidenceRoot)
 		// A peer holding the shared lock here is contention, and no child has
-		// started yet. The caller receives exit 75 with a never-started receipt.
+		// started yet. The caller receives exit 124 naming
+		// hippo.limit.capacity-deferred with a never-started receipt.
 		if errors.Is(statusError, errCoordinationDeferred) {
 			config.noteDeferralf("HIPPO deferred task: %s.\n", statusError)
 

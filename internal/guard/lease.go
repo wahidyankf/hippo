@@ -722,7 +722,8 @@ func AcquirePortLease(root string, port int, ownerName string, minimum, maximum 
 		}
 		if live {
 			// A live peer owning this port is retryable lease pressure, which the
-			// public contract reports as exit 75, not a failure the caller has no
+			// public contract reports as exit 124 naming
+			// hippo.limit.capacity-deferred, not a failure the caller has no
 			// basis to retry.
 			return nil, fmt.Errorf("%w: port %d is already leased", errCoordinationDeferred, port)
 		}

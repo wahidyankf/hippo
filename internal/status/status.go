@@ -2,12 +2,15 @@
 // statuses a shell can branch on, and a closed set of namespaced codes that
 // say precisely what happened.
 //
-// The statuses are deliberately few. Before this package hippo returned 73,
-// 75, 76, and 78 — four numbers that meant cleanup, retry, drain a peer, and
+// The statuses are deliberately few. Before this package hippo exited 73, 75,
+// 76, and 78 — four numbers that meant cleanup, retry, drain a peer, and
 // replan, and that no consumer anywhere branched on: the ./hippo bootstrap
 // shared across nine repositories reaches `exit 78` from a single refuse()
 // helper in sixteen call sites and never asks which reason produced it. A
 // vocabulary nobody reads is not information, it is a number to get wrong.
+// The guard and policy layers still pass those numbers among themselves, but
+// none leaves the process: the command-line boundary maps each to one of the
+// statuses below and names its reason.
 //
 // What replaces it is the one convention that already exists for this problem.
 // `timeout` returns 124 when the limit stopped the work and 125 when timeout
