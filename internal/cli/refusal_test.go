@@ -216,3 +216,108 @@ func TestAHostLostAfterLaunchStaysASupervisionFailure(t *testing.T) {
 		t.Fatalf("the child never started, so this is not the after-launch path: %v", statError)
 	}
 }
+
+// hookedCollector reports a stable host and calls onCall with the number of
+// each collection before answering it, so a test can change the world at a
+// known point in admission sampling.
+type hookedCollector struct {
+	sample policy.Sample
+	calls  *int
+	onCall func(call int)
+}
+
+func (collector hookedCollector) Collect(_ context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
+	*collector.calls++
+	collector.onCall(*collector.calls)
+
+	return policy.Reading{CPUState: previous, Sample: collector.sample}, nil
+}
+
+// requireAdmissionFailedSummary checks that source's one lifetime summary
+// records that hippo itself stopped the run before its child started.
+func requireAdmissionFailedSummary(t *testing.T, root, source string) {
+	t.Helper()
+
+	if outcomes := summaryOutcomes(t, root); len(outcomes) != 1 || outcomes[source] != "admission-failed" {
+		t.Fatalf("the run hippo stopped before launch summarized as %v, want %s=admission-failed", outcomes, source)
+	}
+}
+
+func TestAHostUnreadableDuringAdmissionIsSummarizedAsAdmissionFailed(t *testing.T) {
+	// The run exits naming hippo.host.unreadable. Its summary used to call
+	// the same run a capacity deferral, which it was not: hippo failed.
+	t.Parallel()
+
+	root := t.TempDir()
+	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	calls := 0
+	stderr := &bytes.Buffer{}
+	application := Application{
+		Stdout: &bytes.Buffer{}, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + root},
+		// The command's own probe and the guard's first sample succeed; the
+		// host then stops answering before admission completes.
+		Collector: failsAfter{sample: stableDevelopmentSample(now), healthy: 2, calls: &calls},
+		Now:       func() time.Time { return now }, Sleep: func(time.Duration) {},
+	}
+	code, err := application.Run(context.Background(), []string{
+		"run", "--source", "sampler", "--disk-path", root, "--", "/bin/sh", "-c", "exit 0",
+	})
+	requireReason(t, code, err, stderr.String(), status.CodeHostUnreadable)
+	requireAdmissionFailedSummary(t, root, "sampler")
+}
+
+func TestARefusedReceiptDuringAdmissionIsSummarizedAsAdmissionFailed(t *testing.T) {
+	// A signal stops the sampling run, and the evidence root then refuses its
+	// never-started receipt. The refusal outranks the signal in the exit
+	// status, and the summary must say the same thing.
+	root := t.TempDir()
+	readOnlyDirectory(t, filepath.Join(root, "receipts"))
+	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	ctx, interrupt := context.WithCancelCause(context.Background())
+	defer interrupt(nil)
+	stderr := &bytes.Buffer{}
+	application := Application{
+		Stdout: &bytes.Buffer{}, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + root},
+		Collector: stableCollector{sample: stableDevelopmentSample(now)}, Now: func() time.Time { return now },
+		Sleep: func(time.Duration) { interrupt(status.Interruption{Signal: syscall.SIGTERM}) },
+	}
+	code, err := application.Run(ctx, []string{
+		"run", "--source", "sampler", "--disk-path", root, "--", "/bin/sh", "-c", "exit 0",
+	})
+	requireReason(t, code, err, stderr.String(), status.CodeEvidenceUnwritable)
+	requireAdmissionFailedSummary(t, root, "sampler")
+}
+
+func TestALaunchThatFailsAfterAdmissionSamplingIsSummarizedAsAdmissionFailed(t *testing.T) {
+	// The command was runnable when hippo checked it and stopped being
+	// runnable while hippo sampled the host, so the launch itself fails. No
+	// child started, and hippo, not the host, is why.
+	t.Parallel()
+
+	root := t.TempDir()
+	script := filepath.Join(t.TempDir(), "payload")
+	childMarker := filepath.Join(root, "child-started")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf started > \"$CHILD_MARKER\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	calls := 0
+	stderr := &bytes.Buffer{}
+	application := Application{
+		Stdout: &bytes.Buffer{}, Stderr: stderr,
+		Environment: []string{"HIPPO_ROOT=" + root, "CHILD_MARKER=" + childMarker},
+		Collector: hookedCollector{sample: stableDevelopmentSample(now), calls: &calls, onCall: func(call int) {
+			// The second collection is the guard's first admission sample.
+			if call == 2 {
+				_ = os.Chmod(script, 0o600)
+			}
+		}},
+		Now: func() time.Time { return now }, Sleep: func(time.Duration) {},
+	}
+	code, err := application.Run(context.Background(), []string{"run", "--source", "launcher", "--disk-path", root, "--", script})
+	requireReason(t, code, err, stderr.String(), status.CodeSupervisionFailed)
+	if _, statError := os.Stat(childMarker); !os.IsNotExist(statError) {
+		t.Fatalf("a launch that failed started its child: %v", statError)
+	}
+	requireAdmissionFailedSummary(t, root, "launcher")
+}

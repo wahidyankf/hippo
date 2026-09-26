@@ -40,6 +40,12 @@ const (
 	// stopped before its child started. It is the same word the run's
 	// never-started receipt carries as its reason, so the two records agree.
 	outcomeAdmissionCancelled = "admission-cancelled"
+	// outcomeAdmissionFailed is a run hippo itself stopped after host
+	// sampling began and before its child started: host evidence it could not
+	// read, an evidence write it was refused, or a launch that failed. The
+	// exit status names which; the outcome says no child ran and hippo, not
+	// the host's capacity, is why.
+	outcomeAdmissionFailed = "admission-failed"
 )
 
 // RunOutcomes is every outcome a run's lifetime summary can record. history
@@ -831,6 +837,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			config.EvidenceRoot, writer.summary.RunID, "never-started", outcomeAdmissionCancelled,
 			config.ReservationMetadata, config.TaskClass, config.Now(),
 		)
+		if receiptError != nil {
+			outcome = outcomeAdmissionFailed
+		}
 
 		return 1, errors.Join(cause, refusedEvidenceWrite("writing the never-started receipt", receiptError))
 	}
@@ -845,6 +854,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			if ctx.Err() != nil {
 				return cancelledBeforeLaunch(ctx.Err())
 			}
+			outcome = outcomeAdmissionFailed
 
 			return 1, collectError
 		}
@@ -852,6 +862,8 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		previous = reading.CPUState
 		samples = append(samples, reading.Sample)
 		if appendError := writer.Append(reading.Sample); appendError != nil {
+			outcome = outcomeAdmissionFailed
+
 			return 1, refusedEvidenceWrite("recording a host sample", appendError)
 		}
 
@@ -897,6 +909,8 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			config.EvidenceRoot, writer.summary.RunID, "never-started", "host-admission",
 			config.ReservationMetadata, config.TaskClass, config.Now(),
 		); receiptError != nil {
+			outcome = outcomeAdmissionFailed
+
 			return 1, refusedEvidenceWrite("writing the never-started receipt", receiptError)
 		}
 
@@ -905,6 +919,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 	lifetime, launchError := launchConfiguredLifetime(ctx, config, session, portLease)
 	if launchError != nil {
+		outcome = outcomeAdmissionFailed
 		if lifetime != nil {
 			ownershipRetired = false
 		}

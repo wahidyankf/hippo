@@ -252,26 +252,25 @@ have rotated away.
 
 `outcome` is one of these values, and no other:
 
-| `outcome`               | Child started? | Meaning                                                                              |
-| ----------------------- | -------------- | ------------------------------------------------------------------------------------ |
-| `passed`                | Yes            | The child exited `0`                                                                 |
-| `task-failed`           | Yes            | The child exited nonzero, was stopped by a signal to HIPPO, or failed its activation |
-| `pressure-shed`         | Yes            | HIPPO shed the child under host pressure other than storage                          |
-| `storage-shed`          | Yes            | HIPPO shed the child because the disk floor was crossed                              |
-| `emergency-safety-stop` | Yes            | HIPPO stopped transactional work past the emergency floor                            |
-| `supervision-failed`    | Yes            | HIPPO lost supervision of a running child and stopped it                             |
-| `capacity-deferred`     | No             | Safe host admission was not reached before the admission deadline                    |
-| `storage-blocked`       | No             | The disk floor refused the run before launch                                         |
-| `admission-cancelled`   | No             | A signal or other cancellation stopped the run while it sampled the host             |
+| `outcome`               | Child started? | Meaning                                                                                                                 |
+| ----------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `passed`                | Yes            | The child exited `0`                                                                                                    |
+| `task-failed`           | Yes            | The child exited nonzero, was stopped by a signal to HIPPO, or failed its activation                                    |
+| `pressure-shed`         | Yes            | HIPPO shed the child under host pressure other than storage                                                             |
+| `storage-shed`          | Yes            | HIPPO shed the child because the disk floor was crossed                                                                 |
+| `emergency-safety-stop` | Yes            | HIPPO stopped transactional work past the emergency floor                                                               |
+| `supervision-failed`    | Yes            | HIPPO lost supervision of a running child and stopped it                                                                |
+| `capacity-deferred`     | No             | Safe host admission was not reached before the admission deadline                                                       |
+| `storage-blocked`       | No             | The disk floor refused the run before launch                                                                            |
+| `admission-cancelled`   | No             | A signal or other cancellation stopped the run while it sampled the host                                                |
+| `admission-failed`      | No             | HIPPO stopped the run after host sampling began: unreadable host evidence, a refused evidence write, or a failed launch |
 
 A summary exists only for a run that reached host sampling. A run cancelled while it waited in the
 reservation queue collected no host evidence, so it writes no summary; its `never-started` receipt
-with reason `admission-cancelled` is its whole record. `admission-cancelled` is new in v0.8.2;
-before it, a run cancelled during host sampling was summarized as `capacity-deferred`.
-
-A run that HIPPO itself stops before launch after sampling began, because host evidence became
-unreadable, an evidence write was refused, or the launch failed, is also summarized as
-`capacity-deferred`. Its exit status and reason say which; the outcome does not.
+with reason `admission-cancelled` is its whole record. `admission-cancelled` and `admission-failed` are new in
+v0.8.2; before them, a run cancelled during host sampling, and a run HIPPO failed before launch,
+were both summarized as `capacity-deferred`. When a cancelled run's `never-started` receipt is
+refused, the refusal decides the exit status and the outcome is `admission-failed`.
 
 Schema-4 fields keep their meanings; labels and timestamps are the schema-5 addition.
 `peakOwnerCount` is raised atomically by every admission event during the child's lifetime, so an

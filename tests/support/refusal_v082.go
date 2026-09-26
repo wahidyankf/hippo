@@ -21,9 +21,10 @@ import (
 )
 
 const (
-	refusedRunSource  = "refused-run"
-	releaseCheckVerb  = "check"
-	releaseCheckAsked = "release check"
+	outcomeAdmissionFailedName = "admission-failed"
+	refusedRunSource           = "refused-run"
+	releaseCheckVerb           = "check"
+	releaseCheckAsked          = "release check"
 )
 
 func (driver *Driver) refusalBindings() []contract.StepBinding {
@@ -41,7 +42,84 @@ func (driver *Driver) refusalBindings() []contract.StepBinding {
 		step(`^a guarded run is requested with that state root$`, driver.runWithStateRootV082),
 		step(`^a queued run whose receipt directory refuses writes$`, driver.refusedReceiptDirectoryV082),
 		step(`^the queued run receives SIGINT before it is admitted$`, driver.signalQueuedRunV082),
+		step(`^a guarded run that has begun sampling the host$`, driver.samplingRunV082),
+		step(
+			`^(its host evidence becomes unreadable|a signal stops it and its never-started receipt is refused|its command stops being executable) before its child starts$`,
+			driver.failBeforeLaunchV082,
+		),
+		step(
+			`^it exits 125 naming (hippo\.host\.unreadable|hippo\.evidence\.unwritable|hippo\.supervision\.failed), its child never starts, and its lifetime summary records the outcome admission-failed$`,
+			driver.requireAdmissionFailedV082,
+		),
 	}
+}
+
+// failBeforeLaunchV082 stops a run hippo has begun admitting in one of the
+// ways that are hippo's own failure rather than the host's capacity. The
+// command's own probe is the first collection and the guard's first
+// admission sample the second.
+func (driver *Driver) failBeforeLaunchV082(failure string) error {
+	sample := driver.samples[0]
+	payload := filepath.Join(driver.interruption.root, "payload")
+	if err := os.WriteFile(payload, []byte("#!/bin/sh\nprintf started > \"$CHILD_MARKER\"\n"), 0o700); err != nil {
+		return err
+	}
+	arguments := []string{runCommandName, sourceFlagName, refusedRunSource, diskPathFlag, driver.interruption.root, "--", payload}
+	ctx, interrupt := context.WithCancelCause(context.Background())
+	defer interrupt(nil)
+	var collector policy.Collector = &sequenceCollector{samples: driver.samples}
+	sleep := func(time.Duration) {}
+	switch failure {
+	case "its host evidence becomes unreadable":
+		collector = &failingAfter{sample: sample, healthy: 2}
+	case "a signal stops it and its never-started receipt is refused":
+		if err := driver.lockDirectory(filepath.Join(driver.interruption.root, "receipts")); err != nil {
+			return err
+		}
+		sleep = func(time.Duration) { interrupt(status.Interruption{Signal: syscall.SIGTERM}) }
+	default:
+		collector = &launchBreaker{sample: sample, payload: payload}
+	}
+	driver.runInterruptible(ctx, arguments, collector, sleep)
+
+	return nil
+}
+
+// launchBreaker reports a stable host and, at the guard's first admission
+// sample, makes the command it is about to launch no longer executable.
+type launchBreaker struct {
+	sample  policy.Sample
+	payload string
+	calls   int
+}
+
+func (collector *launchBreaker) Collect(_ context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
+	collector.calls++
+	if collector.calls == 2 {
+		if err := os.Chmod(collector.payload, 0o600); err != nil {
+			return policy.Reading{}, err
+		}
+	}
+
+	return policy.Reading{CPUState: previous, Sample: collector.sample}, nil
+}
+
+func (driver *Driver) requireAdmissionFailedV082(reason string) error {
+	if driver.exitCode != status.GuardFailed || !strings.Contains(driver.errorOutput, "hippo: ["+reason+"]") {
+		return fmt.Errorf("exit %d, want %d naming %s: %q", driver.exitCode, status.GuardFailed, reason, driver.errorOutput)
+	}
+	if _, err := os.Stat(driver.interruption.childMarker); !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("a run hippo stopped before launch started its child: %w", err)
+	}
+	outcomes, err := driver.interruptedSummaries()
+	if err != nil {
+		return err
+	}
+	if len(outcomes) != 1 || outcomes[refusedRunSource] != outcomeAdmissionFailedName {
+		return fmt.Errorf("the run summarized as %v, want %s=%s", outcomes, refusedRunSource, outcomeAdmissionFailedName)
+	}
+
+	return nil
 }
 
 // refusingHost is the real collector with every host file and probe refused,
