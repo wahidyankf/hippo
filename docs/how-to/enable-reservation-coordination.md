@@ -39,8 +39,9 @@ reservation client reports protocol mismatch instead of taking over:
 ```console
 $ hippo run --config hippo.local.json --disk-path . -- echo never-runs
 HIPPO protocol mismatch: shared coordination protocol mismatch: exclusive mode has a live owner; drain or upgrade the incompatible client before retrying.
+hippo: [hippo.coordination.protocol-mismatch] live peer coordination state this client cannot safely join
 $ echo $?
-76
+125
 ```
 
 This is not an error to work around. **Let the old sessions drain**, then retry. HIPPO refuses to
@@ -58,9 +59,9 @@ class.
 
 ## Upgrade to adaptive schema 3
 
-Upgrade every consumer binary and wrapper to a build that documents distinct protocol-mismatch exit
-a protocol mismatch, live exclusive-owner status, and bounded activation contention; the current tagged baseline is
-v0.8.0. Verify each exact binary
+Upgrade every consumer binary and wrapper to a build that reports a protocol mismatch under its own
+reason code, shows live exclusive owners in status, and bounds activation contention; the current
+tagged baseline is v0.8.2. Verify each exact binary
 with `version --json` and its release checksum instead of inferring capability from SemVer ordering.
 Keep schema 2 active until `hippo status --json` reports no owners or waiters with `legacy: true`, then
 atomically install the schema-3 policy. A schema-3 launch returns `125` naming `hippo.coordination.protocol-mismatch` before enqueue or child launch
@@ -115,9 +116,9 @@ time with exit `125`:
 
 ```console
 $ hippo status --config weakened.json --disk-path .
-Error: resource configuration: maximum memory weakens the immutable 256 MiB floor
+hippo: [hippo.config.unreadable] resource configuration: maximum memory weakens the immutable 256 MiB floor
 $ echo $?
-78
+125
 ```
 
 Remember that `maxActiveOwners` composes as a **minimum** across the shared root: the strictest live

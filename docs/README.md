@@ -61,8 +61,9 @@ HIPPO is one of the five **OSE Code Repositories** — the repositories
 | [`beaver-nest`](https://github.com/wahidyankf/beaver-nest) | An independent family product           |
 
 HIPPO coordinates real work across the other four, which consume its published releases through
-their own checksum-pinned bootstraps. Nothing crosses the other way: HIPPO consumes none of them,
-and cannot guard itself.
+their own checksum-pinned bootstraps. Nothing crosses the other way at runtime: the HIPPO binary
+depends on none of them, and cannot guard itself. Only its contributor gates run a checksum-pinned
+RHINO release.
 
 The private one is left unnamed here on purpose: this repository is public, and a public document
 naming a private repository publishes the fact that it exists and what it is called. Anyone

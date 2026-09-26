@@ -114,14 +114,14 @@ and minimum/maximum vectors that fit inside the pool.
 
 ```console
 $ hippo status --config weakened.json --disk-path .
-Error: resource configuration: maximum memory weakens the immutable 256 MiB floor
+hippo: [hippo.config.unreadable] resource configuration: maximum memory weakens the immutable 256 MiB floor
 $ echo $?
-78
+125
 
 $ hippo status --config too-many-owners.json --disk-path .
-Error: resource configuration: maxActiveOwners cannot exceed 20
+hippo: [hippo.config.unreadable] resource configuration: maxActiveOwners cannot exceed 20
 $ echo $?
-78
+125
 ```
 
 Default automatic owner shares divide capacity between four, two, and one owner:

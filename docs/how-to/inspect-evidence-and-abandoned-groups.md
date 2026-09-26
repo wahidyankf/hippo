@@ -68,7 +68,7 @@ hippo history --since 30d --resource-tier heavy --outcome pressure-shed --json
 For a same-day run, the summary file covers the whole session even after older raw chunks rotated.
 
 ```sh
-cat "$ROOT/development-transactional-1788757259105-13633.summary.json"
+cat "${HIPPO_ROOT:-$HOME/Library/Application Support/hippo}/development-transactional-1788757259105-13633.summary.json"
 ```
 
 ```json
@@ -174,7 +174,8 @@ payload that will never exit on its own.
 
 ## When the root will not admit anything
 
-If admission fails with `1` and the ledger looks empty, shared state may be corrupt or inaccessible.
+If admission fails with `125` naming `hippo.supervision.failed` and the ledger looks empty, shared
+state may be corrupt or inaccessible.
 A `hippo.coordination.protocol-mismatch` reason instead means the state is valid but uses an
 incompatible peer protocol. HIPPO preserves both kinds of bytes instead of clearing them; exit `124`
 remains a limit result.

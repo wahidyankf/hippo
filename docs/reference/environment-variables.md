@@ -66,19 +66,20 @@ BUILD_WORKERS=11 TEST_JOBS=11 HIPPO_CONCURRENCY=11
 ### Name rules
 
 A mapped name must be a POSIX environment identifier and must not be one of HIPPO's own protocol
-variables. Violations are usage errors (exit `1`), rejected before anything runs.
+variables. Violations are usage errors (exit `2`, `hippo.args.invalid`), rejected before anything
+runs.
 
 ### Value rules in reservation mode
 
 The caller's existing value, if any, is taken as a ceiling request and reconciled against the
 allocation:
 
-| Caller's value               | Result                           |
-| ---------------------------- | -------------------------------- |
-| unset                        | Receives the allocated CPU       |
-| positive, below allocation   | Survives unchanged               |
-| positive, above allocation   | Clamped down to the allocation   |
-| zero, negative, or malformed | Exit `2` before the child starts |
+| Caller's value               | Result                                                              |
+| ---------------------------- | ------------------------------------------------------------------- |
+| unset or empty               | Receives the allocated CPU                                          |
+| positive, below allocation   | Survives unchanged                                                  |
+| positive, above allocation   | Clamped down to the allocation                                      |
+| zero, negative, or malformed | Exit `125`, `hippo.policy.replan-required`, before the child starts |
 
 ```console
 $ BUILD_WORKERS=1 hippo run --config reservation.json --reserve-cpu 4 --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
@@ -88,9 +89,9 @@ $ BUILD_WORKERS=64 hippo run --config reservation.json --reserve-cpu 2 --concurr
 BUILD_WORKERS=2 HIPPO_CONCURRENCY=2
 
 $ BUILD_WORKERS=abc hippo run --config reservation.json --concurrency-env BUILD_WORKERS -- true
-Error: concurrency environment "BUILD_WORKERS" must be a positive integer
+hippo: [hippo.policy.replan-required] concurrency environment "BUILD_WORKERS" must be a positive integer
 $ echo $?
-78
+125
 ```
 
 Schema-1 exclusive mode retains the v0.3.1 mapping behavior, including degraded admission at

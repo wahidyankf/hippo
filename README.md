@@ -29,7 +29,7 @@ $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make tes
   works by marking a victim and waiting for that victim's own guard to act.
 - **Fails closed.** Unreadable shared state returns a non-retryable failure and preserves bytes
   rather than guessing and rewriting.
-- **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO itself failed, `126` and
+- **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO failed to start or supervise it, `126` and
   `127` the command cannot be run, `2` the invocation cannot be used — the numbers `timeout` and
   every POSIX shell already use. Each failure also names a reason, as `hippo: [hippo.area.reason]`.
   Child-owned codes pass through with task-failed evidence.
@@ -57,7 +57,7 @@ release `checksums.txt`. **Pin both the tag and the expected SHA-256; never foll
 runtime.**
 
 ```sh
-VERSION=v0.8.0
+VERSION=v0.8.2
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -73,8 +73,8 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ./hippo version --json
 ```
 
-The checksum command prints `hippo_v0.8.0_<os>_<arch>.tar.gz: OK`; `version --json` reports
-`v0.8.0` and the exact release commit.
+The checksum command prints `hippo_v0.8.2_<os>_<arch>.tar.gz: OK`; `version --json` reports
+`v0.8.2` and the exact release commit.
 
 Working from a source checkout instead? The tracked `./hippo` bootstrap compiles the CLI once and
 caches it. Full details: [How to install a pinned release](./docs/how-to/install-a-pinned-release.md).
@@ -140,7 +140,7 @@ further selection, so pressure cannot cascade into emptying the ledger.
 
 **Failure.** Exit `124` means a limit stopped the work; the reason says which. `storage-blocked`
 needs cleanup, `capacity-deferred` may be requeued when its receipt says `never-started`, and
-`pressure-shed` needs payload-specific recovery. Exit `125` means HIPPO itself failed: drain or
+`pressure-shed` needs payload-specific recovery. Exit `125` means HIPPO failed to start or supervise the work: drain or
 upgrade an incompatible peer, change the request, or fix the configuration.
 [Exit codes and error codes](./docs/reference/exit-codes.md) lists both closed vocabularies.
 
@@ -198,19 +198,19 @@ consumers supply their own commands, paths, ports, and health endpoints.
 Source contributors need Go 1.26.1 and Node.js 24.
 
 ```sh
-npm ci            # installs locked tooling; the prepare lifecycle installs Git hooks
-npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact and documentation policy
-npm test           # the full release gate, including race detection and vulnerability scan
+npm ci            # installs locked tooling and, via prepare, Git hooks
+npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact and repository policy
+npm test           # the quick gate plus integration, end-to-end, race and vulnerability checks
 ```
 
 Only `main` persists. Work reaches it through a pull request from a branch at
 `{repository location}/worktrees/<task>`; sibling `*-worktrees` directories are forbidden. Direct
-pushes are refused for every actor, with no bypass. One aggregate `Quality gate`
-check, defined in `.github/workflows/pr-quality-gate.yml`, is required, and it is a superset of the
-Git hooks.
+pushes are refused for every actor. One aggregate `Quality gate` check, defined in
+`.github/workflows/pr-quality-gate.yml`, is required.
 
-Documentation gates run under [RHINO](https://github.com/wahidyankf/rhino), pinned by tag and SHA-256
-in `rhino.lock`; `repo-config.yml` supplies the grouped-v2 lifecycle and three native harness
+ShellCheck and documentation gates are in neither script: they run under
+[RHINO](https://github.com/wahidyankf/rhino) on push, pull request and `main`, pinned by tag and
+SHA-256 in `rhino.lock`; `repo-config.yml` supplies the lifecycle and three native harness
 projections. Regenerate those projections only with `./rhino harness adapters generate` and prove
 them with `./rhino harness adapters validate`. RHINO guards its own builds with a pinned `./hippo`.
 

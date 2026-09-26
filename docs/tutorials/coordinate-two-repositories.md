@@ -21,7 +21,7 @@ echo "$HIPPO_ROOT"
 ```
 
 ```console
-/var/folders/fr/jg3jv_4d39b48cyqlqz18mgr0000gn/T/tmp.TYCeLRxNKH/hippo-tutorial
+/tmp/tmp.TYCeLRxNKH/hippo-tutorial
 ```
 
 Your path will differ. When you close this shell, the variable goes with it and HIPPO returns to its
@@ -34,6 +34,7 @@ Reservation mode is what lets several tasks run concurrently against a shared bu
 into with a schema-2 configuration file.
 
 ```sh
+mkdir -p local-tmp
 cat > local-tmp/tutorial.json <<'JSON'
 {
   "schemaVersion": 2,
@@ -42,7 +43,8 @@ cat > local-tmp/tutorial.json <<'JSON'
 JSON
 ```
 
-`local-tmp/` is ignored by Git, so this file will not follow you into a commit.
+A fresh clone has no `local-tmp/`, so the first line creates it. It is ignored by Git, so this file
+will not follow you into a commit.
 
 Now look at the ledger before anything is running:
 
@@ -51,7 +53,7 @@ Now look at the ledger before anything is running:
 ```
 
 ```console
-"coordination":{"schemaVersion":4,"mode":"reservation","capacity":{"cpu":0,"memoryBytes":0},"allocated":{"cpu":0,"memoryBytes":0},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":0,"waitingOwners":0,"ephemeral":0,"service":0,"transactional":0}
+"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":0,"memoryBytes":0},"allocated":{"cpu":0,"memoryBytes":0},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":0,"waitingOwners":0,"ephemeral":0,"service":0,"transactional":0}
 ```
 
 `mode` is now `reservation`. Everything else is zero: an idle ledger has no owners, and reports no
@@ -86,10 +88,11 @@ except the shared state root.
 ```
 
 ```console
-"coordination":{"schemaVersion":4,"mode":"reservation","capacity":{"cpu":11,"memoryBytes":30064771072},"allocated":{"cpu":2,"memoryBytes":1073741824},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":1,"waitingOwners":0,"ephemeral":1,"service":0,"transactional":0}
+"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":11,"memoryBytes":30064771072},"allocated":{"cpu":2,"memoryBytes":1073741824},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":1,"waitingOwners":0,"ephemeral":1,"service":0,"transactional":0,"owners":[{"runId":"a49cd18ac284f507c229e29996dd58ae","state":"active","class":"ephemeral","profile":"balanced","source":"unlabeled","requested":{"cpu":2,"memoryBytes":1073741824}
 ```
 
-There is a lot in that line. Read three things:
+There is a lot in that line. This time it ends partway through an `owners` array, one entry per live
+owner, because the `grep` pattern stops at the fourth closing brace. Read three things:
 
 - **`capacity`** is now populated: `11` CPU and `30064771072` bytes. That is this machine's 12-way
   parallelism minus one safety unit, and 28 GiB — its 32 GiB of memory minus the balanced profile's
@@ -134,8 +137,8 @@ echo $?
 ```
 
 ```console
-Error: reservation requires replanning: requested vector exceeds safe host capacity
-78
+hippo: [hippo.policy.replan-required] reservation requires replanning: requested vector exceeds safe host capacity
+125
 ```
 
 Exit `125` with `hippo.policy.replan-required` means _replan_. HIPPO is not saying "busy, try
@@ -158,7 +161,7 @@ wait
 ```
 
 ```console
-"coordination":{"schemaVersion":4,"mode":"reservation","capacity":{"cpu":0,"memoryBytes":0},"allocated":{"cpu":0,"memoryBytes":0},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":0,"waitingOwners":0,"ephemeral":0,"service":0,"transactional":0}
+"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":0,"memoryBytes":0},"allocated":{"cpu":0,"memoryBytes":0},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":0,"waitingOwners":0,"ephemeral":0,"service":0,"transactional":0}
 ```
 
 Back to an idle epoch. The reservations were released when their owners' process groups fully
