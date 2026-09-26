@@ -211,6 +211,14 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	requireSubcommands(command, execution)
 	command.SilenceErrors = true
 	command.SetFlagErrorFunc(func(failing *cobra.Command, flagError error) error {
+		// Requested help suppresses everything else on the line, as it already
+		// does for a value checked after parsing: the failing command's help
+		// goes to stdout and nothing runs, so the invocation succeeds.
+		if helpRequested(arguments) {
+			failing.HelpFunc()(failing, nil)
+
+			return nil
+		}
 		execution.usage = failing.UsageString()
 
 		return flagError
@@ -268,6 +276,22 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	}
 
 	return execution.exitCode, err
+}
+
+// helpRequested reports whether argv asks for help before any --. Cobra reads
+// its own help flag only once every flag has parsed, so a flag it cannot parse
+// would otherwise hide a request for help that appears on the same line.
+func helpRequested(arguments []string) bool {
+	for _, argument := range arguments {
+		switch argument {
+		case "--":
+			return false
+		case "--help", "-h", "--help=true":
+			return true
+		}
+	}
+
+	return false
 }
 
 // globalFlagRequest reads one global flag's value straight from argv. Cobra

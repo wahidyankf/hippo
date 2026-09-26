@@ -62,7 +62,8 @@ Every command accepts these, placed before or after the command name.
 | `--color <when>`  | `auto`  | Colour the diagnostic line: `always`, `never`, or `auto` (see [Colour](./environment-variables.md#colour)) |
 | `--output <form>` | `text`  | Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr                    |
 
-Any other value is a usage mistake: exit `2`, naming `hippo.args.invalid`.
+Any other value is a usage mistake: exit `2`, naming `hippo.args.invalid`, unless help was requested
+(see below).
 HIPPO reads these flags only before `--`, so a guarded command's own `--output` or `--color` after
 `run`'s `--` belongs to that command and changes nothing HIPPO writes.
 
@@ -83,6 +84,13 @@ The root command also accepts `--version`, which prints the same text as `hippo 
 | `--profile <name>` | unset   | Requested resource profile. Resolution may still fall back to a safer profile.       |
 
 `--help` is available on every command. `version`, `history`, and `completion` take no shared flags.
+
+Requested help wins over everything else on the line. Once `--help` or `-h` appears before `--`, or
+the command is `hippo help <command>`, HIPPO prints that command's help to stdout, writes nothing to
+stderr, runs nothing, and exits `0`. Every other flag and argument is ignored, including a value it
+would refuse, such as `--color bogus`, and a flag it cannot parse, such as `--no-such-flag` or
+`--lease-port abc`. After `--`, `--help` belongs to the guarded command. Without a request for help,
+each of those mistakes still exits `2` naming `hippo.args.invalid`.
 
 ## `hippo version`
 

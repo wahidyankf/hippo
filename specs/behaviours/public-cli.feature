@@ -123,6 +123,37 @@ Feature: Public HIPPO CLI
     When release command help is requested
     Then help lists the release command tree and exits successfully
 
+  Scenario Outline: Requested help wins over every other flag
+    Given the compiled HIPPO binary
+    When hippo is invoked as "<arguments>"
+    Then it prints the help of "<command>" to stdout, nothing to stderr, and exits 0
+
+    Examples:
+      | arguments                        | command       |
+      | --help                           | hippo         |
+      | help run                         | hippo run     |
+      | --help --color bogus             | hippo         |
+      | --output XML --help              | hippo         |
+      | --help --no-such-flag            | hippo         |
+      | --no-such-flag --help            | hippo         |
+      | run --help --lease-port abc      | hippo run     |
+      | run --lease-port abc -h          | hippo run     |
+      | run --help --class bogus         | hippo run     |
+      | history --since nope --help      | hippo history |
+      | release --help --no-such-flag    | hippo release |
+
+  Scenario Outline: A flag mistake without help remains a usage mistake
+    Given the compiled HIPPO binary
+    When hippo is invoked as "<arguments>"
+    Then it exits 2 naming hippo.args.invalid with nothing on stdout
+
+    Examples:
+      | arguments                                 |
+      | --no-such-flag                            |
+      | --color bogus status                      |
+      | run --lease-port abc                      |
+      | run --lease-port abc -- /bin/sh -c --help |
+
   Scenario: Shell completion is generated on demand
     Given the compiled HIPPO binary
     When Zsh completion is requested

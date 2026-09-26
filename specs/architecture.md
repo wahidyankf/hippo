@@ -110,7 +110,7 @@ graph TD
 Every component above sits inside the `Go CLI process` container.
 
 - **Process entry** maps the operating-system argument vector to the application's exit code.
-- **Command tree** owns Cobra commands, flags, validation, stdin/stdout selection, and dependency injection. It reads the global `--output` and `--color` only before `--`, so a guarded command's arguments never shape HIPPO's diagnostic, and a command that defines its own flag of the same name owns it.
+- **Command tree** owns Cobra commands, flags, validation, stdin/stdout selection, and dependency injection. It reads the global `--output` and `--color` only before `--`, so a guarded command's arguments never shape HIPPO's diagnostic, and a command that defines its own flag of the same name owns it. Requested help wins over the rest of the line: `--help` or `-h` before `--` prints that command's help to stdout and exits `0`, even beside a flag it cannot parse or a value it would refuse, while the same mistake without it exits `2` naming `hippo.args.invalid`.
 - **Config loader and profiles** resolve configuration precedence, select schema-1 exclusive, schema-2 reservation, or schema-3 adaptive coordination, validate tiers, promotion, caps, and owner shares, and preserve compiled safety floors.
 - **Host collector** normalizes macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence into portable samples.
 - **Policy engine and profiles** classify evidence, choose an adaptive development profile, and preserve strict transaction and release envelopes.
