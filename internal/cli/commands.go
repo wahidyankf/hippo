@@ -106,9 +106,9 @@ type releaseMonitorOptions struct {
 const exitStatusHelp = `Exit statuses:
   0    the work ran and the answer is affirmative
   1    the work ran and the answer is negative
-  2    the invocation could not be used
+  2    the invocation could not be used, or hippo hit an internal fault
   124  a limit stopped the work; retry when it lifts
-  125  hippo could not do its job and started nothing
+  125  hippo failed before, while, or after starting the work
   126  the command exists and could not be executed
   127  the command was not found
   N    a started command's own status, or 128+N when a signal ended it
