@@ -8,8 +8,9 @@ Reconcile required and conditional delivery, acceptance, verification, and learn
 
 ## Completed Plans
 
-No plan has completed in this repository yet.
+- 2026-09-26 — neutralize test fixture identifiers: the source-override fixture uses a synthetic value.
 
 ## Directory Map
 
-This stage holds no plan folder, so this README has no siblings to map.
+- [Neutralize test fixture identifiers](2026-09-26__neutralize-test-fixture-identifiers/README.md) replaced a fixture
+  string that named a private repository with a synthetic value.
