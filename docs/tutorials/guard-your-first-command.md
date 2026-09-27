@@ -69,7 +69,10 @@ output. The child kept your stdout exactly as it found it.
 
 ## Step 3: see what the child was told
 
-HIPPO always exports two variables into an admitted child. Let's read them.
+HIPPO always exports `HIPPO_PROFILE` and `HIPPO_CONCURRENCY`, the two a build reads, into an admitted
+child. It also exports `HIPPO_SESSION` and `HIPPO_BIN`; see
+[Environment variables](../reference/environment-variables.md#exported-to-a-guarded-child). Let's
+read the first two.
 
 ```sh
 ./hippo run --disk-path . -- sh -c 'echo "profile=$HIPPO_PROFILE concurrency=$HIPPO_CONCURRENCY"'
