@@ -118,12 +118,14 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   still writes its summary before exiting, and one that reaches its own `--duration-ms` still exits
   `0`. A script that stops one of them with a signal and required `0` should accept `130` or `143`,
   or give `release monitor` a `--duration-ms` where it needs `0`.
-- A `run` stopped by `SIGINT` or `SIGTERM` before its child started now exits `130` or `143` with no
-  diagnostic, and keeps its `never-started` receipt. A run waiting in the reservation queue exited
-  `125` naming `hippo.supervision.failed` with `context canceled`, which told the caller HIPPO had
-  failed when the caller had cancelled work that never began. A caller that branched on `125` here
-  should branch on `128+N` and, as before, read the `never-started` receipt before requeueing once.
-  A run whose child had started still passes the child's own status through.
+- A `run` stopped by `SIGINT` or `SIGTERM` while it waited in the reservation queue or sampled the
+  host before launch now exits `130` or `143` with no diagnostic, and keeps its `never-started`
+  receipt; one waiting for a schema-1 heavy-work lease exits the same way and writes no receipt. A
+  run waiting in the reservation queue exited `125` naming `hippo.supervision.failed` with
+  `context canceled`, which told the caller HIPPO had failed when the caller had cancelled work that
+  never began. A caller that branched on `125` here should branch on `128+N` and, as before, read
+  the `never-started` receipt before requeueing once. A run whose child had started still passes
+  the child's own status through.
 - A `run` stopped by a signal or other cancellation while it sampled the host before launch now
   summarizes those samples under a new lifetime-summary outcome, `admission-cancelled`, the reason
   its `never-started` receipt already gave. It was summarized as `capacity-deferred`, so the

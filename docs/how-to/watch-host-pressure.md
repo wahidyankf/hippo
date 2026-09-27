@@ -61,7 +61,8 @@ hippo monitor --json --disk-path . | jq -r 'select(.state != "normal") | "\(.mea
 
 ## Take a single reading instead
 
-For a script that just needs the current answer, `status` is cheaper — one sample, then exit:
+For a script that just needs the current answer, `status` is cheaper — one reading (two samples a
+second apart), then exit:
 
 ```sh
 hippo status --disk-path .

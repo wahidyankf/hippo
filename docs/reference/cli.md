@@ -113,9 +113,11 @@ harness. Any other source build reports `dev (unknown)`.
 
 ## `hippo status`
 
-Takes one host sample, resolves a profile, and reports it. It never admits work, but it needs a
-writable state root: while a reservation epoch is live it takes the coordination lock and reconciles
-the ledger, and a lock it cannot open exits `125` naming `hippo.evidence.unwritable`.
+Takes two host samples one second apart, the first only priming CPU use, resolves a profile, and
+reports the second. It never admits work, but it needs a writable state root while a coordination
+epoch is live, exclusive or reservation: it takes the coordination lock, under reservation also
+reconciles the ledger, and a lock it cannot open exits `125` naming `hippo.evidence.unwritable`. An
+idle root is only read.
 
 | Flag                 | Default | Meaning                                            |
 | -------------------- | ------- | -------------------------------------------------- |
