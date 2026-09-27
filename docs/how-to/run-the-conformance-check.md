@@ -65,16 +65,17 @@ four-consumer conformance passed with unchanged checkouts
 
 ### Read its exit status
 
-| Status  | Meaning                                                                   |
-| ------- | ------------------------------------------------------------------------- |
-| `0`     | The four consumers conform and every checkout is unchanged                |
-| `1`     | They do not; stderr names each failure                                    |
-| `2`     | The invocation is unusable: no manifest argument, or more than one        |
-| `128+N` | Signal `N` stopped the run first: `130` for `SIGINT`, `143` for `SIGTERM` |
+| Status  | Meaning                                                                                        |
+| ------- | ---------------------------------------------------------------------------------------------- |
+| `0`     | The four consumers conform and every checkout is unchanged                                     |
+| `1`     | They do not conform, or the manifest could not be read or validated; stderr names each failure |
+| `2`     | The invocation is unusable: no manifest argument, or more than one                             |
+| `128+N` | Signal `N` stopped the run first: `130` for `SIGINT`, `143` for `SIGTERM`                      |
 
-A stopped run reached no verdict, so it does not exit `1`. It still retires every started process
-group and reconciles the checkouts before exiting, and prints what it found on the way out, so read
-stderr for a changed checkout or a cleanup failure before rerunning.
+A `1` alone is therefore not a verdict: read stderr to tell a manifest that could not be used from
+consumers that failed. A stopped run reached no verdict, so it does not exit `1`. It still retires
+every started process group and reconciles the checkouts before exiting, and prints what it found on
+the way out, so read stderr for a changed checkout or a cleanup failure before rerunning.
 
 ## Understand the phases
 

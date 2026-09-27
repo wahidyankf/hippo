@@ -14,11 +14,11 @@ Feature: Release resource ownership
     Then it exits <status> naming <code> in one diagnostic line that says <reason>
 
     Examples:
-      | condition                                   | status | code                          | reason                                              |
-      | memory pressure never clears                | 124    | hippo.limit.capacity-deferred | memory pressure does not leave safe release headroom |
-      | CPU use never settles                       | 124    | hippo.limit.capacity-deferred | CPU use does not leave release and safety headroom  |
-      | free disk is below the release reserve      | 124    | hippo.limit.storage-blocked   | release disk reserve is unavailable                 |
-      | host evidence stops after the first sample  | 125    | hippo.supervision.failed      | injected host evidence failure                      |
+      | condition                                                        | status | code                          | reason                                               |
+      | memory pressure never clears                                     | 124    | hippo.limit.capacity-deferred | memory pressure does not leave safe release headroom |
+      | CPU use never settles                                            | 124    | hippo.limit.capacity-deferred | CPU use does not leave release and safety headroom   |
+      | free disk is below the release reserve                           | 124    | hippo.limit.storage-blocked   | release disk reserve is unavailable                  |
+      | sampling fails with an unclassified error after the first sample | 125    | hippo.supervision.failed      | injected host evidence failure                       |
 
   Scenario: Release overlap rejects failed health evidence
     Given a release summary with one health failure

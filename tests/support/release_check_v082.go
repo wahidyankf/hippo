@@ -26,7 +26,7 @@ func releaseCheckFailureSamples(condition string) ([]policy.Sample, int, error) 
 		failing.CPUUtilizationPercent = new(99.0)
 	case "free disk is below the release reserve":
 		failing.DiskFreeBytes = new(2 * policy.GiB)
-	case "host evidence stops after the first sample":
+	case "sampling fails with an unclassified error after the first sample":
 		return []policy.Sample{probe}, 1, nil
 	default:
 		return nil, 0, fmt.Errorf("unknown release check condition %q", condition)

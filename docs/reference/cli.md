@@ -107,12 +107,15 @@ $ hippo version --json
 ```
 
 The text form reports the release followed by its exact source commit. The JSON form carries the
-same values in `version` and `commit`. A binary built from source outside the release script reports
-`dev (unknown)`, because both values are injected by `scripts/build-release.sh` at link time.
+same values in `version` and `commit`. Both values are injected at link time: by
+`scripts/build-release.sh` for a release, and as `v0.0.0-test` with an all-zero commit by the test
+harness. Any other source build reports `dev (unknown)`.
 
 ## `hippo status`
 
-Takes one host sample, resolves a profile, and reports it. Read-only: it never admits work.
+Takes one host sample, resolves a profile, and reports it. It never admits work, but it needs a
+writable state root: while a reservation epoch is live it takes the coordination lock and reconciles
+the ledger, and a lock it cannot open exits `125` naming `hippo.evidence.unwritable`.
 
 | Flag                 | Default | Meaning                                            |
 | -------------------- | ------- | -------------------------------------------------- |
@@ -222,11 +225,13 @@ hippo run [flags] -- <command> [arguments...]
 | `--lease-min <n>`                 | `0`         | Minimum allowed leased port; refused without `--lease-port`                                                                            |
 | `--lease-max <n>`                 | `0`         | Maximum allowed leased port; refused without `--lease-port`                                                                            |
 
-The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A normal
-child exit code is passed through unchanged. Capacity waiting creates one FIFO identity and does not
-launch the payload until admitted. A heartbeat reports that run ID, queue position, and remaining
-deadline every 30 seconds. Expiry returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt; HIPPO never
-retries a payload.
+The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A
+normal child exit code is passed through unchanged. Under reservation coordination (schema 2 or 3),
+capacity waiting creates one FIFO identity and does not launch the payload until admitted. A
+heartbeat reports that run ID, queue position, and remaining deadline every 30 seconds. Expiry
+returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt. Under
+schema 1, a heavy-work lease deferral returns the same `124` without a receipt. HIPPO never retries
+a payload.
 
 A `--lease-port` lease is a directory in `hippo-port-leases` under the temporary directory (`TMPDIR`,
 else `/tmp`), not in the state root. A lease root that refuses that write before launch exits `125`
@@ -266,7 +271,7 @@ Silent gate. Exits `0` when a release may proceed, and reports a stable exit cod
 A failed check writes one diagnostic line naming its reason. Memory pressure or CPU use that does not settle defers the
 release, exit `124` naming `hippo.limit.capacity-deferred`, and a retry can succeed. A disk below the release reserve
 exits `124` naming `hippo.limit.storage-blocked`; free space first. Host evidence that cannot be collected exits `125`
-naming `hippo.supervision.failed`.
+naming `hippo.host.unreadable`.
 
 ```console
 $ hippo release check --disk-path /srv/app

@@ -21,6 +21,7 @@ Both sets are fixed: HIPPO compiles in no build-tool or product-specific names.
 | `TERM`                   | Unset or `dumb`: `--color auto` never colours.                                                                                                          |
 | `XDG_STATE_HOME`         | Linux only, when `HIPPO_ROOT` is unset: picks the default state root, and so the shared ledger HIPPO joins. See [State root](./state-root.md#location). |
 | `HOME`                   | When `HIPPO_ROOT` is unset: the base of the default state root. See [State root](./state-root.md#location).                                             |
+| `TMPDIR`                 | Base of the port-lease root `hippo-port-leases` that `run --lease-port` uses; unset means `/tmp`. See [State root](./state-root.md#coordination).       |
 
 ### Test builds only
 

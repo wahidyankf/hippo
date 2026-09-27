@@ -90,12 +90,12 @@ release, see its [comparison on GitHub](https://github.com/wahidyankf/hippo/rele
   and exited `124` as though the evidence had been assessed and rejected. A caller should
   regenerate the summary.
 - `release check` reports a failed stability check on one line that names its own reason. Memory
-  pressure or CPU use that does not settle still exits `124` naming
-  `hippo.limit.capacity-deferred`. A disk below the release reserve now names
-  `hippo.limit.storage-blocked`, as `run` does for the same threshold, and host evidence that stops
-  arriving exits `125` naming `hippo.supervision.failed`. Every one of these printed the bare
-  reason and then a second line claiming a capacity deferral, `124`, whatever had failed. A caller
-  retrying every `124` from `release check` should retry only the retryable reason.
+  pressure or CPU use that does not settle still exits `124` naming `hippo.limit.capacity-deferred`.
+  A disk below the release reserve now names `hippo.limit.storage-blocked`, as `run` does for the
+  same threshold, and host evidence that cannot be collected, including evidence that stops
+  arriving, exits `125` naming `hippo.host.unreadable`. Every one of these printed the bare reason
+  and then a second line claiming a capacity deferral, `124`, whatever had failed. A caller retrying
+  every `124` from `release check` should retry only the retryable reason.
 - `status --source` and `watch --source` with a malformed value, such as `'Bad Source'`, now exit
   `2` naming `hippo.args.invalid` before configuration is read; `history --source` does the same.
   They exited `0` or `1` as though the filter matched nothing. A caller should correct the value.
