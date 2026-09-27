@@ -38,9 +38,10 @@ nor HIPPO failing.
 - `watch`, `monitor`, and `release monitor` run until they are stopped, so a signal is their usual
   end, and they end with `128+N` wherever it lands, including while a sample is being collected.
   `release monitor` still writes its summary first; ending at its own `--duration-ms` exits `0`.
-- A `run` still waiting in the queue, or still sampling the host before its child starts, writes a
-  `never-started` receipt with reason `admission-cancelled`, then exits `128+N`. One stopped while
-  sampling also summarizes those samples under the outcome `admission-cancelled`.
+- A `run` still waiting in the reservation queue (schema 2 or 3), or still sampling the host before
+  its child starts, writes a `never-started` receipt with reason `admission-cancelled`, then exits
+  `128+N`. One waiting for a schema-1 heavy-work lease exits `128+N` without a receipt. One stopped
+  while sampling also summarizes those samples under the outcome `admission-cancelled`.
 - A `run` whose child already started stops that child, and the child's own status passes through
   as usual. A failure HIPPO hits while stopping, such as a receipt it cannot write, is still
   reported under its reason.

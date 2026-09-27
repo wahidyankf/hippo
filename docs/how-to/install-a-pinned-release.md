@@ -96,9 +96,10 @@ That script content-addresses every production Go source file plus the module gr
 under bounded compiler parallelism, publishes the binary atomically, and retains the current
 generation plus two recent fallbacks. Subsequent runs hit the cache.
 
-A source build reports `dev (unknown)` rather than a version, because version and commit are injected
-only by `scripts/build-release.sh`. That is expected, and it is a useful signal: if a machine you
-believed was running a pinned release reports `dev`, it is not.
+A source build reports `dev (unknown)` rather than a version, because only
+`scripts/build-release.sh` injects a release version and commit; the repository's test harness
+stamps its own `v0.0.0-test` identity. That is expected, and it is a useful signal: if a machine you
+believed was running a pinned release reports `dev` or `v0.0.0-test`, it is not.
 
 `HIPPO_BUILD_CACHE` relocates the bootstrap's cache directory.
 

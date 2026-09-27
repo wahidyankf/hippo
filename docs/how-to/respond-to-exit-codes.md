@@ -39,7 +39,8 @@ rejected release, because the same evidence is rejected again.
 
 ### Tell never-started from started
 
-A deferral before launch is safe to requeue once. A shed after launch is not.
+A deferral before launch that left a `never-started` receipt is safe to requeue once. A shed after
+launch is not.
 
 If `HIPPO_ROOT` is not set in your shell, set it to your state root first; see
 [Shared state root](../reference/state-root.md#location) for each platform's default. `receipts/`
@@ -50,9 +51,12 @@ hippo history --since 1d --source my-repo --outcome emergency-safety-stop
 ls "$HIPPO_ROOT/receipts"
 ```
 
-Queue expiry or cancellation writes `state: "never-started"`, including a wait that ran out, or was
-signalled, while another admission held the shared coordination lock; a signal before launch records
-the reason `admission-cancelled`. Emergency termination writes
+Under reservation coordination (schema 2 or 3), queue expiry or cancellation writes
+`state: "never-started"`, including a wait that ran out, or was signalled, while another admission
+held the shared coordination lock; a signal while waiting, or while sampling the host before launch,
+records the reason `admission-cancelled`. Schema 1 has no queue: a heavy-work lease deferral, or a
+signal while waiting for that lease, writes no receipt. A missing receipt never proves that the work
+started, and it never proves that requeueing is safe. Emergency termination writes
 `state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as
 `pressure-shed` or `storage-shed`.
 
@@ -171,9 +175,10 @@ not fail: someone stopped it.
 
 - For `watch`, `monitor`, or `release monitor`, this is the ordinary end. `release monitor` has
   already written its summary; `--duration-ms` ends it with `0` instead.
-- For a `run` whose child never started, a `never-started` receipt with reason
-  `admission-cancelled` says so, and the same invocation may be requeued once. If it had begun
-  sampling the host, its lifetime summary carries the same word as its outcome.
+- For a `run` whose child never started, a `never-started` receipt with reason `admission-cancelled`
+  says so, and the same invocation may be requeued once. If it had begun sampling the host, its
+  lifetime summary carries the same word as its outcome. A run stopped while waiting for a schema-1
+  heavy-work lease writes no receipt, so nothing proves it may be requeued.
 - For a `run` whose child started, the status is the child's own; it was stopped, so recover its
   effects before repeating it.
 
