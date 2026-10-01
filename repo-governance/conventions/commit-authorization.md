@@ -10,6 +10,12 @@ Absent either, prepare the change, verify it, and stop.
 Authorization is specific. Permission to commit one change is not permission to commit the next one, and permission
 given for a plan covers the steps that plan describes.
 
+A release is authorized separately, with one standing exception. A merged HIPPO defect fix, whether filed here under a
+consumer's adopted [upstream tool defects](../development/upstream-tool-defects.md) standard or found and fixed here, is
+released through [release cut](../workflows/release-cut.md) without a further prompt once its regression test and the
+full gate pass on the exact revision. That skips no release-cut step, and a fix that moves the
+[public contract](../development/public-contract.md) still needs its own authorization.
+
 ## Why It Is Separate
 
 A convention that chooses a path — [integration path](integration-path.md), [thematic commits](thematic-commits.md) —
