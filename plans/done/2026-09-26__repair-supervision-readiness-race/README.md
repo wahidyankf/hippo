@@ -14,8 +14,7 @@ failure is scheduled by sample count, while child readiness is assumed rather th
 ## Decision
 
 [Judgment call] Repair only the fixture boundary. Keep the existing Gherkin scenario and product code unchanged, make
-the race deterministic in RED, then place a bounded readiness barrier immediately before the injected collector
-failure.
+the race deterministic in RED, then place a bounded readiness barrier immediately before the injected collector failure.
 
 Rejected alternatives:
 
@@ -55,8 +54,8 @@ Out of scope:
 ## Dependencies
 
 - [Repo-grounded] `tests/support/review_v04.go` already provides bounded marker-wait helpers in the same package.
-- [Repo-grounded] `npm run test:quick` runs the quick gate, one of the gates `pre-push` runs, and `npm test` runs the full
-  test gate; `./rhino gate list` names every gate on each surface.
+- [Repo-grounded] `npm run test:quick` runs the quick gate, one of the gates `pre-push` runs, and `npm test` runs the
+  full test gate; `./rhino gate list` names every gate on each surface.
 - [Repo-grounded] HIPPO does not guard its own compute, so its repository commands run directly.
 
 ## Directory Map

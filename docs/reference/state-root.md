@@ -1,7 +1,7 @@
 # Shared state root
 
-Every repository on a host that uses the same state root coordinates through the same ledger and
-shares one evidence budget. This is what makes cross-repository coordination work at all.
+Every repository on a host that uses the same state root coordinates through the same ledger and shares one evidence
+budget. This is what makes cross-repository coordination work at all.
 
 ## Location
 
@@ -14,8 +14,8 @@ shares one evidence budget. This is what makes cross-repository coordination wor
 
 ## Files
 
-Everything below is private implementation data. **None of it is a supported API.** Consumers should
-read the documented raw samples and summaries instead — see [JSON schemas](./json-schemas.md).
+Everything below is private implementation data. **None of it is a supported API.** Consumers should read the documented
+raw samples and summaries instead — see [JSON schemas](./json-schemas.md).
 
 ### Coordination
 
@@ -32,18 +32,17 @@ read the documented raw samples and summaries instead — see [JSON schemas](./j
 | `.coordination-mode-*.tmp`              | Protected atomic-write staging for the active mode marker           |
 | `.reservations-*.tmp`                   | Protected atomic-write staging for the reservation ledger           |
 
-`reservations.json` and `coordination-mode.json` exist only while an epoch is live. An idle root
-legitimately has neither.
+`reservations.json` and `coordination-mode.json` exist only while an epoch is live. An idle root legitimately has
+neither.
 
-`hippo.evidence.unwritable` covers the whole state root, these coordination files included, not
-only the evidence files below. A `run` that cannot write any of them before its child starts, for
-lack of permission, a read-only file system, or no space or quota, exits `125` naming it, and so
-does `status` when it cannot open `coordination.lock` to read coordination. See
-[Exit codes](./exit-codes.md#error-codes).
+`hippo.evidence.unwritable` covers the whole state root, these coordination files included, not only the evidence files
+below. A `run` that cannot write any of them before its child starts, for lack of permission, a read-only file system,
+or no space or quota, exits `125` naming it, and so does `status` when it cannot open `coordination.lock` to read
+coordination. See [Exit codes](./exit-codes.md#error-codes).
 
-Port leases taken with `run --lease-port` are not kept in the state root. They live in
-`hippo-port-leases` under the temporary directory (`TMPDIR`, else `/tmp`), and a write refused there
-before launch names `hippo.lease.unwritable` instead.
+Port leases taken with `run --lease-port` are not kept in the state root. They live in `hippo-port-leases` under the
+temporary directory (`TMPDIR`, else `/tmp`), and a write refused there before launch names `hippo.lease.unwritable`
+instead.
 
 ### Evidence
 
@@ -76,9 +75,8 @@ reservation-identities
 sessions
 ```
 
-The other directories appear only once something writes them: `owner-metadata/` when reservation
-mode admits an owner, `receipts/` when a receipt is written, and `raw/` and `history/` when a
-previous day's completed streams are compacted.
+The other directories appear only once something writes them: `owner-metadata/` when reservation mode admits an owner,
+`receipts/` when a receipt is written, and `raw/` and `history/` when a previous day's completed streams are compacted.
 
 ## Evidence budget
 
@@ -95,23 +93,21 @@ One shared root, across every repository using it:
 | Summary/history window       | 30 days and 128 MiB               |
 | Safety receipt window        | 30 days and 128 MiB               |
 
-A lifetime summary stays complete even after its older raw chunks rotate away, because the aggregate
-is maintained in fixed memory rather than recomputed from retained samples.
+A lifetime summary stays complete even after its older raw chunks rotate away, because the aggregate is maintained in
+fixed memory rather than recomputed from retained samples.
 
-Active streams are protected from cleanup by process-owned markers. Recognized coordination and
-reservation atomic-write temporary files are retention-exempt while their writers finalize them.
-Completed prior-day raw streams move atomically into gzip files under `raw/`. Prior-day summaries
-are deduplicated by run ID and compacted into daily gzip JSONL under `history/`. If the history cap
-is reached before 30 days, the oldest day is aggregated by source, exact tags, class, tier, and
-outcome before any already-aggregated oldest day is removed. Temporary files older than one hour
-are pruned.
+Active streams are protected from cleanup by process-owned markers. Recognized coordination and reservation atomic-write
+temporary files are retention-exempt while their writers finalize them. Completed prior-day raw streams move atomically
+into gzip files under `raw/`. Prior-day summaries are deduplicated by run ID and compacted into daily gzip JSONL under
+`history/`. If the history cap is reached before 30 days, the oldest day is aggregated by source, exact tags, class,
+tier, and outcome before any already-aggregated oldest day is removed. Temporary files older than one hour are pruned.
 
 ## Privacy
 
-Evidence never records command arguments, repository origins, filesystem paths, credentials, or user
-payload data. `reservations.json` records only capacity, vectors, classes, profiles, a monotonic
-sequence, diagnostic PIDs, process groups, configuration hashes, and the numeric 73/75 shedding
-cause. Metadata, summaries, and receipts use validated source/tag labels instead of paths.
+Evidence never records command arguments, repository origins, filesystem paths, credentials, or user payload data.
+`reservations.json` records only capacity, vectors, classes, profiles, a monotonic sequence, diagnostic PIDs, process
+groups, configuration hashes, and the numeric 73/75 shedding cause. Metadata, summaries, and receipts use validated
+source/tag labels instead of paths.
 
 ## Related
 

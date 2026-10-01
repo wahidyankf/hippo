@@ -1,8 +1,8 @@
 # JSON and evidence formats
 
-Every JSON document HIPPO emits carries a `schemaVersion`. Byte values are integer bytes, timestamps
-are UTC RFC 3339 with optional fractional seconds, and an unavailable optional reading is `null` or
-omitted according to that field's compatibility contract. Field _order_ is not part of any contract.
+Every JSON document HIPPO emits carries a `schemaVersion`. Byte values are integer bytes, timestamps are UTC RFC 3339
+with optional fractional seconds, and an unavailable optional reading is `null` or omitted according to that field's
+compatibility contract. Field _order_ is not part of any contract.
 
 | Document                     | Schema | Produced by                     |
 | ---------------------------- | ------ | ------------------------------- |
@@ -21,10 +21,9 @@ omitted according to that field's compatibility contract. Field _order_ is not p
 
 ## `version --json`
 
-The smallest public document has three required fields: integer `schemaVersion` `1`, the release
-string in `version`, and the exact source commit in `commit`. Release builds currently report
-`v0.8.2`; source builds report `dev` and `unknown`, and the repository's test builds report
-`v0.0.0-test` with an all-zero commit.
+The smallest public document has three required fields: integer `schemaVersion` `1`, the release string in `version`,
+and the exact source commit in `commit`. Release builds currently report `v0.8.2`; source builds report `dev` and
+`unknown`, and the repository's test builds report `v0.0.0-test` with an all-zero commit.
 
 ## `monitor --json`
 
@@ -43,8 +42,8 @@ One object per line, one line per state or profile transition.
 
 ## `status --json`
 
-Schema 5. The latest host sample at the top level, plus the current assessment, resolved profile,
-privacy-safe `coordination` rows and totals, owner-promotion decision, and `configHash`.
+Schema 5. The latest host sample at the top level, plus the current assessment, resolved profile, privacy-safe
+`coordination` rows and totals, owner-promotion decision, and `configHash`.
 
 ```json
 {
@@ -134,24 +133,22 @@ privacy-safe `coordination` rows and totals, owner-promotion decision, and `conf
 }
 ```
 
-An idle coordination epoch reports zeroes for `capacity`, `allocated`, and every count. In exclusive
-mode, each live compatibility session appears as an `active` owner with `legacy: true`; the heavy
-lease and its matching session are one owner, not two. Exclusive mode has no registered waiter rows
-and does not invent reservation vectors.
+An idle coordination epoch reports zeroes for `capacity`, `allocated`, and every count. In exclusive mode, each live
+compatibility session appears as an `active` owner with `legacy: true`; the heavy lease and its matching session are one
+owner, not two. Exclusive mode has no registered waiter rows and does not invent reservation vectors.
 
-**Coordination corruption is an error, never a synthetic zero-total success.** If the reservation
-marker, lock, or ledger cannot be decoded, `status --json` returns an error rather than reporting
-totals it cannot substantiate.
+**Coordination corruption is an error, never a synthetic zero-total success.** If the reservation marker, lock, or
+ledger cannot be decoded, `status --json` returns an error rather than reporting totals it cannot substantiate.
 
-`owners` and `waiters` are safe operational rows. They contain opaque run IDs, labels, class,
-profile, tier, requested/allocated vectors, tier minimum/maximum, registration time, and deadline—never commands, arguments, working
-directories, or repository paths. `legacyEntries` counts live compatibility owners and live schema-2
-records without metadata; schema-3 launches refuse to mix with them until they drain.
+`owners` and `waiters` are safe operational rows. They contain opaque run IDs, labels, class, profile, tier,
+requested/allocated vectors, tier minimum/maximum, registration time, and deadline—never commands, arguments, working
+directories, or repository paths. `legacyEntries` counts live compatibility owners and live schema-2 records without
+metadata; schema-3 launches refuse to mix with them until they drain.
 
 ### `coordination.abandonedProcessGroups`
 
-Present only when HIPPO has recorded a supervised process group that is still running while the guard
-process that owned it is gone.
+Present only when HIPPO has recorded a supervised process group that is still running while the guard process that owned
+it is gone.
 
 ```json
 "coordination": {
@@ -168,17 +165,15 @@ HIPPO reports these and **never signals them**. See
 
 ## Host sample
 
-The same object written one per line into raw development evidence, and embedded in every release
-raw record. Schema 3.
+The same object written one per line into raw development evidence, and embedded in every release raw record. Schema 3.
 
-| Group          | Fields                                                                                                                                   |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity       | `schemaVersion`, `measuredAt`, `platform`, `capabilities`                                                                                |
-| Memory         | `effectiveMemoryLimitBytes`, `availableMemoryBytes`, `availableNonCompressedEstimateBytes`, `memoryPressureLevel`, `physicalMemoryBytes` |
-| Compressor     | `compressorAvailable`, `compressorPayloadBytes`, `compressorStoredPages`, `compressorOccupiedPages`                                      |
-| CPU and disk   | `availableParallelism`, `cpuUtilizationPercent`, `diskFreeBytes`, `diskTotalBytes`                                                       |
-| Swap           | `pageSizeBytes`, `swapIns`, `swapOuts`, `swapTotalBytes`, `swapUsedBytes`, `swapFreeBytes`, `swapState`                                  |
-| Linux pressure | `memoryPsiSomeAvg10`, `memoryPsiFullAvg10`, `oomEvents`, `oomKillEvents`                                                                 |
+- **Identity** — `schemaVersion`, `measuredAt`, `platform`, `capabilities`
+- **Memory** — `effectiveMemoryLimitBytes`, `availableMemoryBytes`, `availableNonCompressedEstimateBytes`,
+  `memoryPressureLevel`, `physicalMemoryBytes`
+- **Compressor** — `compressorAvailable`, `compressorPayloadBytes`, `compressorStoredPages`, `compressorOccupiedPages`
+- **CPU and disk** — `availableParallelism`, `cpuUtilizationPercent`, `diskFreeBytes`, `diskTotalBytes`
+- **Swap** — `pageSizeBytes`, `swapIns`, `swapOuts`, `swapTotalBytes`, `swapUsedBytes`, `swapFreeBytes`, `swapState`
+- **Linux pressure** — `memoryPsiSomeAvg10`, `memoryPsiFullAvg10`, `oomEvents`, `oomKillEvents`
 
 The Linux pressure group appears only where the host supplies it.
 
@@ -194,14 +189,13 @@ A repository may track this small, customizable document:
 }
 ```
 
-`source` is a lowercase safe token. There may be at most eight tag pairs and the encoded document
-may not exceed 512 bytes. Unknown fields, duplicate JSON fields, path-like values, and invalid
-labels are rejected. Invocation `--source`/`--tag` overrides use the same validation.
+`source` is a lowercase safe token. There may be at most eight tag pairs and the encoded document may not exceed 512
+bytes. Unknown fields, duplicate JSON fields, path-like values, and invalid labels are rejected. Invocation
+`--source`/`--tag` overrides use the same validation.
 
 ## Development lifetime summary
 
-Schema 5. The aggregate covers **every** sample taken during the session, even after older raw chunks
-have rotated away.
+Schema 5. The aggregate covers **every** sample taken during the session, even after older raw chunks have rotated away.
 
 ```json
 {
@@ -243,39 +237,59 @@ have rotated away.
 }
 ```
 
-| Summary group       | Fields                                                                                                                                                                                                                                                                    |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity and result | `schemaVersion`, `runId`, `startedAt`, `finishedAt`, `source`, `tags`, `resourceTier`, `sampleCount`, `taskClass`, `outcome`                                                                                                                                              |
-| Capacity aggregate  | `availableParallelism`, `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `compressorAvailableAll`, `compressorPayloadPeakBytes`, `cpuUtilizationP95Percent`, `diskFreeMinBytes`, `swapInsDelta`, `swapOutsDelta`, `swapFreeMinBytes`, `healthFailures` |
-| Source platform     | `platform`, `capabilities`                                                                                                                                                                                                                                                |
-| Resolved policy     | `requestedProfile`, `resolvedProfile`, `fallbackChain`, `concurrency`, `configHash`                                                                                                                                                                                       |
-| Reservation         | `requestedCpu`, `requestedMemoryBytes`, `allocatedCpu`, `allocatedMemoryBytes`, `reservationWaitMilliseconds`, `peakOwnerCount`, `budgetOutcome`                                                                                                                          |
+- **Identity and result** — `schemaVersion`, `runId`, `startedAt`, `finishedAt`, `source`, `tags`, `resourceTier`,
+  `sampleCount`, `taskClass`, `outcome`
+- **Capacity aggregate** — `availableParallelism`, `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`,
+  `compressorAvailableAll`, `compressorPayloadPeakBytes`, `cpuUtilizationP95Percent`, `diskFreeMinBytes`,
+  `swapInsDelta`, `swapOutsDelta`, `swapFreeMinBytes`, `healthFailures`
+- **Source platform** — `platform`, `capabilities`
+- **Resolved policy** — `requestedProfile`, `resolvedProfile`, `fallbackChain`, `concurrency`, `configHash`
+- **Reservation** — `requestedCpu`, `requestedMemoryBytes`, `allocatedCpu`, `allocatedMemoryBytes`,
+  `reservationWaitMilliseconds`, `peakOwnerCount`, `budgetOutcome`
 
 `outcome` is one of these values, and no other:
 
-| `outcome`               | Child started? | Meaning                                                                                                                 |
-| ----------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `passed`                | Yes            | The child exited `0`                                                                                                    |
-| `task-failed`           | Yes            | The child exited nonzero, was stopped by a signal to HIPPO, or failed its activation                                    |
-| `pressure-shed`         | Yes            | HIPPO shed the child under host pressure other than storage                                                             |
-| `storage-shed`          | Yes            | HIPPO shed the child because the disk floor was crossed                                                                 |
-| `emergency-safety-stop` | Yes            | HIPPO stopped transactional work past the emergency floor                                                               |
-| `supervision-failed`    | Yes            | HIPPO lost supervision of a running child and stopped it                                                                |
-| `capacity-deferred`     | No             | Safe host admission was not reached before the admission deadline                                                       |
-| `storage-blocked`       | No             | The disk floor refused the run before launch                                                                            |
-| `admission-cancelled`   | No             | A signal or other cancellation stopped the run while it sampled the host                                                |
-| `admission-failed`      | No             | HIPPO stopped the run after host sampling began: unreadable host evidence, a refused evidence write, or a failed launch |
+- `passed`
+  - Child started?: Yes
+  - Meaning: The child exited `0`
+- `task-failed`
+  - Child started?: Yes
+  - Meaning: The child exited nonzero, was stopped by a signal to HIPPO, or failed its activation
+- `pressure-shed`
+  - Child started?: Yes
+  - Meaning: HIPPO shed the child under host pressure other than storage
+- `storage-shed`
+  - Child started?: Yes
+  - Meaning: HIPPO shed the child because the disk floor was crossed
+- `emergency-safety-stop`
+  - Child started?: Yes
+  - Meaning: HIPPO stopped transactional work past the emergency floor
+- `supervision-failed`
+  - Child started?: Yes
+  - Meaning: HIPPO lost supervision of a running child and stopped it
+- `capacity-deferred`
+  - Child started?: No
+  - Meaning: Safe host admission was not reached before the admission deadline
+- `storage-blocked`
+  - Child started?: No
+  - Meaning: The disk floor refused the run before launch
+- `admission-cancelled`
+  - Child started?: No
+  - Meaning: A signal or other cancellation stopped the run while it sampled the host
+- `admission-failed`
+  - Child started?: No
+  - Meaning: HIPPO stopped the run after host sampling began: unreadable host evidence, a refused evidence write, or a
+    failed launch
 
-A summary exists only for a run that reached host sampling. A run cancelled while it waited in the
-reservation queue collected no host evidence, so it writes no summary; its `never-started` receipt
-with reason `admission-cancelled` is its whole record. `admission-cancelled` and `admission-failed` are new in
-v0.8.2; before them, a run cancelled during host sampling, and a run HIPPO failed before launch,
-were both summarized as `capacity-deferred`. When a cancelled run's `never-started` receipt is
-refused, the refusal decides the exit status and the outcome is `admission-failed`.
+A summary exists only for a run that reached host sampling. A run cancelled while it waited in the reservation queue
+collected no host evidence, so it writes no summary; its `never-started` receipt with reason `admission-cancelled` is
+its whole record. `admission-cancelled` and `admission-failed` are new in v0.8.2; before them, a run cancelled during
+host sampling, and a run HIPPO failed before launch, were both summarized as `capacity-deferred`. When a cancelled run's
+`never-started` receipt is refused, the refusal decides the exit status and the outcome is `admission-failed`.
 
-Schema-4 fields keep their meanings; labels and timestamps are the schema-5 addition.
-`peakOwnerCount` is raised atomically by every admission event during the child's lifetime, so an
-owner that was admitted and released between host-sampling ticks is still counted.
+Schema-4 fields keep their meanings; labels and timestamps are the schema-5 addition. `peakOwnerCount` is raised
+atomically by every admission event during the child's lifetime, so an owner that was admitted and released between
+host-sampling ticks is still counted.
 
 ## `history --json`
 
@@ -297,19 +311,16 @@ owner that was admitted and released between host-sampling ticks is still counte
 }
 ```
 
-The example row is abridged. A row carries every field below that has a value; empty fields are
-omitted:
+The example row is abridged. A row carries every field below that has a value; empty fields are omitted:
 
-| Group        | Fields                                                                                                          |
-| ------------ | --------------------------------------------------------------------------------------------------------------- |
-| Identity     | `schemaVersion`, `runId`, `startedAt`, `finishedAt`, `source`, `tags`, `resourceTier`, `taskClass`              |
-| Result       | `outcome`, `budgetOutcome`, `peakOwnerCount`, `aggregateCount`                                                  |
-| Host summary | `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `cpuUtilizationP95Percent`, `swapOutsDelta` |
+- **Identity** — `schemaVersion`, `runId`, `startedAt`, `finishedAt`, `source`, `tags`, `resourceTier`, `taskClass`
+- **Result** — `outcome`, `budgetOutcome`, `peakOwnerCount`, `aggregateCount`
+- **Host summary** — `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `cpuUtilizationP95Percent`,
+  `swapOutsDelta`
 
-History rows are the queryable safe subset of lifetime summaries. Under the 128 MiB history cap,
-the oldest daily archive is first aggregated by source, exact tags, class, tier, and outcome;
-`aggregateCount` then reports how many original runs the row represents. Aggregates never qualify
-for owner promotion.
+History rows are the queryable safe subset of lifetime summaries. Under the 128 MiB history cap, the oldest daily
+archive is first aggregated by source, exact tags, class, tier, and outcome; `aggregateCount` then reports how many
+original runs the row represents. Aggregates never qualify for owner promotion.
 
 ## Safety receipt
 
@@ -327,13 +338,12 @@ for owner promotion.
 }
 ```
 
-`state` distinguishes `never-started` queue expiry/cancellation from `started-safety-stop`
-emergency pressure and `started-activation-failure` after a launched child could not be activated in
-the ledger. A `never-started` receipt names `admission-deadline` when the queue deadline passed,
-including while another admission held the shared coordination lock, `host-admission` when host
-sampling never became safe, and `admission-cancelled` when a signal stopped the run first,
-including while it waited for that lock. Only `never-started` authorizes automatic requeue. Receipts contain no command or path
-and are retained for 30 days under a 128 MiB cap.
+`state` distinguishes `never-started` queue expiry/cancellation from `started-safety-stop` emergency pressure and
+`started-activation-failure` after a launched child could not be activated in the ledger. A `never-started` receipt
+names `admission-deadline` when the queue deadline passed, including while another admission held the shared
+coordination lock, `host-admission` when host sampling never became safe, and `admission-cancelled` when a signal
+stopped the run first, including while it waited for that lock. Only `never-started` authorizes automatic requeue.
+Receipts contain no command or path and are retained for 30 days under a 128 MiB cap.
 
 ## Release raw record
 

@@ -1,19 +1,19 @@
 # HIPPO documentation
 
-HIPPO admits, supervises, and sheds local development work from host resource evidence, so several
-repositories can build and test on one machine without thrashing it.
+HIPPO admits, supervises, and sheds local development work from host resource evidence, so several repositories can
+build and test on one machine without thrashing it.
 
 ## Start here
 
-New to HIPPO? [Guard your first command](./tutorials/guard-your-first-command.md) takes about five
-minutes and ends with a real command running under supervision.
+New to HIPPO? [Guard your first command](./tutorials/guard-your-first-command.md) takes about five minutes and ends with
+a real command running under supervision.
 
 Already know what you want to do? Jump to the [how-to guides](./how-to/README.md).
 
 ## Find the right kind of help
 
-This documentation follows the [Diátaxis framework](https://diataxis.fr/), so you can pick material
-that matches the question you have right now.
+This documentation follows the [Diátaxis framework](https://diataxis.fr/), so you can pick material that matches the
+question you have right now.
 
 | Section                                | Use it when                                          |
 | -------------------------------------- | ---------------------------------------------------- |
@@ -22,30 +22,28 @@ that matches the question you have right now.
 | [Reference](./reference/README.md)     | You need an exact flag, exit code, field, or default |
 | [Explanation](./explanation/README.md) | You want to understand why HIPPO is built this way   |
 
-The distinction that matters most: a **tutorial** teaches you something you did not know how to want,
-while a **how-to guide** helps you do something you already decided to do. If a page feels like the
-wrong shape for your question, the other section probably has the right one.
+The distinction that matters most: a **tutorial** teaches you something you did not know how to want, while a **how-to
+guide** helps you do something you already decided to do. If a page feels like the wrong shape for your question, the
+other section probably has the right one.
 
 ## The short version
 
 - **What it is** — a standalone Go CLI for macOS and Linux. No daemon, no agent, no service.
-- **What it does** — reads host evidence, resolves a safe profile, claims a CPU-and-memory
-  reservation from a ledger shared by every repository on the machine, then runs your command in its
-  own process group with the allocated concurrency in its environment.
-- **How you use it** — under adaptive schema 3, `hippo run --resource-tier <tier> -- <command>`, plus
-  one environment variable your build tool already reads.
-- **How you observe it** — `hippo status`, `hippo watch`, and `hippo history` show labeled admission
-  and bounded outcomes without recording commands or paths.
-- **What it will not do** — signal a process group it did not start, or guess when shared state is
-  unreadable.
+- **What it does** — reads host evidence, resolves a safe profile, claims a CPU-and-memory reservation from a ledger
+  shared by every repository on the machine, then runs your command in its own process group with the allocated
+  concurrency in its environment.
+- **How you use it** — under adaptive schema 3, `hippo run --resource-tier <tier> -- <command>`, plus one environment
+  variable your build tool already reads.
+- **How you observe it** — `hippo status`, `hippo watch`, and `hippo history` show labeled admission and bounded
+  outcomes without recording commands or paths.
+- **What it will not do** — signal a process group it did not start, or guess when shared state is unreadable.
 
 ## Specifications
 
-The [specifications tree](../specs/README.md) is canonical.
-[`specs/architecture.md`](../specs/architecture.md) holds the as-built C4 model, and
-[`specs/behaviours/`](../specs/behaviours/README.md) holds the executable Gherkin corpus that every
-test adapter runs. Where this documentation and the corpus disagree about observable behavior, the
-corpus wins — and that disagreement is a bug worth reporting.
+The [specifications tree](../specs/README.md) is canonical. [`specs/architecture.md`](../specs/architecture.md) holds
+the as-built C4 model, and [`specs/behaviours/`](../specs/behaviours/README.md) holds the executable Gherkin corpus that
+every test adapter runs. Where this documentation and the corpus disagree about observable behavior, the corpus wins —
+and that disagreement is a bug worth reporting.
 
 ## Project context
 
@@ -60,19 +58,18 @@ HIPPO is one of the five **OSE Code Repositories** — the repositories
 | **`hippo`**                                                | Resource coordination — this repository |
 | [`beaver-nest`](https://github.com/wahidyankf/beaver-nest) | An independent family product           |
 
-HIPPO coordinates real work across the other four, which consume its published releases through
-their own checksum-pinned bootstraps. Nothing crosses the other way at runtime: the HIPPO binary
-depends on none of them, and cannot guard itself. Only its contributor gates run a checksum-pinned
-RHINO release.
+HIPPO coordinates real work across the other four, which consume its published releases through their own
+checksum-pinned bootstraps. Nothing crosses the other way at runtime: the HIPPO binary depends on none of them, and
+cannot guard itself. Only its contributor gates run a checksum-pinned RHINO release.
 
-The private one is left unnamed here on purpose: this repository is public, and a public document
-naming a private repository publishes the fact that it exists and what it is called. Anyone
-authorized to work in it already knows its name.
+The private one is left unnamed here on purpose: this repository is public, and a public document naming a private
+repository publishes the fact that it exists and what it is called. Anyone authorized to work in it already knows its
+name.
 
-**That name is navigation, not coupling.** The five are developed, versioned, and released
-independently — no shared version number, no shared release cadence, no monorepo, and no parent
-repository above them. Membership means only that a reader who finds one can find the other four.
-HIPPO is usable entirely on its own and has no OSE-specific defaults compiled into it.
+**That name is navigation, not coupling.** The five are developed, versioned, and released independently — no shared
+version number, no shared release cadence, no monorepo, and no parent repository above them. Membership means only that
+a reader who finds one can find the other four. HIPPO is usable entirely on its own and has no OSE-specific defaults
+compiled into it.
 
-External contributions are currently closed. See the
-[repository README](../README.md#-project-status) for the current status.
+External contributions are currently closed. See the [repository README](../README.md#-project-status) for the current
+status.

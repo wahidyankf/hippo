@@ -11,11 +11,9 @@ compatibility: Requires read access to the content under review and to the repor
 
 # Applying Maker, Checker, and Fixer
 
-The check-fix workflows own the loop:
-Specs Quality Gate and its siblings say what runs,
-in what order, and when it stops.
-Finding Criticality and Confidence
-owns the scales. This skill covers the judgement each role needs inside that loop.
+The check-fix workflows own the loop: Specs Quality Gate and its siblings say what runs, in what order, and when it
+stops. Finding Criticality and Confidence owns the scales. This skill covers the judgement each role needs inside that
+loop.
 
 ## Three Roles, Three Questions
 
@@ -29,9 +27,8 @@ A request to create or substantially reshape content is a maker's job. A report 
 finding that needs taste, restructuring, or context nobody recorded is neither: it goes to the maker or a person, and a
 fixer that attempts it produces confident damage.
 
-A checker never edits what it judges, for the reason
-Agent Authoring gives: once it edits, nothing
-independent is left to judge the edit.
+A checker never edits what it judges, for the reason Agent Authoring gives: once it edits, nothing independent is left
+to judge the edit.
 
 ## Re-Validate From the Evidence
 
@@ -67,16 +64,16 @@ for a person who owns the rule, and take it out of the loop's count.
 
 A clean report after a fix can mean the checker skipped what the fix touched. The workflows ask for two consecutive
 clean validations for that reason. A count that stops falling usually means a non-deterministic check or a scope that
-grows while it is fixed, and another identical cycle will not change either;
-Bounded Convergence decides what happens next.
+grows while it is fixed, and another identical cycle will not change either; Bounded Convergence decides what happens
+next.
 
 ## Planning Has No Separate Fixer
 
 This pattern is recorded as contradicting the planning roster, and planning wins inside its own scope.
-[Skill and Agent Roster](../../../repo-governance/development/planning-capabilities/002-skill-and-agent-roster.md)
-has the plan maker apply validated findings itself, within the repair budget of
-[Plan Quality Gate](../../../repo-governance/workflows/plan-quality-gate.md), because a loop waiting for an empty
-report can always reach one.
+[Skill and Agent Roster](../../../repo-governance/development/planning-capabilities/002-skill-and-agent-roster.md) has
+the plan maker apply validated findings itself, within the repair budget of
+[Plan Quality Gate](../../../repo-governance/workflows/plan-quality-gate.md), because a loop waiting for an empty report
+can always reach one.
 
 Outside planning, a workflow may declare a dedicated fixer. In both arrangements, whoever applies findings uses the
 judgement above.

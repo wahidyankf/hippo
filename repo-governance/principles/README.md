@@ -1,6 +1,7 @@
 # Principles
 
-Durable constraints that hold across every convention, standard, and workflow in this repository. They change rarely, and changing one is expected to change documents below it.
+Durable constraints that hold across every convention, standard, and workflow in this repository. They change rarely,
+and changing one is expected to change documents below it.
 
 Principles sit under the [vision](../vision/README.md) and above the [conventions](../conventions/README.md).
 

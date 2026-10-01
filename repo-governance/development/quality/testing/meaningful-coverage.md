@@ -13,10 +13,9 @@ A coverage number is evidence only about the code it measured, and only when the
 Counted over generated files or configuration, or by a tool that misreports, it moves while the untested behaviour stays
 exactly where it was.
 
-This standard implements Evidence Over Assertion and
-Explicit Over Implicit. It decides what coverage may measure. Whether a
-floor exists is recorded under [Test-Driven Development](../../test-driven-development.md). Which run
-gates coverage, and how each exclusion is named, belong to [Test-Driven Development](../../test-driven-development.md). A
+This standard implements Evidence Over Assertion and Explicit Over Implicit. It decides what coverage may measure.
+Whether a floor exists is recorded under [Test-Driven Development](../../test-driven-development.md). Which run gates
+coverage, and how each exclusion is named, belong to [Test-Driven Development](../../test-driven-development.md). A
 measured figure is read as Trustworthy Measurement requires.
 
 ## What a Number May Measure
@@ -51,9 +50,8 @@ Each exclusion sits in the gating run's configuration and is named, with its rea
 Where no reliable instrument exists, such as declarative infrastructure or a shell dialect whose coverage tool
 misreports, the stack's native verification stands in its place: validation, lint, native tests, plan review, and
 idempotence runs where they apply. Never invent a surrogate number, such as resources touched or scripts with a test, to
-fill a coverage slot, and never define a coverage target that measures nothing, as
-Task Runner Target Standards forbids. The stack standard names its
-native verification.
+fill a coverage slot, and never define a coverage target that measures nothing, as Task Runner Target Standards forbids.
+The stack standard names its native verification.
 
 ## Adoption Never Lowers a Floor
 

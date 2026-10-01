@@ -37,7 +37,8 @@ are untouched.
 ## Leftovers
 
 Scratch a crashed session left behind in `local-tmp/` is reclaimed only deliberately, never by an ambient sweep: once
-unmodified for seven days, it moves to `local-tmp/.reclaim-quarantine-YYYY-MM-DD/`, and is deleted once nothing needs it.
+unmodified for seven days, it moves to `local-tmp/.reclaim-quarantine-YYYY-MM-DD/`, and is deleted once nothing needs
+it.
 
 ## Deletion Is Not Reversible in the Way People Assume
 

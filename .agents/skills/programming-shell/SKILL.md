@@ -13,18 +13,18 @@ compatibility: Requires a shell script with a declared interpreter and the repos
 [Shell Scripts](../../../repo-governance/development/quality/code/shell-scripts.md) owns script mechanics, and
 [Shell Standards](../../../repo-governance/development/quality/stacks/shell-standards.md) owns every shell stack rule.
 [Test-Driven Development](../../../repo-governance/development/test-driven-development.md) and
-[Quality Gates](../../../repo-governance/development/quality-gates.md) govern
-tests and gates, [Red, Green, Refactor](../../../repo-governance/workflows/red-green-refactor.md) runs each
-cycle, and [Developing Applications](../developing-applications/SKILL.md) carries the judgement that holds in every
-language. This skill adds only the procedure and judgement of applying them in shell. Where a sentence here seems to
-state a rule, the standards decide.
+[Quality Gates](../../../repo-governance/development/quality-gates.md) govern tests and gates,
+[Red, Green, Refactor](../../../repo-governance/workflows/red-green-refactor.md) runs each cycle, and
+[Developing Applications](../developing-applications/SKILL.md) carries the judgement that holds in every language. This
+skill adds only the procedure and judgement of applying them in shell. Where a sentence here seems to state a rule, the
+standards decide.
 
 ## Start From the First Line
 
 Read the interpreter line and the strict-mode setting before anything else; they decide which dialect's rules apply. Run
 the analyser, the formatter check, and the script's tests on the untouched tree. A gate already failing is handled under
-Preexisting Error Resolution.
-For a dialect the analyser cannot read, the syntax check passes and you carry the review the analyser would have done.
+Preexisting Error Resolution. For a dialect the analyser cannot read, the syntax check passes and you carry the review
+the analyser would have done.
 
 ## Decide Whether It Belongs in Shell
 

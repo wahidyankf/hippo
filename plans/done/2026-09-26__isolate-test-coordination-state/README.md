@@ -4,17 +4,17 @@ Status: Done (2026-09-26)
 
 ## Context
 
-[Repo-grounded] The test suite hands its own environment to the binary under test. `tests/e2e/cli_contract_test.go`
-runs the built executable with the inherited process environment, and `tests/support/driver.go::environmentWith`,
-`tests/support/pending_v04.go`, and the integration tests start from `os.Environ()` and override only `HIPPO_ROOT`
-where a scenario chose to. Every other `HIPPO_*` variable in the invoking shell reaches the product, and a run without
+[Repo-grounded] The test suite hands its own environment to the binary under test. `tests/e2e/cli_contract_test.go` runs
+the built executable with the inherited process environment, and `tests/support/driver.go::environmentWith`,
+`tests/support/pending_v04.go`, and the integration tests start from `os.Environ()` and override only `HIPPO_ROOT` where
+a scenario chose to. Every other `HIPPO_*` variable in the invoking shell reaches the product, and a run without
 `HIPPO_ROOT` resolves the user's default evidence root through `internal/host/runtime.go::DefaultEvidenceRoot` — the
 same shared coordination state every guarded process on that machine uses.
 
-[Repo-grounded] Found during a cross-repository standards adoption, where `npm test` failed on a workstation and
-passed in CI. Reproduced on 2026-09-26 at `d1bbf41` by running `./tests/e2e/run.sh` beneath `./hippo run`, which
-exports `HIPPO_CONFIG`, `HIPPO_DEFAULT_CONFIG`, `HIPPO_DEFAULT_IDENTITY`, `HIPPO_SESSION`, `HIPPO_PROFILE`,
-`HIPPO_CONCURRENCY`, `HIPPO_RESERVED_MEMORY_BYTES`, and `HIPPO_BIN` to its child:
+[Repo-grounded] Found during a cross-repository standards adoption, where `npm test` failed on a workstation and passed
+in CI. Reproduced on 2026-09-26 at `d1bbf41` by running `./tests/e2e/run.sh` beneath `./hippo run`, which exports
+`HIPPO_CONFIG`, `HIPPO_DEFAULT_CONFIG`, `HIPPO_DEFAULT_IDENTITY`, `HIPPO_SESSION`, `HIPPO_PROFILE`, `HIPPO_CONCURRENCY`,
+`HIPPO_RESERVED_MEMORY_BYTES`, and `HIPPO_BIN` to its child:
 
 | Invoking environment                                   | Result                                                                                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,8 +35,8 @@ set.
 
 Rejected alternatives:
 
-- scrub only in `scripts/test.sh` and `scripts/test-quick.sh` — a bare `go test ./tests/e2e` would still join the
-  shared state;
+- scrub only in `scripts/test.sh` and `scripts/test-quick.sh` — a bare `go test ./tests/e2e` would still join the shared
+  state;
 - patch each `append(os.Environ(), ...)` call site — more than twenty sites, and the next one added reopens the leak;
 - a named denylist of product variables — the product can read a new variable before anyone updates the list; the
   existing scrub in `internal/conformance/conformance.go` already lists six and omits `HIPPO_CONFIG`.

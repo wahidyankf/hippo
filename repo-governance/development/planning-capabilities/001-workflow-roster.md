@@ -14,8 +14,8 @@ equivalent local procedure recorded as a deviation.
 | cleanup          | [`dev-artifact-clean-up`](../../workflows/dev-artifact-clean-up.md) |
 
 A repository that supports Gherkin acceptance criteria additionally exposes exactly one
-[`gherkin-implementation-review`](../../workflows/gherkin-implementation-review.md). One, not several: the
-review's value is that every scenario is walked, and two overlapping reviews each assume the other covered the gap.
+[`gherkin-implementation-review`](../../workflows/gherkin-implementation-review.md). One, not several: the review's
+value is that every scenario is walked, and two overlapping reviews each assume the other covered the gap.
 
 ## Why These Seven
 

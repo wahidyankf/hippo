@@ -1,8 +1,7 @@
 # How to map concurrency into your build tool
 
-Your build tool already reads some environment variable to decide how many workers to start. HIPPO
-can write its allocation into that variable, so the tool sizes itself to what the host can spare
-instead of to the core count.
+Your build tool already reads some environment variable to decide how many workers to start. HIPPO can write its
+allocation into that variable, so the tool sizes itself to what the host can spare instead of to the core count.
 
 HIPPO does not know about any build tool. You supply the name.
 
@@ -27,7 +26,8 @@ hippo run \
 ```
 
 ```console
-$ hippo run --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
+$ hippo run --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS \
+    -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
 BUILD_WORKERS=11 TEST_JOBS=11 HIPPO_CONCURRENCY=11
 ```
 
@@ -52,50 +52,52 @@ hippo run --concurrency-env JOBS -- sh -c 'make -j"$JOBS" all'
 
 ## Understand how your existing value is treated
 
-A value you already exported is treated differently in each coordination mode, so establish which
-mode you are in before relying on either behavior. Reservation mode reconciles the value against the
-allocation; exclusive mode passes it through untouched.
+A value you already exported is treated differently in each coordination mode, so establish which mode you are in before
+relying on either behavior. Reservation mode reconciles the value against the allocation; exclusive mode passes it
+through untouched.
 
 ### Reservation mode reconciles it
 
-Under a fixed reservation allocation the existing value is read as a request and reconciled against
-the allocation. In schema 3, the selected tier supplies a minimum and maximum; HIPPO grants the
-largest vector that fits when the FIFO head is admitted and exports that fixed CPU allocation. The
-[value rules](../reference/environment-variables.md#value-rules-in-reservation-mode) list the result
-for each kind of value.
+Under a fixed reservation allocation the existing value is read as a request and reconciled against the allocation. In
+schema 3, the selected tier supplies a minimum and maximum; HIPPO grants the largest vector that fits when the FIFO head
+is admitted and exports that fixed CPU allocation. The
+[value rules](../reference/environment-variables.md#value-rules-in-reservation-mode) list the result for each kind of
+value.
 
 ```console
-$ BUILD_WORKERS=1 hippo run --config reservation.json --reserve-cpu 4 --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
+$ BUILD_WORKERS=1 hippo run --config reservation.json --reserve-cpu 4 --concurrency-env BUILD_WORKERS \
+    -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
 BUILD_WORKERS=1 HIPPO_CONCURRENCY=4
 
-$ BUILD_WORKERS=64 hippo run --config reservation.json --reserve-cpu 2 --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
+$ BUILD_WORKERS=64 hippo run --config reservation.json --reserve-cpu 2 --concurrency-env BUILD_WORKERS \
+    -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
 BUILD_WORKERS=2 HIPPO_CONCURRENCY=2
 ```
 
-A deliberately low value is respected; an optimistic one is capped. This means you can keep an
-existing `BUILD_WORKERS=2` in a `.env` and HIPPO will not raise it.
+A deliberately low value is respected; an optimistic one is capped. This means you can keep an existing
+`BUILD_WORKERS=2` in a `.env` and HIPPO will not raise it.
 
-Choose `light` for formatting and small checks, `standard` for ordinary build/test plans, and `heavy`
-only for measured memory- or CPU-intensive work. The tier lets an idle machine grant heavier work up
-to its safe maximum while protecting the UI and queued peers.
+Choose `light` for formatting and small checks, `standard` for ordinary build/test plans, and `heavy` only for measured
+memory- or CPU-intensive work. The tier lets an idle machine grant heavier work up to its safe maximum while protecting
+the UI and queued peers.
 
 ### Exclusive mode leaves it alone
 
-Schema 1 — the default when you supply no configuration — retains the v0.3.1 mapping behavior. A
-mapped variable is written only when it is missing, so a value already in the environment reaches
-the child unchanged. Nothing is clamped and nothing is rejected, and an optimistic value therefore
-survives even though `HIPPO_CONCURRENCY` reports the smaller allocation beside it.
+Schema 1 — the default when you supply no configuration — retains the v0.3.1 mapping behavior. A mapped variable is
+written only when it is missing, so a value already in the environment reaches the child unchanged. Nothing is clamped
+and nothing is rejected, and an optimistic value therefore survives even though `HIPPO_CONCURRENCY` reports the smaller
+allocation beside it.
 
 ```console
-$ BUILD_WORKERS=64 hippo run --disk-path . --concurrency-env BUILD_WORKERS -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
+$ BUILD_WORKERS=64 hippo run --disk-path . --concurrency-env BUILD_WORKERS \
+    -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
 BUILD_WORKERS=64 HIPPO_CONCURRENCY=11
 ```
 
-Two consequences are worth planning around. A stale `BUILD_WORKERS=64` inherited from a shell
-profile or a `.env` oversubscribes the host despite the guard, and a `0` or a typo reaches your
-build tool rather than being caught. If you want the reconciliation, enable
-[reservation coordination](./enable-reservation-coordination.md); otherwise keep the variable out of
-the environment and let HIPPO supply it.
+Two consequences are worth planning around. A stale `BUILD_WORKERS=64` inherited from a shell profile or a `.env`
+oversubscribes the host despite the guard, and a `0` or a typo reaches your build tool rather than being caught. If you
+want the reconciliation, enable [reservation coordination](./enable-reservation-coordination.md); otherwise keep the
+variable out of the environment and let HIPPO supply it.
 
 Degraded admission is the one exclusive-mode case that does overwrite an existing value — see
 [the note below](#note-on-degraded-admission).
@@ -120,8 +122,8 @@ $ echo $?
 
 Use a POSIX identifier that is not one of HIPPO's own `HIPPO_*` protocol variables.
 
-**Exit `125`, `hippo.policy.replan-required` — the inherited value is wrong.** Reservation mode
-only; exclusive mode does not inspect the value.
+**Exit `125`, `hippo.policy.replan-required` — the inherited value is wrong.** Reservation mode only; exclusive mode
+does not inspect the value.
 
 ```console
 $ BUILD_WORKERS=0 hippo run --config reservation.json --concurrency-env BUILD_WORKERS -- true
@@ -130,13 +132,13 @@ $ echo $?
 125
 ```
 
-Something upstream is exporting `0`, a negative number, or a non-number. Fix the source rather than
-dropping the mapping — a `0` reaching a build tool is usually a bug on its own.
+Something upstream is exporting `0`, a negative number, or a non-number. Fix the source rather than dropping the mapping
+— a `0` reaching a build tool is usually a bug on its own.
 
 ## Note on degraded admission
 
-Balanced ephemeral work on macOS can admit under a stable warning window at concurrency `1`. When
-that happens, **every** mapped variable is forced to `1` as well, and HIPPO says so:
+Balanced ephemeral work on macOS can admit under a stable warning window at concurrency `1`. When that happens,
+**every** mapped variable is forced to `1` as well, and HIPPO says so:
 
 ```console
 HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1.

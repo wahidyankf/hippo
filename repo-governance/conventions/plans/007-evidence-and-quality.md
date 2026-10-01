@@ -49,5 +49,5 @@ convenient.
 
 A plan whose result has a user-facing surface routes evidence through distinct layers, records each one separately, and
 remains incomplete while any applicable layer is unresolved. The layers, what each proves, and what an assertion must
-state are owned by the [Manual Verification](../../development/manual-verification.md) standard rather than
-restated here.
+state are owned by the [Manual Verification](../../development/manual-verification.md) standard rather than restated
+here.

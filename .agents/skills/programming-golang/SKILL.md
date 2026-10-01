@@ -12,18 +12,17 @@ compatibility: Requires a Go module with the Go toolchain on the path.
 
 Every Go rule is owned by [Go Standards](../../../repo-governance/development/quality/stacks/golang-standards.md).
 [Test-Driven Development](../../../repo-governance/development/test-driven-development.md) and
-[Quality Gates](../../../repo-governance/development/quality-gates.md) govern
-tests and gates, [Red, Green, Refactor](../../../repo-governance/workflows/red-green-refactor.md) runs each
-cycle, and [Developing Applications](../developing-applications/SKILL.md) carries the judgement on layers, errors, logs,
-and input that holds in every language. This skill adds only the procedure and judgement of applying them in Go. Where a
-sentence here seems to state a rule, the standard decides.
+[Quality Gates](../../../repo-governance/development/quality-gates.md) govern tests and gates,
+[Red, Green, Refactor](../../../repo-governance/workflows/red-green-refactor.md) runs each cycle, and
+[Developing Applications](../developing-applications/SKILL.md) carries the judgement on layers, errors, logs, and input
+that holds in every language. This skill adds only the procedure and judgement of applying them in Go. Where a sentence
+here seems to state a rule, the standard decides.
 
 ## Start From What the Module Records
 
 Read the module's `go` directive, its committed linter configuration, and the recorded choices for assertions and
 integration selection. Run the standard's gates, then the unit run with the race detector, on the untouched tree. A gate
-already failing is handled under
-Preexisting Error Resolution.
+already failing is handled under Preexisting Error Resolution.
 
 ## Place a Test by What It Touches
 
@@ -39,17 +38,15 @@ is a new cycle: add it, watch it fail, then change the code.
 Ask what the nearest caller will do with the failure. If it only reports or passes it on, wrap it with context and give
 it no identity. Only when a caller must test for the condition, or read details from it, does the error take one of the
 exported forms the standard lists. An exported sentinel or type joins the package's
-[Public Contract](../../../repo-governance/development/public-contract.md), so exporting one "in
-case" commits the package to it. When a `panic` seems tempting, ask whether any caller could handle the failure; if one
-could, it is a returned error.
+[Public Contract](../../../repo-governance/development/public-contract.md), so exporting one "in case" commits the
+package to it. When a `panic` seems tempting, ask whether any caller could handle the failure; if one could, it is a
+returned error.
 
 ## Declare the Interface Where It Is Used
 
 Declare an interface in the package that consumes it, sized to the methods that consumer calls, and let the
 implementation return its concrete type. An interface sitting beside its only implementation "for testing" usually
-belongs with the caller, which is also where
-Hexagonal Architecture puts a
-port.
+belongs with the caller, which is also where Hexagonal Architecture puts a port.
 
 ## Give Every Goroutine an Owner
 

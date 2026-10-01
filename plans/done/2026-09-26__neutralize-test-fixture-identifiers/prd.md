@@ -2,8 +2,8 @@
 
 ## Product Overview
 
-[Repo-grounded] `identity.Load` takes an optional source override that wins when no identity file exists. The test
-for that behaviour stays; only its fixture value changes.
+[Repo-grounded] `identity.Load` takes an optional source override that wins when no identity file exists. The test for
+that behaviour stays; only its fixture value changes.
 
 ## Personas
 

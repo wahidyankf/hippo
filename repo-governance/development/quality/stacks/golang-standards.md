@@ -12,11 +12,8 @@ when_to_use: >-
 This standard is canonical for Go. It holds the choices Go and its toolchain leave open, and a Go programming skill
 defers here for each rule it applies.
 
-It implements Explicit Over Implicit,
-Simplicity Over Complexity, and
-Automation Over Manual. The module's `go` directive and `go.sum` follow
-Native-First Toolchain and
-Reproducibility.
+It implements Explicit Over Implicit, Simplicity Over Complexity, and Automation Over Manual. The module's `go`
+directive and `go.sum` follow Native-First Toolchain and Reproducibility.
 
 ## Gates
 
@@ -77,17 +74,27 @@ per [Meaningful Coverage](../testing/meaningful-coverage.md). Any floor is recor
 ## Documentation
 
 Every exported name has a doc comment beginning with that name. An exported sentinel or error type joins the
-[Public Contract](../../public-contract.md), so one is exported only when a caller needs it, and a behaviour
-change updates its documentation per [Specification Maintenance](../../specification-maintenance.md).
+[Public Contract](../../public-contract.md), so one is exported only when a caller needs it, and a behaviour change
+updates its documentation per [Specification Maintenance](../../specification-maintenance.md).
 
 ## Adopter Decisions
 
-| Decision              | Option                      | Gains                           | Costs                                                                   |
-| --------------------- | --------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
-| assertions            | the `testing` package only  | no dependency                   | longer comparisons and hand-written diffs                               |
-|                       | a library; example: testify | shorter assertions, clear diffs | a dependency, per [Dependency Selection](../../dependency-selection.md) |
-| integration selection | a build tag per file        | tests stay beside their package | a forgotten tag moves a test into unit                                  |
-|                       | a separate test directory   | the layer is visible by path    | tests reach only the exported API                                       |
+- **assertions**
+  - Option: the `testing` package only
+  - Gains: no dependency
+  - Costs: longer comparisons and hand-written diffs
+- (none)
+  - Option: a library; example: testify
+  - Gains: shorter assertions, clear diffs
+  - Costs: a dependency, per [Dependency Selection](../../dependency-selection.md)
+- **integration selection**
+  - Option: a build tag per file
+  - Gains: tests stay beside their package
+  - Costs: a forgotten tag moves a test into unit
+- (none)
+  - Option: a separate test directory
+  - Gains: the layer is visible by path
+  - Costs: tests reach only the exported API
 
 Record each choice in the repository adapter [Stack Packs](../../../conventions/structure/stack-packs.md) defines.
 

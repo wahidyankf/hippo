@@ -11,16 +11,13 @@ compatibility: Requires read access to the application source, its tests, and it
 
 # Developing Applications
 
-The standards own the rules.
-Hexagonal Architecture and
-Functional Core, Imperative Shell
-place code; [Test-Driven Development](../../../repo-governance/development/test-driven-development.md)
-and [Behaviour-Driven Development](../../../repo-governance/development/behaviour-driven-development.md)
-govern tests; [Dependency Selection](../../../repo-governance/development/dependency-selection.md) governs
-what is added; and Implementation Stages
-orders the work. A language's stack standard, such as
-[Go Standards](../../../repo-governance/development/quality/stacks/golang-standards.md), adds its own
-choices. This skill covers the judgement those rules leave to whoever writes the code.
+The standards own the rules. Hexagonal Architecture and Functional Core, Imperative Shell place code;
+[Test-Driven Development](../../../repo-governance/development/test-driven-development.md) and
+[Behaviour-Driven Development](../../../repo-governance/development/behaviour-driven-development.md) govern tests;
+[Dependency Selection](../../../repo-governance/development/dependency-selection.md) governs what is added; and
+Implementation Stages orders the work. A language's stack standard, such as
+[Go Standards](../../../repo-governance/development/quality/stacks/golang-standards.md), adds its own choices. This
+skill covers the judgement those rules leave to whoever writes the code.
 
 ## Place Code Before Writing It
 
@@ -30,8 +27,7 @@ application layer.
 
 Misplacement shows early: a domain function that wants a clock, a connection, or a logger; an adapter holding a
 condition about a business rule; an application function choosing a transport status. Which layering fits a given
-application is decided in
-Application Shapes.
+application is decided in Application Shapes.
 
 ## Give Every Error One Fate
 
@@ -45,8 +41,7 @@ At each call that can fail, choose exactly one:
 
 Discarding it is never a fate. Add context where the meaning changes, such as a storage failure becoming "could not load
 order `<id>`", not at every frame it crosses; the same message repeated at each layer buries the cause. Infrastructure
-error types stop at their adapter, and a failure becomes a transport response once, as
-Layers and the Dependency Rule
+error types stop at their adapter, and a failure becomes a transport response once, as Layers and the Dependency Rule
 requires. Whether expected failures travel as values or exceptions is the stack standard's decision, or, where no stack
 standard exists, the language skill states the language's idiom or records the choice as an adopter decision. Every
 error path gets its own test.
@@ -75,8 +70,7 @@ input into its text.
 
 Start each behaviour with a failing test at the narrowest layer that can prove it: a decision with injected dependencies
 at unit, an adapter against a real local resource at integration, and a journey through the public boundary at
-end-to-end, kept few. [Red, Green, Refactor](../../../repo-governance/workflows/red-green-refactor.md) owns the
-cycle.
+end-to-end, kept few. [Red, Green, Refactor](../../../repo-governance/workflows/red-green-refactor.md) owns the cycle.
 
 ## Before Calling It Ready
 

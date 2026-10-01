@@ -1,10 +1,10 @@
 # Guard your first command
 
-In this tutorial we will run a command under HIPPO's supervision, see what HIPPO tells that command
-about the machine, and confirm that guarding changes nothing about how the command behaves.
+In this tutorial we will run a command under HIPPO's supervision, see what HIPPO tells that command about the machine,
+and confirm that guarding changes nothing about how the command behaves.
 
-By the end you will have run five commands and seen HIPPO admit work, pass through an exit code, and
-leave your shell pipeline intact.
+By the end you will have run five commands and seen HIPPO admit work, pass through an exit code, and leave your shell
+pipeline intact.
 
 ## Before we start
 
@@ -13,9 +13,8 @@ You need:
 - **macOS or Linux** on `amd64` or `arm64`. Native Windows is not supported.
 - **Go 1.26.1** if you are running from a source checkout, which is what we will do here.
 
-We are going to work inside the HIPPO repository itself, using the tracked `./hippo` bootstrap. That
-script compiles the CLI once, caches it, and then hands off to the compiled binary — so the first
-command is slower than the rest.
+We are going to work inside the HIPPO repository itself, using the tracked `./hippo` bootstrap. That script compiles the
+CLI once, caches it, and then hands off to the compiled binary — so the first command is slower than the rest.
 
 If you do not have a checkout yet, clone one; otherwise change into the one you have:
 
@@ -34,22 +33,24 @@ Before guarding anything, let's look at the machine through HIPPO's eyes.
 
 The first run compiles the binary. When it finishes you will see a single line:
 
+Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
+
 ```console
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9% owners=0 waiters=0 ownerLimit=0 promotion=not-configured
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
+  owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
-Read it left to right. The host is in the `normal` state, HIPPO resolved the `balanced` profile, and
-it would tell a guarded command it may use `11` parallel workers. The `owners` and `waiters` fields
-count guarded commands that hold or await a reservation; with none running, they read `0`.
+Read it left to right. The host is in the `normal` state, HIPPO resolved the `balanced` profile, and it would tell a
+guarded command it may use `11` parallel workers. The `owners` and `waiters` fields count guarded commands that hold or
+await a reservation; with none running, they read `0`.
 
-**Your numbers will differ**, and that is the point — `concurrency` is derived from your machine, not
-from a constant. If your `state` says `warning` instead of `normal`, that is fine too; the rest of
-this tutorial still works.
+**Your numbers will differ**, and that is the point — `concurrency` is derived from your machine, not from a constant.
+If your `state` says `warning` instead of `normal`, that is fine too; the rest of this tutorial still works.
 
 ## Step 2: guard a command
 
-Now run something under supervision. Note the `--` before the command: everything after it belongs to
-the child, so HIPPO never tries to interpret the child's own flags.
+Now run something under supervision. Note the `--` before the command: everything after it belongs to the child, so
+HIPPO never tries to interpret the child's own flags.
 
 ```sh
 ./hippo run --class ephemeral --disk-path . -- sh -c 'echo build-started; echo build-finished'
@@ -60,19 +61,17 @@ build-started
 build-finished
 ```
 
-That is the whole output. A healthy guarded run is deliberately quiet — HIPPO writes to stderr only
-when an operator needs to know about a degraded admission, a deferral, a storage block, or a pressure
-shed.
+That is the whole output. A healthy guarded run is deliberately quiet — HIPPO writes to stderr only when an operator
+needs to know about a degraded admission, a deferral, a storage block, or a pressure shed.
 
-Notice what did **not** happen: no progress bar, no wrapper banner, no reformatting of the child's
-output. The child kept your stdout exactly as it found it.
+Notice what did **not** happen: no progress bar, no wrapper banner, no reformatting of the child's output. The child
+kept your stdout exactly as it found it.
 
 ## Step 3: see what the child was told
 
-HIPPO always exports `HIPPO_PROFILE` and `HIPPO_CONCURRENCY`, the two a build reads, into an admitted
-child. It also exports `HIPPO_SESSION` and `HIPPO_BIN`; see
-[Environment variables](../reference/environment-variables.md#exported-to-a-guarded-child). Let's
-read the first two.
+HIPPO always exports `HIPPO_PROFILE` and `HIPPO_CONCURRENCY`, the two a build reads, into an admitted child. It also
+exports `HIPPO_SESSION` and `HIPPO_BIN`; see
+[Environment variables](../reference/environment-variables.md#exported-to-a-guarded-child). Let's read the first two.
 
 ```sh
 ./hippo run --disk-path . -- sh -c 'echo "profile=$HIPPO_PROFILE concurrency=$HIPPO_CONCURRENCY"'
@@ -82,12 +81,11 @@ read the first two.
 profile=balanced concurrency=11
 ```
 
-This is the whole integration surface for most consumers. A build script reads `HIPPO_CONCURRENCY`
-and sizes itself accordingly, instead of asking the operating system how many cores exist and
-assuming it owns all of them.
+This is the whole integration surface for most consumers. A build script reads `HIPPO_CONCURRENCY` and sizes itself
+accordingly, instead of asking the operating system how many cores exist and assuming it owns all of them.
 
-Compare that number with the `concurrency=` you saw in Step 1. They match, because both came from the
-same policy applied to the same host.
+Compare that number with the `concurrency=` you saw in Step 1. They match, because both came from the same policy
+applied to the same host.
 
 ## Step 4: confirm the exit code survives
 
@@ -102,17 +100,17 @@ echo $?
 3
 ```
 
-HIPPO passed the child's own exit status straight through. Its own statuses are `1` for an empty
-result, `2` for an unusable invocation, `124` for a limit that stopped the work, `125` for HIPPO
-failing to start or supervise the work, and `126` or `127` for a command that cannot be run; `0` is success. A child can
-also return any of those numbers — but only HIPPO's own failures write a `hippo:` line to stderr, so
-the diagnostic tells them apart, and the receipt and task-failed evidence say the same independently. The
-[exit code reference](../reference/exit-codes.md) covers the contract.
+HIPPO passed the child's own exit status straight through. Its own statuses are `1` for an empty result, `2` for an
+unusable invocation, `124` for a limit that stopped the work, `125` for HIPPO failing to start or supervise the work,
+and `126` or `127` for a command that cannot be run; `0` is success. A child can also return any of those numbers — but
+only HIPPO's own failures write a `hippo:` line to stderr, so the diagnostic tells them apart, and the receipt and
+task-failed evidence say the same independently. The [exit code reference](../reference/exit-codes.md) covers the
+contract.
 
 ## Step 5: confirm your pipeline survives
 
-Guarding also has to be invisible to shell plumbing. Let's put a guarded command in the middle of a
-pipe, reading from stdin and writing to stdout.
+Guarding also has to be invisible to shell plumbing. Let's put a guarded command in the middle of a pipe, reading from
+stdin and writing to stdout.
 
 ```sh
 printf 'hello\n' | ./hippo run --disk-path . -- sh -c 'read value; printf "%s-world\n" "$value"' | tr a-z A-Z
@@ -122,9 +120,9 @@ printf 'hello\n' | ./hippo run --disk-path . -- sh -c 'read value; printf "%s-wo
 HELLO-WORLD
 ```
 
-The child read our `hello` from the pipe, wrote `hello-world`, and `tr` upcased it. Standard input,
-standard output, and standard error all stayed connected to the caller. HIPPO's own diagnostics never
-enter that stream — they go to stderr — so existing scripts and CI logs keep looking familiar.
+The child read our `hello` from the pipe, wrote `hello-world`, and `tr` upcased it. Standard input, standard output, and
+standard error all stayed connected to the caller. HIPPO's own diagnostics never enter that stream — they go to stderr —
+so existing scripts and CI logs keep looking familiar.
 
 ## What we did
 
@@ -136,13 +134,13 @@ In five commands you:
 - confirmed exit codes pass through unchanged;
 - confirmed stdin and stdout stay caller-owned.
 
-So far HIPPO has been arbitrating between exactly one task, which is not very interesting. The real
-job starts with a second one.
+So far HIPPO has been arbitrating between exactly one task, which is not very interesting. The real job starts with a
+second one.
 
 ## Next steps
 
-- [Coordinate two repositories](./coordinate-two-repositories.md) — watch two guarded tasks share one
-  budget, which is what HIPPO is actually for.
+- [Coordinate two repositories](./coordinate-two-repositories.md) — watch two guarded tasks share one budget, which is
+  what HIPPO is actually for.
 - [Why HIPPO exists](../explanation/why-hippo-exists.md) — the problem behind all of this.
-- [How to map concurrency into your build tool](../how-to/map-concurrency-into-your-build-tool.md) —
-  wire `HIPPO_CONCURRENCY` into a real build.
+- [How to map concurrency into your build tool](../how-to/map-concurrency-into-your-build-tool.md) — wire
+  `HIPPO_CONCURRENCY` into a real build.

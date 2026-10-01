@@ -2,15 +2,19 @@
 
 Repeatable procedures with steps and an order. They sit beneath every other level and may compose one another.
 
-A workflow describes how something is done. It never grants permission to do it — see [commit authorization](../conventions/commit-authorization.md).
+A workflow describes how something is done. It never grants permission to do it — see
+[commit authorization](../conventions/commit-authorization.md).
 
 ## Directory Map
 
 - [Coding harness contract change](coding-harness-contract-change.md) — changing the canon or a harness adapter.
 - [Coding harness parity verification](coding-harness-parity-verification.md) — proving the roster still reconciles.
-- [Exploratory and usability review](exploratory-usability-review.md) — a bounded exploration, recorded with its evidence.
-- [Gherkin implementation review](gherkin-implementation-review.md) — the manual review a changed scenario or adapter requires.
-- [Dev artifact clean-up](dev-artifact-clean-up.md) — removing the artifacts one piece of work created, and nothing else.
+- [Exploratory and usability review](exploratory-usability-review.md) — a bounded exploration, recorded with its
+  evidence.
+- [Gherkin implementation review](gherkin-implementation-review.md) — the manual review a changed scenario or adapter
+  requires.
+- [Dev artifact clean-up](dev-artifact-clean-up.md) — removing the artifacts one piece of work created, and nothing
+  else.
 - [Docs propagation](docs-propagation.md) — carrying a change into every human-facing document it affects.
 - [Docs quality gate](docs-quality-gate.md) — auditing the human-facing documents, on request or at a release.
 - [Plan backlog grooming](plan-backlog-grooming.md) — keeping the backlog ordered and current.

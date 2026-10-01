@@ -4,16 +4,16 @@ Status: Done (2026-09-26)
 
 ## Context
 
-[Repo-grounded] [Shell standards](../../../repo-governance/development/quality/stacks/shell-standards.md) require
-every script to be statically analysed at the [lint strictness](../../../repo-governance/development/quality/checks/lint-strictness.md)
-threshold — warning and above fails. The
-[repository adapter](../../../repo-governance/development/quality/stacks/repository-adapter.md) records the shell stack
-as `adapted` with the gap "static analysis: not yet a gate; `shfmt` formats every script". Only `shfmt` runs, from
-`scripts/format-check.sh` and `scripts/format-staged.sh`; no hook, registry entry, or workflow runs an analyser. Found
-during a cross-repository standards adoption.
+[Repo-grounded] [Shell standards](../../../repo-governance/development/quality/stacks/shell-standards.md) require every
+script to be statically analysed at the
+[lint strictness](../../../repo-governance/development/quality/checks/lint-strictness.md) threshold — warning and above
+fails. The [repository adapter](../../../repo-governance/development/quality/stacks/repository-adapter.md) records the
+shell stack as `adapted` with the gap "static analysis: not yet a gate; `shfmt` formats every script". Only `shfmt`
+runs, from `scripts/format-check.sh` and `scripts/format-staged.sh`; no hook, registry entry, or workflow runs an
+analyser. Found during a cross-repository standards adoption.
 
-[Repo-grounded] ShellCheck 0.11.0 at `--severity=warning`, run on 2026-09-26 at `d1bbf41` over every tracked `*.sh`
-file plus `hippo`, `rhino`, `ferret`, and the three `.husky/` hooks, reports 14 findings:
+[Repo-grounded] ShellCheck 0.11.0 at `--severity=warning`, run on 2026-09-26 at `d1bbf41` over every tracked `*.sh` file
+plus `hippo`, `rhino`, `ferret`, and the three `.husky/` hooks, reports 14 findings:
 
 | Rule   | Count | Where                                                                                                                                                                                                                                        | Cause                                                         |
 | ------ | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -21,15 +21,15 @@ file plus `hippo`, `rhino`, `ferret`, and the three `.husky/` hooks, reports 14 
 | SC2115 | 1     | `hippo:107`                                                                                                                                                                                                                                  | `rm -rf -- "$platform_cache/$candidate"` without a `:?` guard |
 | SC2148 | 3     | `.husky/commit-msg`, `.husky/pre-commit`, `.husky/pre-push`                                                                                                                                                                                  | no shebang or `shell` directive                               |
 
-Below the threshold it also prints five SC2329 notes and one SC2016 note, all in `scripts/public-safety/`, whose
-README states those adopted copies are already clean at `--severity=warning`. `rhino` and `ferret` report nothing.
+Below the threshold it also prints five SC2329 notes and one SC2016 note, all in `scripts/public-safety/`, whose README
+states those adopted copies are already clean at `--severity=warning`. `rhino` and `ferret` report nothing.
 `scripts/format-check.sh` hands `shfmt` the entrypoints `hippo`, `rhino`, and the hooks, but not `ferret`.
 
 ## Decision
 
 [Judgment call] Clean, then gate: fix the 14 findings, then register one `shell-lint` check in `repo-config.yml` on
-`pre-push`, `pull-request`, and `main`, running a checksum-pinned ShellCheck at `--severity=warning` over one
-enumerated file list that `format-check.sh` shares.
+`pre-push`, `pull-request`, and `main`, running a checksum-pinned ShellCheck at `--severity=warning` over one enumerated
+file list that `format-check.sh` shares.
 
 Rejected alternatives:
 
