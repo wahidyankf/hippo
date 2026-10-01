@@ -18,6 +18,10 @@ Writing a plan into this repository takes an explicit request. Designing an appr
 planning mode, authorizes neither the folder nor the commit that would carry it. See
 [commit authorization](commit-authorization.md).
 
+The one standing request is [upstream tool defects](../development/upstream-tool-defects.md): an idea brief for a HIPPO
+defect, or a [bug-fix plan](plans/010-bug-fix-plan.md) for one that blocks the work in hand with no workaround, filed
+here under a consumer's adopted standard, needs no further request.
+
 ## Scope
 
 This repository plans only what it can deliver alone. Work spanning repositories is planned where it is coordinated and

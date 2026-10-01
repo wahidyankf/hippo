@@ -8,6 +8,7 @@ A convention chooses a path. It does not authorize anyone to walk it; see
 
 ## Directory Map
 
+- [Bug reports](bug-reports.md) — the duplicate search and fields a report carries, and its route to a fix.
 - [Coding harness contract](coding-harness-contract.md) — one canonical instruction body, expressed per harness.
 - [Command-line interface](command-line-interface.md) — the two-layer contract a command-line tool presents to its
   callers.
