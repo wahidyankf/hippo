@@ -22,7 +22,8 @@ A workflow describes how something is done. It never grants permission to do it 
 - [Plan execution check](plan-execution-check.md) — judging a finished plan against what it promised.
 - [Plan ideas grooming](plan-ideas-grooming.md) — turning a raw idea into a brief worth planning.
 - [Plan planning](plan-planning.md) — writing the plan itself, gate by gate.
-- [Plan quality gate](plan-quality-gate.md) — one plan's readiness, on explicit request only.
+- [Plan quality gate](plan-quality-gate.md) — one plan's readiness, on explicit request only; for a bug-fix plan, an
+  adopted [upstream tool defects](../development/upstream-tool-defects.md) standard is that request.
 - [PR leak review](pr-leak-review.md) — the posted, current-head review a merge requires.
 - [Red green refactor](red-green-refactor.md) — the cycle, with its evidence.
 - [Release cut](release-cut.md) — publishing a version.

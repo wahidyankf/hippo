@@ -47,7 +47,9 @@ asserted. Each item carries its executor label, as the [Delivery Contract](004-d
 - **The decision gates in [Workflows and Skills](005-workflows-and-skills.md):** a defect has one correct behaviour, so
   there is nothing to interview about.
 - **An adopter's explicit-request rule** — here, [plan lifecycle](../plan-lifecycle.md): it needs no separate request
-  when written under a recorded Upstream Tool Defects standard, or when the owner asks.
+  when written under a recorded Upstream Tool Defects standard, or when the owner asks. That standing request also
+  directs its plan quality gate and its execution: once the plan lands, run the gate on it and execute on a passing
+  verdict, without a further prompt.
 
 Every other plan rule holds: slug rules, one root, executor labels, no time estimates, knowledge capture, execution
 review, archival, and the adopter's local rules.
