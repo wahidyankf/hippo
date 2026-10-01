@@ -261,6 +261,15 @@ gates:
       run-on:
         pull-request:
           reason: "The scanner regression suite requires an isolated pull-request checkout; local hooks stay bounded."
+    - id: leak-review-tests
+      type: check
+      command:
+        executable: bash
+        args: [{ literal: scripts/leak-review/tests/run.sh }]
+      run-on:
+        pull-request:
+          reason: "The record check's offline suite runs where the hosted check is defined."
+        main: {}
     - id: format-staged
       type: mutation
       inputs:

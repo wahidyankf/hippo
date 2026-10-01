@@ -74,10 +74,9 @@ Grouped by the source that leaves the choice open; each entry reads decision: ch
   - context parameter: deviation: `noctx` disabled — host probes and supervised process groups have no request context
     to propagate
 - `shell-scripts.md`
-  - interpreter: deviation: POSIX `sh` with `set -eu`; Bash only in the adopted scanner, the pinned-tool wrappers
-    `rhino`, `ferret`, and `scripts/shellcheck.sh`, and the gate scripts `format-staged.sh` and
-    `check-commit-message.sh` — the bootstrap wrappers run before any toolchain on macOS and Linux; the scanner stays as
-    adopted
+  - interpreter: deviation: POSIX `sh` with `set -eu`; Bash only in the adopted scanner and record check, the
+    pinned-tool wrappers `rhino`, `ferret`, and `scripts/shellcheck.sh`, and the gate scripts `format-staged.sh` and
+    `check-commit-message.sh` — the bootstrap wrappers run before any toolchain on macOS and Linux; both stay as adopted
 - `shell-standards.md`
   - static analysis: the `shell-lint` gate: pinned ShellCheck at `--severity=warning` over `scripts/shell-files.sh`, the
     list `shfmt -d` also reads — one list keeps the analyser and the formatter from drifting; the pin keeps a green

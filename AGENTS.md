@@ -3,17 +3,15 @@
 This file is an index. Every rule lives in [`repo-governance/`](repo-governance/README.md); this file states none of its
 own.
 
-Start with [the vision](repo-governance/vision/README.md) if you have not worked here before: it explains what a guard
-nobody notices is for.
+New here? Start with [the vision](repo-governance/vision/README.md): what a guard nobody notices is for.
 
 ## The Product
 
 HIPPO holds no defaults about the work it guards:
 [repository independence](repo-governance/principles/repository-independence.md).
 
-The exit statuses `0`, `1`, `2`, `124`, `125`, `126`, and `127`, the `hippo.area.reason` error codes, the evidence
-readers, and configuration compatibility are the [public contract](repo-governance/development/public-contract.md); none
-moves without authorization.
+Exit statuses, `hippo.area.reason` error codes, evidence readers, and configuration compatibility are the
+[public contract](repo-governance/development/public-contract.md); none moves without authorization.
 
 ## Plans
 
@@ -22,7 +20,7 @@ Plans are working records under [`plans/`](plans/README.md), never architecture:
 [local rules](repo-governance/conventions/plan-lifecycle.md) layered on it, and
 [specification changes](repo-governance/conventions/plan-specification-changes.md).
 
-What a plan is groomed, written, executed and reviewed with — every workflow, skill and agent of the roster — is
+Every workflow, skill, and agent that grooms, writes, executes, or reviews a plan:
 [planning capabilities](repo-governance/development/planning-capabilities.md).
 
 ## Specifications
@@ -77,7 +75,9 @@ a sibling `*-worktrees/` path—per [worktree location](repo-governance/conventi
 [merge preconditions](repo-governance/conventions/pull-request-merge.md) that hold every time.
 
 Committing and pushing need [authorization](repo-governance/conventions/commit-authorization.md). Never commit what
-[data safety](repo-governance/conventions/public-repository-data-safety.md) prohibits. Never bypass a
+[data safety](repo-governance/conventions/public-repository-data-safety.md) prohibits. A
+[leak review](repo-governance/workflows/pr-leak-review.md) of each outgoing commit precedes every push; every merge
+needs its posted `pass` for the exact head, which the `leak-review` status enforces. Never bypass a
 [push hook](repo-governance/conventions/push-hook-verification.md). Never destroy work or history without
 [approval for that one command](repo-governance/conventions/no-destructive-git-operations.md). Keep the
 [working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub

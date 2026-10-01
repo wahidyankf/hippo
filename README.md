@@ -199,8 +199,8 @@ npm test           # the quick gate plus integration, end-to-end, race and vulne
 ```
 
 Only `main` persists. Work reaches it through a pull request from a branch at `{repository location}/worktrees/<task>`;
-sibling `*-worktrees` directories are forbidden. Direct pushes are refused for every actor. One aggregate `Quality gate`
-check, defined in `.github/workflows/pr-quality-gate.yml`, is required.
+sibling `*-worktrees` directories are forbidden. Direct pushes are refused for every actor. The required checks,
+`Quality gate` and `leak-review`, are both defined in `.github/workflows/`.
 
 ShellCheck and documentation gates are in neither script: they run under [RHINO](https://github.com/wahidyankf/rhino) on
 push and pull request, pinned by tag and SHA-256 in `rhino.lock`; `repo-config.yml` supplies the lifecycle and three
