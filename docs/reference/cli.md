@@ -1,42 +1,25 @@
 # Command-line interface
 
-Complete command and flag inventory for the `hippo` executable. Generated from the binary's own
-help output; run `hippo <command> --help` to confirm against the version you have installed.
+Complete command and flag inventory for the `hippo` executable. Generated from the binary's own help output; run
+`hippo <command> --help` to confirm against the version you have installed.
 
 ## Command tree
 
-```mermaid
-graph LR
-    hippo["hippo"]
-    version["version"]
-    status["status"]
-    watch["watch"]
-    history["history"]
-    monitor["monitor"]
-    run["run"]
-    release["release"]
-    completion["completion"]
-    check["check"]
-    assess["assess"]
-    rmonitor["monitor"]
+`hippo` has eight commands; `release` holds three subcommands of its own.
 
-    hippo --> version
-    hippo --> status
-    hippo --> watch
-    hippo --> history
-    hippo --> monitor
-    hippo --> run
-    hippo --> release
-    hippo --> completion
-    release --> check
-    release --> assess
-    release --> rmonitor
-
-    classDef root fill:#DE8F05,stroke:#000000,color:#000000
-    classDef command fill:#0173B2,stroke:#000000,color:#FFFFFF
-
-    class hippo root
-    class version,status,watch,history,monitor,run,release,completion,check,assess,rmonitor command
+```text
+hippo
++-- version
++-- status
++-- watch
++-- history
++-- monitor
++-- run
++-- release
+|   +-- check
+|   +-- assess
+|   +-- monitor
++-- completion
 ```
 
 | Command                 | Does                                             |
@@ -57,20 +40,21 @@ graph LR
 
 Every command accepts these, placed before or after the command name.
 
-| Flag              | Default | Meaning                                                                                                    |
-| ----------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
-| `--color <when>`  | `auto`  | Colour the diagnostic line: `always`, `never`, or `auto` (see [Colour](./environment-variables.md#colour)) |
-| `--output <form>` | `text`  | Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr                    |
+- `--color <when>`
+  - Default: `auto`
+  - Meaning: Colour the diagnostic line: `always`, `never`, or `auto` (see [Colour](./environment-variables.md#colour))
+- `--output <form>`
+  - Default: `text`
+  - Meaning: Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr
 
-Any other value is a usage mistake: exit `2`, naming `hippo.args.invalid`, unless help was requested
-(see below).
-HIPPO reads these flags only before `--`, so a guarded command's own `--output` or `--color` after
-`run`'s `--` belongs to that command and changes nothing HIPPO writes.
+Any other value is a usage mistake: exit `2`, naming `hippo.args.invalid`, unless help was requested (see below). HIPPO
+reads these flags only before `--`, so a guarded command's own `--output` or `--color` after `run`'s `--` belongs to
+that command and changes nothing HIPPO writes.
 
-`release monitor` defines its own `--output` (the raw sample destination), which takes the place of
-the global flag for that command wherever it is placed, so that command never writes a failure body.
-The failure body is described in [Exit codes](./exit-codes.md#the-machine-readable-body); its
-`command` field names the command that ran, wherever the global flags sit.
+`release monitor` defines its own `--output` (the raw sample destination), which takes the place of the global flag for
+that command wherever it is placed, so that command never writes a failure body. The failure body is described in
+[Exit codes](./exit-codes.md#the-machine-readable-body); its `command` field names the command that ran, wherever the
+global flags sit.
 
 The root command also accepts `--version`, which prints the same text as `hippo version` and exits.
 
@@ -85,12 +69,11 @@ The root command also accepts `--version`, which prints the same text as `hippo 
 
 `--help` is available on every command. `version`, `history`, and `completion` take no shared flags.
 
-Requested help wins over everything else on the line. Once `--help` or `-h` appears before `--`, or
-the command is `hippo help <command>`, HIPPO prints that command's help to stdout, writes nothing to
-stderr, runs nothing, and exits `0`. Every other flag and argument is ignored, including a value it
-would refuse, such as `--color bogus`, and a flag it cannot parse, such as `--no-such-flag` or
-`--lease-port abc`. After `--`, `--help` belongs to the guarded command. Without a request for help,
-each of those mistakes still exits `2` naming `hippo.args.invalid`.
+Requested help wins over everything else on the line. Once `--help` or `-h` appears before `--`, or the command is
+`hippo help <command>`, HIPPO prints that command's help to stdout, writes nothing to stderr, runs nothing, and exits
+`0`. Every other flag and argument is ignored, including a value it would refuse, such as `--color bogus`, and a flag it
+cannot parse, such as `--no-such-flag` or `--lease-port abc`. After `--`, `--help` belongs to the guarded command.
+Without a request for help, each of those mistakes still exits `2` naming `hippo.args.invalid`.
 
 ## `hippo version`
 
@@ -106,18 +89,16 @@ $ hippo version --json
 {"schemaVersion":1,"version":"v0.8.2","commit":"<commit>"}
 ```
 
-The text form reports the release followed by its exact source commit. The JSON form carries the
-same values in `version` and `commit`. Both values are injected at link time: by
-`scripts/build-release.sh` for a release, and as `v0.0.0-test` with an all-zero commit by the test
-harness. Any other source build reports `dev (unknown)`.
+The text form reports the release followed by its exact source commit. The JSON form carries the same values in
+`version` and `commit`. Both values are injected at link time: by `scripts/build-release.sh` for a release, and as
+`v0.0.0-test` with an all-zero commit by the test harness. Any other source build reports `dev (unknown)`.
 
 ## `hippo status`
 
-Takes two host samples one second apart, the first only priming CPU use, resolves a profile, and
-reports the second. It never admits work, but it needs a writable state root while a coordination
-epoch is live, exclusive or reservation: it takes the coordination lock, under reservation also
-reconciles the ledger, and a lock it cannot open exits `125` naming `hippo.evidence.unwritable`. An
-idle root is only read.
+Takes two host samples one second apart, the first only priming CPU use, resolves a profile, and reports the second. It
+never admits work, but it needs a writable state root while a coordination epoch is live, exclusive or reservation: it
+takes the coordination lock, under reservation also reconciles the ledger, and a lock it cannot open exits `125` naming
+`hippo.evidence.unwritable`. An idle root is only read.
 
 | Flag                 | Default | Meaning                                            |
 | -------------------- | ------- | -------------------------------------------------- |
@@ -126,27 +107,32 @@ idle root is only read.
 | `--source <label>`   | unset   | Filter owner and waiter rows by source             |
 | `--tag <key=value>`  | none    | Filter rows by a label; repeatable, all must match |
 
+Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
+
 ```console
 $ hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=16.64 diskFreeGiB=63.05 cpu=27.4% owners=2 waiters=1 ownerLimit=2 promotion=insufficient-overlap-runs
-active run=a161efd79fbf2947e02cc76b1f84f865 position=0 source=hippo class=ephemeral tier=standard cpu=4 memoryMiB=6144 deadline=2026-09-26T08:50:52.086019Z
-active run=e58306df9d9abcc729f132fc1a19b081 position=0 source=hippo class=ephemeral tier=light cpu=2 memoryMiB=2048 deadline=2026-09-26T07:50:54.096318Z
-waiting run=fb5b47c58a0287aee14ca7c310499cd0 position=1 source=my-repo class=ephemeral tier=heavy cpu=4 memoryMiB=8192 deadline=2026-09-26T11:20:56.116166Z
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=16.64 diskFreeGiB=63.05 cpu=27.4%
+  owners=2 waiters=1 ownerLimit=2 promotion=insufficient-overlap-runs
+active run=a161efd79fbf2947e02cc76b1f84f865 position=0 source=hippo class=ephemeral tier=standard cpu=4 memoryMiB=6144
+  deadline=2026-09-26T08:50:52.086019Z
+active run=e58306df9d9abcc729f132fc1a19b081 position=0 source=hippo class=ephemeral tier=light cpu=2 memoryMiB=2048
+  deadline=2026-09-26T07:50:54.096318Z
+waiting run=fb5b47c58a0287aee14ca7c310499cd0 position=1 source=my-repo class=ephemeral tier=heavy cpu=4 memoryMiB=8192
+  deadline=2026-09-26T11:20:56.116166Z
 ```
 
-The text form prints one privacy-safe row line under the summary for each owner and waiter. The JSON
-form carries the same rows in full, plus the base, maximum, and currently effective owner limit. A
-live exclusive compatibility session appears as a legacy owner, while exclusive waiters remain
-unregistered. Filters change rows, not the global aggregate totals. A malformed `--tag` is a usage
-mistake (`2`, `hippo.args.invalid`), for `watch` as for `status`. It is documented in
-[JSON schemas](./json-schemas.md#status---json).
+The text form prints one privacy-safe row line under the summary for each owner and waiter. The JSON form carries the
+same rows in full, plus the base, maximum, and currently effective owner limit. A live exclusive compatibility session
+appears as a legacy owner, while exclusive waiters remain unregistered. Filters change rows, not the global aggregate
+totals. A malformed `--tag` is a usage mistake (`2`, `hippo.args.invalid`), for `watch` as for `status`. It is
+documented in [JSON schemas](./json-schemas.md#status---json).
 
 ## `hippo watch`
 
-Runs `status` repeatedly and prints only changed snapshots. This is the operator view for owners,
-FIFO position, admission deadline, and promotion state; `monitor` remains the lower-level resource
-transition stream. It runs until it is stopped: `SIGINT` ends it with `130` and `SIGTERM` with
-`143`, whether the signal lands between snapshots or while one is being collected.
+Runs `status` repeatedly and prints only changed snapshots. This is the operator view for owners, FIFO position,
+admission deadline, and promotion state; `monitor` remains the lower-level resource transition stream. It runs until it
+is stopped: `SIGINT` ends it with `130` and `SIGTERM` with `143`, whether the signal lands between snapshots or while
+one is being collected.
 
 | Flag                    | Default | Meaning                                            |
 | ----------------------- | ------- | -------------------------------------------------- |
@@ -158,8 +144,8 @@ transition stream. It runs until it is stopped: `SIGINT` ends it with `130` and 
 
 ## `hippo history`
 
-Reads current and daily compacted summaries from the shared root. It never emits commands,
-arguments, working directories, or repository paths.
+Reads current and daily compacted summaries from the shared root. It never emits commands, arguments, working
+directories, or repository paths.
 
 | Flag                     | Default | Meaning                                                             |
 | ------------------------ | ------- | ------------------------------------------------------------------- |
@@ -174,16 +160,16 @@ arguments, working directories, or repository paths.
 
 `--json` and `--jsonl` are mutually exclusive.
 
-A filter value no recorded run can carry is a usage mistake (`2`, `hippo.args.invalid`), not an
-empty result: `--class` takes `ephemeral`, `service`, `transactional`, or `release`;
-`--resource-tier` takes `light`, `standard`, or `heavy`; and `--outcome` takes `passed`,
-`task-failed`, `supervision-failed`, `pressure-shed`, `storage-shed`, `emergency-safety-stop`,
-`capacity-deferred`, `storage-blocked`, `admission-cancelled`, or `admission-failed`. A valid filter that matches nothing exits `1`.
+A filter value no recorded run can carry is a usage mistake (`2`, `hippo.args.invalid`), not an empty result: `--class`
+takes `ephemeral`, `service`, `transactional`, or `release`; `--resource-tier` takes `light`, `standard`, or `heavy`;
+and `--outcome` takes `passed`, `task-failed`, `supervision-failed`, `pressure-shed`, `storage-shed`,
+`emergency-safety-stop`, `capacity-deferred`, `storage-blocked`, `admission-cancelled`, or `admission-failed`. A valid
+filter that matches nothing exits `1`.
 
 ## `hippo monitor`
 
-Prints the initial state, then one line per state or profile transition. Runs until it is stopped,
-and a signal ends it with `128+N`: `130` for `SIGINT`, `143` for `SIGTERM`.
+Prints the initial state, then one line per state or profile transition. Runs until it is stopped, and a signal ends it
+with `128+N`: `130` for `SIGINT`, `143` for `SIGTERM`.
 
 | Flag                    | Default | Meaning                                      |
 | ----------------------- | ------- | -------------------------------------------- |
@@ -191,54 +177,81 @@ and a signal ends it with `128+N`: `130` for `SIGINT`, `143` for `SIGTERM`.
 | `--disk-path <path>`    | `.`     | Path whose free space is measured            |
 | `--interval <duration>` | `1s`    | Sample interval                              |
 
+Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
+
 ```console
 $ hippo monitor --interval 1s --disk-path .
 2026-09-07T04:55:25.508138Z state=normal reason=normal profile=balanced swap=active
 ^C
 
 $ hippo monitor --interval 1s --json --disk-path .
-{"schemaVersion":1,"measuredAt":"2026-09-07T04:55:28.569948Z","state":"normal","reason":"normal","profile":"balanced","swapState":"active"}
+{"schemaVersion":1,"measuredAt":"2026-09-07T04:55:28.569948Z","state":"normal","reason":"normal","profile":"balanced",
+  "swapState":"active"}
 ^C
 ```
 
 ## `hippo run`
 
-Admits, supervises, and sheds one guarded command. The `--` boundary is mandatory so the guarded
-command's own arguments are never parsed as hippo flags.
+Admits, supervises, and sheds one guarded command. The `--` boundary is mandatory so the guarded command's own arguments
+are never parsed as hippo flags.
 
 ```text
 hippo run [flags] -- <command> [arguments...]
 ```
 
-| Flag                              | Default     | Meaning                                                                                                                                |
-| --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `--class <name>`                  | `ephemeral` | Task class: `ephemeral`, `service`, or `transactional`                                                                                 |
-| `--cwd <path>`                    | unset       | Child working directory                                                                                                                |
-| `--disk-path <path>`              | unset       | Path whose free space is measured                                                                                                      |
-| `--reserve-cpu <n>`               | `0`         | Fixed CPU reservation; `0` selects the automatic fair share                                                                            |
-| `--reserve-memory-mib <n>`        | `0`         | Fixed memory reservation in MiB; `0` selects the automatic fair share                                                                  |
-| `--resource-tier <name>`          | unset       | `light`, `standard`, or `heavy`; required by schema 3                                                                                  |
-| `--source <label>`                | identity    | Override the discovered `hippo.identity.json` source                                                                                   |
-| `--tag <key=value>`               | identity    | Override/add a privacy-safe label; repeatable, last duplicate wins                                                                     |
-| `--concurrency-env <NAME>`        | none        | Child variable that receives resolved concurrency; repeatable                                                                          |
-| `--wait-for-admission <duration>` | `0`         | Schema-2 FIFO deadline without a tier; never negative; refused under schema 1, beside a tier under schema 2, and always under schema 3 |
-| `--lease-port <n>`                | `0`         | Service port to lease; 1–65535, within `--lease-min`..`--lease-max`                                                                    |
-| `--lease-owner <name>`            | unset       | Service port owner; lowercase letters, digits, and `-`; required with `--lease-port`, refused without it                               |
-| `--lease-min <n>`                 | `0`         | Minimum allowed leased port; refused without `--lease-port`                                                                            |
-| `--lease-max <n>`                 | `0`         | Maximum allowed leased port; refused without `--lease-port`                                                                            |
+- `--class <name>`
+  - Default: `ephemeral`
+  - Meaning: Task class: `ephemeral`, `service`, or `transactional`
+- `--cwd <path>`
+  - Default: unset
+  - Meaning: Child working directory
+- `--disk-path <path>`
+  - Default: unset
+  - Meaning: Path whose free space is measured
+- `--reserve-cpu <n>`
+  - Default: `0`
+  - Meaning: Fixed CPU reservation; `0` selects the automatic fair share
+- `--reserve-memory-mib <n>`
+  - Default: `0`
+  - Meaning: Fixed memory reservation in MiB; `0` selects the automatic fair share
+- `--resource-tier <name>`
+  - Default: unset
+  - Meaning: `light`, `standard`, or `heavy`; required by schema 3
+- `--source <label>`
+  - Default: identity
+  - Meaning: Override the discovered `hippo.identity.json` source
+- `--tag <key=value>`
+  - Default: identity
+  - Meaning: Override/add a privacy-safe label; repeatable, last duplicate wins
+- `--concurrency-env <NAME>`
+  - Default: none
+  - Meaning: Child variable that receives resolved concurrency; repeatable
+- `--wait-for-admission <duration>`
+  - Default: `0`
+  - Meaning: Schema-2 FIFO deadline without a tier; never negative; refused under schema 1, beside a tier under schema
+    2, and always under schema 3
+- `--lease-port <n>`
+  - Default: `0`
+  - Meaning: Service port to lease; 1–65535, within `--lease-min`..`--lease-max`
+- `--lease-owner <name>`
+  - Default: unset
+  - Meaning: Service port owner; lowercase letters, digits, and `-`; required with `--lease-port`, refused without it
+- `--lease-min <n>`
+  - Default: `0`
+  - Meaning: Minimum allowed leased port; refused without `--lease-port`
+- `--lease-max <n>`
+  - Default: `0`
+  - Meaning: Maximum allowed leased port; refused without `--lease-port`
 
-The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A
-normal child exit code is passed through unchanged. Under reservation coordination (schema 2 or 3),
-capacity waiting creates one FIFO identity and does not launch the payload until admitted. A
-heartbeat reports that run ID, queue position, and remaining deadline every 30 seconds. Expiry
-returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt. Under
-schema 1, a heavy-work lease deferral returns the same `124` without a receipt. HIPPO never retries
-a payload.
+The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A normal child exit code is
+passed through unchanged. Under reservation coordination (schema 2 or 3), capacity waiting creates one FIFO identity and
+does not launch the payload until admitted. A heartbeat reports that run ID, queue position, and remaining deadline
+every 30 seconds. Expiry returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt.
+Under schema 1, a heavy-work lease deferral returns the same `124` without a receipt. HIPPO never retries a payload.
 
-A `--lease-port` lease is a directory in `hippo-port-leases` under the temporary directory (`TMPDIR`,
-else `/tmp`), not in the state root. A lease root that refuses that write before launch exits `125`
-naming `hippo.lease.unwritable`; a port another live owner holds exits `124` naming
-`hippo.limit.capacity-deferred`.
+A `--lease-port` lease is a directory in `hippo-port-leases` under the temporary directory (`TMPDIR`, else `/tmp`), not
+in the state root. A lease root that refuses that write before launch exits `125` naming `hippo.lease.unwritable`; a
+port another live owner holds exits `124` naming `hippo.limit.capacity-deferred`.
 
 ```console
 $ hippo run --class ephemeral --resource-tier light --disk-path . -- sh -c 'echo build-started; echo build-finished'
@@ -250,13 +263,12 @@ $ echo $?
 42
 ```
 
-`--reserve-cpu` and `--reserve-memory-mib` apply in reservation mode. An explicit reservation may be
-smaller than the automatic share but never below one CPU or 256 MiB; see
-[Configuration](./configuration.md) to enable reservation mode.
+`--reserve-cpu` and `--reserve-memory-mib` apply in reservation mode. An explicit reservation may be smaller than the
+automatic share but never below one CPU or 256 MiB; see [Configuration](./configuration.md) to enable reservation mode.
 
-Schema 3 grants the largest launch-time vector that fits between the selected tier's minimum and
-maximum. It requires a valid identity from `HIPPO_IDENTITY`, upward `hippo.identity.json` discovery,
-or `HIPPO_DEFAULT_IDENTITY`. An invocation override is useful for worktree context:
+Schema 3 grants the largest launch-time vector that fits between the selected tier's minimum and maximum. It requires a
+valid identity from `HIPPO_IDENTITY`, upward `hippo.identity.json` discovery, or `HIPPO_DEFAULT_IDENTITY`. An invocation
+override is useful for worktree context:
 
 ```sh
 hippo run --resource-tier standard --tag checkout=worktree --tag plan=maximize-hippo -- make test
@@ -284,8 +296,8 @@ $ echo $?
 
 ## `hippo release monitor`
 
-Captures release overlap evidence. `--output`, `--summary`, `--deployment-root`, `--health-url`, and
-`--routed-origin` are all required; without any of them the command exits `2` before it samples.
+Captures release overlap evidence. `--output`, `--summary`, `--deployment-root`, `--health-url`, and `--routed-origin`
+are all required; without any of them the command exits `2` before it samples.
 
 | Flag                       | Default               | Meaning                                                        |
 | -------------------------- | --------------------- | -------------------------------------------------------------- |
@@ -297,11 +309,11 @@ Captures release overlap evidence. `--output`, `--summary`, `--deployment-root`,
 | `--service-port <n>`       | none                  | Service port included in RSS accounting; repeatable            |
 | `--duration-ms <n>`        | `0`                   | Stop after this many milliseconds; `0` runs until a signal     |
 
-Either way the summary is written before HIPPO exits. Reaching `--duration-ms` exits `0`; a signal
-exits `128+N`, `130` for `SIGINT` and `143` for `SIGTERM`.
+Either way the summary is written before HIPPO exits. Reaching `--duration-ms` exits `0`; a signal exits `128+N`, `130`
+for `SIGINT` and `143` for `SIGTERM`.
 
-`--output -` and `--summary -` cannot both be used in one invocation, because raw and summary
-schemas must never be mixed on one stream:
+`--output -` and `--summary -` cannot both be used in one invocation, because raw and summary schemas must never be
+mixed on one stream:
 
 ```console
 $ hippo release monitor --output - --summary - ...
@@ -323,14 +335,17 @@ $ hippo release assess --summary summary.json
 {"accepted":true,"schemaVersion":5}
 ```
 
-Rejected evidence prints `"accepted":false` and returns exit `124`, naming
-`hippo.limit.release-envelope-exceeded`, with a diagnostic that says the evidence was rejected and why. The reason is not
-retryable: the same summary is rejected again, so change the release rather than retry it.
+Rejected evidence prints `"accepted":false` and returns exit `124`, naming `hippo.limit.release-envelope-exceeded`, with
+a diagnostic that says the evidence was rejected and why. The reason is not retryable: the same summary is rejected
+again, so change the release rather than retry it.
+
+Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
 
 ```console
 $ hippo release assess --summary summary.json
 {"accepted":false,"schemaVersion":5}
-hippo: [hippo.limit.release-envelope-exceeded] release evidence rejected: release overlap exhausted resource or routed responsiveness headroom
+hippo: [hippo.limit.release-envelope-exceeded] release evidence rejected: release overlap exhausted resource or routed
+  responsiveness headroom
 $ echo $?
 124
 ```
@@ -350,12 +365,11 @@ $ hippo completion zsh > "${fpath[1]}/_hippo"
 
 ## Usage errors
 
-A usage mistake returns exit `2`, naming `hippo.args.invalid`. A mistyped invocation — an unknown
-flag or command, a positional argument a command does not take, a missing `--`, or a command group
-such as `release` or `completion` given no subcommand or an unknown one — also prints the usage of
-the command it named on stderr next to its diagnostic, and nothing on stdout. A value or
-combination the command rejects after parsing, and any failure after the arguments were accepted,
-print only the diagnostic, so consumer logs keep the real cause instead of a flag list.
+A usage mistake returns exit `2`, naming `hippo.args.invalid`. A mistyped invocation — an unknown flag or command, a
+positional argument a command does not take, a missing `--`, or a command group such as `release` or `completion` given
+no subcommand or an unknown one — also prints the usage of the command it named on stderr next to its diagnostic, and
+nothing on stdout. A value or combination the command rejects after parsing, and any failure after the arguments were
+accepted, print only the diagnostic, so consumer logs keep the real cause instead of a flag list.
 
 ```console
 $ hippo run --disk-path . echo hi
@@ -368,26 +382,20 @@ $ echo $?
 2
 ```
 
-Every command refuses a `--color` other than `always`, `never`, or `auto`, and an `--output` other
-than `text` or `json`, the same way. `run` checks its flag values before it reads configuration,
-host evidence, or coordination state:
-a `--class` other than `ephemeral`, `service`, or `transactional`; a `--resource-tier` other than
-`light`, `standard`, or `heavy`; a malformed `--tag` or `--source`; a negative
-`--wait-for-admission`; a `--lease-port` outside 1–65535, outside `--lease-min`..`--lease-max`, or
-without a valid lowercase `--lease-owner`; and a `--lease-owner`, `--lease-min`, or `--lease-max`
-without `--lease-port` are each usage errors (`2`, `hippo.args.invalid`, diagnostic only), as is a
-non-positive `monitor --interval`. Once the configuration is read, `run` also refuses
-`--wait-for-admission` under schema 1 the same way.
-A run with no identity source — no `--source`, and no `hippo.identity.json` through
-`HIPPO_IDENTITY`, upward discovery, or `HIPPO_DEFAULT_IDENTITY`, while `--tag` or schema 3 needs one
-— is refused the same way, naming `--source` in the diagnostic. An identity file that is found but
-cannot be used is not a usage mistake: the run exits `125` naming `hippo.identity.invalid`, and the
-diagnostic names the file.
-Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`,
-diagnostic only). Invalid mapped
-_values_ inherited from the caller's environment are not: they return `125`,
-`hippo.policy.replan-required`. The rules live in
-[Environment variables](./environment-variables.md#name-rules); see also [Exit codes](./exit-codes.md).
+Every command refuses a `--color` other than `always`, `never`, or `auto`, and an `--output` other than `text` or
+`json`, the same way. `run` checks its flag values before it reads configuration, host evidence, or coordination state:
+a `--class` other than `ephemeral`, `service`, or `transactional`; a `--resource-tier` other than `light`, `standard`,
+or `heavy`; a malformed `--tag` or `--source`; a negative `--wait-for-admission`; a `--lease-port` outside 1–65535,
+outside `--lease-min`..`--lease-max`, or without a valid lowercase `--lease-owner`; and a `--lease-owner`,
+`--lease-min`, or `--lease-max` without `--lease-port` are each usage errors (`2`, `hippo.args.invalid`, diagnostic
+only), as is a non-positive `monitor --interval`. Once the configuration is read, `run` also refuses
+`--wait-for-admission` under schema 1 the same way. A run with no identity source — no `--source`, and no
+`hippo.identity.json` through `HIPPO_IDENTITY`, upward discovery, or `HIPPO_DEFAULT_IDENTITY`, while `--tag` or schema 3
+needs one — is refused the same way, naming `--source` in the diagnostic. An identity file that is found but cannot be
+used is not a usage mistake: the run exits `125` naming `hippo.identity.invalid`, and the diagnostic names the file.
+Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`, diagnostic only). Invalid mapped
+_values_ inherited from the caller's environment are not: they return `125`, `hippo.policy.replan-required`. The rules
+live in [Environment variables](./environment-variables.md#name-rules); see also [Exit codes](./exit-codes.md).
 
 ## Related
 
