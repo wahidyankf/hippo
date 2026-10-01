@@ -8,4 +8,5 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-This quadrant holds no idea yet, so this README has no siblings to map.
+- [Package wiring scan counts nested worktrees](package-wiring-scan-counts-nested-worktrees.md) — the quick gate fails
+  in any checkout holding a task worktree, because the package scan descends into nested modules.
