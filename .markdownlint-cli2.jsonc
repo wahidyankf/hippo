@@ -1,0 +1,30 @@
+// Markdown is read in terminal editors without a renderer, so this config
+// enforces only the 120-column line limit; Prettier owns every other layout
+// choice. Archived plans, the changelog, and fixture bytes are exempt.
+{
+  "config": {
+    "default": false,
+    "MD013": {
+      "line_length": 120,
+      "heading_line_length": 120,
+      "code_block_line_length": 120,
+      "code_blocks": true,
+      "tables": true,
+      "headings": true,
+      "strict": true,
+    },
+  },
+  "globs": ["**/*.md"],
+  "ignores": [
+    "**/node_modules/**",
+    ".cache/**",
+    "coverage/**",
+    "dist/**",
+    "generated-reports/**",
+    "local-tmp/**",
+    "worktrees/**",
+    "plans/done/**",
+    "specs/fixtures/**",
+    "CHANGELOG.md",
+  ],
+}
