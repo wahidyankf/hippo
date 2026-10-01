@@ -1,20 +1,31 @@
 # Markdown Visualizations
 
-Diagrams are Mermaid. Not ASCII art, not an image, not a rendered file checked in beside its source.
+Diagrams are plain ASCII art in a `text` fenced block. Not Mermaid, not an image, not a rendered file checked in beside
+its source.
 
-`rhino md mermaid validate` checks every diagram against the limits and the palette declared in [`repo-config.yml`](../../repo-config.yml).
+`rhino md mermaid validate`, with `authoring-rule: plain-text` declared in [`repo-config.yml`](../../repo-config.yml),
+refuses any Mermaid block.
 
-## Why Mermaid
+## Why ASCII
 
-An ASCII diagram is unreachable by a screen reader, unmaintainable under a rename, and silently wrong the moment a box is added without redrawing the lines around it. An image is worse: it is opaque to review, to diff, and to search. Mermaid is text that renders, so a diagram change is a diff a reader can read.
+This repository's Markdown is read in terminal editors without a renderer, where Mermaid shows as its source. ASCII is
+the same text in every reader: an editor, a diff, a search result, and a terminal. An image is worse than either: it is
+opaque to review, to diff, and to search.
+
+ASCII has two known weaknesses, and the requirements below answer both. A screen reader cannot follow a drawing, so the
+meaning lives in prose too. A drawing goes silently wrong when a box is added without redrawing its lines, so a diagram
+changes in the same commit as the structure it shows.
 
 ## Requirements
 
-- Node and state labels: at most **32 graphemes**. Edge and transition labels: at most **24**. A label that will not fit is a label describing more than one thing; split the node or move the detail into prose beneath the diagram.
-- Colour comes from the declared palette and nowhere else. The palette is Okabe–Ito, chosen because it stays distinguishable under the common forms of colour blindness.
-- Contrast is a constraint, not a preference: `#029E73` carries black text, never white. The validator enforces the pairing.
-- Every relationship a diagram shows also appears in prose near it. A diagram is a second way to read something, never the only way — which is what makes it safe for a reader who cannot see it at all.
+- Use only printable ASCII: `+`, `-`, `|` for boxes and lines, and `>`, `<`, `^`, `v` for arrow heads. Box-drawing
+  characters and arrows such as `→` render at ambiguous widths in some terminals.
+- Keep every line within the [Markdown line length](markdown-line-length.md).
+- Precede each diagram with one sentence that states what it shows.
+- Every relationship a diagram shows also appears in prose near it. A diagram is a second way to read something, never
+  the only way, which is what makes it safe for a reader who cannot see it at all.
+- Label every box. Where a category matters, name it in the label, such as `(system)`; position and line style never
+  carry meaning alone.
+- Where a graph would cross its own edges, draw one row per relationship, grouped by the component it starts from.
 
-## Adding the First Diagram to a Tree
-
-The palette must be declared before a `classDef` can name a colour. An empty colour list in `repo-config.yml` fails every diagram that styles anything, which is the intended order: declare what is allowed, then draw.
+Directory trees are not diagrams; they stay in `text` blocks in their usual form.
