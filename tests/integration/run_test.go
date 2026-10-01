@@ -314,10 +314,29 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	// before it installs its trap, which kills the child by SIGTERM's default
 	// action and leaves this test nothing to observe. Interrupt on the child's own
 	// readiness mark so the premise holds every run.
+	//
+	// The child's own bound is a release mark this test writes on its clock,
+	// well past the grace, never an iteration count: how long a count takes
+	// depends on the shell, and a fast shell can finish one inside the grace,
+	// which reports a correct guard as letting the child finish on its own.
+	release := filepath.Join(childRoot, "release")
+	runDone := make(chan struct{})
+	released := make(chan struct{})
 	go func() {
-		defer cancel()
+		defer close(released)
 
 		awaitChildReadiness(ready)
+		cancel()
+
+		select {
+		case <-time.After(livenessLimit):
+		case <-runDone:
+		}
+		_ = os.WriteFile(release, []byte("r"), 0o600)
+	}()
+	defer func() {
+		close(runDone)
+		<-released
 	}()
 
 	// The child waits without forking. A forked foreground child shares the
@@ -325,15 +344,16 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	// runs its trap a second time to report the child that died from that signal,
 	// which makes the trap count an unreliable witness for how often the guard
 	// actually signalled. A builtin-only wait counts kernel deliveries exactly,
-	// and its bound stops a guard that never force-stops from leaving a spinning
-	// orphan behind. A child that outlives that bound marks its own completion,
-	// which is how the test tells a force-stop from a child that finished.
+	// and its release stops a guard that never force-stops from leaving a
+	// spinning orphan behind. A child that outlives the grace until that release
+	// marks its own completion, which is how the test tells a force-stop from a
+	// child that finished.
 	completed := filepath.Join(childRoot, "completed")
 	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      "/bin/sh",
-		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done; printf d > "$GUARD_DONE_MARKER"`},
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; while [ ! -e "$GUARD_RELEASE_MARKER" ]; do :; done; printf d > "$GUARD_DONE_MARKER"`},
 		TaskClass:    "ephemeral",
-		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready, "GUARD_DONE_MARKER="+completed),
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready, "GUARD_RELEASE_MARKER="+release, "GUARD_DONE_MARKER="+completed),
 		EvidenceRoot: t.TempDir(),
 		DiskPath:     ".",
 		Collector:    collector,
