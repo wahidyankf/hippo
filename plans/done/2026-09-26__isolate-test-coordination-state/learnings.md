@@ -34,6 +34,6 @@ guarded end-to-end GREEN; every other run removed its root. `RunIsolated` remove
 test process that ends first — by a signal, or an `os.Exit` inside a test — leaves it behind. Which process did so was
 not established.
 
-**Disposition:** discarded as bounded. The leftover is an empty directory in the operating system's temporary
-directory, which the system reclaims; it holds no coordination state, and a failed removal is already reported rather
-than failed, as the helper's comment says. It was removed with `rmdir`.
+**Disposition:** discarded as bounded. The leftover is an empty directory in the operating system's temporary directory,
+which the system reclaims; it holds no coordination state, and a failed removal is already reported rather than failed,
+as the helper's comment says. It was removed with `rmdir`.

@@ -10,8 +10,8 @@ Recorded under the [execution check workflow](../../../../repo-governance/workfl
 
 Matches. The diff from `837ad5f` touches the pin, its wrapper and refusal test, the shared list, the gate script, the
 format check, the registry entry, the fourteen fixes, the adapter and quality-gate documents, and this plan. It leaves
-the adopted `scripts/public-safety/` copies, the `shfmt` settings, and every note below the threshold alone, as the
-plan excluded.
+the adopted `scripts/public-safety/` copies, the `shfmt` settings, and every note below the threshold alone, as the plan
+excluded.
 
 ## 2. Requirements
 
@@ -28,8 +28,8 @@ construction. The Delivery Unit assigns that evidence to the pull request's `Qua
 
 ## 3. Checklist Evidence
 
-Every ticked item carries a result, and each result matches the repository: the files exist with executable modes
-where they run, `shellcheck.lock` holds the four digests Phase 0 recorded, and the backlog holds no copy of the plan.
+Every ticked item carries a result, and each result matches the repository: the files exist with executable modes where
+they run, `shellcheck.lock` holds the four digests Phase 0 recorded, and the backlog holds no copy of the plan.
 
 ## 4. Gates
 

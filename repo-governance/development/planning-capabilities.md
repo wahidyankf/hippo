@@ -1,7 +1,7 @@
 # Planning Capabilities
 
-The [Plans Convention](../conventions/plans.md) says what a plan is. This standard says what a repository
-must be able to _do_ with one, and in what form those abilities are published.
+The [Plans Convention](../conventions/plans.md) says what a plan is. This standard says what a repository must be able
+to _do_ with one, and in what form those abilities are published.
 
 The two are separable on purpose. A repository can hold well-formed plans and still be unable to groom, review, or
 archive them, and that gap is invisible to any check that only looks at documents.

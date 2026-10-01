@@ -15,11 +15,10 @@ leave open.
 
 ## What It Holds, and What It Links
 
-The adapter holds only repository-wide decisions and deviations. Per-project facts already have an owner:
-Project READMEs state each project's stack, commands, and test levels, and
-Test Boundaries and Gates places every omitted
-target and its reason there. The adapter links each project README instead of copying those facts. A project without a
-README carries them inline in the adapter until it gains one.
+The adapter holds only repository-wide decisions and deviations. Per-project facts already have an owner: Project
+READMEs state each project's stack, commands, and test levels, and Test Boundaries and Gates places every omitted target
+and its reason there. The adapter links each project README instead of copying those facts. A project without a README
+carries them inline in the adapter until it gains one.
 
 It records no command, threshold, or tool version the project README or a manifest already states. A version is named by
 the manifest or toolchain file that declares it, never repeated.
@@ -67,10 +66,9 @@ This document owns the `extensions.software-development` inventory in the reposi
 - **Adopted Packs.** Each pack carries exactly one status: adopted as written, adapted with its reason, or not
   applicable with its reason. A pack the inventory lists but this table omits is an unknown state, and a finding.
 - **Adopter Decisions.** Every Adopter Decision row of each adopted standard and skill, plus the coverage-floor and
-  task-runner choices that
-  Layers and Adapters
-  and Test Boundaries and Gates ask a repository to record. A stronger local rule, such as a higher coverage floor or a
-  language confined to one project, is recorded here as a deviation with its reason, and adoption never loosens it.
+  task-runner choices that Layers and Adapters and Test Boundaries and Gates ask a repository to record. A stronger
+  local rule, such as a higher coverage floor or a language confined to one project, is recorded here as a deviation
+  with its reason, and adoption never loosens it.
 - **Project Applicability.** One link per project README. Applicable test layers, useful coverage, and each
   not-applicable boundary with its technical reason live in that README, never as a target that does nothing.
 - **Version Sources.** Manifest and toolchain file paths only.

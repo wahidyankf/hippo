@@ -17,9 +17,9 @@ defect. No second owner is created.
 
 ## L2 — The artifact fixtures read the index, not the working tree
 
-One complete-gate run failed seven release-artifact scenarios with `copy fixture entry: lstat ... no such file or
-directory`, because the index still listed the plan's backlog paths after they had been moved on disk and unstaged. With
-the index and the working tree agreeing, the same scenarios passed.
+One complete-gate run failed seven release-artifact scenarios with
+`copy fixture entry: lstat ... no such file or directory`, because the index still listed the plan's backlog paths after
+they had been moved on disk and unstaged. With the index and the working tree agreeing, the same scenarios passed.
 
 **Disposition:** discarded as specific to this execution. The gate reported a real inconsistency correctly; the remedy
 was to stage the move before running it, and no rule or test is missing.

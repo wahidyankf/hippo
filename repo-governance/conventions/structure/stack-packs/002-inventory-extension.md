@@ -10,8 +10,8 @@ when_to_use: >-
 # Inventory Extension
 
 The inventory tells a reader and an agent which packs apply to each project. It is informational data an adopter keeps
-in the `extensions` group of its [repository configuration file](../../../../repo-config.yml), never a second place
-for commands or policy.
+in the `extensions` group of its [repository configuration file](../../../../repo-config.yml), never a second place for
+commands or policy.
 
 ## Shape
 
@@ -41,9 +41,9 @@ change how its tests are written.
 
 ## A Visible Owner
 
-Top-Level Schema requires every extension to name an owner. The
-owner is the adopter's repository adapter: a YAML comment above the key names it, and the adapter links back to the
-configuration file. The marker stays a comment so the payload's shape is the same in every adopter.
+Top-Level Schema requires every extension to name an owner. The owner is the adopter's repository adapter: a YAML
+comment above the key names it, and the adapter links back to the configuration file. The marker stays a comment so the
+payload's shape is the same in every adopter.
 
 The payload holds no commands, thresholds, hosts, credentials, digests, versions, or catalog pins. Each of those has an
 owner elsewhere, and an extension may not conceal one.

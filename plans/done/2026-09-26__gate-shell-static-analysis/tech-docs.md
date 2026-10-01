@@ -14,9 +14,9 @@ scripts/format-check.sh                   hands the same list to shfmt -d
 ## Design Decisions
 
 - `shellcheck.lock` follows `rhino.lock`: `version=` and one `<platform>=<sha256>` line per release archive.
-- `scripts/shellcheck.sh` follows the verify-before-execute contract in `ferret`: Bash, `set -euo pipefail`, cache
-  under the ignored `/.cache/`, re-digest on every run, publish by atomic rename, and exit `125` on a malformed pin, a
-  digest mismatch, or an unpinned platform.
+- `scripts/shellcheck.sh` follows the verify-before-execute contract in `ferret`: Bash, `set -euo pipefail`, cache under
+  the ignored `/.cache/`, re-digest on every run, publish by atomic rename, and exit `125` on a malformed pin, a digest
+  mismatch, or an unpinned platform.
 - The cache keeps the verified release archive, not only the executable. Every run re-digests that archive against the
   pin and re-derives the executable from it, so a cached archive whose digest differs is refused with `125` rather than
   silently replaced: something changed it, and a fresh download would hide that. `SHELLCHECK_INSTALL_CACHE` redirects
@@ -31,9 +31,9 @@ scripts/format-check.sh                   hands the same list to shfmt -d
 
 ## Specification Changes
 
-None. No product behaviour changes. AC-01 is proved by `tests/artifacts/shellcheck-pin.sh`, which `tests/artifacts/run.sh` calls, AC-02 and AC-03 by the
-gate run and a deliberate mutation, AC-04 by comparing both tools' inputs, and AC-05 by the pull-request replay and the
-adapter diff.
+None. No product behaviour changes. AC-01 is proved by `tests/artifacts/shellcheck-pin.sh`, which
+`tests/artifacts/run.sh` calls, AC-02 and AC-03 by the gate run and a deliberate mutation, AC-04 by comparing both
+tools' inputs, and AC-05 by the pull-request replay and the adapter diff.
 
 ## File-Impact Analysis
 

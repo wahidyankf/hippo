@@ -2,10 +2,10 @@
 
 A plan carries exactly one technical shape:
 
-| Shape       | Form                                          | Choose when                                                             |
-| ----------- | --------------------------------------------- | ----------------------------------------------------------------------- |
-| single file | `tech-docs.md`                                | the technical design fits in one document a reader will actually finish |
-| directory   | `tech-docs/README.md` plus ordered companions | it does not                                                             |
+| Shape       | Form                                       | Choose when                                       |
+| ----------- | ------------------------------------------ | ------------------------------------------------- |
+| single file | `tech-docs.md`                             | the design fits one document a reader will finish |
+| directory   | `tech-docs/README.md` + ordered companions | it does not                                       |
 
 Never both. A plan root containing `tech-docs.md` _and_ `tech-docs/` is a validation failure, not a transitional state,
 because the two will diverge and nothing decides which is authoritative.

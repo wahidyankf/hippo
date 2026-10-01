@@ -4,4 +4,5 @@ description: |-
 name: applying-maker-checker-fixer
 ---
 
-Read .agents/skills/applying-maker-checker-fixer/SKILL.md completely, resolve every relative resource from that skill directory, and follow it as authoritative before acting.
+Read .agents/skills/applying-maker-checker-fixer/SKILL.md completely,
+resolve every relative resource from that skill directory, and follow it as authoritative before acting.

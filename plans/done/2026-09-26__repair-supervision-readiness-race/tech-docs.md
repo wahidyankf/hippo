@@ -47,8 +47,8 @@ No durable product-specification change is required:
 - AC-02 preserves the existing `specs/behaviours/execution.feature` scenario
   `A supervision failure reaps the guarded child before releasing ownership`; its unit binding and existing
   integration/end-to-end exemptions remain unchanged.
-- AC-01 stays plan-level because readiness orders the fixture's Given rather than changing product behavior. The Phase
-  1 deterministic RED, GREEN focused unit command, and twenty-run stress task prove it.
+- AC-01 stays plan-level because readiness orders the fixture's Given rather than changing product behavior. The Phase 1
+  deterministic RED, GREEN focused unit command, and twenty-run stress task prove it.
 - AC-03 stays plan-level because test-only scope and repeatability are delivery properties. The Phase 1 diff gate and
   Phase 2 `npm run test:quick` plus `npm test` tasks prove it.
 - AC-04 stays plan-level because the timeout is a test-support diagnostic. The Phase 1

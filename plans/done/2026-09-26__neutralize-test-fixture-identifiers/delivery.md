@@ -30,15 +30,15 @@ One branch and pull request deliver one test-only outcome: the source-override f
 the test file and the plan record together. The worktree-to-PR workflow owns commit, push, draft, exact-head quality,
 leak review, rebase merge, main reconciliation, and cleanup.
 
-Owner decision, 2026-09-26: the plan is archived inside this delivery pull request rather than through a second one.
-The merge, the primary reconciliation, and the clean-up follow the archival commit, so they cannot be ticked here; the
+Owner decision, 2026-09-26: the plan is archived inside this delivery pull request rather than through a second one. The
+merge, the primary reconciliation, and the clean-up follow the archival commit, so they cannot be ticked here; the
 worktree-to-PR workflow performs them and the pull request records their proof. See the
 [quality gate](evidence/quality-gate.md).
 
 ## Phase 0: Environment Setup and Baseline
 
-- [x] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at
-      `origin/main` and `git status --porcelain` is empty. `[AC-03]`
+- [x] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at `origin/main`
+      and `git status --porcelain` is empty. `[AC-03]`
   - Result: registered once at `837ad5f`; `npm ci` ran beneath the worktree-local guard; the porcelain status was empty.
 - [x] `[AI]` Move the plan to `plans/in-progress/neutralize-test-fixture-identifiers/` with `git mv` and update both
       stage indexes; acceptance: only the in-progress index links it. `[AC-03]`
@@ -86,12 +86,12 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
   - Result: exit `0`, run directly with `HIPPO_CONFIG` unset and `HIPPO_ROOT` an empty temporary directory;
     `govulncheck` reported no called vulnerability. Two earlier runs failed for reasons outside this diff, recorded as
     [L1 and L2](learnings.md).
-- [x] `[AI]` Commit with a Conventional Commit whose message does not name the removed string, after inspecting the
-      diff against data safety; acceptance: hooks pass and only declared paths are committed. `[AC-02]` `[AC-03]`
+- [x] `[AI]` Commit with a Conventional Commit whose message does not name the removed string, after inspecting the diff
+      against data safety; acceptance: hooks pass and only declared paths are committed. `[AC-02]` `[AC-03]`
   - Result: `test(identity): prove the source override with a synthetic value` holds only the test file; the
     `public-safety-tree`, `format-staged`, `public-safety-message`, and `commit-message` hooks passed.
-- [x] `[AI]` Push and open the pull request as a draft with a screened body; acceptance: the draft exists at the
-      pushed head. `[AC-03]`
+- [x] `[AI]` Push and open the pull request as a draft with a screened body; acceptance: the draft exists at the pushed
+      head. `[AC-03]`
   - Result: the pre-push gate passed; draft pull request #69 opened at `ca0de3d` after the outbound preflight reported
     the title and body clean. Once #69 was green, `main` gained the shell static-analysis plan and #69 conflicted in the
     done index. Updating #69 needed a force push this execution held no approval for, so the three commits were replayed
@@ -109,11 +109,11 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
 
 ## Plan Archival
 
-- [x] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__neutralize-test-fixture-identifiers/` with the completion date
-      and update both stage indexes; acceptance: one done copy exists. `[AC-03]`
+- [x] `[AI]` Move the plan to `plans/done/YYYY-MM-DD__neutralize-test-fixture-identifiers/` with the completion date and
+      update both stage indexes; acceptance: one done copy exists. `[AC-03]`
   - Result: moved with `git mv` to `plans/done/2026-09-26__neutralize-test-fixture-identifiers/`, after confirming the
     destination did not exist; the in-progress index is empty again and the done index lists the plan.
-- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`;
-      acceptance: no rule fails and the gate exits `0`. `[AC-03]`
+- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance:
+      no rule fails and the gate exits `0`. `[AC-03]`
   - Result: 0 structural findings; the internal-link and directory-map checks reported no findings; the quick gate
     exited `0`.

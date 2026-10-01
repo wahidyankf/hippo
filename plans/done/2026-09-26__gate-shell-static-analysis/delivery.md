@@ -28,30 +28,30 @@ The repository gates run directly, never beneath `./hippo`.
 
 ## Delivery Unit
 
-One branch and pull request deliver one outcome: shell static analysis is a gate. Clean and gate land together,
-because a gate turned on before the clean-up fails every push, and a clean-up without the gate decays. Rollback reverts
-the delivery commits together.
+One branch and pull request deliver one outcome: shell static analysis is a gate. Clean and gate land together, because
+a gate turned on before the clean-up fails every push, and a clean-up without the gate decays. Rollback reverts the
+delivery commits together.
 
-The archival commit rides in the same pull request as the delivery, by the owner's decision of 2026-09-26, so the
-branch that merges carries the finished record. The worktree-to-PR workflow owns push, draft, exact-head quality, leak
-review, rebase merge, main reconciliation, and the worktree and branch clean-up; their evidence is the pull request
-itself — its `Quality gate` check, its leak-review record, and its merge commit — because every one of them post-dates
-the archived copy of this checklist. Fix every gate failure at its cause; never bypass a hook.
+The archival commit rides in the same pull request as the delivery, by the owner's decision of 2026-09-26, so the branch
+that merges carries the finished record. The worktree-to-PR workflow owns push, draft, exact-head quality, leak review,
+rebase merge, main reconciliation, and the worktree and branch clean-up; their evidence is the pull request itself — its
+`Quality gate` check, its leak-review record, and its merge commit — because every one of them post-dates the archived
+copy of this checklist. Fix every gate failure at its cause; never bypass a hook.
 
 ## Phase 0: Environment Setup and Baseline
 
-- [x] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at
-      `origin/main` and `git status --porcelain` is empty. `[AC-05]`
-  - Result (2026-09-26): registered once at `837ad5f` on `worktree/gate-shell-static-analysis`; `npm ci` installed
-    the hooks and the status was empty.
+- [x] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at `origin/main`
+      and `git status --porcelain` is empty. `[AC-05]`
+  - Result (2026-09-26): registered once at `837ad5f` on `worktree/gate-shell-static-analysis`; `npm ci` installed the
+    hooks and the status was empty.
 - [x] `[AI]` Run `npm run test:quick`; acceptance: the baseline exits `0`. `[AC-02]`
   - Result: exit `0` at `837ad5f`, with the selected core coverage at 99.07%.
 - [x] `[AI]` Move the plan to `plans/in-progress/gate-shell-static-analysis/` with `git mv` and update both stage
       indexes; acceptance: only the in-progress index links it. `[AC-05]`
   - Result: moved after the quality-gate repair commit; the backlog index no longer names it.
 - [x] `[AI]` Confirm the current ShellCheck release, its per-platform asset names, and their SHA-256 digests from the
-      upstream release page, and record them here; acceptance: four platforms are recorded, or the missing one is
-      named and the pin refuses it. `[AC-01]`
+      upstream release page, and record them here; acceptance: four platforms are recorded, or the missing one is named
+      and the pin refuses it. `[AC-01]`
   - Result: `v0.11.0` (published 2025-08-04) is still the latest release. The four `.tar.gz` assets and their SHA-256
     digests, each recomputed locally from a download and equal to the digest the release publishes:
 
@@ -67,7 +67,8 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 ### Phase 0 Gate
 
-- [x] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-05]`
+- [x] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and
+      run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-05]`
   - Result: no structural rule fails in the in-progress location; the link check and the directory-map check report no
     findings.
 
@@ -76,14 +77,12 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 ## Phase 1: Pinned Analyser
 
-- [x] `[AI]` **RED**: add `tests/artifacts/shellcheck-pin.sh` asserting that `scripts/shellcheck.sh` exits `125`
-      against a pin whose digest does not match and against a platform the pin omits, and call it from
-      `tests/artifacts/run.sh`; run `./tests/artifacts/run.sh`; acceptance: it fails because the wrapper does not
-      exist. `[AC-01]`
-  - Result: exit `1`, from the test's own setup:
-    `cp: …/scripts/shellcheck.sh: No such file or directory`. The test copies the wrapper into a scratch tree, plants a
-    stand-in analyser that records being executed, pins every supported platform to a digest the cached archive lacks,
-    and then pins a version with no platform at all.
+- [x] `[AI]` **RED**: add `tests/artifacts/shellcheck-pin.sh` asserting that `scripts/shellcheck.sh` exits `125` against
+      a pin whose digest does not match and against a platform the pin omits, and call it from `tests/artifacts/run.sh`;
+      run `./tests/artifacts/run.sh`; acceptance: it fails because the wrapper does not exist. `[AC-01]`
+  - Result: exit `1`, from the test's own setup: `cp: …/scripts/shellcheck.sh: No such file or directory`. The test
+    copies the wrapper into a scratch tree, plants a stand-in analyser that records being executed, pins every supported
+    platform to a digest the cached archive lacks, and then pins a version with no platform at all.
 - [x] `[AI]` **GREEN**: add `shellcheck.lock` and `scripts/shellcheck.sh` as `tech-docs.md` specifies; run
       `./tests/artifacts/run.sh` and `scripts/shellcheck.sh --version`; acceptance: the refusal cases pass and the
       version matches the pin. `[AC-01]`
@@ -105,8 +104,8 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 ## Phase 2: Clean, Then Gate
 
-- [x] `[AI]` **RED**: add `scripts/shell-files.sh` and `scripts/shell-lint.sh`; run `scripts/shell-lint.sh`;
-      acceptance: it exits non-zero with the 14 findings the README table records. `[AC-02]` `[AC-04]`
+- [x] `[AI]` **RED**: add `scripts/shell-files.sh` and `scripts/shell-lint.sh`; run `scripts/shell-lint.sh`; acceptance:
+      it exits non-zero with the 14 findings the README table records. `[AC-02]` `[AC-04]`
   - Result: exit `1` with exactly 14 lines — SC2148 on the three hooks, SC1007 at `hippo:4`,
     `scripts/build-release.sh:18,55`, and line 4 of `check-worktree-layout.sh`, `format-check.sh`, `test-loaded.sh`,
     `test-quick.sh`, `test.sh`, `tests/artifacts/run.sh`, and `tests/e2e/run.sh`, and
@@ -116,11 +115,11 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
       acceptance: exit `0`. `[AC-02]`
   - Result: exit `0` with no output. `CDPATH= cd` became `CDPATH='' cd` in ten places, `hippo:107` guards its prefix
     with `${platform_cache:?}`, and each hook starts with `# shellcheck shell=sh`.
-- [x] `[AI]` **REFACTOR**: point `scripts/format-check.sh` at `scripts/shell-files.sh`; run
-      `./scripts/format-check.sh`; acceptance: exit `0`, and `ferret` is now among the formatter's inputs. `[AC-04]`
-  - Result: exit `0`. Both scripts read the list into positional parameters the same way, so neither word-splits
-    it. A deliberate mis-indent in `ferret` then made `./scripts/format-check.sh` exit `1` with a `shfmt` diff for
-    `ferret`, which the old directory arguments never covered; restoring it cleared the diff.
+- [x] `[AI]` **REFACTOR**: point `scripts/format-check.sh` at `scripts/shell-files.sh`; run `./scripts/format-check.sh`;
+      acceptance: exit `0`, and `ferret` is now among the formatter's inputs. `[AC-04]`
+  - Result: exit `0`. Both scripts read the list into positional parameters the same way, so neither word-splits it. A
+    deliberate mis-indent in `ferret` then made `./scripts/format-check.sh` exit `1` with a `shfmt` diff for `ferret`,
+    which the old directory arguments never covered; restoring it cleared the diff.
 - [x] `[AI]` **RED** (mutation): revert `hippo:107` to the unguarded form, run `scripts/shell-lint.sh`, record the
       SC2115 output here, then restore the fix; acceptance: the mutation fails naming `hippo` and SC2115, and the
       restored tree exits `0`. `[AC-03]`
@@ -130,17 +129,17 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
       `./rhino repo-config validate` and `./rhino gate run --surface pre-push`; acceptance: both exit `0` and the
       pre-push run lists `shell-lint`. `[AC-05]`
   - Result: `repo-config validate` and `gate validate` report no findings; `gate list` places `shell-lint` on
-    `pre-push`, `pull-request`, and `main`. The pre-push surface, fed one simulated push update on standard input as
-    the hook does, passed all nine gates, `shell-lint` second.
+    `pre-push`, `pull-request`, and `main`. The pre-push surface, fed one simulated push update on standard input as the
+    hook does, passed all nine gates, `shell-lint` second.
 
 ### Phase 2 Gate
 
 - [x] `[AI]` Run `npm test`; acceptance: exit `0`, proving every fixed script still behaves. `[AC-02]` `[AC-05]`
   - Result: the first run exited `1` in four end-to-end scenarios with `hippo.args.invalid` "schema 3 requires
-    --resource-tier", because the executing shell exported a workstation `HIPPO_CONFIG` into the binary under test —
-    the leak the [isolate test coordination state](../../backlog/isolate-test-coordination-state/README.md) plan owns,
-    unrelated to this change. With that one variable unset, `npm test` exited `0`: quick, integration, end-to-end,
-    race, and `govulncheck` (0 reachable vulnerabilities).
+    --resource-tier", because the executing shell exported a workstation `HIPPO_CONFIG` into the binary under test — the
+    leak the [isolate test coordination state](../../backlog/isolate-test-coordination-state/README.md) plan owns,
+    unrelated to this change. With that one variable unset, `npm test` exited `0`: quick, integration, end-to-end, race,
+    and `govulncheck` (0 reachable vulnerabilities).
 
 > **Pause Safety**: the repository is clean and the gate is registered. Safe to stop. To resume:
 > `scripts/shell-lint.sh`.
@@ -150,26 +149,26 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 - [x] `[AI]` Apply rules propagation to the adapter change, then update `repository-adapter.md` (shell row, interpreter
       and static-analysis rows, pins) and `quality-gates.md`; record the propagation result here; acceptance: no
       document still describes static analysis as a gap, and the interpreter row names every Bash script. `[AC-05]`
-  - Result: `PASS_CHANGED`. Ledger: the static-analysis row (`OPEN` → `RESOLVED`, now the `shell-lint` gate), the
-    shell pack's status reason (`RESOLVED`, no longer "no static-analysis gate yet"), the interpreter row (`RESOLVED`,
-    now naming `rhino`, `ferret`, `scripts/shellcheck.sh`, `format-staged.sh`, and `check-commit-message.sh` beside the
+  - Result: `PASS_CHANGED`. Ledger: the static-analysis row (`OPEN` → `RESOLVED`, now the `shell-lint` gate), the shell
+    pack's status reason (`RESOLVED`, no longer "no static-analysis gate yet"), the interpreter row (`RESOLVED`, now
+    naming `rhino`, `ferret`, `scripts/shellcheck.sh`, `format-staged.sh`, and `check-commit-message.sh` beside the
     scanner), the version sources (`RESOLVED`, `shellcheck.lock` added), and `quality-gates.md` (`RESOLVED`, the gate
-    named under Locally). `shell-standards.md` stays canonical and unchanged (`NOT_APPLICABLE`); `AGENTS.md` only
-    links. The pre-push surface is the gate run step 4 names; it passes on the delivery head.
+    named under Locally). `shell-standards.md` stays canonical and unchanged (`NOT_APPLICABLE`); `AGENTS.md` only links.
+    The pre-push surface is the gate run step 4 names; it passes on the delivery head.
 - [x] `[AI]` Run docs propagation and record whether `CHANGELOG.md` needs an entry for the `hippo` byte change;
       acceptance: the decision is recorded. `[AC-05]`
-  - Result: `no-change`. A search of `README.md`, `docs/`, `specs/`, and `CHANGELOG.md` for `CDPATH`, ShellCheck,
-    static analysis, and `shfmt` finds nothing stale; `scripts/public-safety/README.md` already describes its copies
-    as clean at this threshold, which stays true. `CHANGELOG.md` gets no entry: its entries are per release, and the
-    `hippo` bootstrap change is behaviour-neutral and ships in no release asset.
+  - Result: `no-change`. A search of `README.md`, `docs/`, `specs/`, and `CHANGELOG.md` for `CDPATH`, ShellCheck, static
+    analysis, and `shfmt` finds nothing stale; `scripts/public-safety/README.md` already describes its copies as clean
+    at this threshold, which stays true. `CHANGELOG.md` gets no entry: its entries are per release, and the `hippo`
+    bootstrap change is behaviour-neutral and ships in no release asset.
 - [x] `[AI]` Run `npm run test:quick`; acceptance: exit `0`. `[AC-02]` `[AC-05]`
   - Result: exit `0` with the documentation changes in place.
 - [x] `[AI]` Inspect the diff and the proposed commit and PR text against data safety, then commit thematically;
       acceptance: hooks pass, including the new `shell-lint` on push. `[AC-05]`
-  - Result: every added line and commit message was read and screened for credentials, local absolute paths, and
-    private names, with no match; the branch carries the plan repair, the plan start, the pin, the fixes, the gate,
-    and the rules update as separate commits, each passing `public-safety-tree`, `format-staged`,
-    `public-safety-message`, and `commit-message`. `shell-lint` on push is proved by the push itself.
+  - Result: every added line and commit message was read and screened for credentials, local absolute paths, and private
+    names, with no match; the branch carries the plan repair, the plan start, the pin, the fixes, the gate, and the
+    rules update as separate commits, each passing `public-safety-tree`, `format-staged`, `public-safety-message`, and
+    `commit-message`. `shell-lint` on push is proved by the push itself.
 - [x] `[AI]` Replay the pull-request surface the `repository-contract` job runs, with
       `./rhino gate run --surface pull-request --base origin/main --head HEAD`; acceptance: exit `0`, and the run lists
       `shell-lint`. `[AC-05]`
@@ -180,8 +179,8 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
 
 - [x] `[AI]` Run `repo-governance/workflows/plan-execution-check.md` against AC-01 to AC-05 and record its verdict;
       acceptance: `PASS`. `[AC-05]`
-  - Result: `PASS`, recorded in [the execution check](evidence/execution-check.md). It ran once Phase 4 had made the
-    one learning terminal, because its sixth step reads `learnings.md`.
+  - Result: `PASS`, recorded in [the execution check](evidence/execution-check.md). It ran once Phase 4 had made the one
+    learning terminal, because its sixth step reads `learnings.md`.
 
 > **Pause Safety**: the gate is committed on the branch. Safe to stop. To resume: `scripts/shell-lint.sh`.
 
@@ -204,7 +203,8 @@ the archived copy of this checklist. Fix every gate failure at its cause; never 
       both stage indexes; acceptance: one done copy exists. `[AC-05]`
   - Result: moved to `plans/done/2026-09-26__gate-shell-static-analysis/`; the in-progress index maps nothing, the done
     index lists it, and no live reference to the old path remains.
-- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance: no rule fails and the gate exits `0`. `[AC-05]`
+- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance:
+      no rule fails and the gate exits `0`. `[AC-05]`
   - Result: the `done/` slug carries its date and occupies one root; the directory-map and link checks report nothing;
     `npm run test:quick` exits `0` from the archived state.
 - [x] `[AI]` Commit the archival move onto the delivery branch; acceptance: the commit is on the head the pull request

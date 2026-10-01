@@ -13,14 +13,14 @@
 ## Findings
 
 1. **Archival route conflicts with the owner's direction.** `delivery.md` archives through a second pull request. The
-   owner directed on 2026-09-26 that the plan be archived inside its delivery pull request. Repair: the archival
-   section now carries the move in the same pull request, and the merge, primary reconciliation, and clean-up that
-   follow the archival commit are stated as owned by the worktree-to-PR workflow and proved on the pull request, which
-   the Delivery Unit section already said.
+   owner directed on 2026-09-26 that the plan be archived inside its delivery pull request. Repair: the archival section
+   now carries the move in the same pull request, and the merge, primary reconciliation, and clean-up that follow the
+   archival commit are stated as owned by the worktree-to-PR workflow and proved on the pull request, which the Delivery
+   Unit section already said.
 2. **The complete gate inherits the contributor's coordination variables.** `npm test` passes the invoking shell's
    `HIPPO_*` variables to the binary under test, which the backlog plan
-   [isolate test coordination state](../../../backlog/isolate-test-coordination-state/README.md) removes. Not
-   repaired here: that plan owns the defect. Execution records the environment each gate ran in.
+   [isolate test coordination state](../../../backlog/isolate-test-coordination-state/README.md) removes. Not repaired
+   here: that plan owns the defect. Execution records the environment each gate ran in.
 
 ## Checks That Found Nothing
 
@@ -28,5 +28,4 @@
   gates.
 - The RED is a deliberate mutation of the assertion alone, which proves the assertion reads the value before the
   argument changes.
-- The removed string appears in no plan document, and the Phase 0 Gate read confirmed one tracked file with two
-  matches.
+- The removed string appears in no plan document, and the Phase 0 Gate read confirmed one tracked file with two matches.

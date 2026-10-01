@@ -11,10 +11,8 @@ when_to_use: >-
 A lint finding either matters or it does not. A tier that prints findings without failing gets read for a week and then
 scrolls past forever, so a gate that reports a finding also blocks on it.
 
-This standard implements Automation Over Manual,
-Explicit Over Implicit, and
-Root Cause Orientation. Where each gate runs is owned by
-[Quality Gates](../../quality-gates.md).
+This standard implements Automation Over Manual, Explicit Over Implicit, and Root Cause Orientation. Where each gate
+runs is owned by [Quality Gates](../../quality-gates.md).
 
 ## Warning and Above Fails
 

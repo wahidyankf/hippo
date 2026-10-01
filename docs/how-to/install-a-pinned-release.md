@@ -1,7 +1,7 @@
 # How to install a pinned release
 
-Use a tagged release binary rather than building from source when you want a reproducible,
-verified HIPPO on a developer machine or a CI runner.
+Use a tagged release binary rather than building from source when you want a reproducible, verified HIPPO on a developer
+machine or a CI runner.
 
 **Pin both the tag and the expected SHA-256. Never follow `main` at runtime.**
 
@@ -57,8 +57,8 @@ Each archive contains exactly one regular mode-755 member named `hippo`.
 '
 ```
 
-The reported `version` and `commit` are baked in at link time, so this is a positive identification
-of the build — not a claim the binary reads from a file beside it.
+The reported `version` and `commit` are baked in at link time, so this is a positive identification of the build — not a
+claim the binary reads from a file beside it.
 
 Record that `commit` alongside the SHA-256 in whatever pins your toolchain.
 
@@ -69,8 +69,8 @@ install -m 755 hippo /usr/local/bin/hippo
 hippo version
 ```
 
-On a machine where you cannot write to `/usr/local/bin`, keep the binary in a project-local tools
-directory and invoke it by path. HIPPO does not care where it lives.
+On a machine where you cannot write to `/usr/local/bin`, keep the binary in a project-local tools directory and invoke
+it by path. HIPPO does not care where it lives.
 
 ## Shell completion
 
@@ -92,14 +92,13 @@ If you are working inside the HIPPO checkout, use the tracked bootstrap:
 ./hippo version
 ```
 
-That script content-addresses every production Go source file plus the module graph, builds once
-under bounded compiler parallelism, publishes the binary atomically, and retains the current
-generation plus two recent fallbacks. Subsequent runs hit the cache.
+That script content-addresses every production Go source file plus the module graph, builds once under bounded compiler
+parallelism, publishes the binary atomically, and retains the current generation plus two recent fallbacks. Subsequent
+runs hit the cache.
 
-A source build reports `dev (unknown)` rather than a version, because only
-`scripts/build-release.sh` injects a release version and commit; the repository's test harness
-stamps its own `v0.0.0-test` identity. That is expected, and it is a useful signal: if a machine you
-believed was running a pinned release reports `dev` or `v0.0.0-test`, it is not.
+A source build reports `dev (unknown)` rather than a version, because only `scripts/build-release.sh` injects a release
+version and commit; the repository's test harness stamps its own `v0.0.0-test` identity. That is expected, and it is a
+useful signal: if a machine you believed was running a pinned release reports `dev` or `v0.0.0-test`, it is not.
 
 `HIPPO_BUILD_CACHE` relocates the bootstrap's cache directory.
 

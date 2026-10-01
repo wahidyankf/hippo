@@ -39,49 +39,44 @@ Language-neutral standards apply to every project. Stack rules come from the sta
 read from the repository's local copies, as [Stack Packs](../../repo-governance/conventions/structure/stack-packs.md)
 resolves them; see [Stack Standards](../../repo-governance/development/quality/stacks/README.md).
 
-| Recorded for a stack     | The checker also applies                      | Trade-off                                                          |
-| ------------------------ | --------------------------------------------- | ------------------------------------------------------------------ |
-| a catalog stack standard | that standard                                 | shared, reviewed choices; the adopter keeps pace with the standard |
-| a local standard         | the local standard                            | fits the repository's own choices; nobody outside reviews them     |
-| nothing recorded         | no stack rule, reporting the missing decision | no rule is invented; stack-specific defects go unreported          |
+- **a catalog stack standard**
+  - The checker also applies: that standard
+  - Trade-off: shared, reviewed choices; the adopter keeps pace with the standard
+- **a local standard**
+  - The checker also applies: the local standard
+  - Trade-off: fits the repository's own choices; nobody outside reviews them
+- **nothing recorded**
+  - The checker also applies: no stack rule, reporting the missing decision
+  - Trade-off: no rule is invented; stack-specific defects go unreported
 
 ## What It Checks
 
-1. **Placement and failure handling.**
-   Hexagonal Architecture and
-   Functional Core, Imperative Shell,
-   with error fates, logging, and input validation judged as
-   [Developing Applications](../skills/developing-applications/SKILL.md) teaches, and types and boundaries per
+1. **Placement and failure handling.** Hexagonal Architecture and Functional Core, Imperative Shell, with error fates,
+   logging, and input validation judged as [Developing Applications](../skills/developing-applications/SKILL.md)
+   teaches, and types and boundaries per
    [Type and Boundary Safety](../../repo-governance/development/quality/code/type-and-boundary-safety.md).
-2. **Clarity and cost.** [Code Clarity](../../repo-governance/development/code-clarity.md),
-   Code as Liability, and
+2. **Clarity and cost.** [Code Clarity](../../repo-governance/development/code-clarity.md), Code as Liability, and
    [Dependency Selection](../../repo-governance/development/dependency-selection.md), with
    [Shell Scripts](../../repo-governance/development/quality/code/shell-scripts.md) for any script in scope.
 3. **Stack rules,** as the decision above selects.
 4. **Test design.** Each test sits at its layer, per
-   [Behaviour-Driven Development](../../repo-governance/development/behaviour-driven-development.md), with
-   doubles, data, and any git fixture following
-   Test Doubles,
-   Test Data Isolation, and
-   Git Fixture Isolation, and any coverage
+   [Behaviour-Driven Development](../../repo-governance/development/behaviour-driven-development.md), with doubles,
+   data, and any git fixture following Test Doubles, Test Data Isolation, and Git Fixture Isolation, and any coverage
    number measuring what [Meaningful Coverage](../../repo-governance/development/quality/testing/meaningful-coverage.md)
    allows.
 5. **Test-first evidence.** New or changed behaviour has a test, and the red, green, and refactor records that
-   [Test-Driven Development](../../repo-governance/development/test-driven-development.md)
-   requires exist wherever the work kept them. Behaviour shipped with no test is a finding. A green suite proves the
-   final state, never the order, per
-   [Software Quality Enforcement](../../repo-governance/development/software-quality-enforcement.md).
+   [Test-Driven Development](../../repo-governance/development/test-driven-development.md) requires exist wherever the
+   work kept them. Behaviour shipped with no test is a finding. A green suite proves the final state, never the order,
+   per [Software Quality Enforcement](../../repo-governance/development/software-quality-enforcement.md).
 6. **Regression tests.** Each bug fix carries the test
-   [Test-Driven Development](../../repo-governance/development/test-driven-development.md)
-   requires.
+   [Test-Driven Development](../../repo-governance/development/test-driven-development.md) requires.
 
 ## Rating
 
-Rate each finding by consequence, per
-Criticality Levels,
-whose security adjustment covers a secret in source or a query built by joining input. A discarded error, an untested
-error path, a bug fix without its regression test, or a test that can reach a real repository or real data usually
-seriously lowers quality. A naming or comment lapse usually matters less.
+Rate each finding by consequence, per Criticality Levels, whose security adjustment covers a secret in source or a query
+built by joining input. A discarded error, an untested error path, a bug fix without its regression test, or a test that
+can reach a real repository or real data usually seriously lowers quality. A naming or comment lapse usually matters
+less.
 
 ## Findings
 
@@ -101,8 +96,7 @@ cannot be read, reporting it as not run.
 
 ## What It Does Not Do
 
-It never edits code, chooses a stack standard, or researches the web. Targets, hooks, and pipelines belong to
-CI Checker, what scenario bindings assert to
-[Gherkin Implementation Reviewer](gherkin-implementation-reviewer.md), a pinned change under review to the review
-disciplines such as PR Review Integrity Checker, and documentation to
-Docs Checker.
+It never edits code, chooses a stack standard, or researches the web. Targets, hooks, and pipelines belong to CI
+Checker, what scenario bindings assert to [Gherkin Implementation Reviewer](gherkin-implementation-reviewer.md), a
+pinned change under review to the review disciplines such as PR Review Integrity Checker, and documentation to Docs
+Checker.

@@ -10,11 +10,11 @@ internal/identity/identity_test.go::TestOverrideSourceWithoutFile
 
 ## Design Decisions
 
-- Use `fixture-source`, which follows the data-safety convention's `fixture` vocabulary and cannot be mistaken for a real
-  repository.
+- Use `fixture-source`, which follows the data-safety convention's `fixture` vocabulary and cannot be mistaken for a
+  real repository.
 - Change both sites in one edit, so the argument and the assertion cannot disagree.
-- Do not name the removed string in any commit message, pull-request body, or this plan. Publishing it again would be the
-  finding this plan removes.
+- Do not name the removed string in any commit message, pull-request body, or this plan. Publishing it again would be
+  the finding this plan removes.
 
 ## Specification Changes
 

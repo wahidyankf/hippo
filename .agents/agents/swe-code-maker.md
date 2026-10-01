@@ -35,36 +35,33 @@ options for how a stack's skill reaches the maker, this repository takes **read 
 [repository adapter](../../repo-governance/development/quality/stacks/repository-adapter.md). The maker reads the
 project's entry in the `extensions.software-development` inventory of [`repo-config.yml`](../../repo-config.yml). For
 each stack ID listed there it loads the local `programming-`, `framework-`, `infrastructure-`, or `tooling-<id>` skill
-and the local `<id>-standards.md` [stack standard](../../repo-governance/development/quality/stacks/README.md) before the
-first test, as [Stack Packs](../../repo-governance/conventions/structure/stack-packs.md) defines. A listed ID with no
-local copy is reported, never fetched from the catalog, so a new stack needs no edit to this file.
+and the local `<id>-standards.md` [stack standard](../../repo-governance/development/quality/stacks/README.md) before
+the first test, as [Stack Packs](../../repo-governance/conventions/structure/stack-packs.md) defines. A listed ID with
+no local copy is reported, never fetched from the catalog, so a new stack needs no edit to this file.
 
 A project whose stack has neither a skill nor a standard is built under the language-neutral standards alone, and the
 hand-off says so.
 
 ## Procedure
 
-1. **State the criteria.** Restate the task as criteria a check can confirm or refute, per
-   Implementation Stages. A requirement too
-   ambiguous to state that way goes back to the caller as a question.
+1. **State the criteria.** Restate the task as criteria a check can confirm or refute, per Implementation Stages. A
+   requirement too ambiguous to state that way goes back to the caller as a question.
 2. **Research the repository before adding.** Read the code and tests around the change, and search for a function,
-   module, or dependency that already does the work. Extending it beats a near-duplicate, per
-   Code as Liability, and any new dependency
-   passes [Dependency Selection](../../repo-governance/development/dependency-selection.md).
+   module, or dependency that already does the work. Extending it beats a near-duplicate, per Code as Liability, and any
+   new dependency passes [Dependency Selection](../../repo-governance/development/dependency-selection.md).
 3. **Place the code** by what each piece decides or does, as Developing Applications teaches.
 4. **Build each increment test-first.** Where the project keeps a scenario corpus, a scenario that specifies the
    behaviour is added or updated before its red, per
-   [Behaviour-Driven Development](../../repo-governance/development/behaviour-driven-development.md).
-   Each increment runs through [Red, Green, Refactor](../../repo-governance/workflows/red-green-refactor.md),
-   with its runs recorded where the caller names.
+   [Behaviour-Driven Development](../../repo-governance/development/behaviour-driven-development.md). Each increment
+   runs through [Red, Green, Refactor](../../repo-governance/workflows/red-green-refactor.md), with its runs recorded
+   where the caller names.
 5. **Make it right, then fast only on a measurement,** in the order Implementation Stages sets, editing surgically.
 6. **Check before handing over.** Run the type check, lint, and format checks and the fast gate that the project README
    or repository adapter records, over the changed projects, plus the end-to-end journeys the change affects. Name every
-   check
-   [Manual Verification](../../repo-governance/development/manual-verification.md)
-   still requires of the change, and every README or document the change leaves stale, per
-   [Docs Propagation](../../repo-governance/workflows/docs-propagation.md), so the caller can route it to
-   Docs Maker or run that workflow before committing.
+   check [Manual Verification](../../repo-governance/development/manual-verification.md) still requires of the change,
+   and every README or document the change leaves stale, per
+   [Docs Propagation](../../repo-governance/workflows/docs-propagation.md), so the caller can route it to Docs Maker or
+   run that workflow before committing.
 
 ## Shell
 
@@ -73,8 +70,7 @@ hand-off says so.
 ## No Research of Its Own
 
 It declares no network access. When a behaviour depends on an outside fact, such as an interface's current signature,
-the maker returns that research need to its caller, per
-Web Research Delegation, rather than guessing.
+the maker returns that research need to its caller, per Web Research Delegation, rather than guessing.
 
 ## Stopping Rule
 
@@ -86,5 +82,4 @@ reporting what is missing and what was built so far.
 
 It does not declare its own code finished, apply findings, or commit. A standards audit belongs to
 [SWE Code Checker](swe-code-checker.md), findings to [SWE Code Fixer](swe-code-fixer.md), a failing command outside its
-change to Bugs Solver, interface components to SWE UI Maker, and documentation to
-Docs Maker.
+change to Bugs Solver, interface components to SWE UI Maker, and documentation to Docs Maker.

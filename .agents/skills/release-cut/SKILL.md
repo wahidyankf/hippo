@@ -5,7 +5,8 @@ description: Cut and publish a HIPPO release, with the immutability rules that m
 
 # Release Cut
 
-The authoritative procedure is [`repo-governance/workflows/release-cut.md`](../../../repo-governance/workflows/release-cut.md).
+The authoritative procedure is
+[`repo-governance/workflows/release-cut.md`](../../../repo-governance/workflows/release-cut.md).
 
 ## Before Anything
 
@@ -22,7 +23,8 @@ The authoritative procedure is [`repo-governance/workflows/release-cut.md`](../.
 ./tests/artifacts/release-assets.sh <output-dir> <version> <commit>
 ```
 
-Only through that script. It clones, detaches at the exact commit, and builds the whole platform matrix with CGO disabled, so the archives do not depend on the machine that produced them.
+Only through that script. It clones, detaches at the exact commit, and builds the whole platform matrix with CGO
+disabled, so the archives do not depend on the machine that produced them.
 
 The commit must equal checkout HEAD and be a real 40-character object.
 
@@ -30,4 +32,5 @@ The commit must equal checkout HEAD and be a real 40-character object.
 
 Replace an existing tag. Weaken checksum verification. Hand-build an asset.
 
-Consumers pin by version **and** checksum. A replaced tag makes every one of those pins a lie, and does it silently, because the version string did not change. A mistake in a published release is fixed by publishing the next version.
+Consumers pin by version **and** checksum. A replaced tag makes every one of those pins a lie, and does it silently,
+because the version string did not change. A mistake in a published release is fixed by publishing the next version.

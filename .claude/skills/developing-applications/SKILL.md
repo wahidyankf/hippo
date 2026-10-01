@@ -4,4 +4,5 @@ description: |-
 name: developing-applications
 ---
 
-Read .agents/skills/developing-applications/SKILL.md completely, resolve every relative resource from that skill directory, and follow it as authoritative before acting.
+Read .agents/skills/developing-applications/SKILL.md completely,
+resolve every relative resource from that skill directory, and follow it as authoritative before acting.

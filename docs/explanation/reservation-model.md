@@ -2,107 +2,99 @@
 
 ## Two modes, one rollout
 
-HIPPO has two coordination modes. Which one a repository uses is decided by its configuration
-`schemaVersion`, and the choice is deliberate rather than incidental.
+HIPPO has two coordination modes. Which one a repository uses is decided by its configuration `schemaVersion`, and the
+choice is deliberate rather than incidental.
 
-**Schema 1, exclusive.** The original model, retained from v0.3.1. Services own independent
-inheritable sessions; ephemeral and transactional work serializes on a single shared `heavy.lock`.
-One heavy task at a time, host-wide. Safe, simple, and wasteful — a two-core test suite blocks an
-unrelated one-core build for no reason.
+**Schema 1, exclusive.** The original model, retained from v0.3.1. Services own independent inheritable sessions;
+ephemeral and transactional work serializes on a single shared `heavy.lock`. One heavy task at a time, host-wide. Safe,
+simple, and wasteful — a two-core test suite blocks an unrelated one-core build for no reason.
 
-**Schema 2, reservation.** Introduced in v0.4.0. Every owner — service, ephemeral, and transactional
-alike — claims a fixed CPU-and-memory _vector_ from a shared ledger. Several owners run concurrently
-as long as their vectors fit together.
+**Schema 2, reservation.** Introduced in v0.4.0. Every owner — service, ephemeral, and transactional alike — claims a
+fixed CPU-and-memory _vector_ from a shared ledger. Several owners run concurrently as long as their vectors fit
+together.
 
-The two cannot be mixed within one state root. A v1 client that meets a live incompatible epoch exits
-`125`, naming `hippo.coordination.protocol-mismatch`. It preserves the existing state and starts no child. This is what lets a host migrate: old
-sessions drain, and only then does the new mode take over. HIPPO never creates a mixed epoch and
-never describes protocol incompatibility as transient capacity.
+The two cannot be mixed within one state root. A v1 client that meets a live incompatible epoch exits `125`, naming
+`hippo.coordination.protocol-mismatch`. It preserves the existing state and starts no child. This is what lets a host
+migrate: old sessions drain, and only then does the new mode take over. HIPPO never creates a mixed epoch and never
+describes protocol incompatibility as transient capacity.
 
 ## Why a vector rather than a count
 
-A count of "how many tasks may run" is the wrong abstraction. Two tasks that each want one core and
-256 MiB are nothing like two tasks that each want eight cores and 8 GiB. A slot-based limiter either
-admits the second pair and thrashes, or refuses the first pair and wastes the machine.
+A count of "how many tasks may run" is the wrong abstraction. Two tasks that each want one core and 256 MiB are nothing
+like two tasks that each want eight cores and 8 GiB. A slot-based limiter either admits the second pair and thrashes, or
+refuses the first pair and wastes the machine.
 
 So admission works on both dimensions at once:
 
 - **CPU capacity** is the host's available parallelism minus one safety unit.
 - **Memory capacity** is effective memory minus the resolved profile's reserve.
 
-Both must fit **together**. The check uses checked subtraction specifically so that integer overflow
-cannot wrap an exhausted vector around into an apparent admission — a bug class that would be
-catastrophic and silent.
+Both must fit **together**. The check uses checked subtraction specifically so that integer overflow cannot wrap an
+exhausted vector around into an apparent admission — a bug class that would be catastrophic and silent.
 
 ## Why capacity is smaller than the machine
 
-The safety unit and the profile reserve are not conservatism for its own sake. The machine still has
-to run an editor, a browser, a window server, and HIPPO itself. Handing out every core and every byte
-would reproduce exactly the overload HIPPO exists to prevent, just with better bookkeeping.
+The safety unit and the profile reserve are not conservatism for its own sake. The machine still has to run an editor, a
+browser, a window server, and HIPPO itself. Handing out every core and every byte would reproduce exactly the overload
+HIPPO exists to prevent, just with better bookkeeping.
 
-Concretely, on a 12-core host with 32 GiB running `balanced`: capacity is 11 CPU and 28 GiB, and the
-automatic share is a quarter of that, rounded up — 3 CPU and 7 GiB. Three such owners fit; a fourth
-would need 12 CPU of 11, so it waits. See [resource policy](../reference/resource-policy.md#reservation-capacity) for the rounding.
+Concretely, on a 12-core host with 32 GiB running `balanced`: capacity is 11 CPU and 28 GiB, and the automatic share is
+a quarter of that, rounded up — 3 CPU and 7 GiB. Three such owners fit; a fourth would need 12 CPU of 11, so it waits.
+See [resource policy](../reference/resource-policy.md#reservation-capacity) for the rounding.
 
 ## Why fitting the vector is not the end of the story
 
-Host pressure thresholds remain authoritative **after** a vector fits. This looks redundant until you
-notice that the ledger only knows what owners _asked for_. It does not know that a build's linker
-step just allocated four times its steady-state footprint, or that something outside HIPPO's control
-started consuming memory.
+Host pressure thresholds remain authoritative **after** a vector fits. This looks redundant until you notice that the
+ledger only knows what owners _asked for_. It does not know that a build's linker step just allocated four times its
+steady-state footprint, or that something outside HIPPO's control started consuming memory.
 
-The reservation prevents predictable overcommitment. Continued sampling catches the unpredictable
-kind. Both are necessary; neither is sufficient.
+The reservation prevents predictable overcommitment. Continued sampling catches the unpredictable kind. Both are
+necessary; neither is sufficient.
 
 ## Strict FIFO, and the wait before `124`
 
-When capacity is temporarily exhausted, a would-be owner joins a strict FIFO queue rather than
-retrying opportunistically. Strict ordering is what prevents starvation: without it, a task wanting
-one core would jump ahead of a task wanting eight indefinitely, and the large task would never run on
-a busy host.
+When capacity is temporarily exhausted, a would-be owner joins a strict FIFO queue rather than retrying
+opportunistically. Strict ordering is what prevents starvation: without it, a task wanting one core would jump ahead of
+a task wanting eight indefinitely, and the large task would never run on a busy host.
 
-Under schema 3, a waiter's deadline comes from its resource tier's configured `queueDeadline` — in
-the recommended configuration, 30 minutes for `light` up to four hours for `heavy`, per
-[the tier table](../reference/resource-policy.md#schema-3-resource-tiers).
-Under schema 2, a waiter stays at the FIFO head through a bounded lease interval — five minutes by
-default — before returning `124`. That is a long time to wait silently, and it is intentional: on a machine where four
-builds are legitimately in flight, five minutes is often shorter than the time to fail and be
-manually retried. A caller that would rather decide for itself gets `124` and can act. Under schema 2, a
-caller that runs without a tier and just wants the work to happen can set `--wait-for-admission`.
-Beside a tier, and always under schema 3, the flag is refused with exit `2`, because the tier sets the
-deadline. Schema 1 refuses it too: exclusive coordination has no FIFO queue for it to bound.
+Under schema 3, a waiter's deadline comes from its resource tier's configured `queueDeadline` — in the recommended
+configuration, 30 minutes for `light` up to four hours for `heavy`, per
+[the tier table](../reference/resource-policy.md#schema-3-resource-tiers). Under schema 2, a waiter stays at the FIFO
+head through a bounded lease interval — five minutes by default — before returning `124`. That is a long time to wait
+silently, and it is intentional: on a machine where four builds are legitimately in flight, five minutes is often
+shorter than the time to fail and be manually retried. A caller that would rather decide for itself gets `124` and can
+act. Under schema 2, a caller that runs without a tier and just wants the work to happen can set `--wait-for-admission`.
+Beside a tier, and always under schema 3, the flag is refused with exit `2`, because the tier sets the deadline. Schema
+1 refuses it too: exclusive coordination has no FIFO queue for it to bound.
 
 ## The effective owner limit is a minimum, not a maximum
 
-Every live owner and every queued waiter contributes its own configured `maxActiveOwners`, and HIPPO
-uses the **smallest** contribution until that participant leaves. The limit resets when the ledger
-becomes idle.
+Every live owner and every queued waiter contributes its own configured `maxActiveOwners`, and HIPPO uses the
+**smallest** contribution until that participant leaves. The limit resets when the ledger becomes idle.
 
-This is deliberately asymmetric. A repository that has been configured conservatively — because its
-work is known to be heavy, or because the developer wants headroom — tightens the whole host. A
-permissive peer cannot loosen it. Safety composes downward only.
+This is deliberately asymmetric. A repository that has been configured conservatively — because its work is known to be
+heavy, or because the developer wants headroom — tightens the whole host. A permissive peer cannot loosen it. Safety
+composes downward only.
 
 ## Why an impossible request fails differently from a busy one
 
 Two failures that look similar to a caller are treated as fundamentally different:
 
-- A vector that **cannot ever** fit the host returns `125` immediately. Waiting would accomplish
-  nothing; the request itself has to change.
-- A vector that **does not currently** fit returns `124` after the bounded wait. Retrying is the
-  correct response only when the receipt proves `never-started`, because capacity genuinely frees
-  up.
-- A live incompatible peer protocol returns `125`. Capacity changes cannot fix it; the epoch must
-  drain or the peer must upgrade.
+- A vector that **cannot ever** fit the host returns `125` immediately. Waiting would accomplish nothing; the request
+  itself has to change.
+- A vector that **does not currently** fit returns `124` after the bounded wait. Retrying is the correct response only
+  when the receipt proves `never-started`, because capacity genuinely frees up.
+- A live incompatible peer protocol returns `125`. Capacity changes cannot fix it; the epoch must drain or the peer must
+  upgrade.
 
-Collapsing these into one code would force every caller to either retry forever on an impossible
-request, or give up on a recoverable one.
+Collapsing these into one code would force every caller to either retry forever on an impossible request, or give up on
+a recoverable one.
 
 ## Inheritance
 
-A child that inherits `HIPPO_SESSION` reuses the existing fixed allocation and never creates or
-expands an owner. Nested guarded commands within one admitted task therefore share the parent's
-budget rather than multiplying it — otherwise a build script that wrapped its own steps in `hippo
-run` would silently claim several times its share.
+A child that inherits `HIPPO_SESSION` reuses the existing fixed allocation and never creates or expands an owner. Nested
+guarded commands within one admitted task therefore share the parent's budget rather than multiplying it — otherwise a
+build script that wrapped its own steps in `hippo run` would silently claim several times its share.
 
 ## Related
 

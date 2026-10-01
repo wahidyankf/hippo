@@ -44,15 +44,16 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
 
 ## Phase 0: Environment Setup and Baseline
 
-- [x] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at
-      `origin/main` and `git status --porcelain` is empty. `[AC-05]`
+- [x] `[AI]` Provision the declared worktree with the commands above; acceptance: it is registered once at `origin/main`
+      and `git status --porcelain` is empty. `[AC-05]`
   - Result: registered once at `837ad5f`; `npm ci` ran beneath the worktree-local guard; the porcelain status was empty.
 - [x] `[AI]` Run `npm run test:quick`; acceptance: the baseline exits `0` without retry. `[AC-05]`
   - Result: exit `0` at `837ad5f`, run directly, with only the staged plan activation in the tree.
 - [x] `[AI]` Move the plan to `plans/in-progress/isolate-test-coordination-state/` with `git mv` and update both stage
       indexes; acceptance: one in-progress copy exists and only the in-progress index links it. `[AC-05]`
   - Result: moved with `git mv`; the backlog index lost its entry and the in-progress index gained it.
-- [x] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-05]`
+- [x] `[AI]` Check the plan against every rule in `repo-governance/conventions/plans/006-structural-validation.md` and
+      run `./rhino md internal-link validate`; acceptance: no rule fails and the link check exits `0`. `[AC-05]`
   - Result: 0 structural findings over the whole `plans/` tree; the link check exited `0`. The quality gate returned
     `PASS_WITH_FINDINGS` with four repaired findings; see [the record](evidence/quality-gate.md).
 
@@ -62,18 +63,19 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
       `[AC-05]`
   - Result: only the plan's rename into `plans/in-progress/`, its new `evidence/` records, and the two stage indexes.
 
-> **Pause Safety**: a clean worktree holds the active plan. Safe to stop. To resume: `./rhino md internal-link validate`.
+> **Pause Safety**: a clean worktree holds the active plan. Safe to stop. To resume:
+> `./rhino md internal-link validate`.
 
 ## Phase 1: Isolation Cycle
 
 - [x] `[AI]` **RED**: run `./hippo run --class ephemeral --resource-tier standard --disk-path . -- ./tests/e2e/run.sh`;
-      acceptance: it fails as the README table records, and the failing scenarios and assertion identifiers are
-      recorded under this item. `[AC-04]`
+      acceptance: it fails as the README table records, and the failing scenarios and assertion identifiers are recorded
+      under this item. `[AC-04]`
   - Result: exit `1`; 31 scenarios, 27 passed and 4 failed, as the README's first row records:
     `Reservation coordination rejects every compatibility class as a protocol mismatch` ("ephemeral never reached the
     compatibility check in 40 attempts; last exit was 2: hippo.args.invalid schema 3 requires --resource-tier"), both
-    `A child-owned reserved exit stays a child failure` examples ("compiled child exit 124/125 was not admitted after
-    40 attempts"), and `Interactive guarded child owns the terminal while it runs` ("compiled PTY guard failed:
+    `A child-owned reserved exit stays a child failure` examples ("compiled child exit 124/125 was not admitted after 40
+    attempts"), and `Interactive guarded child owns the terminal while it runs` ("compiled PTY guard failed:
     hippo.args.invalid"). `TestCommandLineInterfaceContract` passed in this run.
 - [x] `[AI]` **RED**: run the complete gate beneath the guard with the shared root exported,
       `HIPPO_ROOT="$HOME/Library/Application Support/hippo" ./hippo run --class ephemeral --resource-tier heavy --disk-path . -- npm test`
@@ -85,9 +87,9 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
     `cli.args.double-dash-ends-options` with exit `125` instead, recorded by the fixture-identifier plan's execution.
 - [x] `[AI]` **RED**: add `tests/support/isolation_test.go` with `TestRunIsolatedRemovesInheritedCoordination`,
       `TestRunIsolatedKeepsHarnessInputs` (all five allowlisted inputs), and
-      `TestRunIsolatedLeavesMarkedHelpersUnchanged`, driving the helper
-      through a re-executed test binary; run `go test -count=1 ./tests/support`; acceptance: the package fails to
-      compile or the three tests fail because `RunIsolated` does not exist. `[AC-01]` `[AC-02]` `[AC-03]`
+      `TestRunIsolatedLeavesMarkedHelpersUnchanged`, driving the helper through a re-executed test binary; run
+      `go test -count=1 ./tests/support`; acceptance: the package fails to compile or the three tests fail because
+      `RunIsolated` does not exist. `[AC-01]` `[AC-02]` `[AC-03]`
   - Result: exit `1`, `tests/support/isolation_test.go:33:18: undefined: support.RunIsolated`, build failed.
 - [x] `[AI]` **GREEN**: add `tests/support/isolation.go` as `tech-docs.md` specifies; run
       `go test -count=1 ./tests/support`; acceptance: the three tests pass. `[AC-01]` `[AC-02]` `[AC-03]`
@@ -96,20 +98,20 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
     marker check failed `TestRunIsolatedLeavesMarkedHelpersUnchanged` on all four helper values.
 - [x] `[AI]` Add `./tests/support` to the unit line of `scripts/test-quick.sh`; acceptance: `npm run test:quick` runs
       the three helper tests. `[AC-01]` `[AC-02]` `[AC-03]`
-  - Result: the quick gate inside the guarded complete-gate GREEN reported `ok github.com/wahidyankf/hippo/tests/support`.
+  - Result: the quick gate inside the guarded complete-gate GREEN reported
+    `ok github.com/wahidyankf/hippo/tests/support`.
 - [x] `[AI]` **GREEN**: add `main_test.go` with `os.Exit(support.RunIsolated(m))` to `tests/unit`, `tests/integration`,
       `tests/bdd`, and `tests/e2e`; re-run the Phase 1 RED reproduction; acceptance: it exits `0` with every `HIPPO_*`
       variable still exported by the wrapper. `[AC-04]`
   - Result: exit `0`, `ok github.com/wahidyankf/hippo/tests/e2e`, beneath the same guard and the same inherited
     variables as the RED.
-- [x] `[AI]` **GREEN**: re-run the guarded complete-gate RED command; acceptance: it exits `0` without retry, with
-      every `HIPPO_*` variable and the shared `HIPPO_ROOT` still exported. `[AC-04]`
+- [x] `[AI]` **GREEN**: re-run the guarded complete-gate RED command; acceptance: it exits `0` without retry, with every
+      `HIPPO_*` variable and the shared `HIPPO_ROOT` still exported. `[AC-04]`
   - Result: exit `0` on the first admitted run; the guard deferred it six times at the `heavy` tier before admitting it
-    (never started, requeued unchanged). Every package passed, including `./tests/e2e`, the race run, and
-    `govulncheck`.
-- [x] `[AI]` **REFACTOR**: keep the allowlist and marker in one place, run
-      `go tool golangci-lint fmt --diff` and `git diff --check`; acceptance: both exit `0` and the four `TestMain`
-      bodies are one line each. `[AC-01]` `[AC-05]`
+    (never started, requeued unchanged). Every package passed, including `./tests/e2e`, the race run, and `govulncheck`.
+- [x] `[AI]` **REFACTOR**: keep the allowlist and marker in one place, run `go tool golangci-lint fmt --diff` and
+      `git diff --check`; acceptance: both exit `0` and the four `TestMain` bodies are one line each. `[AC-01]`
+      `[AC-05]`
   - Result: the allowlist and the marker live only in `tests/support/isolation.go`; `go tool golangci-lint fmt --diff`
     and `git diff --check` exited `0`; each `TestMain` is one line. `golangci-lint run` flagged two probe paths as
     `G703`, each now carrying a specific, explained `nolint`, and then reported `0 issues`.
@@ -145,8 +147,8 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
     and the `public-safety-tree`, `format-staged`, `public-safety-message`, and `commit-message` hooks passed. The
     branch was rebased onto `main` twice before its first push, as the shell static-analysis and fixture-identifier
     plans landed; only the stage indexes conflicted, and `shell-lint` passed on the edited gate script.
-- [x] `[AI]` Push and open the pull request as a draft with a screened body recording every RED and GREEN;
-      acceptance: the draft exists at the pushed head. `[AC-05]`
+- [x] `[AI]` Push and open the pull request as a draft with a screened body recording every RED and GREEN; acceptance:
+      the draft exists at the pushed head. `[AC-05]`
   - Result: the pre-push gate passed, `shell-lint` included; draft pull request #72 opened at `ce8ce7e` after the
     outbound preflight reported the title and body clean.
 
@@ -165,8 +167,8 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
   - Result: `PASS`; see [the record](evidence/execution-check.md).
 - [x] `[AI]` Route every `learnings.md` entry to one durable owner or discard it with a reason, filing code follow-ups
       as backlog plans; acceptance: no unresolved entry remains. `[AC-05]`
-  - Result: L1 promoted to a code comment, L2 to the quick gate, L3 and L4 discarded with reasons; no follow-up plan
-    was needed.
+  - Result: L1 promoted to a code comment, L2 to the quick gate, L3 and L4 discarded with reasons; no follow-up plan was
+    needed.
 
 ### Phase 3 Gate
 
@@ -183,6 +185,7 @@ worktree-to-PR workflow performs them and the pull request records their proof. 
       update both stage indexes; acceptance: one done copy exists. `[AC-05]`
   - Result: moved with `git mv` to `plans/done/2026-09-26__isolate-test-coordination-state/`, after confirming the
     destination did not exist; the in-progress index is empty again and the done index lists the plan.
-- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance: no rule fails and the gate exits `0`. `[AC-05]`
+- [x] `[AI]` Re-check the archived plan against `006-structural-validation.md` and run `npm run test:quick`; acceptance:
+      no rule fails and the gate exits `0`. `[AC-05]`
   - Result: 0 structural findings; the internal-link and directory-map checks reported no findings; the quick gate
     exited `0` with `./tests/support` in it.

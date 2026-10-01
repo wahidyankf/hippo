@@ -1,10 +1,14 @@
 # Verification Layers
 
-| Layer                  | Proves                                                         | Evidence                                  |
-| ---------------------- | -------------------------------------------------------------- | ----------------------------------------- |
-| programmatic           | parse, accessibility rules, layout and viewport assertions     | commands, exit classes, machine reports   |
-| exploratory/usability  | tasks are understandable and flows survive realistic variation | scripted observations, sanitized findings |
-| device-specific visual | intended composition at the declared devices and viewports     | accessible captures, comparison notes     |
+- **programmatic**
+  - Proves: parse, accessibility rules, layout and viewport assertions
+  - Evidence: commands, exit classes, machine reports
+- **exploratory/usability**
+  - Proves: tasks are understandable and flows survive realistic variation
+  - Evidence: scripted observations, sanitized findings
+- **device-specific visual**
+  - Proves: intended composition at the declared devices and viewports
+  - Evidence: accessible captures, comparison notes
 
 ## They Are Separately Dispositioned
 

@@ -37,9 +37,8 @@ finding is `execution` work.
 2. **Order by priority,** as [Assessing Criticality and Confidence](../skills/assessing-criticality-confidence/SKILL.md)
    explains.
 3. **Re-validate each finding.** Read the tests covering the code first, per
-   [Test-Driven Development](../../repo-governance/development/test-driven-development.md),
-   then confirm the breach still exists at the stated file and line under the stated standard. Rate confidence one
-   finding at a time, per
+   [Test-Driven Development](../../repo-governance/development/test-driven-development.md), then confirm the breach
+   still exists at the stated file and line under the stated standard. Rate confidence one finding at a time, per
    Confidence and Re-Validation.
 4. **Dispose of it.**
    - `HIGH`: apply the fix, changing only what the finding names.
@@ -55,12 +54,11 @@ finding is `execution` work.
 
 A finding that a bug fix lacks its regression test, or that behaviour shipped untested, is fixed by adding a test that
 is seen to fail. For a defect still present, the test fails on the current code for the reason the defect gives, and the
-smallest change then passes it, through
-[Red, Green, Refactor](../../repo-governance/workflows/red-green-refactor.md) and as
-[Test-Driven Development](../../repo-governance/development/test-driven-development.md)
-requires. For behaviour that already works, the test proves it can fail by breaking that behaviour, running it, and
-restoring, as Test-Driven Development describes. A test never seen failing leaves the finding open. A test-first fix loads
-the project's stack skill as the maker's recorded option does.
+smallest change then passes it, through [Red, Green, Refactor](../../repo-governance/workflows/red-green-refactor.md)
+and as [Test-Driven Development](../../repo-governance/development/test-driven-development.md) requires. For behaviour
+that already works, the test proves it can fail by breaking that behaviour, running it, and restoring, as Test-Driven
+Development describes. A test never seen failing leaves the finding open. A test-first fix loads the project's stack
+skill as the maker's recorded option does.
 
 ## When the Standard Settles the Edit
 
@@ -76,16 +74,14 @@ leave one correct edit, typically:
 ## Left for a Person
 
 Moving code across layers, choosing an error's fate where more than one fits, removing duplication that may be
-deliberate, and a change for speed without the measurement
-Implementation Stages requires are all `MEDIUM`.
-So is any change to observable behaviour, which its owner decides, per
+deliberate, and a change for speed without the measurement Implementation Stages requires are all `MEDIUM`. So is any
+change to observable behaviour, which its owner decides, per
 [Applying Maker, Checker, and Fixer](../skills/applying-maker-checker-fixer/SKILL.md).
 
 ## No Research of Its Own
 
 It declares no network access. A finding that needs an outside fact is rated `MEDIUM` and goes back to the checking
-side, as exception 3 of Web Research Delegation
-requires.
+side, as exception 3 of Web Research Delegation requires.
 
 ## Stopping Rule
 
@@ -96,6 +92,5 @@ dismissed a second time.
 ## What It Does Not Do
 
 It does not audit beyond the findings, refactor past a finding, suppress or loosen a check, apply a `MEDIUM` finding,
-decide when the check-fix loop ends, or commit. A failing type check, lint run, or test suite belongs to
-Bugs Solver, new behaviour to [SWE Code Maker](swe-code-maker.md), and interface component findings to
-SWE UI Fixer.
+decide when the check-fix loop ends, or commit. A failing type check, lint run, or test suite belongs to Bugs Solver,
+new behaviour to [SWE Code Maker](swe-code-maker.md), and interface component findings to SWE UI Fixer.

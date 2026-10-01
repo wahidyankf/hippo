@@ -73,12 +73,12 @@ Each module names the defaults it has to correct.
 The convention asks each adopter to record which of its own tools sits at which tier. `hippo` is a product surface a
 person and a gate both call directly, so it meets the full bar; everything else here is at the floor:
 
-| Surface                                       | Tier     | Why                                                              |
-| --------------------------------------------- | -------- | ---------------------------------------------------------------- |
-| `hippo`, built here                           | Full bar | A product surface a person and a gate both call directly         |
-| `./rhino` and `./ferret`                      | Floor    | Wrappers invoked from a shell; each `exec`s the tool it installs |
-| `.husky/commit-msg`, `pre-commit`, `pre-push` | Floor    | Git invokes them and branches on what they return                |
-| `scripts/*.sh`                                | Floor    | Shipped scripts a gate or a hook calls                           |
+| Surface                                   | Tier     | Why                                                       |
+| ----------------------------------------- | -------- | --------------------------------------------------------- |
+| `hippo`, built here                       | Full bar | A product surface a person and a gate both call directly  |
+| `./rhino` and `./ferret`                  | Floor    | Shell-invoked wrappers; each `exec`s the tool it installs |
+| `.husky/{commit-msg,pre-commit,pre-push}` | Floor    | Git invokes them and branches on what they return         |
+| `scripts/*.sh`                            | Floor    | Shipped scripts a gate or a hook calls                    |
 
 `hippo` starts the command it guards, so it additionally owes the supervisor statuses `126` and `127`. The wrappers
 start the tool they install and return `125` when they refuse; no other surface here starts another program.

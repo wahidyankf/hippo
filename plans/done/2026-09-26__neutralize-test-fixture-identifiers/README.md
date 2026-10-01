@@ -26,8 +26,8 @@ Rejected alternatives:
 
 - Filed on 2026-09-26 as a knowledge-capture follow-up.
 - Activated on 2026-09-26: the owner approved the decision above and directed execution now, with the plan archived
-  inside its delivery pull request rather than through a second one. The
-  [quality gate](evidence/quality-gate.md) records the resulting delivery repair.
+  inside its delivery pull request rather than through a second one. The [quality gate](evidence/quality-gate.md)
+  records the resulting delivery repair.
 
 ## Scope
 

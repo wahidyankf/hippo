@@ -1,7 +1,6 @@
 # How to inspect evidence and abandoned process groups
 
-When a guarded run behaves unexpectedly, or a shared root starts deferring everything, this is how to
-find out why.
+When a guarded run behaves unexpectedly, or a shared root starts deferring everything, this is how to find out why.
 
 ## Look at the ledger first
 
@@ -9,9 +8,8 @@ find out why.
 hippo status --json --disk-path . | jq '{coordination, promotion}'
 ```
 
-With two owners and one waiter, the output looks like this. It is abridged: the real output also
-carries `capacity`, the per-class counts, every field of each owner and waiter row, and the rest of
-`promotion`.
+With two owners and one waiter, the output looks like this. It is abridged: the real output also carries `capacity`, the
+per-class counts, every field of each owner and waiter row, and the rest of `promotion`.
 
 ```console
 {
@@ -66,12 +64,11 @@ Five questions this answers:
 - **Why is owner three closed?** `promotion.reason` and `effectiveOwners`.
 - **Which repository is next?** Privacy-safe `waiters[].source` and `position`.
 
-All zeroes means an idle epoch, not a broken one. A live exclusive compatibility session appears as a
-legacy owner even though it has no reservation vector or queue position.
+All zeroes means an idle epoch, not a broken one. A live exclusive compatibility session appears as a legacy owner even
+though it has no reservation vector or queue position.
 
-If `status --json` returns an **error** instead of totals, the coordination state is corrupt. HIPPO
-reports that rather than fabricating zero totals, because a zero total would silently license every
-waiting task to start at once.
+If `status --json` returns an **error** instead of totals, the coordination state is corrupt. HIPPO reports that rather
+than fabricating zero totals, because a zero total would silently license every waiting task to start at once.
 
 ## Find the evidence for one run
 
@@ -84,9 +81,8 @@ If `HIPPO_ROOT` is not set in your shell, set it to that root first.
 ls -1A "$HIPPO_ROOT"
 ```
 
-The listing below is illustrative. Your stream names carry your own timestamps and process IDs, and
-some directories appear only later, as [Shared state root](../reference/state-root.md#evidence)
-explains.
+The listing below is illustrative. Your stream names carry your own timestamps and process IDs, and some directories
+appear only later, as [Shared state root](../reference/state-root.md#evidence) explains.
 
 ```console
 .writers.lock
@@ -105,8 +101,8 @@ Streams are named `development-<class>-<epochMillis>-<pid>`.
 
 ## Read a lifetime summary
 
-Prefer the public history command. It covers current summaries and daily gzip archives without
-requiring knowledge of state-root filenames:
+Prefer the public history command. It covers current summaries and daily gzip archives without requiring knowledge of
+state-root filenames:
 
 ```sh
 hippo history --since 7d --source hippo --tag checkout=worktree
@@ -119,9 +115,8 @@ For a same-day run, the summary file covers the whole session even after older r
 cat "$HIPPO_ROOT/development-transactional-1788757259105-13633.summary.json"
 ```
 
-Abridged to the fields this page reads; the real file also carries timing, platform, capability, and
-capacity fields, all listed under
-[development lifetime summary](../reference/json-schemas.md#development-lifetime-summary):
+Abridged to the fields this page reads; the real file also carries timing, platform, capability, and capacity fields,
+all listed under [development lifetime summary](../reference/json-schemas.md#development-lifetime-summary):
 
 ```json
 {
@@ -150,32 +145,28 @@ capacity fields, all listed under
 
 What to look at:
 
-- **`reservationWaitMilliseconds`** — how long admission actually took. A large number means the host
-  was contended, not that HIPPO was slow.
-- **`peakOwnerCount`** — how many owners were live at the busiest moment during this run. Raised
-  atomically by every admission event, so a peer admitted and released between sampling ticks is
-  still counted.
+- **`reservationWaitMilliseconds`** — how long admission actually took. A large number means the host was contended, not
+  that HIPPO was slow.
+- **`peakOwnerCount`** — how many owners were live at the busiest moment during this run. Raised atomically by every
+  admission event, so a peer admitted and released between sampling ticks is still counted.
 - **`requestedCpu` vs `allocatedCpu`** — whether you got what you asked for.
-- **`fallbackChain`** — the profiles HIPPO tried before settling. A chain longer than one entry means
-  the host could not support the profile you requested.
+- **`fallbackChain`** — the profiles HIPPO tried before settling. A chain longer than one entry means the host could not
+  support the profile you requested.
 - **`outcome`** and **`budgetOutcome`** — how the session ended. The
-  [outcome list](../reference/json-schemas.md#development-lifetime-summary) says whether the child
-  started.
+  [outcome list](../reference/json-schemas.md#development-lifetime-summary) says whether the child started.
 
-Same-day raw `.jsonl` chunks hold one host sample per line for finer-grained analysis. Prior-day raw
-streams are gzip-compressed under `raw/`; use `gzip -dc`. Prior-day summaries are under
-`history/YYYY-MM-DD.jsonl.gz`. The summary/history view is complete without raw samples.
+Same-day raw `.jsonl` chunks hold one host sample per line for finer-grained analysis. Prior-day raw streams are
+gzip-compressed under `raw/`; use `gzip -dc`. Prior-day summaries are under `history/YYYY-MM-DD.jsonl.gz`. The
+summary/history view is complete without raw samples.
 
-Safety receipts under `receipts/` answer the operationally important question after exit `124`:
-`never-started` means no payload launched; `started-safety-stop` means emergency pressure stopped a
-running payload. `started-activation-failure` accompanies exit `125` (`hippo.supervision.failed`)
-when ledger activation still failed after its two-second contention window. Never blindly retry
-either started state.
+Safety receipts under `receipts/` answer the operationally important question after exit `124`: `never-started` means no
+payload launched; `started-safety-stop` means emergency pressure stopped a running payload. `started-activation-failure`
+accompanies exit `125` (`hippo.supervision.failed`) when ledger activation still failed after its two-second contention
+window. Never blindly retry either started state.
 
 ## Investigate an abandoned process group
 
-If `status --json` reports `abandonedProcessGroups`, a guard was killed outright while its child kept
-running:
+If `status --json` reports `abandonedProcessGroups`, a guard was killed outright while its child kept running:
 
 ```json
 "coordination": {
@@ -185,12 +176,12 @@ running:
 }
 ```
 
-That reservation is held by work nothing is supervising any more. Nothing will shed it under
-pressure, and nothing will release it while the payload runs.
+That reservation is held by work nothing is supervising any more. Nothing will shed it under pressure, and nothing will
+release it while the payload runs.
 
-**HIPPO reports these and never signals them.** Neither should you, until you have confirmed what the
-group actually is. The record holds a bare process group with no start-time identity, so a group the
-kernel has recycled would name an entirely unrelated process.
+**HIPPO reports these and never signals them.** Neither should you, until you have confirmed what the group actually is.
+The record holds a bare process group with no start-time identity, so a group the kernel has recycled would name an
+entirely unrelated process.
 
 Confirm before acting:
 
@@ -202,10 +193,10 @@ pgrep -g 99252
 Check three things:
 
 1. **Does the process still exist?** If not, the report is already stale — see below.
-2. **Is its start time consistent** with when you believe the guarded run began? A process that
-   started _after_ the guard died is a recycled identifier, not your payload.
-3. **Is the command what you expected to be guarding?** If it is your editor or an unrelated service,
-   the identifier was reused. Do not signal it.
+2. **Is its start time consistent** with when you believe the guarded run began? A process that started _after_ the
+   guard died is a recycled identifier, not your payload.
+3. **Is the command what you expected to be guarding?** If it is your editor or an unrelated service, the identifier was
+   reused. Do not signal it.
 
 Only once all three check out is the group yours to terminate:
 
@@ -215,35 +206,34 @@ kill -TERM -99252     # note the leading '-': signals the group
 
 ## Wait rather than intervene, where you can
 
-An abandoned group's reservation is reclaimed automatically once that group actually retires. The
-next guard to take the coordination lock reconciles liveness and releases it:
+An abandoned group's reservation is reclaimed automatically once that group actually retires. The next guard to take the
+coordination lock reconciles liveness and releases it:
 
 ```console
 $ hippo status --config reservation.json --json --disk-path . | grep -o '"coordination":.*'
 "coordination":{...,"allocated":{"cpu":0,"memoryBytes":0},"activeOwners":0,...}
 ```
 
-So the leak is bounded by the payload's own lifetime. Manual intervention is only needed for a
-payload that will never exit on its own.
+So the leak is bounded by the payload's own lifetime. Manual intervention is only needed for a payload that will never
+exit on its own.
 
 ## When the root will not admit anything
 
-If admission fails with `125` naming `hippo.supervision.failed` and the ledger looks empty, shared
-state may be corrupt or inaccessible.
-A `hippo.coordination.protocol-mismatch` reason instead means the state is valid but uses an
-incompatible peer protocol. HIPPO preserves both kinds of bytes instead of clearing them; exit `124`
-remains a limit result.
+If admission fails with `125` naming `hippo.supervision.failed` and the ledger looks empty, shared state may be corrupt
+or inaccessible. A `hippo.coordination.protocol-mismatch` reason instead means the state is valid but uses an
+incompatible peer protocol. HIPPO preserves both kinds of bytes instead of clearing them; exit `124` remains a limit
+result.
 
 Recovery is manual and deliberate:
 
 1. Inspect the state root.
 2. Confirm that no owner remains — check every PID and process group it names.
-3. For an unreadable-state reason, correct whatever made the files inaccessible or malformed. For a protocol mismatch, drain
-   the live epoch or upgrade every client that shares the root.
+3. For an unreadable-state reason, correct whatever made the files inaccessible or malformed. For a protocol mismatch,
+   drain the live epoch or upgrade every client that shares the root.
 4. Retry.
 
-Clearing state to "unstick" a root is how a live owner's record disappears and every waiting task
-starts at once. See [Why HIPPO fails closed](../explanation/failing-closed.md).
+Clearing state to "unstick" a root is how a live owner's record disappears and every waiting task starts at once. See
+[Why HIPPO fails closed](../explanation/failing-closed.md).
 
 ## Related
 

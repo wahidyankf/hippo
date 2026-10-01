@@ -3,11 +3,10 @@
 One narrow review, posted on the pull request, for the exact head that will merge. It is a
 [merge precondition](../conventions/pull-request-merge.md): no leak review, no merge.
 
-Adapted from the sibling repository that originated it. What changed here: there is no separate
-reviewer agent, the review is performed by whoever handles the merge, and the categories are the
-ones [data safety](../conventions/public-repository-data-safety.md) already names for this
-repository. The evidence marker keeps the sibling's name so one reader can authenticate a record
-from any of these repositories.
+Adapted from the sibling repository that originated it. What changed here: there is no separate reviewer agent, the
+review is performed by whoever handles the merge, and the categories are the ones
+[data safety](../conventions/public-repository-data-safety.md) already names for this repository. The evidence marker
+keeps the sibling's name so one reader can authenticate a record from any of these repositories.
 
 ## What It Inspects
 
@@ -17,18 +16,18 @@ Exactly three categories, and nothing else:
 2. Properties that belong in environment or secret storage rather than a tracked file.
 3. Real machine-specific absolute paths, and real host evidence captured from a workstation.
 
-This is not a security review and not a semantic one. A public identifier, a documented public
-value, an obvious placeholder, a repository-relative path, and a deliberately synthetic fixture are
-not leaks. A name containing `key`, `token`, `secret`, or `prod` is not evidence by itself; treat a
-candidate as a finding only where its shape and its context establish that the value is real.
+This is not a security review and not a semantic one. A public identifier, a documented public value, an obvious
+placeholder, a repository-relative path, and a deliberately synthetic fixture are not leaks. A name containing `key`,
+`token`, `secret`, or `prod` is not evidence by itself; treat a candidate as a finding only where its shape and its
+context establish that the value is real.
 
 ## Procedure
 
 1. Pin the head SHA. Everything below is about that SHA and no other.
 2. Read the whole diff at it — not the summary, not memory of what was written.
-3. Screen the review body as [data safety](../conventions/public-repository-data-safety.md) requires,
-   then post one review on the pull request carrying the record below. Post it whatever the result
-   is: a pass that was never written down is indistinguishable from a review nobody ran.
+3. Screen the review body as [data safety](../conventions/public-repository-data-safety.md) requires, then post one
+   review on the pull request carrying the record below. Post it whatever the result is: a pass that was never written
+   down is indistinguishable from a review nobody ran.
 4. Read the review back through the API and confirm its `commit_id` equals the pinned SHA.
 5. Query the live head again.
 
@@ -43,18 +42,17 @@ candidate as a finding only where its shape and its context establish that the v
 
 ## Results
 
-`pass` when every count is zero, `findings` when any is not, `stale` when the head moved before or
-after posting, and `failed` when no verdict could be obtained. Only `pass`, on the exact head being
-merged, satisfies the precondition.
+`pass` when every count is zero, `findings` when any is not, `stale` when the head moved before or after posting, and
+`failed` when no verdict could be obtained. Only `pass`, on the exact head being merged, satisfies the precondition.
 
-A moved head needs one new review of the new head. Clean reviews do not accumulate: three passes on
-three old heads say nothing about the head that will merge.
+A moved head needs one new review of the new head. Clean reviews do not accumulate: three passes on three old heads say
+nothing about the head that will merge.
 
 ## Findings
 
-Name the category, the file, and the remediation. Never repeat the value, and never paste it into a
-review body, a commit message, or a pull-request body — those are published too. Treat anything
-found as already disclosed: rotate first, then remove.
+Name the category, the file, and the remediation. Never repeat the value, and never paste it into a review body, a
+commit message, or a pull-request body — those are published too. Treat anything found as already disclosed: rotate
+first, then remove.
 
-The review body is itself a published artifact. A local absolute path pasted into it is the same
-finding the review exists to catch.
+The review body is itself a published artifact. A local absolute path pasted into it is the same finding the review
+exists to catch.

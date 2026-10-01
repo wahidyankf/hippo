@@ -1,7 +1,7 @@
 # How to watch host pressure
 
-Use `hippo watch` for the complete operator view of host pressure, current owners, FIFO waiters,
-deadlines, and burst promotion. Use `hippo monitor` when a resource-only transition stream is enough.
+Use `hippo watch` for the complete operator view of host pressure, current owners, FIFO waiters, deadlines, and burst
+promotion. Use `hippo monitor` when a resource-only transition stream is enough.
 
 ## Watch admission and queue transitions
 
@@ -9,9 +9,9 @@ deadlines, and burst promotion. Use `hippo monitor` when a resource-only transit
 hippo watch --interval 5s --disk-path .
 ```
 
-`watch` prints the initial schema-5 status and then only changed snapshots. Each owner or waiter row
-shows its opaque run ID, position, source, task class, resource tier, vector, and deadline. Filter a
-busy machine without hiding global totals:
+`watch` prints the initial schema-5 status and then only changed snapshots. Each owner or waiter row shows its opaque
+run ID, position, source, task class, resource tier, vector, and deadline. Filter a busy machine without hiding global
+totals:
 
 ```sh
 hippo watch --source ose-public --tag checkout=worktree --disk-path .
@@ -29,9 +29,9 @@ hippo monitor --interval 1s --disk-path .
 2026-09-07T04:55:25.508138Z state=normal reason=normal profile=balanced swap=active
 ```
 
-`monitor` prints the initial state and then **only transitions** — a quiet pane means the host is
-stable, not that monitoring stopped. It runs until you stop it; `Ctrl-C` ends it with `130`, the
-status a shell reports for an interrupt, and so does `watch`.
+`monitor` prints the initial state and then **only transitions** — a quiet pane means the host is stable, not that
+monitoring stopped. It runs until you stop it; `Ctrl-C` ends it with `130`, the status a shell reports for an interrupt,
+and so does `watch`.
 
 A busy host produces a trail:
 
@@ -40,8 +40,8 @@ A busy host produces a trail:
 2026-01-02T03:05:10Z state=warning reason=memory-psi profile=constrained swap=idle
 ```
 
-The `reason` field names the specific evidence that moved the state — memory, PSI, disk, swap, CPU,
-or compressor — which is usually the fastest way to identify what is actually saturated.
+The `reason` field names the specific evidence that moved the state — memory, PSI, disk, swap, CPU, or compressor —
+which is usually the fastest way to identify what is actually saturated.
 
 ## Feed a machine consumer
 
@@ -49,8 +49,11 @@ or compressor — which is usually the fastest way to identify what is actually 
 hippo monitor --interval 1s --json --disk-path .
 ```
 
+Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
+
 ```console
-{"schemaVersion":1,"measuredAt":"2026-09-07T04:55:28.569948Z","state":"normal","reason":"normal","profile":"balanced","swapState":"active"}
+{"schemaVersion":1,"measuredAt":"2026-09-07T04:55:28.569948Z","state":"normal","reason":"normal","profile":"balanced",
+  "swapState":"active"}
 ```
 
 One schema-1 object per transition, one object per line. Pipe it anywhere that reads JSONL:
@@ -61,15 +64,18 @@ hippo monitor --json --disk-path . | jq -r 'select(.state != "normal") | "\(.mea
 
 ## Take a single reading instead
 
-For a script that just needs the current answer, `status` is cheaper — one reading (two samples a
-second apart), then exit:
+For a script that just needs the current answer, `status` is cheaper — one reading (two samples a second apart), then
+exit:
 
 ```sh
 hippo status --disk-path .
 ```
 
+Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
+
 ```console
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=13.76 diskFreeGiB=78.67 cpu=15.5% owners=0 waiters=0 ownerLimit=0 promotion=not-configured
+state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=13.76 diskFreeGiB=78.67 cpu=15.5%
+  owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
 ```sh
@@ -86,15 +92,15 @@ tmux capture-pane -p -t hippo:0.0 -S -200
 
 ## Point it at the right volume
 
-`--disk-path` decides which filesystem's free space is measured. Point it at the directory the
-guarded work will actually write to — a build output tree, a container store, a deployment root:
+`--disk-path` decides which filesystem's free space is measured. Point it at the directory the guarded work will
+actually write to — a build output tree, a container store, a deployment root:
 
 ```sh
 hippo monitor --interval 5s --disk-path ./target
 ```
 
-Measuring a roomy volume while the work fills a small one is the most common way to be surprised by
-exit `124` naming `hippo.limit.storage-blocked`.
+Measuring a roomy volume while the work fills a small one is the most common way to be surprised by exit `124` naming
+`hippo.limit.storage-blocked`.
 
 ## Related
 

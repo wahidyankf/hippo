@@ -1,6 +1,7 @@
 # Development
 
-Engineering standards for changing this repository's code. They sit under the [conventions](../conventions/README.md) and above the [workflows](../workflows/README.md).
+Engineering standards for changing this repository's code. They sit under the [conventions](../conventions/README.md)
+and above the [workflows](../workflows/README.md).
 
 ## Directory Map
 
@@ -17,7 +18,8 @@ Engineering standards for changing this repository's code. They sit under the [c
 - [Public contract](public-contract.md) — exit codes, evidence readers, configuration compatibility.
 - [Quality](quality/README.md) — the software-development standards adopted from the shared catalog.
 - [Quality gates](quality-gates.md) — what runs, where, and in what order.
-- [Resource-aware development](resource-aware-development.md) — the guard, and why this repository cannot use it on itself.
+- [Resource-aware development](resource-aware-development.md) — the guard, and why this repository cannot use it on
+  itself.
 - [Software quality enforcement](software-quality-enforcement.md) — the gates that must pass before a change is done.
 - [Specification maintenance](specification-maintenance.md) — Gherkin first, always.
 - [Test-driven development](test-driven-development.md) — red, green, refactor, with evidence.
