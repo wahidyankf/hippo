@@ -79,22 +79,15 @@ updates its documentation per [Specification Maintenance](../../specification-ma
 
 ## Adopter Decisions
 
+Each decision's options, with gains and costs:
+
 - **assertions**
-  - Option: the `testing` package only
-  - Gains: no dependency
-  - Costs: longer comparisons and hand-written diffs
-- (none)
-  - Option: a library; example: testify
-  - Gains: shorter assertions, clear diffs
-  - Costs: a dependency, per [Dependency Selection](../../dependency-selection.md)
+  - the `testing` package only. Gains: no dependency. Costs: longer comparisons and hand-written diffs.
+  - a library; example: testify. Gains: shorter assertions, clear diffs. Costs: a dependency, per
+    [Dependency Selection](../../dependency-selection.md).
 - **integration selection**
-  - Option: a build tag per file
-  - Gains: tests stay beside their package
-  - Costs: a forgotten tag moves a test into unit
-- (none)
-  - Option: a separate test directory
-  - Gains: the layer is visible by path
-  - Costs: tests reach only the exported API
+  - a build tag per file. Gains: tests stay beside their package. Costs: a forgotten tag moves a test into unit.
+  - a separate test directory. Gains: the layer is visible by path. Costs: tests reach only the exported API.
 
 Record each choice in the repository adapter [Stack Packs](../../../conventions/structure/stack-packs.md) defines.
 
