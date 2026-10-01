@@ -9,9 +9,12 @@ machine.
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey)](#-install)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-HIPPO is a standalone Go CLI that admits, supervises, and sheds local development work based on what the host can
-actually spare. It coordinates concurrent repositories through a shared CPU-and-memory reservation ledger, and only the
-guard that owns a child may signal that child's process group.
+<p align="center">
+  <img src="./.github/hippo-project-illustration.png" alt="HIPPO mascot illustration" width="320">
+</p>
+
+HIPPO is a Go CLI that admits, supervises, and sheds local development work against available host resources. A shared
+CPU-and-memory reservation ledger coordinates repositories; only the owning guard may signal its child's process group.
 
 ```console
 $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make test
