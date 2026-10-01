@@ -1247,10 +1247,30 @@ func (driver *Driver) interruptGuard() error {
 	// trap, which kills the child by SIGTERM's default action and leaves nothing
 	// for the scenario to observe. Interrupting on the child's own readiness mark
 	// establishes the Given instead of assuming it.
+	//
+	// The child's own bound is a release mark this fixture writes on its clock,
+	// well past the grace, never an iteration count: how long a count takes
+	// depends on the shell, and Linux's dash finishes one that macOS's sh needs
+	// seconds for inside the grace, so a correct guard was reported as letting
+	// the child finish on its own.
+	release := filepath.Join(driver.leaseRoot, "release")
+	runDone := make(chan struct{})
+	released := make(chan struct{})
 	go func() {
-		defer cancel()
+		defer close(released)
 
 		_ = awaitMarkerFile(ready, interruptReadinessWait)
+		cancel()
+
+		select {
+		case <-time.After(fixtureLivenessWait):
+		case <-runDone:
+		}
+		_ = os.WriteFile(release, []byte("r"), 0o600)
+	}()
+	defer func() {
+		close(runDone)
+		<-released
 	}()
 
 	// The child waits without forking. A forked foreground child shares the
@@ -1258,15 +1278,16 @@ func (driver *Driver) interruptGuard() error {
 	// runs its trap a second time to report the child that died from that signal,
 	// which makes the trap count an unreliable witness for how often the guard
 	// actually signalled. A builtin-only wait counts kernel deliveries exactly,
-	// and its bound stops a guard that never force-stops from leaving a spinning
-	// orphan behind. A child that outlives that bound marks its own completion,
-	// which is how the scenario tells a force-stop from a child that finished.
+	// and its release stops a guard that never force-stops from leaving a
+	// spinning orphan behind. A child that outlives the grace until that release
+	// marks its own completion, which is how the scenario tells a force-stop from
+	// a child that finished.
 	completed := filepath.Join(driver.leaseRoot, "completed")
 	_, err := guard.Run(ctx, guard.RunConfig{
 		Command:      shellPath,
-		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; attempt=0; while [ "$attempt" -lt 2000000 ]; do attempt=$((attempt+1)); done; printf d > "$GUARD_DONE_MARKER"`},
+		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; while [ ! -e "$GUARD_RELEASE_MARKER" ]; do :; done; printf d > "$GUARD_DONE_MARKER"`},
 		TaskClass:    taskClassEphemeral,
-		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready, "GUARD_DONE_MARKER="+completed),
+		Environment:  append(os.Environ(), "GUARD_TERM_MARKER="+marker, "GUARD_READY_MARKER="+ready, "GUARD_RELEASE_MARKER="+release, "GUARD_DONE_MARKER="+completed),
 		EvidenceRoot: driver.leaseRoot,
 		DiskPath:     ".",
 		Collector: &sequenceCollector{samples: []policy.Sample{
