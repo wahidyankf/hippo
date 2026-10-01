@@ -16,7 +16,9 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
   [data safety](../conventions/public-repository-data-safety.md). `release.yml` generates those notes from merged pull
   requests, so screen the text `gh api repos/<owner>/<repo>/releases/generate-notes -f tag_name=<version> --jq .body`
   returns before tagging.
-- The cut is [authorized](../conventions/commit-authorization.md).
+- The cut is [authorized](../conventions/commit-authorization.md). An adopted
+  [upstream tool defects](../development/upstream-tool-defects.md) standard authorizes releasing a merged HIPPO defect
+  fix, whether a consumer filed it or this repository found it.
 
 ## Building
 
