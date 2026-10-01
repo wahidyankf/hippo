@@ -11,8 +11,8 @@ surface runs, and `./rhino gate list` prints them.
   Conventional Commits, on every commit.
 - **`pre-commit`** — the public-safety tree screen, then `scripts/format-staged.sh`: `goimports` and `gofumpt` over
   staged Go, `shfmt` over staged shell, Prettier over staged JSON, Markdown, and YAML.
-- **`pre-push`** — the public-safety range screen, `shell-lint`, the quick gate, repository configuration, and the
-  documentation gates, unguarded.
+- **`pre-push`** — the public-safety range screen (commit by commit), `shell-lint`, the quick gate, repository
+  configuration, and the documentation gates, unguarded.
 - **`shell-lint`** — on `pre-push` and in the pull-request replay: the checksum-pinned ShellCheck at
   `--severity=warning` over every shell file `scripts/shell-files.sh` lists, the same list the format check hands
   `shfmt`.
@@ -43,9 +43,11 @@ is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
 ## In CI
 
 [`pr-quality-gate.yml`](../../.github/workflows/pr-quality-gate.yml) mirrors every hook contract and absorbs everything
-the retired `ci.yml` ran. One aggregate check, `Quality gate`, is the sole required status check; it treats a skipped or
-cancelled job as failure, because a skipped required check never reports at all. Workflow storage stays inside the free
-allowance: [GitHub Actions storage](github-actions-storage.md).
+the retired `ci.yml` ran. Its aggregate check, `Quality gate`, treats a skipped or cancelled job as failure, because a
+skipped required check never reports at all. The ruleset requires it and the `leak-review` status that
+[`leak-review.yml`](../../.github/workflows/leak-review.yml) publishes from the posted
+[leak review](../workflows/pr-leak-review/003-enforcement.md). Workflow storage stays inside the free allowance:
+[GitHub Actions storage](github-actions-storage.md).
 
 ## Never Nx
 
