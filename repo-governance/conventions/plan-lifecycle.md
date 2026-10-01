@@ -20,7 +20,8 @@ planning mode, authorizes neither the folder nor the commit that would carry it.
 
 The one standing request is [upstream tool defects](../development/upstream-tool-defects.md): an idea brief for a HIPPO
 defect, or a [bug-fix plan](plans/010-bug-fix-plan.md) for one that blocks the work in hand with no workaround, filed
-here under a consumer's adopted standard, needs no further request.
+here under a consumer's adopted standard, needs no further request, and neither do that bug-fix plan's quality gate and
+execution.
 
 ## Scope
 
