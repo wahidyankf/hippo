@@ -20,6 +20,9 @@ Inspect the diff — not memory, not intent — and remove anything above. The c
 includes a file added earlier and still untracked-then-staged now. [Thematic commits](thematic-commits.md) makes the
 diff small enough to actually read.
 
+Before every push and every merge, the [leak review](../workflows/pr-leak-review.md) judges each outgoing commit against
+this list, because history publishes what a later commit deletes.
+
 ## Before Publishing Anything Else
 
 A pull-request title and body, a comment or review body, and release notes are published the moment they are posted, and

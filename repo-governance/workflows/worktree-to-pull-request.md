@@ -29,8 +29,9 @@ current task against it before continuing.
 
 ## 4. Push and Open
 
-Push, then open the pull request **as a draft**, with a body that carries why, what was decided, and how it was proved —
-see [pull request body](../conventions/pull-request-body.md). Screen the title and body before opening it — see
+Run the [push review](pr-leak-review/002-push-review.md) of every outgoing commit before each push, then push and open
+the pull request **as a draft**, with a body that carries why, what was decided, and how it was proved — see
+[pull request body](../conventions/pull-request-body.md). Screen the title and body before opening it — see
 [data safety](../conventions/public-repository-data-safety.md).
 
 ## 5. Ready, Then Wait
@@ -40,8 +41,9 @@ starts now. Check no more often than [every three minutes](../conventions/github
 
 ## 6. Merge
 
-When every [merge precondition](../conventions/pull-request-merge.md) holds, rebase-merge. Re-inspect the exact head
-being merged for data safety first.
+Run the [leak review](pr-leak-review.md) on the exact head being merged. When every
+[merge precondition](../conventions/pull-request-merge.md) holds, including its `leak-review` status, rebase-merge that
+head.
 
 ## 7. Land the Next Unit, or Clean Up
 

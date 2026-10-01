@@ -24,7 +24,9 @@ A workflow describes how something is done. It never grants permission to do it 
 - [Plan planning](plan-planning.md) — writing the plan itself, gate by gate.
 - [Plan quality gate](plan-quality-gate.md) — one plan's readiness, on explicit request only; for a bug-fix plan, an
   adopted [upstream tool defects](../development/upstream-tool-defects.md) standard is that request.
-- [PR leak review](pr-leak-review.md) — the posted, current-head review a merge requires.
+- [PR leak review](pr-leak-review.md) — the private review every push requires, and the posted, current-head review a
+  merge requires.
+- [PR leak review modules](pr-leak-review/README.md) — leak classes, the push review, and how both are enforced.
 - [Red green refactor](red-green-refactor.md) — the cycle, with its evidence.
 - [Release cut](release-cut.md) — publishing a version.
 - [Rules grooming](rules-grooming.md) — keeping this tree true, on request, without writing.
