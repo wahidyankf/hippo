@@ -23,3 +23,4 @@ and above the [workflows](../workflows/README.md).
 - [Software quality enforcement](software-quality-enforcement.md) — the gates that must pass before a change is done.
 - [Specification maintenance](specification-maintenance.md) — Gherkin first, always.
 - [Test-driven development](test-driven-development.md) — red, green, refactor, with evidence.
+- [Upstream tool defects](upstream-tool-defects.md) — a pinned RHINO or FERRET defect goes to its owner.

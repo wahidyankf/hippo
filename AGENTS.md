@@ -48,8 +48,7 @@ Red, green, refactor, with evidence of each:
 [a manual review](repo-governance/workflows/gherkin-implementation-review.md).
 
 What runs and where: [quality gates](repo-governance/development/quality-gates.md). What must pass before a change is
-done: [software quality enforcement](repo-governance/development/software-quality-enforcement.md). This repository never
-acquires Nx.
+done: [software quality enforcement](repo-governance/development/software-quality-enforcement.md).
 
 ## Change Discipline
 
@@ -60,11 +59,10 @@ acquires Nx.
 Go and shell stack standards, and every local deviation: the
 [repository adapter](repo-governance/development/quality/stacks/repository-adapter.md).
 
+A pinned RHINO or FERRET defect: [upstream tool defects](repo-governance/development/upstream-tool-defects.md).
+
 HIPPO cannot guard HIPPO; the reason, and the contract this repository owes consumers, is in
 [resource-aware development](repo-governance/development/resource-aware-development.md).
-
-Workflow storage stays inside the free allowance:
-[GitHub Actions storage](repo-governance/development/github-actions-storage.md).
 
 ## Version Control
 

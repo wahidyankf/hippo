@@ -6,7 +6,9 @@ specification is right and the plan is a record of what someone once intended.
 
 Most work here needs no plan. One delivery unit, one pull request, done. A plan earns its cost when work spans several
 units or several sessions, or when the decision behind it is one a reader will later want the argument for. Writing one
-requires an explicit request; see the [plans convention](../repo-governance/conventions/plans.md).
+requires an explicit request, except a defect filed under
+[upstream tool defects](../repo-governance/development/upstream-tool-defects.md); see the
+[plans convention](../repo-governance/conventions/plans.md).
 
 ## The Stages
 

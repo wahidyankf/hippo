@@ -44,7 +44,8 @@ is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
 
 [`pr-quality-gate.yml`](../../.github/workflows/pr-quality-gate.yml) mirrors every hook contract and absorbs everything
 the retired `ci.yml` ran. One aggregate check, `Quality gate`, is the sole required status check; it treats a skipped or
-cancelled job as failure, because a skipped required check never reports at all.
+cancelled job as failure, because a skipped required check never reports at all. Workflow storage stays inside the free
+allowance: [GitHub Actions storage](github-actions-storage.md).
 
 ## Never Nx
 

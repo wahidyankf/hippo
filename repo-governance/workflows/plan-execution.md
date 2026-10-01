@@ -19,7 +19,8 @@ A plan in `plans/in-progress/` whose quality gate returned a terminal verdict pe
    [Verification Routing](../development/planning-capabilities/006-verification-routing.md).
 6. **Fix what fails, including what was already failing.** A check that was red before the plan started is still red
    because of this plan's work by the time it ships. Pre-existing is an explanation, not an exemption.
-7. **Route discoveries to `learnings.md`** as they happen, not from memory afterwards.
+7. **Route discoveries to `learnings.md`**, or a bug-fix plan's Learnings section, as they happen, not from memory
+   afterwards.
 8. **Run [Execution Check](plan-execution-check.md)** once every substantive item is terminal.
 
 ## Exit
