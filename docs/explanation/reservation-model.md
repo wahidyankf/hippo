@@ -67,6 +67,10 @@ act. Under schema 2, a caller that runs without a tier and just wants the work t
 Beside a tier, and always under schema 3, the flag is refused with exit `2`, because the tier sets the deadline. Schema
 1 refuses it too: exclusive coordination has no FIFO queue for it to bound.
 
+Each of these deadlines bounds the queue alone. Host pressure is judged afterwards, over a fixed 16-second admission
+window, so a host that never becomes safe to admit within it defers the work early with a `never-started` receipt — see
+[Tell never-started from started](../how-to/respond-to-exit-codes.md#tell-never-started-from-started).
+
 ## The effective owner limit is a minimum, not a maximum
 
 Every live owner and every queued waiter contributes its own configured `maxActiveOwners`, and HIPPO uses the
