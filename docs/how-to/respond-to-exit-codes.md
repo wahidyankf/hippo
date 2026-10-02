@@ -56,8 +56,8 @@ that the work started, and it never proves that requeueing is safe. Emergency te
 `state: "started-safety-stop"`. Ordinary pressure shedding is recorded in the lifetime summary as `pressure-shed` or
 `storage-shed`.
 
-Let HIPPO wait before launch rather than looping yourself. A tier sets the deadline; under schema 2, a run without a
-tier can set one instead:
+Let HIPPO wait in the queue rather than looping yourself. A tier sets the queue deadline; under schema 2, a run without
+a tier can set one instead:
 
 ```sh
 hippo run --wait-for-admission 10m -- make test
@@ -65,6 +65,26 @@ hippo run --wait-for-admission 10m -- make test
 
 It creates one stable FIFO waiter, reports position every 30 seconds, and starts the payload once at most. HIPPO never
 runs a payload retry loop.
+
+That deadline bounds the queue, not host pressure. After the queue, HIPPO samples the host for a fixed 16-second
+admission window — see [resource policy](../reference/resource-policy.md) — and launches as soon as admission is safe. A
+host that never becomes safe within the window, such as a briefly loaded CI runner, defers with
+`hippo.limit.capacity-deferred` and `HIPPO deferred task: safe admission was not reached.`, however much of the tier
+deadline remains. That deferral leaves a `never-started` receipt with reason `host-admission`, so one requeue of the
+same invocation is safe. Confirm the receipt is new before requeueing:
+
+```sh
+ls "$HIPPO_ROOT/receipts" >before 2>/dev/null
+hippo run --resource-tier light --disk-path . -- make test 2>errors
+status=$?
+if [ "$status" -eq 124 ] && grep -q '^hippo: \[hippo.limit.capacity-deferred\]' errors; then
+  for name in $(ls "$HIPPO_ROOT/receipts" | grep -vxF -f before); do
+    grep -q '"state":"never-started"' "$HIPPO_ROOT/receipts/$name" && echo "never started: requeue once"
+  done
+fi
+```
+
+A requeued run that defers again leaves a receipt of its own; bound how many times you requeue.
 
 Or handle it yourself when the payload is not safe to repeat:
 
