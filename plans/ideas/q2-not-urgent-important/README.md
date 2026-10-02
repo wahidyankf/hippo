@@ -10,3 +10,5 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 - [Package wiring scan counts nested worktrees](package-wiring-scan-counts-nested-worktrees.md) — the quick gate fails
   in any checkout holding a task worktree, because the package scan descends into nested modules.
+- [Resource policy reference misstates thresholds](resource-policy-reference-misstates-thresholds.md) — the reference
+  shows fixed thresholds no command uses, misdescribes `capabilities`, and omits the sustained-warning shed.

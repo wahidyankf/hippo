@@ -8,4 +8,5 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-This quadrant holds no idea yet, so this README has no siblings to map.
+- [Release build depends on the local Go toolchain](release-build-depends-on-local-go-toolchain.md) — a local
+  `scripts/build-release.sh` run builds with whatever Go is installed, so its checksums need not match the release.
