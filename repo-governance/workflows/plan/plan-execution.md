@@ -2,7 +2,8 @@
 
 ## Entry
 
-A plan in `plans/in-progress/` whose quality gate returned a terminal verdict permitting execution.
+A plan in `plans/in-progress/` whose [quality gate](../quality/plan-quality-gate.md) recorded a verdict, any of the
+four: every verdict is advisory, so a `FAIL` or `BLOCKED` row has an owner and does not hold execution back.
 
 ## Sequence
 

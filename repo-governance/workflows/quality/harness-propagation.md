@@ -1,38 +1,72 @@
 # Harness Propagation
 
-Changing the canonical instruction body, a skill, an agent, or any harness adapter. The contract itself is
-[coding harness contract](../../conventions/coding-harness-contract.md).
+## Contract
 
-## 1. Change the Canon First
+This is the `harness` family's sole writer, under
+[Sole-Writer Propagation](../../development/workflow/sole-writer-propagation.md).
 
-`AGENTS.md`, `.agents/skills/<name>/SKILL.md`, or `.agents/agents/<name>.md`. Never an adapter first — an adapter edited
-ahead of the canon is a divergence that the validator will report as the adapter's fault.
+## Scope
 
-## 2. Prove the Divergence
+The canonical agent and skill artifacts, the adapter generator's mapping, the reference record kept of each harness's
+conventions, and the adapters the generator regenerates from them. A generated adapter is never edited by hand, per
+[Harness Adapters](../../conventions/coding-harness-contract.md).
 
-Run `./rhino harness adapters validate` and read the finding. A change to the canon that produces no finding either
-changed nothing a harness expresses, or the harness that should express it is not declared.
+## Executor
 
-Capture that output. It is the RED — see [red green refactor](red-green-refactor.md).
+`harness-fixer`, loading the `checking-harness-compatibility` skill.
 
-## 3. Update Every Adapter
+## Row Verification
 
-Each declared harness, in the same change. An adapter left behind is not a smaller problem than a missing one; the gate
-treats them identically, and so should the author.
+A row closes when the committed binding now agrees with the row's cited upstream fact, the adapters were regenerated
+with the repository's generator, and the repository's parity check and Markdown gates exit 0. Each ledger row ends
+`resolved`, `not-resolved`, `not-applicable`, or `needs-decision`, with evidence.
 
-## 4. Prove Parity
+## Family Rules
 
-Run the validator again. It must report the declared adapter tree clean; the generated catalog and provenance artifacts
-carry the source digests that distinguish "nothing changed" from "nothing was checked".
+### Entry
 
-Then weaken one denial deliberately and confirm the validator reports it. A parity check that passes whatever the
-adapters say is not a check. See [harness parity verification](harness-parity-verification.md).
+The [Harness Quality Gate](harness-quality-gate.md) hands over a frozen ledger, or an explicit request names its rows.
 
-## 5. Adding or Removing a Harness
+- `findings` (`file`, required): the frozen ledger, each row with its upstream citation and retrieval date.
 
-A new harness is a `repo-config.yml` change plus its adapters, landed together. Declaring the harness without its
-adapters, or adapters without the declaration, both fail — deliberately, because a half-declared roster reconciles
-against nothing and says it is clean.
+### Sequence
 
-Establish a harness's real surface from current vendor documentation before declaring it. A path that was correct when a
-sibling repository adopted it may not be correct now.
+1. **Re-read each named file against its citation.** A file that already agrees with the cited fact is `not-applicable`,
+   since the drift is gone; a file that holds neither the quoted value nor the cited one is `needs-decision`, because
+   the ground moved under the row.
+2. **Repair the source, never the output.** Drift the evidence settles unambiguously, such as a renamed metadata key or
+   a moved file location, is repaired in the canonical artifact, the generator mapping, or the reference record.
+3. **Leave decisions to people.** A source conflict, a change to what a permission means, adding or removing a harness,
+   a change to the generator's logic, and a retired model identifier without a named successor are `needs-decision`,
+   with the citation and the options.
+4. **Regenerate the adapters,** then verify each row.
+
+The writer does not research. A row its citation and the repository cannot confirm stays `needs-decision`, and new
+research returns to the checking side, per Web Research Delegation. It never weakens the parity check, drops a
+restriction, or excludes a path to reach a clean result.
+
+### Canonical Changes
+
+This writer keeps the trigger it already had here: adding, changing, renaming, or removing a canonical rule, skill,
+agent, or adapter enters it automatically, with no ledger, and follows
+[Canonical Change](harness-propagation/001-canonical-change.md).
+
+### Exit
+
+Outputs: `status` (`enum`: `no-change`, `landed`, `partial`, `input-changed`) and the ledger, each row with its status
+and evidence. The caller commits the repairs with the regenerated adapters. A rerun on unchanged inputs changes nothing.
+
+## Example Usage
+
+```text
+Run harness-propagation with the ledger the harness quality gate froze for subject all.
+```
+
+## Related Workflows
+
+- [Harness Quality Gate](harness-quality-gate.md) researches upstream drift and hands its blocking rows here.
+- [Harness Parity Verification](harness-parity-verification.md) owns parity between bindings and their source.
+
+## Modules
+
+1. [Canonical Change](harness-propagation/001-canonical-change.md)

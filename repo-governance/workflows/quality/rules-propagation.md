@@ -1,69 +1,88 @@
 # Rules Propagation
 
-Apply this workflow automatically whenever a [rule](../../conventions/rules.md) in this tree is created, changed, moved,
-or deleted, or an explicitly requested [rules quality gate](rules-quality-gate.md) hands over findings. No separate user
-instruction is required: the actor that proposes or notices the change enters propagation as part of the work in hand,
-and the absence of a request to run it is never permission to skip it.
+## Contract
 
-Propagation is the sole writer. The quality gate and [grooming](../maintenance/rules-grooming.md) discover, rank, and
-hand off; neither edits. Edits made inside one transaction do not start another.
+This is the `rules` family's sole writer, under
+[Sole-Writer Propagation](../../development/workflow/sole-writer-propagation.md).
 
-## It Stops at This Repository's Boundary
+## Scope
 
-A change to this tree propagates nowhere automatically. The siblings hold their own governance and nothing keeps the
-copies synchronized. That is the decision rather than an oversight: the only shared contract is machine-checked, each
-repository's `repo-config.yml` and the validator it runs.
+Every rule-bearing location that [Rule Definition](../../conventions/rules.md) names, plus the derived surfaces
+regenerated from them. A handed-over ledger narrows the scope to what its rows require.
 
-Where a rule discovered here genuinely applies elsewhere, change it here with its reason, say in the pull-request body
-which repositories may want it and why, and let each decide in its own change with its own evidence. A rule copied
-without that step arrives without the reason that justified it, and the first reader to find it inconvenient will delete
-it correctly.
+## Executor
 
-A rule that fits one repository is not thereby owed to another.
-[Worktree location](../../conventions/worktree-location.md) is the worked example: worktrees below the checkout were
-adopted here only after this repository's own Go release provenance was checked, not because a sibling had the layout;
-adopting it on that ground alone would have been the blind propagation this workflow exists to prevent.
+`rules-fixer`, loading the `propagating-rules` skill.
 
-Three phrasings of one rule across three repositories is three repositories having decided, not one having decayed.
-Divergence is never a finding here; where it _is_ decay, grooming catches it.
+## Row Verification
 
-## Inputs and Transaction
+A row closes when its rule sits in one canonical home, its conflicts are resolved by level, it carries one enforcement
+disposition, and the deterministic gates over the changed surfaces exit 0, per
+[Enforcement and Verification](rules-propagation/003-enforcement-and-verification.md). Each ledger row ends `resolved`,
+`not-resolved`, `not-applicable`, or `needs-decision`, with evidence.
 
-Freeze: the proposed rule and its reason; its intended strength; the files, agents, or tasks in scope; known enforcement
-routes; any handed-over findings; the Git revision and dirty paths; and authorization. Preserve them through compaction
-or handoff. A material change to those inputs returns `BLOCKED_INPUT_CHANGED`; it never restarts the transaction.
+## Family Rules
 
-## Procedure
+### Entry
 
-1. Build one finite ledger from the requested outcome and any handed-over findings. Inspect only the affected rule, its
-   points of use, higher authority, and directly overlapping guidance. Record each material gap as `OPEN`, `RESOLVED`,
-   `NOT_APPLICABLE`, or `BLOCKED`. Do not add style preferences, speculative hardening, or checks a validator owns.
-2. Before editing, return `BLOCKED_INPUT` for a missing decision or authority and `BLOCKED_CONFLICT` for an
-   irreconcilable higher-authority conflict. Otherwise apply the minimum repair that closes every `OPEN` row:
-   - place each rule at the level that owns it, and leave `AGENTS.md` linking rather than restating;
-   - resolve conflicts in the order `vision > principles > conventions > development > workflows`;
-   - keep one canonical statement, merge unique meaning, replace copies with links, and apply
-     [progressive disclosure](../../principles/progressive-disclosure.md);
-   - change only stale, misplaced, overlapping, or repeated content the ledger implicates; and
-   - name truthful enforcement under [software quality enforcement](../../development/software-quality-enforcement.md),
-     adding machinery only for a demonstrated need.
-3. Read the repaired surfaces once for semantic closure. Resolve only conflicts the repair caused, under the hierarchy
-   and [minimal sufficiency](../../principles/minimal-sufficiency.md). Never broaden the ledger.
-4. Run the gate:
+A rule, as [Rule Definition](../../conventions/rules.md) defines one, is about to be added, changed, moved, or removed,
+or [Rules Grooming](../maintenance/rules-grooming.md) or the [Rules Quality Gate](rules-quality-gate.md) hands over
+findings. Entry is automatic: whoever proposes or detects the change starts here, without a separate request. Edits made
+inside one run start no second one.
 
-   ```sh
-   ./rhino gate run --surface pre-push
-   ```
+- `rules` (`string`, required): each rule as stated, with its reason.
+- `findings` (`file`, optional): a handed-over, frozen ledger.
+- `dry-run` (`boolean`, optional, default `false`): record placements without writing.
 
-5. Return `PASS_NO_CHANGE` when no edit was necessary, otherwise `PASS_CHANGED`. For deterministic findings this
-   transaction caused, freeze their exact set, repair mechanically, and rerun step 4 only while the count of failing
-   checks and violations strictly decreases and no new failure class appears. That measure is nonnegative and
-   decreasing, so recovery terminates. Return `BLOCKED_TOOLING` if progress stops, a new or unrelated failure appears,
-   or no verdict can be obtained.
+### Sequence
 
-## Terminal Contract
+1. **Freeze the inputs:** each rule with its reason, strength, scope, and enforcement, plus the revision and uncommitted
+   paths, kept through compaction. A material change ends the run blocked.
+2. **Make each rule falsifiable,** one obligation per statement with the observations that show it followed and
+   violated, per [Statement and Conflict](rules-propagation/001-statement-and-conflict.md). A rule that stays
+   unfalsifiable halts alone, and the rest of the batch continues.
+3. **Stop where the rules already suffice.** When existing rules carry the meaning in full, record their source and end
+   that rule with no change.
+4. **Resolve conflict by level,** per [Governance Layers](../../README.md): a lower rule is amended to agree, a
+   same-level or unclear contradiction goes to the owner, and a new rule contradicting a higher one halts. Record every
+   supersession.
+5. **Place each rule on the narrowest surface that reaches its audience,** per
+   [Placement](rules-propagation/002-placement.md). No ceiling rises for a placement; a full surface relocates its
+   weakest entry in the same change.
+6. **Write and tidy the subject.** Keep one canonical statement, merge unique meaning into it, and replace copies with
+   links. A budget may move a rule but never generalize or drop its obligation, audience, scope, exception, or
+   condition. A wrong rule is corrected here, never worked around, and an adapted rule records what changed and why.
+   Under `dry-run`, steps 6 to 9 record without writing.
+7. **Give each rule one enforcement disposition,** covered, gated, or unenforced by decision, per
+   [Enforcement and Verification](rules-propagation/003-enforcement-and-verification.md).
+8. **Verify** by exit codes rather than output, returning a failure to the step that owns it, and repair findings the
+   run caused only while their count strictly decreases, per Bounded Convergence.
+9. **Hand delivery to the caller, and record obligations beyond this repository.** The run never commits; the work in
+   hand delivers through the repository's own route, stating each rule's home, disposition, and relocations. Sibling and
+   catalog obligations follow
+   [Enforcement and Verification](rules-propagation/003-enforcement-and-verification.md#beyond-this-repository).
 
-The only results are `PASS_NO_CHANGE`, `PASS_CHANGED`, `BLOCKED_INPUT`, `BLOCKED_CONFLICT`, `BLOCKED_TOOLING`, and
-`BLOCKED_INPUT_CHANGED`. Propagation repairs every authorized row; what it cannot decide or verify maps to a named
-blocker. Passing means good enough rather than perfect, and authorizes neither commit nor push. With unchanged inputs
-and repository state, another transaction produces no diff.
+### Exit
+
+Every rule ends with no change, landed, recorded under `dry-run`, or halted, and nothing is written but unaccounted for.
+
+Outputs: a placement record (`file`, in the repository's scratch location) and `status` (`enum`: `no-change`, `landed`,
+`recorded`, `partial`, `halted`, `blocked`). Partial outcome: some rules landed while others halted, each named with its
+blocker. A rerun on unchanged inputs changes nothing.
+
+## Example Usage
+
+```text
+Run rules-propagation with rules "Every script that deletes files offers a dry run, because deletion cannot be undone."
+```
+
+## Related Workflows
+
+- [Rules Grooming](../maintenance/rules-grooming.md) hands over reductions.
+- [Rules Quality Gate](rules-quality-gate.md) hands over findings.
+
+## Modules
+
+1. [Statement and Conflict](rules-propagation/001-statement-and-conflict.md)
+2. [Placement](rules-propagation/002-placement.md)
+3. [Enforcement and Verification](rules-propagation/003-enforcement-and-verification.md)

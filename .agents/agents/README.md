@@ -7,11 +7,24 @@ generated from these only by `./rhino harness adapters generate` and are never e
 
 ## Planning
 
-- [plan-maker](plan-maker.md) — authors a plan, runs both decision gates, and repairs its own draft.
+- [plan-maker](plan-maker.md) — authors a plan, runs both decision gates, and submits it to the plan quality gate.
 - [plan-checker](plan-checker.md) — audits a frozen draft and reports; changes nothing.
+- [plan-fixer](plan-fixer.md) — repairs only the rows of a frozen plan quality ledger.
 - [plan-execution-checker](plan-execution-checker.md) — audits finished execution and permits or blocks archival.
 
-There is no fixer. The maker validates the checker's findings and applies the ones that hold.
+## Quality Gates
+
+One checker and one fixer per gate family, under the
+[quality gate contract](../../repo-governance/development/workflow/quality-gate-contract.md). Each checker reports and
+changes nothing; each fixer runs its family's propagation on a frozen ledger.
+
+- [docs-checker](docs-checker.md) and [docs-fixer](docs-fixer.md) — human-facing documents.
+- [rules-checker](rules-checker.md) and [rules-fixer](rules-fixer.md) — the rules in `AGENTS.md` and `repo-governance/`.
+- [harness-checker](harness-checker.md) and [harness-fixer](harness-fixer.md) — harness bindings against upstream
+  conventions.
+- [ci-checker](ci-checker.md) and [ci-fixer](ci-fixer.md) — hook and pipeline wiring.
+- [specs-checker](specs-checker.md) and [specs-fixer](specs-fixer.md) — specification folders.
+- [pr-review-checker](pr-review-checker.md) and [pr-review-fixer](pr-review-fixer.md) — one pull request.
 
 ## Software Development
 

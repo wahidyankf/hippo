@@ -20,7 +20,7 @@ Someone has asked for a formal plan, or a brief has been promoted by [Ideas Groo
 5. **Run the post-write gate.** A separate gate, on the complete draft, resolving what only became visible once the plan
    existed. It does not merge into the first gate — see
    [Decision Gates](../../development/planning-capabilities/003-decision-gates.md).
-6. **Run the [Quality Gate](../quality/plan-quality-gate.md)** and repair within its bounded budget.
+6. **Run the [Quality Gate](../quality/plan-quality-gate.md)** and record its verdict.
 
 ## Exit
 

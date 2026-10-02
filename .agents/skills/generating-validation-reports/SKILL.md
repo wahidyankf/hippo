@@ -68,9 +68,13 @@ and Judgement Validation sets the matching rule for reusing a preflight's unchan
 
 ## A Frozen Ledger Is Not a Streamed Report
 
-A gate whose workflow defines a finite ledger, written once and then closed row by row, follows that workflow instead.
-[Rules Quality Gate](../../../repo-governance/workflows/quality/rules-quality-gate.md) is one. Its rows need no run
-chain or confidence label, because the ledger is audited once and every row must reach a status.
+A quality gate, such as [Rules Quality Gate](../../../repo-governance/workflows/quality/rules-quality-gate.md), follows
+the [Ledger][contract-ledger] its contract defines instead. Each of its at most 3 cycles freezes that cycle's blocking
+rows, and the gate's propagation, as the writer, rates each row's confidence when it re-validates the row; the checker
+leaves that column empty. The rows need no run chain, and every row must reach a status.
 
 For the levels a report carries, see
 [Assessing Criticality and Confidence](../assessing-criticality-confidence/SKILL.md).
+
+[contract-ledger]:
+  ../../../repo-governance/development/workflow/quality-gate-contract/003-verdicts-ledger-and-relations.md#ledger
