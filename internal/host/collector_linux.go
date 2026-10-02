@@ -92,10 +92,12 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 	}
 
 	effective := EffectiveMemoryLimit(memory.Total, maximum, high)
-	available := memory.Available
-	if current, finite := ParseCgroupLimit(readOptional(read, filepath.Join(cgroup, "memory.current"))); finite && effective > 0 {
-		available = min(available, max(int64(0), effective-current))
-	}
+	available := CgroupAvailableMemory(
+		memory.Available,
+		effective,
+		readOptional(read, filepath.Join(cgroup, "memory.current")),
+		readOptional(read, filepath.Join(cgroup, "memory.stat")),
+	)
 
 	parallelism := runtime.NumCPU()
 	if quota, finite := ParseCPUMax(string(readOptional(read, filepath.Join(cgroup, "cpu.max")))); finite {

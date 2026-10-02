@@ -165,6 +165,25 @@ func EffectiveMemoryLimit(hostBytes, maximumBytes, highBytes int64) int64 {
 	return result
 }
 
+// CgroupAvailableMemory returns the memory new work can use on Linux: the host's
+// MemAvailable, capped by what the cgroup's effective limit leaves beside its
+// working set whenever the cgroup reports memory.current. The working set is
+// memory.current less the inactive_file cache memory.stat reports, because the
+// kernel reclaims that list first; it is the figure the kubelet's node-pressure
+// eviction uses. An unreadable memory.stat, or one with no well-formed
+// inactive_file, subtracts nothing, so the reading is never more generous than
+// counting the whole of memory.current.
+func CgroupAvailableMemory(memAvailable, effective int64, current, stat []byte) int64 {
+	usage, finite := ParseCgroupLimit(current)
+	if !finite || effective <= 0 {
+		return memAvailable
+	}
+
+	workingSet := max(0, usage-ParseMemoryEvents(string(stat))["inactive_file"])
+
+	return min(memAvailable, max(0, effective-workingSet))
+}
+
 // ParseCPUMax converts a cgroup v2 CPU quota into integer execution units.
 func ParseCPUMax(data string) (int, bool) {
 	fields := strings.Fields(data)

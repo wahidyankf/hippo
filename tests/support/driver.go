@@ -185,6 +185,9 @@ type Driver struct {
 	effectiveMemory          int64
 	linuxMemInfo             string
 	linuxCgroupLimit         int64
+	linuxCgroupCurrent       string
+	linuxMemoryStat          string
+	availableMemory          int64
 	configPath               string
 	privateArtifacts         bool
 	exampleTracked           bool
@@ -3272,6 +3275,9 @@ func (driver *Driver) collectLinuxEvidence() error {
 	}
 
 	driver.effectiveMemory = host.EffectiveMemoryLimit(memory.Total, driver.linuxCgroupLimit, 0)
+	driver.availableMemory = host.CgroupAvailableMemory(
+		memory.Available, driver.effectiveMemory, []byte(driver.linuxCgroupCurrent), []byte(driver.linuxMemoryStat),
+	)
 
 	return nil
 }
@@ -3279,6 +3285,24 @@ func (driver *Driver) collectLinuxEvidence() error {
 func (driver *Driver) requireFourGiB() error {
 	if driver.effectiveMemory != 4*policy.GiB {
 		return fmt.Errorf("effective memory is %d", driver.effectiveMemory)
+	}
+	return nil
+}
+
+// linuxPageCacheCgroup is the container reproduction from the page-cache
+// defect: a 6 GiB cgroup filled almost entirely by a file read back, on a host
+// whose MemAvailable is far larger.
+func (driver *Driver) linuxPageCacheCgroup() {
+	driver.linuxMemInfo = "MemTotal: 25165824 kB\nMemAvailable: 23802675 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n"
+	driver.linuxCgroupLimit = 6 * policy.GiB
+	driver.linuxCgroupCurrent = "6441140224\n"
+	driver.linuxMemoryStat = "anon 122880\nfile 6438256640\nactive_file 0\ninactive_file 6438256640\n"
+}
+
+func (driver *Driver) requireInactiveFileCacheAvailable() error {
+	// Only the 2883584 bytes outside the inactive file cache count as used.
+	if want := 6*policy.GiB - 2883584; driver.availableMemory != want {
+		return fmt.Errorf("available memory is %d, want %d", driver.availableMemory, want)
 	}
 	return nil
 }

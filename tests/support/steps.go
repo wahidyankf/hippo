@@ -916,6 +916,8 @@ func (driver *Driver) portabilityBindings() []contract.StepBinding {
 		step(`^Linux host and cgroup memory evidence$`, driver.linuxCgroupCapacity),
 		step(`^the Linux evidence is collected$`, driver.collectLinuxEvidence),
 		step(`^effective memory is 4 GiB$`, driver.requireFourGiB),
+		step(`^a Linux cgroup whose usage is mostly inactive file cache$`, driver.linuxPageCacheCgroup),
+		step(`^available memory excludes the inactive file cache$`, driver.requireInactiveFileCacheAvailable),
 		step(`^Linux reports no usable swap$`, driver.linuxWithoutSwap),
 		step(`^swap is unavailable without causing critical pressure$`, driver.requireSwapUnavailable),
 		step(`^Linux memory PSI some average is 10 percent$`, driver.linuxPSIWarning),

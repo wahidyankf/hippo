@@ -61,3 +61,39 @@ func TestLinuxCollectorUsesCgroupCapacityAndAllowsNoSwap(t *testing.T) {
 		t.Fatalf("unexpected Linux CPU sample %+v error=%v", second.Sample, err)
 	}
 }
+
+func TestLinuxCollectorExcludesInactiveFileCacheFromCgroupUsage(t *testing.T) {
+	// The page-cache defect's container reproduction: a 6 GiB cgroup filled by
+	// a file read back, on a host with far more memory available.
+	files := map[string]string{
+		"/proc/meminfo":                 "MemTotal: 25165824 kB\nMemAvailable: 23802675 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
+		"/proc/stat":                    "cpu 10 0 10 80 0\n",
+		"/proc/self/cgroup":             "0::/\n",
+		"/sys/fs/cgroup/memory.max":     "6442450944\n",
+		"/sys/fs/cgroup/memory.high":    "max\n",
+		"/sys/fs/cgroup/memory.current": "6441140224\n",
+		"/sys/fs/cgroup/memory.stat":    "anon 122880\nfile 6438256640\nactive_file 0\ninactive_file 6438256640\n",
+	}
+	read := func(path string) ([]byte, error) {
+		value, exists := files[path]
+		if !exists {
+			return nil, errors.New("fixture path is unavailable")
+		}
+
+		return []byte(value), nil
+	}
+
+	collector := host.SystemCollector{ReadFile: read, Now: func() time.Time { return time.Unix(0, 0) }}
+	reading, err := collector.Collect(context.Background(), nil, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	available := reading.Sample.AvailableMemoryBytes
+	if available == nil {
+		t.Fatalf("no Linux available memory in %+v", reading.Sample)
+	}
+	// Only the 2883584 bytes outside the inactive file cache count as used.
+	if want := 6*policy.GiB - 2883584; *available != want {
+		t.Fatalf("Linux available memory %d, want %d", *available, want)
+	}
+}
