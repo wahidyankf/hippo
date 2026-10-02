@@ -19,7 +19,12 @@ owner it would like to shed still cannot touch it.
 
 ## How shedding works without cross-signalling
 
-Under critical pressure, some owner must actually stop. The mechanism is mark-and-observe:
+Under critical pressure, some owner must actually stop. Warning pressure gets a grace first: once it has lasted 10 s
+under an ephemeral guard, or 30 s under a service guard, it is treated the same way, because a warning that does not
+clear is pressure the host is not recovering from. A single normal sample resets the grace. The thresholds are in
+[resource policy](../reference/resource-policy.md#host-pressure-remains-authoritative).
+
+The mechanism is mark-and-observe:
 
 1. Under one locked evaluation, a guard selects **at most one** victim and writes a mark into the shared ledger. The
    mark carries only the intended internal shed reason — storage, or other pressure.

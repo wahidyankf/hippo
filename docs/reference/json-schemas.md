@@ -175,7 +175,10 @@ The same object written one per line into raw development evidence, and embedded
 - **Swap** — `pageSizeBytes`, `swapIns`, `swapOuts`, `swapTotalBytes`, `swapUsedBytes`, `swapFreeBytes`, `swapState`
 - **Linux pressure** — `memoryPsiSomeAvg10`, `memoryPsiFullAvg10`, `oomEvents`, `oomKillEvents`
 
-The Linux pressure group appears only where the host supplies it.
+`capabilities` is fixed per platform: `["compressor", "memory-pressure", "swap"]` on macOS and
+`["cgroup-v2", "memory-psi"]` on Linux, whatever the host could read. The Linux pressure group appears only in Linux
+samples: the two PSI fields are omitted when no pressure file parses, and `oomEvents` and `oomKillEvents` are always
+present, reading `0` when `memory.events` is unreadable. See [resource policy](./resource-policy.md#supported-evidence).
 
 ## Run identity
 
