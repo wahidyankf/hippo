@@ -7,6 +7,20 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.8.3] — 2026-10-02
+
+### Fixed
+
+- On Linux, reclaimable page cache no longer reads as used memory. HIPPO capped `availableMemoryBytes` at the cgroup's
+  effective limit minus its whole `memory.current`, which counts the file cache the cgroup has read. After large
+  installs on a 16 GiB hosted runner, that left about 3 GiB available while the kernel reported 14 GiB, so HIPPO fell
+  under the `balanced` reserve and shed guarded work with `hippo.limit.pressure-shed`; a container whose `memory.max`
+  had filled with cache read as nearly zero and deferred every run. HIPPO now subtracts the `inactive_file` that
+  `memory.stat` reports, the cache the kernel reclaims first, from `memory.current` before taking the difference, as the
+  kubelet does for node-pressure eviction. `MemAvailable` still caps the reading, and a cgroup with no readable
+  `memory.stat` keeps the v0.8.2 reading. A consumer that drops page cache before a guarded step only to satisfy HIPPO
+  can stop.
+
 ## [v0.8.2] — 2026-09-26
 
 ### Changed
@@ -452,6 +466,8 @@ Entries are reconstructed from the repository's own history. For the complete co
 
 - First standalone release, published as Resource Guard.
 
+[v0.8.3]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.3
+[v0.8.2]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.2
 [v0.8.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.1
 [v0.8.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.0
 [v0.7.2]: https://github.com/wahidyankf/hippo/releases/tag/v0.7.2
