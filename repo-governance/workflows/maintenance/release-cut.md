@@ -29,8 +29,17 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
 ```
 
 Assets are built **only** through that script. It clones the checkout, detaches at the exact commit, and builds the full
-platform matrix from that one commit with CGO disabled — so the archives do not depend on the machine that produced
-them. A hand-built asset is an asset nobody can reproduce.
+platform matrix from that one commit with CGO disabled, on the Go release that commit's `go.mod` names — fetched when
+the local Go differs — and without the host's Go settings. `scripts/release-archive` then writes each archive with the
+commit's time in place of the build's, so the archives do not depend on the machine that produced them: a rebuild at a
+release commit reproduces that release's `checksums.txt` byte for byte. The pull-request gate proves it by rebuilding
+every change on macOS and requiring the Linux checksums. A hand-built asset is an asset nobody can reproduce.
+
+Go also stamps the module version into each binary from the tags the checkout holds, so a rebuild matches only with the
+same tags present. To check a published release, build its tag's commit in a checkout that has fetched its tags, into an
+empty directory, and `diff` the result's `checksums.txt` against the published one. Releases up to v0.8.3 predate the
+pinned toolchain and archiver: their archives carry the time they were built and never reproduce, so compare the
+extracted binaries instead, built with that release's Go.
 
 The commit must equal checkout HEAD and must be a real 40-character object. The script enforces both rather than
 trusting the caller.
