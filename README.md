@@ -135,8 +135,8 @@ resizes a running child. Every repository using the same state root competes aga
 any variables you mapped. A private launcher holds the reservation identity through complete group retirement, so a
 leader exiting early or forking a background descendant cannot release capacity while the work is still running.
 
-**Shedding.** Under critical pressure one locked evaluation marks a single victim — newest ephemeral first, then newest
-service. Transactional work is protected during ordinary shedding and is eligible last only at the configured emergency
+**Shedding.** Critical pressure, or warning past its class grace, makes one locked evaluation mark a single victim —
+newest ephemeral first, then newest service. Transactional work is eligible last, and only at the configured emergency
 floor. A remote guard **never** signals another guard's process group; it marks and waits for that owner to stop its own
 child. A live unresponsive victim blocks any further selection, so pressure cannot cascade into emptying the ledger.
 
