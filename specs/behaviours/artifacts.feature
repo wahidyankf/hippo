@@ -83,6 +83,18 @@ Feature: HIPPO build artifacts
     Then only exact committed source affects assets and isolated build state is removed
 
   @e2e-exempt
+  Scenario: Release builds use the Go release go.mod names
+    Given host Go settings that name another toolchain and other build flags
+    When its release binaries are built
+    Then every build runs with the go.mod Go release and none of the host's Go settings
+
+  @e2e-exempt
+  Scenario: Rebuilding a release commit reproduces its archives
+    Given one release commit built twice from binaries stamped at different times
+    When the two release outputs are compared
+    Then their archives and checksums are byte-identical
+
+  @e2e-exempt
   Scenario Outline: Release temporary materialization is always removed
     Given a controlled temporary directory and a release build that <result>
     When the release build finishes
