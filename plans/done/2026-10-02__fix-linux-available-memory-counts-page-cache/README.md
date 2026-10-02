@@ -1,6 +1,6 @@
 # Fix: Linux Available Memory Counts Page Cache
 
-Status: In progress (2026-10-02)
+Status: Done (2026-10-02)
 
 On Linux, HIPPO subtracts the job cgroup's whole `memory.current` from its limit. That figure includes clean,
 reclaimable page cache, so a healthy host that has read a lot of files looks starved, and HIPPO defers or sheds work the
@@ -301,42 +301,111 @@ records the release's pin values that each repin uses.
 
 ### Phase 5: Integrate and Release
 
-- [ ] `[AI]` Land the fix unit through a pull request, with the leak review posted for the exact head and every merge
+- [x] `[AI]` Land the fix unit through a pull request, with the leak review posted for the exact head and every merge
       precondition holding; proof: the merge commit on `origin/main`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-05]`
-- [ ] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
+      **Result:** #112 merged by rebase at `6878c25`, from head `2333a65`, whose tree it equals. The leak review posted
+      `pass` for that head, and `Quality gate` passed on it, including the Ubuntu job's full Linux suite. The other
+      `Quality gate` and `record` entries are runs a later event cancelled and superseded.
+- [x] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
       `all` at that commit, as [release cut](../../../repo-governance/workflows/maintenance/release-cut.md) requires;
-      proof: one verdict line recorded here. `[AC-06]`
-- [ ] `[AI]` Cut `v0.8.3` on the merge commit through
+      proof: one verdict line recorded here. `[AC-06]` **Result:** audited at `2333a65`, the tree of `6878c25`. The
+      v0.8.3 entry and every page naming the release matched the code. Three rows predate this release: the resource
+      policy reference's threshold table (HIGH), its `capabilities` claims (MEDIUM), and the unstated warning shed
+      (MEDIUM). Repairing them is a separate delivery boundary, so the caller stopped the run after the cycle-1 audit of
+      its three allowed cycles: no docs propagation repair ran, the entry and exit tooling did not run, and the rows
+      went to the idea brief [Resource policy reference misstates thresholds][rp-brief] as their owner.
+      `docs-quality-gate: FAIL (1 cycle, 1 HIGH and 2 MEDIUM open, owned by that brief)`
+- [x] `[AI]` Cut `v0.8.3` on the merge commit through
       [release cut](../../../repo-governance/workflows/maintenance/release-cut.md), screening the generated notes first;
-      proof: the release's `checksums.txt` and the tag's peeled commit recorded here. `[AC-06]`
-- [ ] `[AI]` Run the install commands in `docs/how-to/install-a-pinned-release.md` against the release; proof: the
-      checksum line reads `OK` and `version --json` names `v0.8.3`. `[AC-06]`
+      proof: the release's `checksums.txt` and the tag's peeled commit recorded here. `[AC-06]` **Result:** the full
+      gate had passed on the same tree, the generated notes and tag name passed the outbound screen, and
+      `scripts/build-release.sh` with `tests/artifacts/release-assets.sh` passed locally. The annotated tag `v0.8.3`
+      peels to `6878c2577d645e7a8aa3e5455369edbcb6705d78`. Release run 37007217751 succeeded and published four archives
+      and the `checksums.txt` in the release record below.
+
+- [x] `[AI]` Run the install commands in `docs/how-to/install-a-pinned-release.md` against the release; proof: the
+      checksum line reads `OK` and `version --json` names `v0.8.3`. `[AC-06]` **Result:**
+      `hippo_v0.8.3_darwin_arm64.tar.gz: OK`, and `version --json` printed
+      `{"schemaVersion":1,"version":"v0.8.3","commit":"6878c2577d645e7a8aa3e5455369edbcb6705d78"}`, so the `jq -e`
+      identity check passed.
+
+#### Release Record
+
+Release [v0.8.3](https://github.com/wahidyankf/hippo/releases/tag/v0.8.3), tag peeled to
+`6878c2577d645e7a8aa3e5455369edbcb6705d78`, published `checksums.txt`:
+
+```text
+7306d3d9becfeb69f5895e0071703dc853c511af4eb605e073ce94cf8502ba7d  hippo_v0.8.3_darwin_amd64.tar.gz
+551f2358d5f64df61144fd5a5a3da407531fa18041777789289156a43e2e8910  hippo_v0.8.3_darwin_arm64.tar.gz
+35df88400aa42ccfbd87d1ff265ce8e59c6c02cf15d8a1f3fb4421151d41746b  hippo_v0.8.3_linux_amd64.tar.gz
+1cbfab5444f22e47c8d5872238f49d9608b82ffc7dd953065c0d8e003999cf5b  hippo_v0.8.3_linux_arm64.tar.gz
+```
+
+The `hippo.lock` a consumer repin pins, from those published values:
+
+```text
+version=v0.8.3
+commit=6878c2577d645e7a8aa3e5455369edbcb6705d78
+darwin-amd64=7306d3d9becfeb69f5895e0071703dc853c511af4eb605e073ce94cf8502ba7d
+darwin-arm64=551f2358d5f64df61144fd5a5a3da407531fa18041777789289156a43e2e8910
+linux-amd64=35df88400aa42ccfbd87d1ff265ce8e59c6c02cf15d8a1f3fb4421151d41746b
+linux-arm64=1cbfab5444f22e47c8d5872238f49d9608b82ffc7dd953065c0d8e003999cf5b
+```
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
-      owner or its reason. `[AC-07]`
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
-      verdict recorded here. `[AC-07]`
+- [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
+      owner or its reason. `[AC-07]` **Result:** two entries routed to idea briefs, two discarded with reasons.
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
+      verdict recorded here. `[AC-07]` **Result:** the first run found scope, AC-01 to AC-06, gates, and learnings
+      sound, and returned `FAIL` on the record: an unclosable checksum fence, the docs gate's early stop unstated, a
+      learning discarded against release cut's own claim, a misattributed cancelled run, and clean-up unrecorded. All
+      five were repaired here. The re-run found them resolved, with one LOW row that this archival move closes.
+      `plan-execution-check: PASS_WITH_FINDINGS (2 runs, 1 LOW closed by archival)`
 
 ### Archival
 
-- [ ] `[AI]` Move this folder to `plans/done/2026-10-02__fix-linux-available-memory-counts-page-cache/` with both stage
+- [x] `[AI]` Move this folder to `plans/done/2026-10-02__fix-linux-available-memory-counts-page-cache/` with both stage
       indexes updated, and land it through a pull request; proof: the merge commit on `origin/main`, and no copy left
-      under `plans/in-progress/`. `[AC-07]`
+      under `plans/in-progress/`. `[AC-07]` **Result:** moved with `git mv` on
+      `worktree/fix-linux-available-memory-counts-page-cache-record`, with the in-progress and done indexes updated.
+      **Merge carried by the archival pull request (2026-10-02):** an archived file cannot record its own merge, so the
+      merge commit is posted on that pull request.
 - [ ] `[AI]` Run [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md);
-      proof: the worktree and every branch copy are gone and primary `main` equals `origin/main`. `[AC-07]`
+      proof: the worktree and every branch copy are gone and primary `main` equals `origin/main`. `[AC-07]` **Carried by
+      the archival pull request (2026-10-02):** the worktree serves every unit, so it goes once the archival unit lands.
+      Classified before then:
+  - _Remote branches_ `worktree/fix-linux-available-memory-counts-page-cache` and `...-fix`: scratch, already deleted on
+    merge; `git ls-remote origin 'refs/heads/worktree/fix-linux-*'` printed nothing. `...-record` goes on its merge.
+  - _Local branches_, all three: scratch. The first two carry the trees of `3c53b69` and `6878c25`, so they are deleted
+    as landed; `...-record` goes once its merge lands.
+  - _The worktree and its ignored `local-tmp/`_ (reproduction binaries, gate ledgers, test output): scratch; the gate
+    ledgers are never committed by contract. Removed with `git worktree remove`.
+  - _The `golang:1.26` and `alpine:latest` Docker images_: unknown ownership, likely shared, so kept. No container
+    remains.
+
+  After the merge, the proof is posted on the archival pull request: `git worktree list` without this worktree, no local
+  `worktree/fix-linux-*` branch, and `git rev-list --left-right --count HEAD...origin/main` reading `0 0` after
+  `git fetch --prune` and `git merge --ff-only origin/main`. AC-07's clean-up half is met by that proof.
 
 ## Learnings
 
 - **An outer workstation guard and this repository's self-hosting rule meet at ad hoc commands.** The gates ran
   directly, but the workstation running this plan refused bare compute outside a HIPPO boundary, so single test runs,
   Linux builds, and container runs ran under the primary checkout's `./hippo`, built from `origin/main` rather than from
-  the change under test. Owner: pending routing in Phase 6.
+  the change under test. **Discarded:** the outer guard is the workstation's, not this repository's, and the rule held
+  where it applies: no gate ran under a guard, and no guard was built from the change under test.
 - **The Linux tests cannot be run whole in a plain container.** Running all of `./tests/unit` in `golang:1.26` as root,
   with the worktree's `.git` pointing outside the mount, fails release-identity and permission cases unrelated to the
   change; the _Linux tests_ command selects the host-evidence tests instead, and CI's Ubuntu job runs the whole suite.
-  Owner: pending routing in Phase 6.
+  **Discarded:** CI's Ubuntu job is the canonical Linux run, and this archived plan keeps the narrow command for reuse.
+- **A local release build need not match the published bytes.** The local `scripts/build-release.sh` run used Go 1.27.1,
+  while `release.yml` builds with the `go.mod` version, 1.26.1, so every archive's checksum differed. Consumers pin the
+  published `checksums.txt`, never a local build. That contradicts release cut's claim that the archives do not depend
+  on the machine that produced them. **Routed** to the idea brief [Release build depends on the local Go
+  toolchain][toolchain-brief].
+- **The release-time docs gate found pre-existing reference errors.** **Routed** to the idea brief [Resource policy
+  reference misstates thresholds][rp-brief].
 
 ## Directory Map
 
@@ -349,3 +418,5 @@ This plan is one document, so this README has no siblings to map.
   https://github.com/kubernetes/website/blob/main/content/en/examples/admin/resource/memory-available-cgroupv2.sh
 [ose-utd]:
   https://github.com/wahidyankf/ose-public/blob/main/repo-governance/development/workflow/upstream-tool-defects.md
+[rp-brief]: ../../ideas/q2-not-urgent-important/resource-policy-reference-misstates-thresholds.md
+[toolchain-brief]: ../../ideas/q4-not-urgent-not-important/release-build-depends-on-local-go-toolchain.md
