@@ -557,6 +557,10 @@ func (driver *Driver) prepareGuardedExecution(samples []policy.Sample) error {
 }
 
 func (driver *Driver) runGuardedShell(script string, environment []string) error {
+	return driver.runGuardedShellUnder(fastBehaviourPolicy(), script, environment)
+}
+
+func (driver *Driver) runGuardedShellUnder(resourcePolicy policy.Policy, script string, environment []string) error {
 	if environment == nil {
 		environment = os.Environ()
 	}
@@ -570,7 +574,7 @@ func (driver *Driver) runGuardedShell(script string, environment []string) error
 		EvidenceRoot: driver.leaseRoot,
 		DiskPath:     ".",
 		Collector:    &sequenceCollector{samples: driver.samples},
-		Policy:       fastBehaviourPolicy(),
+		Policy:       resourcePolicy,
 		// A forced stop is judged by the killed group's real exit, bounded
 		// only as a hang, not by how quickly a loaded host reaps it.
 		RetirementConfirmation: fixtureLivenessWait,
@@ -1652,10 +1656,60 @@ func (driver *Driver) requireShed() error {
 		return fmt.Errorf("got exit %d", driver.exitCode)
 	}
 	if driver.childCompleted {
-		return errors.New("critical child finished its work instead of being shed")
+		return errors.New("child finished its work instead of being shed")
 	}
 
 	return requirePressureShedAtBoundary()
+}
+
+// lastingWarningChild admits an ephemeral child on healthy evidence, then
+// holds memory at warning: below the admission reserve and above the critical
+// level, with nothing else under pressure.
+func (driver *Driver) lastingWarningChild() error {
+	base := time.Now()
+	warning := healthySample(base.Add(3 * time.Millisecond))
+	available := 6 * policy.GiB
+	warning.AvailableMemoryBytes = &available
+	warning.AvailableNonCompressedEstimateBytes = &available
+
+	return driver.prepareGuardedExecution([]policy.Sample{
+		healthySample(base),
+		healthySample(base.Add(time.Millisecond)),
+		healthySample(base.Add(2 * time.Millisecond)),
+		warning,
+	})
+}
+
+// observeLastingWarning runs a child that would finish long after the
+// ephemeral warning grace, which the policy shortens so the shed it triggers
+// is observable without waiting the compiled ten seconds.
+func (driver *Driver) observeLastingWarning() error {
+	resourcePolicy := fastBehaviourPolicy()
+	resourcePolicy.EphemeralWarningGrace = 3 * time.Millisecond
+	completed := filepath.Join(driver.leaseRoot, "completed")
+	err := driver.runGuardedShellUnder(
+		resourcePolicy,
+		`sleep 10; printf d > "$CHILD_COMPLETED"`,
+		append(os.Environ(), "CHILD_COMPLETED="+completed),
+	)
+	if _, completedError := os.Stat(completed); completedError == nil {
+		driver.childCompleted = true
+	}
+
+	return err
+}
+
+// requireWarningShed holds the shed to the warning that outlasted its grace:
+// the guard names memory-warning as the cause, never a critical reading.
+func (driver *Driver) requireWarningShed() error {
+	if err := driver.requireShed(); err != nil {
+		return err
+	}
+	if !strings.Contains(driver.errorOutput, "HIPPO shedding ephemeral child after memory-warning.") {
+		return fmt.Errorf("shed was not attributed to memory warning: stderr=%q", driver.errorOutput)
+	}
+
+	return nil
 }
 
 func (driver *Driver) degradedGrowthChild() error {
