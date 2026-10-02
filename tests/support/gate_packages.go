@@ -65,6 +65,14 @@ func packagesWithTests(root string) ([]string, error) {
 				name == "testdata" || name == "node_modules" || name == "vendor") {
 				return filepath.SkipDir
 			}
+			// A directory holding its own go.mod, such as a task worktree, is
+			// another module: ./... stops there, so no gate pattern here can run
+			// its tests and they are not this module's to count.
+			if path != root {
+				if _, statError := os.Stat(filepath.Join(path, "go.mod")); statError == nil {
+					return filepath.SkipDir
+				}
+			}
 
 			return nil
 		}
