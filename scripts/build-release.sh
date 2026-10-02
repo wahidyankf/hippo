@@ -64,6 +64,35 @@ source_root="$materialization/source"
 git clone --quiet --no-checkout --no-local "$root" "$source_root"
 git -C "$source_root" checkout --detach --quiet "$commit"
 
+# The Go toolchain is an input to the binary, so a newer local Go would build
+# different bytes from the same commit. Build with the release go.mod names --
+# its toolchain line, else its go line -- the same choice setup-go makes for
+# release.yml, and let the go command fetch that release when it is not local.
+toolchain=$(sed -n 's/^toolchain[[:space:]][[:space:]]*\(go[^[:space:]]*\)[[:space:]]*$/\1/p' "$source_root/go.mod")
+if [ -z "$toolchain" ]; then
+	toolchain=go$(sed -n 's/^go[[:space:]][[:space:]]*\([^[:space:]]*\)[[:space:]]*$/\1/p' "$source_root/go.mod")
+fi
+if ! printf '%s\n' "$toolchain" | grep -Eq '^go[0-9]+\.[0-9]+\.[0-9]+$'; then
+	echo "go.mod must name an exact Go release to build with" >&2
+	exit 1
+fi
+GOTOOLCHAIN=$toolchain
+# Host Go settings would change the binary too: the user's go env file, extra
+# build flags, experiments, and the architecture levels a host may raise.
+GOENV=off
+export GOTOOLCHAIN GOENV
+unset GOFLAGS GOEXPERIMENT GOAMD64 GOARM64 GOFIPS140
+
+# Every member carries the release commit's time rather than the build's, and
+# the archiver is built from the release commit itself, so the archive bytes
+# depend on the commit alone.
+modified=$(git -C "$source_root" show -s --format=%ct "$commit")
+archiver="$work/release-archive"
+(
+	cd "$source_root"
+	go build -o "$archiver" ./scripts/release-archive
+)
+
 # Build the complete supported matrix from one commit with CGO disabled, which
 # keeps the archives independent from runner-local system libraries.
 for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
@@ -77,12 +106,9 @@ for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
 			-ldflags "-s -w -X github.com/wahidyankf/hippo/internal/cli.Version=$version -X github.com/wahidyankf/hippo/internal/cli.Commit=$commit" \
 			-o "$binary" ./cmd/hippo
 	)
-	chmod 755 "$binary"
-	# Ownership metadata is pinned so an archive never carries the build user.
-	# The name:id spelling is the only one both implementations accept: GNU tar
-	# rejects bsdtar's --uid/--gid/--uname/--gname, and the release runner is
-	# Linux.
-	tar --format ustar --owner=root:0 --group=root:0 -C "$work" -czf "$output_dir/$archive" hippo
+	# The archiver writes the one member as root-owned mode 755 whatever the
+	# build user or host tar, and never the build time.
+	"$archiver" -binary "$binary" -mtime "$modified" -output "$output_dir/$archive"
 done
 
 # Publish one checksum inventory covering exactly the archives above. The
