@@ -819,6 +819,12 @@ func (driver *Driver) artifactBindings() []contract.StepBinding {
 		step(`^clean committed source shadowed by ignored global and repository-excluded Go files$`, prepare("release exact committed source", requireV04ReleaseExactSource)),
 		step(`^release binaries are built from the checkout identity$`, driver.exerciseReservationScenarioV04),
 		step(`^only exact committed source affects assets and isolated build state is removed$`, assert("release exact committed source")),
+		step(`^host Go settings that name another toolchain and other build flags$`, prepare("release pinned toolchain", requireV04ReleasePinnedToolchain)),
+		step(`^its release binaries are built$`, driver.exerciseReservationScenarioV04),
+		step(`^every build runs with the go\.mod Go release and none of the host's Go settings$`, assert("release pinned toolchain")),
+		step(`^one release commit built twice from binaries stamped at different times$`, prepare("release reproducible archives", requireV04ReleaseReproducibleArchives)),
+		step(`^the two release outputs are compared$`, driver.exerciseReservationScenarioV04),
+		step(`^their archives and checksums are byte-identical$`, assert("release reproducible archives")),
 		step(`^a controlled temporary directory and a release build that (succeeds|build fails|second allocation fails)$`, func(result string) error {
 			return driver.prepareReservationScenarioV04("release temporary cleanup", func(root string) error {
 				return requireV04ReleaseTempCleanup(root, result)

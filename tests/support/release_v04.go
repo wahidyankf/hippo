@@ -14,7 +14,11 @@ import (
 	"strings"
 )
 
-const releaseFixtureVersion = "v0.4.0"
+const (
+	releaseFixtureVersion = "v0.4.0"
+	// temporaryDirectoryVariable redirects a release script's mktemp staging.
+	temporaryDirectoryVariable = "TMPDIR"
+)
 
 // The CI smoke build must hand the builder and the validator one identical
 // release identity, so both commands are read rather than matched literally.
@@ -111,14 +115,37 @@ func cleanReleaseFixtureV04(root string) (string, string, error) {
 	return fixtureRoot, strings.TrimSpace(string(head)), nil
 }
 
+// releaseArchiverDelegationV04 opens every fake go. A fake stands in for the
+// hippo build, but the release archiver is real code whose archives the
+// scenarios read, so its build goes to the real go. It builds on the local
+// toolchain, because which toolchain builds the archiver is not what any fake
+// scenario tests.
+func releaseArchiverDelegationV04() (string, error) {
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		return "", err
+	}
+
+	return `for argument in "$@"; do
+	if [ "$argument" = ./scripts/release-archive ]; then
+		GOTOOLCHAIN=local exec ` + shellQuoteV04(realGo) + ` "$@"
+	fi
+done
+`, nil
+}
+
 func installFakeGoV04(root string) (string, error) {
 	bin := filepath.Join(root, "fake-bin")
 	if err := os.MkdirAll(bin, 0o700); err != nil {
 		return "", err
 	}
+	delegation, err := releaseArchiverDelegationV04()
+	if err != nil {
+		return "", err
+	}
 	script := `#!/bin/sh
 set -eu
-output=
+` + delegation + `output=
 while [ "$#" -gt 0 ]; do
 	if [ "$1" = "-o" ]; then
 		shift
@@ -131,7 +158,7 @@ test -n "$output"
 printf '#!/bin/sh\nexit 0\n' > "$output"
 chmod 755 "$output"
 `
-	if err := os.WriteFile(filepath.Join(bin, "go"), []byte(script), 0o700); err != nil {
+	if err = os.WriteFile(filepath.Join(bin, "go"), []byte(script), 0o700); err != nil {
 		return "", err
 	}
 
@@ -143,9 +170,13 @@ func installSourceAwareFakeGoV04(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	delegation, err := releaseArchiverDelegationV04()
+	if err != nil {
+		return "", err
+	}
 	script := `#!/bin/sh
 set -eu
-if find cmd/hippo -name 'injected_*.go' -print | grep -q .; then
+` + delegation + `if find cmd/hippo -name 'injected_*.go' -print | grep -q .; then
 	exit 97
 fi
 output=
@@ -475,7 +506,7 @@ func requireV04ReleaseTempCleanup(root, result string) error {
 		head,
 		filepath.Join(root, "temporary-assets"),
 		toolchain,
-		map[string]string{"TMPDIR": temporaryRoot},
+		map[string]string{temporaryDirectoryVariable: temporaryRoot},
 	)
 	if result == succeedsOutcome && buildError != nil {
 		return buildError
@@ -645,9 +676,13 @@ func installReleaseAwareFakeGoV04(root, commit string) (string, error) {
 	}
 	expectedJSON := fmt.Sprintf(`{"schemaVersion":1,"version":%q,"commit":%q}`, releaseFixtureVersion, commit)
 	binaryScript := "#!/bin/sh\nprintf '%s\\n' " + shellQuoteV04(expectedJSON) + "\n"
+	delegation, err := releaseArchiverDelegationV04()
+	if err != nil {
+		return "", err
+	}
 	script := `#!/bin/sh
 set -eu
-if [ "$1" = env ]; then
+` + delegation + `if [ "$1" = env ]; then
 	if [ "$2" = GOOS ]; then printf '%s\n' darwin; else printf '%s\n' amd64; fi
 	exit 0
 fi
@@ -898,7 +933,7 @@ func requireV04ReleaseSpacedPath(root string) error {
 		return err
 	}
 
-	return invokeReleaseValidatorCustomV04(repository, output, head, toolchain, map[string]string{"TMPDIR": temporaryRoot})
+	return invokeReleaseValidatorCustomV04(repository, output, head, toolchain, map[string]string{temporaryDirectoryVariable: temporaryRoot})
 }
 
 func writeUnsafeReleaseArchiveV04(path string, typeFlag byte, linkName string) (returnError error) {
@@ -1197,6 +1232,214 @@ func requireV04ReleaseStorageNeutrality(string) error {
 	}
 	if err = requireV04ReleaseCacheDisabled(""); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// installStampedFakeGoV04 records the Go settings of every go invocation the
+// release builder makes, then writes one fixed stub binary. A nonempty stamp
+// is the stub's modification time, as touch -t reads it, so two builds can
+// differ in nothing but when their binaries were written.
+func installStampedFakeGoV04(root, record, stamp string) (string, error) {
+	bin := filepath.Join(root, "fake-bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		return "", err
+	}
+	delegation, err := releaseArchiverDelegationV04()
+	if err != nil {
+		return "", err
+	}
+	script := `#!/bin/sh
+set -eu
+printf 'GOTOOLCHAIN=%s GOENV=%s GOFLAGS=%s GOEXPERIMENT=%s GOAMD64=%s GOARM64=%s GOFIPS140=%s\n' \
+	"${GOTOOLCHAIN-unset}" "${GOENV-unset}" "${GOFLAGS-unset}" "${GOEXPERIMENT-unset}" \
+	"${GOAMD64-unset}" "${GOARM64-unset}" "${GOFIPS140-unset}" >>` + shellQuoteV04(record) + `
+` + delegation + `output=
+while [ "$#" -gt 0 ]; do
+	if [ "$1" = "-o" ]; then
+		shift
+		output=$1
+		break
+	fi
+	shift
+done
+test -n "$output"
+printf '#!/bin/sh\nexit 0\n' > "$output"
+chmod 755 "$output"
+stamp=` + shellQuoteV04(stamp) + `
+if [ -n "$stamp" ]; then
+	touch -t "$stamp" "$output"
+fi
+`
+	if err = os.WriteFile(filepath.Join(bin, "go"), []byte(script), 0o700); err != nil {
+		return "", err
+	}
+
+	return bin, nil
+}
+
+// goModReleaseV04 names the Go release a go.mod selects for a build: its
+// toolchain line, else its go line.
+func goModReleaseV04(repository string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(repository, "go.mod"))
+	if err != nil {
+		return "", err
+	}
+	release := ""
+	for line := range strings.SplitSeq(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		switch fields[0] {
+		case "toolchain":
+			return fields[1], nil
+		case "go":
+			release = "go" + fields[1]
+		}
+	}
+	if release == "" {
+		return "", errors.New("fixture go.mod names no Go release")
+	}
+
+	return release, nil
+}
+
+// requireV04ReleasePinnedToolchain builds a release on a host whose own Go
+// settings would change the binary, once with the go line alone and once with
+// a toolchain line, and requires every go invocation to see the go.mod release
+// and none of the host's settings.
+func requireV04ReleasePinnedToolchain(root string) error {
+	host := map[string]string{
+		"GOTOOLCHAIN":  "local",
+		"GOENV":        filepath.Join(root, "host-go-env"),
+		"GOFLAGS":      "-tags=host",
+		"GOEXPERIMENT": "hostexperiment",
+		"GOAMD64":      "v3",
+		"GOARM64":      "v9.0",
+		"GOFIPS140":    "latest",
+	}
+	for _, toolchainLine := range []string{"", "go1.26.9"} {
+		caseRoot := filepath.Join(root, "go-line")
+		if toolchainLine != "" {
+			caseRoot = filepath.Join(root, "toolchain-line")
+		}
+		repository, head, err := cleanReleaseFixtureV04(caseRoot)
+		if err != nil {
+			return err
+		}
+		if toolchainLine != "" {
+			if head, err = pinFixtureToolchainV04(repository, toolchainLine); err != nil {
+				return err
+			}
+		}
+		release, err := goModReleaseV04(repository)
+		if err != nil {
+			return err
+		}
+		record := filepath.Join(caseRoot, "go-invocations")
+		toolchain, err := installStampedFakeGoV04(filepath.Join(caseRoot, "tool"), record, "")
+		if err != nil {
+			return err
+		}
+		if err = invokeReleaseBuilderEnvironmentV04(repository, releaseFixtureVersion, head, filepath.Join(caseRoot, "assets"), toolchain, host); err != nil {
+			return err
+		}
+		recorded, err := os.ReadFile(record)
+		if err != nil {
+			return err
+		}
+		want := "GOTOOLCHAIN=" + release + " GOENV=off GOFLAGS=unset GOEXPERIMENT=unset GOAMD64=unset GOARM64=unset GOFIPS140=unset"
+		invocations := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+		for _, invocation := range invocations {
+			if invocation != want {
+				return fmt.Errorf("release build ran go with %q, want %q", invocation, want)
+			}
+		}
+		// The archiver and the four platform binaries.
+		if len(invocations) != 5 {
+			return fmt.Errorf("release builder ran go %d times, want 5", len(invocations))
+		}
+	}
+
+	return nil
+}
+
+func pinFixtureToolchainV04(repository, toolchain string) (string, error) {
+	path := filepath.Join(repository, "go.mod")
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		return "", err
+	}
+	if _, err = fmt.Fprintf(file, "\ntoolchain %s\n", toolchain); err != nil {
+		_ = file.Close()
+
+		return "", err
+	}
+	if err = file.Close(); err != nil {
+		return "", err
+	}
+	if _, err = runGitV04(repository, "-c", "user.name=HIPPO fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "-am", "pin fixture toolchain"); err != nil {
+		return "", err
+	}
+	head, err := runGitV04(repository, "rev-parse", "HEAD")
+
+	return strings.TrimSpace(string(head)), err
+}
+
+// requireV04ReleaseReproducibleArchives builds one commit twice, from
+// identical binaries written at different times into different temporary
+// roots, and requires the two outputs to match byte for byte.
+func requireV04ReleaseReproducibleArchives(root string) error {
+	repository, head, err := cleanReleaseFixtureV04(filepath.Join(root, "reproducible"))
+	if err != nil {
+		return err
+	}
+	var outputs []string
+	for index, stamp := range []string{"200001020304", "201005060708"} {
+		build := filepath.Join(root, fmt.Sprintf("build-%d", index))
+		toolchain, installError := installStampedFakeGoV04(filepath.Join(build, "tool"), filepath.Join(build, "go-invocations"), stamp)
+		if installError != nil {
+			return installError
+		}
+		temporary := filepath.Join(build, "temporary")
+		if err = os.MkdirAll(temporary, 0o700); err != nil {
+			return err
+		}
+		output := filepath.Join(build, "assets")
+		if err = invokeReleaseBuilderEnvironmentV04(repository, releaseFixtureVersion, head, output, toolchain, map[string]string{temporaryDirectoryVariable: temporary}); err != nil {
+			return err
+		}
+		outputs = append(outputs, output)
+	}
+	entries, err := os.ReadDir(outputs[0])
+	if err != nil {
+		return err
+	}
+	if len(entries) != 5 {
+		return fmt.Errorf("release output holds %d files, want four archives and checksums.txt", len(entries))
+	}
+	// Archives first, so a difference names the archive that caused it rather
+	// than the inventory that lists it.
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Name() != "checksums.txt" {
+			names = append(names, entry.Name())
+		}
+	}
+	for _, name := range append(names, "checksums.txt") {
+		first, readError := os.ReadFile(filepath.Join(outputs[0], name))
+		if readError != nil {
+			return readError
+		}
+		second, readError := os.ReadFile(filepath.Join(outputs[1], name))
+		if readError != nil {
+			return readError
+		}
+		if !bytes.Equal(first, second) {
+			return fmt.Errorf("%s differs between two builds of one release commit", name)
+		}
 	}
 
 	return nil

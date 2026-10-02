@@ -240,6 +240,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release checkout has no untracked changes", Boundary: repositoryStateBoundary, Reason: "requires an isolated untracked-dirty checkout"},
 		{Scenario: "Every invalid release identity creates no output", Boundary: repositoryStateBoundary, Reason: "requires direct pre-output filesystem boundary inspection"},
 		{Scenario: "Release builds use only exact committed source", Boundary: repositoryStateBoundary, Reason: "requires isolated ignored and excluded build inputs plus exact-commit materialization inspection"},
+		{Scenario: "Release builds use the Go release go.mod names", Boundary: repositoryStateBoundary, Reason: "requires a recording Go toolchain and host Go settings around fixture release builds"},
+		{Scenario: "Rebuilding a release commit reproduces its archives", Boundary: repositoryStateBoundary, Reason: "requires two fixture release builds from binaries stamped at controlled times"},
 		{Scenario: "Release policy inventories every version-four source", Boundary: repositoryStateBoundary, Reason: "repository source inventory is outside the compiled binary boundary"},
 		{Scenario: "Release assets have one exact platform set", Boundary: releaseArtifactsBoundary, Reason: "requires a complete cross-platform archive build and checksum inventory"},
 		{Scenario: "Every release archive has one executable member", Boundary: releaseArtifactsBoundary, Reason: "requires direct cross-platform archive member and mode inspection"},
