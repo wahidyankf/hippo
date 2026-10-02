@@ -11,11 +11,11 @@ The preconditions for merging. All of them, every time; there is no bypass in th
   merge.
 - No conversation is unresolved. The ruleset requires thread resolution.
 - The branch is up to date with `main`. The ruleset requires it strictly, which is what keeps history linear.
-- Every push of the branch passed the [push review](../workflows/pr-leak-review/002-push-review.md) of each outgoing
-  commit.
-- One [leak review](../workflows/pr-leak-review.md) is **posted on the pull request** for the exact head being merged,
-  and reports `pass`, and the required `leak-review` status on that head reads `success`. An inspection nobody wrote
-  down is not this precondition; a pass on a superseded head is not either.
+- Every push of the branch passed the [push review](../workflows/quality/pr-leak-review/002-push-review.md) of each
+  outgoing commit.
+- One [leak review](../workflows/quality/pr-leak-review.md) is **posted on the pull request** for the exact head being
+  merged, and reports `pass`, and the required `leak-review` status on that head reads `success`. An inspection nobody
+  wrote down is not this precondition; a pass on a superseded head is not either.
 - Merging is [authorized](commit-authorization.md).
 
 ## Method

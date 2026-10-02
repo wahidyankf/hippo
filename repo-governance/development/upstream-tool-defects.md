@@ -49,7 +49,8 @@ A security defect skips every public step and goes through the owner's private s
 The cause lives in the owner, so the fix does too, and this repository never carries a local patch, a vendored copy, or
 a weakened gate. The work that found the defect continues on a workaround rather than absorbing the fix, so it stays
 reviewable, and each repository's change arrives with its own evidence, as
-[rules propagation](../workflows/rules-propagation.md) and [plan lifecycle](../conventions/plan-lifecycle.md) require.
+[rules propagation](../workflows/quality/rules-propagation.md) and [plan lifecycle](../conventions/plan-lifecycle.md)
+require.
 
 ## This Repository's Decision
 

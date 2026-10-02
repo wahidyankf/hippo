@@ -5,7 +5,7 @@ log are kept true to what has actually happened, as it happens. A checklist reco
 checklist; it was a summary written afterwards.
 
 Work starts by moving one folder out of [`../backlog/`](../backlog/README.md) without renaming it, and proceeds under
-[plan execution](../../repo-governance/workflows/plan-execution.md).
+[plan execution](../../repo-governance/workflows/plan/plan-execution.md).
 
 Work finishes only when every required outcome, acceptance condition, verification, learning, and triggered conditional
 has been reconciled against the record. A recovery task that never fired is given a dated, evidenced `Not triggered`

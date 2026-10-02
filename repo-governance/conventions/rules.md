@@ -28,8 +28,8 @@ Change the document. A rule discovered to be wrong is evidence, and working arou
 rediscover the same problem with less to go on.
 
 Where a rule is adapted from another repository, say what changed and why, in the document.
-[Rules propagation](../workflows/rules-propagation.md) stops at this repository's boundary, so divergence is expected;
-undocumented divergence is not.
+[Rules propagation](../workflows/quality/rules-propagation.md) stops at this repository's boundary, so divergence is
+expected; undocumented divergence is not.
 
 ## Enforcement
 

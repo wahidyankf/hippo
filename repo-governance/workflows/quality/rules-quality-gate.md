@@ -15,9 +15,9 @@ For each document:
 - **Does it state a rule, or describe a practice?** A description with no obligation belongs in `docs/` or in a
   specification.
 - **Does it give the reason?** A rule without one is followed until it is inconvenient.
-- **Is it at the right level?** See [rules](../conventions/rules.md).
+- **Is it at the right level?** See [rules](../../conventions/rules.md).
 - **Does anything below it contradict it?** A lower level may not contradict a higher one.
-- **Is it reachable from [`AGENTS.md`](../../AGENTS.md)?** An unreachable rule is an unfollowed rule.
+- **Is it reachable from [`AGENTS.md`](../../../AGENTS.md)?** An unreachable rule is an unfollowed rule.
 - **Is it enforced, and does it say so?** Where a gate checks it, name the gate. Where none does, say that too.
 - **Is it within budget for the right reason?**
 
@@ -27,8 +27,8 @@ Findings, ordered by how likely each is to cause someone to do the wrong thing. 
 and what would make it right.
 
 The review produces findings; it does not produce commits. They go to [rules propagation](rules-propagation.md), which
-is the sole writer, and the repairs land through [worktree to pull request](worktree-to-pull-request.md) like anything
-else.
+is the sole writer, and the repairs land through [worktree to pull request](../maintenance/worktree-to-pull-request.md)
+like anything else.
 
 The machine-checkable part — budgets, links, maps, diagrams, harness parity — already runs on every gate. This gate is
 for what a validator cannot read.

@@ -47,8 +47,8 @@ CLI. What survived was rewritten against this repository's own rules rather than
 **Nothing keeps the copies synchronized, and that is the decision rather than an oversight.** The only shared contract
 is the machine-checked one: [`repo-config.yml`](../repo-config.yml) and the validator each repository runs. A future
 reader finding three different phrasings of the integration path should read that as three repositories having decided,
-not as one having decayed. [Rules propagation](workflows/rules-propagation.md) stops at this repository's boundary for
-the same reason.
+not as one having decayed. [Rules propagation](workflows/quality/rules-propagation.md) stops at this repository's
+boundary for the same reason.
 
 The [worktree location](conventions/worktree-location.md) follows the shared workspace worktree-containment rule.
 

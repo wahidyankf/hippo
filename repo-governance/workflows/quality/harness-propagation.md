@@ -1,7 +1,7 @@
-# Coding Harness Contract Change
+# Harness Propagation
 
 Changing the canonical instruction body, a skill, an agent, or any harness adapter. The contract itself is
-[coding harness contract](../conventions/coding-harness-contract.md).
+[coding harness contract](../../conventions/coding-harness-contract.md).
 
 ## 1. Change the Canon First
 
@@ -26,7 +26,7 @@ Run the validator again. It must report the declared adapter tree clean; the gen
 carry the source digests that distinguish "nothing changed" from "nothing was checked".
 
 Then weaken one denial deliberately and confirm the validator reports it. A parity check that passes whatever the
-adapters say is not a check. See [coding harness parity verification](coding-harness-parity-verification.md).
+adapters say is not a check. See [harness parity verification](harness-parity-verification.md).
 
 ## 5. Adding or Removing a Harness
 

@@ -1,7 +1,7 @@
 # Leak Classes
 
 A leak review judges three classes and no others. Each maps to the record's count of the same name, and
-[data safety](../../conventions/public-repository-data-safety.md) owns all three here.
+[data safety](../../../conventions/public-repository-data-safety.md) owns all three here.
 
 | Class                            | A finding is                                                                     |
 | -------------------------------- | -------------------------------------------------------------------------------- |
@@ -40,13 +40,13 @@ message, never only the range's final files.
 
 The review binds from adoption onward. Content a range does not add is not judged again, and history published before
 adoption is out of scope for the review; a leak found there is handled under
-[data safety](../../conventions/public-repository-data-safety.md#if-something-lands-anyway) instead.
+[data safety](../../../conventions/public-repository-data-safety.md#if-something-lands-anyway) instead.
 
 ## The Review Is Itself Published
 
-The review body is outbound, per [data safety](../../conventions/public-repository-data-safety.md). A path pasted into
-it is the finding the review exists to catch, and a quoted secret is published again in the record of its discovery.
-Anything found is treated as already disclosed.
+The review body is outbound, per [data safety](../../../conventions/public-repository-data-safety.md). A path pasted
+into it is the finding the review exists to catch, and a quoted secret is published again in the record of its
+discovery. Anything found is treated as already disclosed.
 
 It is not a security or semantic review. A screen matches shapes; this review reads context, and three classes keep it
 small enough for every push and every head.

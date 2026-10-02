@@ -37,4 +37,4 @@ and the reader has no way to know which half they got. The v0.4 adapter validato
 does not claim to scan arbitrary nested instruction filenames, so that broader product check must not be claimed as
 adapter-validation evidence.
 
-Changing any of this follows [the harness contract change workflow](../workflows/coding-harness-contract-change.md).
+Changing any of this follows [harness propagation](../workflows/quality/harness-propagation.md).

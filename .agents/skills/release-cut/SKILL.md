@@ -6,14 +6,15 @@ description: Cut and publish a HIPPO release, with the immutability rules that m
 # Release Cut
 
 The authoritative procedure is
-[`repo-governance/workflows/release-cut.md`](../../../repo-governance/workflows/release-cut.md).
+[`repo-governance/workflows/release-cut.md`](../../../repo-governance/workflows/maintenance/release-cut.md).
 
 ## Before Anything
 
 - On `main`, synced, in a worktree. This repository's clone is bare, so there is no primary checkout to prefer.
 - Working tree clean **including untracked files** — the build script verifies this itself and refuses otherwise.
 - `scripts/test.sh` passes.
-- A [docs quality gate](../../../repo-governance/workflows/docs-quality-gate.md) run with scope `all` ends `pass`.
+- A [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) run with scope `all` ends
+  `pass`.
 - The cut is authorized.
 
 ## Build

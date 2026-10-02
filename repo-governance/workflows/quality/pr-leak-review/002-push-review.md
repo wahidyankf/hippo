@@ -13,7 +13,7 @@ lacks starts from its merge base with `origin/main`.
 1. **List the range's commits.** Every commit in the range, oldest first, including merges.
 2. **Run the screen on the range.** The `pre-push` hook runs it commit by commit per [enforcement](003-enforcement.md);
    a scan error blocks exactly as a finding does, and the hook is never bypassed — see
-   [push hook verification](../../conventions/push-hook-verification.md).
+   [push hook verification](../../../conventions/push-hook-verification.md).
 3. **Read every commit.** Each commit's added lines, its file names, its message, and the ref name. A merge contributes
    what it resolved beyond the automatic merge.
 4. **Judge against the [leak classes](001-leak-classes.md).** No candidate is copied into notes, commands, or logs.
@@ -32,6 +32,6 @@ the latest commit, or rebuild the range without it.
 | `machine_specific_absolute_path` | a `~/` path, a repository-relative path, or a documented placeholder        |
 
 After the push, the value is disclosed. Stop, rotate any credential, and report it to the repository owner. Here,
-rewriting published history is not a remedy at all: [data safety](../../conventions/public-repository-data-safety.md)
+rewriting published history is not a remedy at all: [data safety](../../../conventions/public-repository-data-safety.md)
 rules it out, and the `main` ruleset refuses the force push it would need. Correcting the tree alone is never the whole
 remedy either.

@@ -31,8 +31,7 @@ Every workflow, skill, and agent that grooms, writes, executes, or reviews a pla
 
 `README.md`, `docs/`, and `CHANGELOG.md` follow Diátaxis and may not contradict `specs/`:
 [documentation architecture](repo-governance/conventions/documentation-architecture.md). Every change that alters what a
-document describes runs [docs propagation](repo-governance/workflows/docs-propagation.md); the
-[docs quality gate](repo-governance/workflows/docs-quality-gate.md) audits on request.
+document describes runs [docs propagation](repo-governance/workflows/quality/docs-propagation.md).
 
 ## Testing
 
@@ -42,8 +41,8 @@ One corpus, three executing boundaries:
 
 Red, green, refactor, with evidence of each:
 [test-driven development](repo-governance/development/test-driven-development.md) and
-[the cycle](repo-governance/workflows/red-green-refactor.md). A changed scenario or binding needs
-[a manual review](repo-governance/workflows/gherkin-implementation-review.md).
+[the cycle](repo-governance/workflows/quality/red-green-refactor.md). A changed scenario or binding needs
+[a manual review](repo-governance/workflows/quality/gherkin-implementation-review.md).
 
 What runs and where: [quality gates](repo-governance/development/quality-gates.md). What must pass before a change is
 done: [software quality enforcement](repo-governance/development/software-quality-enforcement.md).
@@ -65,7 +64,7 @@ HIPPO cannot guard HIPPO; the reason, and the contract this repository owes cons
 ## Version Control
 
 Only `main` persists. Work reaches it through
-[worktree to pull request](repo-governance/workflows/worktree-to-pull-request.md), under the
+[worktree to pull request](repo-governance/workflows/maintenance/worktree-to-pull-request.md), under the
 [integration path](repo-governance/conventions/integration-path.md), from `{repository location}/worktrees/<task>`—never
 a sibling `*-worktrees/` path—per [worktree location](repo-governance/conventions/worktree-location.md).
 
@@ -76,21 +75,21 @@ a sibling `*-worktrees/` path—per [worktree location](repo-governance/conventi
 
 Committing and pushing need [authorization](repo-governance/conventions/commit-authorization.md). Never commit what
 [data safety](repo-governance/conventions/public-repository-data-safety.md) prohibits. A
-[leak review](repo-governance/workflows/pr-leak-review.md) of each outgoing commit precedes every push; every merge
-needs its posted `pass` for the exact head, which the `leak-review` status enforces. Never bypass a
+[leak review](repo-governance/workflows/quality/pr-leak-review.md) of each outgoing commit precedes every push; every
+merge needs its posted `pass` for the exact head, which the `leak-review` status enforces. Never bypass a
 [push hook](repo-governance/conventions/push-hook-verification.md). Never destroy work or history without
 [approval for that one command](repo-governance/conventions/no-destructive-git-operations.md). Keep the
 [working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub
 [no faster than three minutes](repo-governance/conventions/github-polling.md).
 
-Releases: [release cut](repo-governance/workflows/release-cut.md). A published tag is never replaced.
+Releases: [release cut](repo-governance/workflows/maintenance/release-cut.md). A published tag is never replaced.
 
 ## Harnesses
 
 One canonical instruction body, expressed per harness:
 [coding harness contract](repo-governance/conventions/coding-harness-contract.md). Changing it follows
-[the change workflow](repo-governance/workflows/coding-harness-contract-change.md) and
-[parity verification](repo-governance/workflows/coding-harness-parity-verification.md).
+[the change workflow](repo-governance/workflows/quality/harness-propagation.md) and
+[parity verification](repo-governance/workflows/quality/harness-parity-verification.md).
 
 ## Working Here
 

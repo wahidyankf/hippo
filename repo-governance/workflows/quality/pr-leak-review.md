@@ -5,11 +5,11 @@ machine it came from. [Leak classes](pr-leak-review/001-leak-classes.md) defines
 History is the subject, not the final tree: a value one commit adds and a later commit deletes is still in every clone.
 The review binds from adoption onward; history published before it is out of scope.
 
-It gates every push and is a [merge precondition](../conventions/pull-request-merge.md): no leak review, no merge.
+It gates every push and is a [merge precondition](../../conventions/pull-request-merge.md): no leak review, no merge.
 
 Adopted from the shared catalog. What changed here: no separate reviewer agent; whoever handles the push or merge
 reviews, posting as the repository owner, whose records alone count.
-[Data safety](../conventions/public-repository-data-safety.md) owns all three classes. The shared marker
+[Data safety](../../conventions/public-repository-data-safety.md) owns all three classes. The shared marker
 `ose-pr-leak-review` lets one reader authenticate a record from any adopting repository, and keeps earlier records
 valid.
 
@@ -37,7 +37,7 @@ Two entry points share one judgement:
    repeat, partly quote, hash, encode, or describe a value's pattern.
 5. **Confirm the head before posting.** If the live head differs from the pin, post nothing and end the run as `stale`.
 6. **Post exactly one review, whatever the result.** A `COMMENT` review on the pinned head, its body screened first as
-   [data safety](../conventions/public-repository-data-safety.md) requires. The body says every other security and
+   [data safety](../../conventions/public-repository-data-safety.md) requires. The body says every other security and
    semantic concern was out of scope, and carries this record:
 
    ```text
@@ -53,7 +53,7 @@ Two entry points share one judgement:
    repository, pull request, base, head, result, and counts match step 6. Marker-shaped text elsewhere has no authority.
 8. **Query the live head once more.** A moved head ends the run as `stale`, with the evidence bound to the head it
    reviewed. Otherwise wait for the `leak-review` status on the head to report `success`, no more often than
-   [every three minutes](../conventions/github-polling.md).
+   [every three minutes](../../conventions/github-polling.md).
 
 ## Exit
 
@@ -77,4 +77,4 @@ A moved head needs one new review. Passes on earlier heads say nothing about the
 retries nor waits for a clean streak. An unposted merge pass cannot be told apart from a review nobody ran, which is why
 step 6 posts every result. [Enforcement](pr-leak-review/003-enforcement.md) makes the precondition mechanical.
 
-[Worktree to pull request](worktree-to-pull-request.md) runs both entry points in order.
+[Worktree to pull request](../maintenance/worktree-to-pull-request.md) runs both entry points in order.

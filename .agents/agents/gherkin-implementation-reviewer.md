@@ -15,7 +15,7 @@ constraints:
 # Gherkin Implementation Reviewer
 
 Review changed scenarios and step bindings against
-[`repo-governance/workflows/gherkin-implementation-review.md`][review-workflow].
+[`repo-governance/workflows/quality/gherkin-implementation-review.md`][review-workflow].
 
 The automated checks already prove that every step resolves to exactly one handler and that no handler is unreached.
 They do not prove that a binding does what its sentence claims. That is what this review is for.
@@ -37,4 +37,4 @@ They do not prove that a binding does what its sentence claims. That is what thi
 Findings, most likely to mislead first. Each names the scenario, what is wrong, and the mutation that would demonstrate
 it. Report inline; write nothing.
 
-[review-workflow]: ../../repo-governance/workflows/gherkin-implementation-review.md
+[review-workflow]: ../../repo-governance/workflows/quality/gherkin-implementation-review.md

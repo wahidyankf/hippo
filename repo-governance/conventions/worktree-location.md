@@ -10,8 +10,8 @@ Every task worktree lives below this repository's location at `worktrees/<task>`
 - Reuse that path for every delivery unit in the task. Initialize it with `npm ci` before a gate or Git mutation.
 - Keep `/worktrees/` in `.gitignore` and the repository scanner exclusions.
 - Run the worktree-local `./hippo`; never reach back to a primary-checkout wrapper or build output.
-- After all units merge, follow [Dev Artifact Clean-Up](../workflows/dev-artifact-clean-up.md) and remove the registered
-  worktree without `--force`.
+- After all units merge, follow [Dev Artifact Clean-Up](../workflows/maintenance/dev-artifact-clean-up.md) and remove
+  the registered worktree without `--force`.
 
 ## Go Provenance
 

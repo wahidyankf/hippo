@@ -47,9 +47,9 @@ Two tests:
 ## Carry the Documents With the Change
 
 A delivery unit that changes what a README, documentation page, or specification describes also carries a
-[docs propagation](../../../repo-governance/workflows/docs-propagation.md) item, landing in the same commit as the
-change. Documentation deferred to one task at the end is written from memory, after the change it describes has already
-landed.
+[docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) item, landing in the same commit as
+the change. Documentation deferred to one task at the end is written from memory, after the change it describes has
+already landed.
 
 ## Write for a Cold Executor
 
