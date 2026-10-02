@@ -10,8 +10,9 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
 - The working tree is clean **including untracked files**. `scripts/build-release.sh` verifies this itself and refuses
   otherwise.
 - `scripts/test.sh` — the full gate — passes.
-- A [docs quality gate](../quality/docs-quality-gate.md) run with scope `all` ends `pass` — two consecutive clear audits
-  — so `CHANGELOG.md`, `README.md`, and `docs/` are true to the binary being cut.
+- A [docs quality gate](../quality/docs-quality-gate.md) verdict on subject `all` is recorded, so `CHANGELOG.md`,
+  `README.md`, and `docs/` are checked against the binary being cut. A documented contract the binary breaks is fixed in
+  code before the tag.
 - The tag name and the notes the release will publish pass the screen in
   [data safety](../../conventions/public-repository-data-safety.md). `release.yml` generates those notes from merged
   pull requests, so screen the text

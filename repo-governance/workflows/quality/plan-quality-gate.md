@@ -1,32 +1,92 @@
-# Quality Gate
+# Plan Quality Gate
+
+This gate follows the [Quality Gate Contract](../../development/workflow/quality-gate-contract.md): a read-only checker,
+a frozen ledger, one separate writer, at most three cycles, and an advisory verdict. This file states only what is
+specific to plans.
 
 ## Entry
 
-A complete draft, with both decision gates finished. The draft is frozen at a named commit for the duration of the gate.
+The gate starts only on an explicit request that names it, or from [Planning](../plan/plan-planning.md), after the
+post-write gate.
 
-## Sequence
+An adopting repository lists only the callers it has, chosen from this set.
 
-1. **Freeze the snapshot.** Record the commit. A gate that re-reads a changing draft cannot state what it verified.
-2. **Run structural validation** against the frozen snapshot. Structure is mechanical and is checked mechanically — see
-   [Structural Validation](../../conventions/plans/006-structural-validation.md).
-3. **Review what validation cannot reach**: whether the acceptance criteria are testable and the right ones, whether
-   `delivery.md` is genuinely executable by someone who was not present, whether the technical shape matches the work.
-4. **Record one terminal verdict** — `PASS`, `PASS_WITH_FINDINGS`, or `FAIL` — with the command, the commit, the time,
-   and the findings, sanitized.
-5. **Repair within the budget.** At most two repair cycles. Each cycle repairs against the frozen finding list and
-   re-verifies once.
-6. **Decide at the ceiling.** If findings remain after the second cycle, choose between the repaired draft and the last
-   known-good state on the criteria declared before the first cycle, and record the choice and its reasoning. Do not
-   extend the budget because the next attempt looks close.
+Creating, editing, or executing a plan never starts it alone. Each run serves one named checkpoint: before execution, or
+after a material change.
 
-## Exit
+## Inputs
 
-A terminal verdict exists as a file, with its command, commit, timestamp, result, and sanitized findings.
+| Input        | Type    | Values                                    | Default  |
+| ------------ | ------- | ----------------------------------------- | -------- |
+| `subject`    | string  | One plan folder, with both decision gates | required |
+| `mode`       | enum    | `lax`, `normal`, `strict`, `all`          | `normal` |
+| `max-cycles` | integer | 1, 2, or 3                                | 3        |
 
-## Why Bounded
+Any other `max-cycles` value, or a missing subject, refuses to start.
 
-An unbounded quality gate is a gate that always passes eventually. Each repair cycle costs judgement, and the third
-cycle is usually spent defending the second rather than improving the plan.
+## Deterministic Boundary
 
-The budget forces the more useful question: is this draft good enough to execute, or is the last known-good state better
-than what two cycles produced? Either answer closes the gate.
+The checker reports none of these properties. The entry and exit checks run their owners instead.
+
+| Property                            | Owned by                 | This repository runs                        |
+| ----------------------------------- | ------------------------ | ------------------------------------------- |
+| Markdown formatting and line length | the formatter and linter | `prettier`, `markdownlint-cli2`             |
+| Internal links and anchors          | the link validator       | `./rhino md internal-link validate`         |
+| Directory maps                      | the map validator        | `./rhino governance directory-map validate` |
+
+No plan structural validator runs on this repository's surfaces, so the properties
+[Structural Validation](../../conventions/plans/006-structural-validation.md) lists stay judgeable here. A property no
+tool of its own owns leaves the table and becomes judgeable.
+
+## Cycle
+
+Each cycle is one full audit by `plan-checker`, loading the `plan-validating-quality` skill, and one repair by
+[Plan Propagation](plan-propagation.md), run by `plan-fixer`, per
+[Sequence and Termination](../../development/workflow/quality-gate-contract/002-sequence-and-termination.md). The audit
+reads the frozen plan and asks whether:
+
+1. the acceptance criteria are testable, and are the right ones for the stated outcome;
+2. `delivery.md` is executable by someone who was not present, in dependency order, per
+   [Plans](../../conventions/plans.md);
+3. the technical shape matches the work, and each of the six documents answers its own question;
+4. for a bug-fix plan, the root cause carries checkable evidence and the solution cites references; and
+5. every decision the plan relies on is recorded, so an executor invents no policy.
+
+Wording preference and speculative cases are not findings, per
+[Minimal Sufficiency](../../principles/minimal-sufficiency.md). `plan-maker` authors plans; `plan-fixer` only repairs
+ledger rows.
+
+## Termination
+
+The contract's
+[termination table](../../development/workflow/quality-gate-contract/002-sequence-and-termination.md#termination)
+applies unchanged. This gate adds no row.
+
+## Verdict
+
+| Verdict              | The caller                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `PASS`               | records the verdict and continues                                                   |
+| `PASS_WITH_FINDINGS` | records the verdict and the open non-blocking rows, and continues                   |
+| `FAIL`               | gives each open blocking row an owner (idea brief, plan item, or issue), continues  |
+| `BLOCKED`            | records the cause (tooling, input-changed, or unavailable), then acts as for `FAIL` |
+
+No verdict stops the caller, and none authorizes execution, a commit, or a push. The plan records one line in its
+`delivery.md`, for example `plan-quality-gate: PASS_WITH_FINDINGS (2 cycles, 3 LOW open)`.
+
+## Ledger
+
+`local-tmp/quality/plan/<plan-slug>__<YYYYMMDDTHHMMZ>.md`, with the columns and closing verdict block in
+[the contract](../../development/workflow/quality-gate-contract/003-verdicts-ledger-and-relations.md#ledger). It is
+never committed.
+
+## Example Usage
+
+```text
+Run plan-quality-gate on plans/in-progress/billing-retry with mode normal.
+```
+
+## Related Workflows
+
+- [Planning](../plan/plan-planning.md) authors the draft this gate judges.
+- [Execution Check](../plan/plan-execution-check.md) judges finished execution, not a draft.

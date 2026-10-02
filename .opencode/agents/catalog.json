@@ -3,14 +3,44 @@
   "profile": "opencode",
   "sources": [
     {
+      "id": "agent/ci-checker",
+      "path": ".agents/agents/ci-checker.md",
+      "digest": "86904b3911e6c03a46b694a1710b8f293e53b94acea3470c51935a2aea998ec2"
+    },
+    {
+      "id": "agent/ci-fixer",
+      "path": ".agents/agents/ci-fixer.md",
+      "digest": "24101bfce3e1c36b2f0e479efcb820dd9c8d67015e690c75e9301841c30b22cd"
+    },
+    {
+      "id": "agent/docs-checker",
+      "path": ".agents/agents/docs-checker.md",
+      "digest": "875f8eb4c99807188e1d13e5fa510ddf50f56ef91a8a37d58b70c22e5ee63a60"
+    },
+    {
+      "id": "agent/docs-fixer",
+      "path": ".agents/agents/docs-fixer.md",
+      "digest": "803d294f9fa8d1baed1a658b692ff9ad0edb93e9b7b904c3d7fef21f0cb5a6fb"
+    },
+    {
       "id": "agent/gherkin-implementation-reviewer",
       "path": ".agents/agents/gherkin-implementation-reviewer.md",
       "digest": "66e52fc12303436f2e7198e95205278619e2a71f9175e3887a6662b730032c2f"
     },
     {
+      "id": "agent/harness-checker",
+      "path": ".agents/agents/harness-checker.md",
+      "digest": "e97b9aae448d43b44532f707fbcb150ec3d0c753c68c0b8baf31c1f79c55eaab"
+    },
+    {
+      "id": "agent/harness-fixer",
+      "path": ".agents/agents/harness-fixer.md",
+      "digest": "2210142518a2604940f8ea87e43c2804c3216c077b2e9d9746983b4a6a177c03"
+    },
+    {
       "id": "agent/plan-checker",
       "path": ".agents/agents/plan-checker.md",
-      "digest": "5e33e714b9f7412bfa18fc0c0220ce29f4ee5c81ece1bd48428d397883f886d1"
+      "digest": "08b16122b9b9eaa19424a7451a73e87b21a908b27e9dc8e7d65eceaccad9dcf5"
     },
     {
       "id": "agent/plan-execution-checker",
@@ -18,9 +48,44 @@
       "digest": "ea948a303885131b7cb10d5947d105bc040e03f6ad568f8dc7f78487f9abbbfd"
     },
     {
+      "id": "agent/plan-fixer",
+      "path": ".agents/agents/plan-fixer.md",
+      "digest": "d22e5d2b49ce82b0d33d9596b3a93236ff7c24bcab369dd9135498bf69866a9f"
+    },
+    {
       "id": "agent/plan-maker",
       "path": ".agents/agents/plan-maker.md",
-      "digest": "7d0b298b196960ac0fe4ae23c7d472443579d2cb5fe35ebb69588278a965676e"
+      "digest": "d9e492a8b8b76b3238dcdf65ac9fe4c98911b09088c84395e1447e61ed50a82f"
+    },
+    {
+      "id": "agent/pr-review-checker",
+      "path": ".agents/agents/pr-review-checker.md",
+      "digest": "ab6ef366abcbc854de19754392d120e1defe5ac9bd1b267f57ca69c68143d897"
+    },
+    {
+      "id": "agent/pr-review-fixer",
+      "path": ".agents/agents/pr-review-fixer.md",
+      "digest": "d620410e8ba36217719905f90f642e9409482d3c0fc104bc7c56bf368570a313"
+    },
+    {
+      "id": "agent/rules-checker",
+      "path": ".agents/agents/rules-checker.md",
+      "digest": "76cc670f893530c2f1d1a45fd48c6140464b3394076f55131be4ea17c0638ea4"
+    },
+    {
+      "id": "agent/rules-fixer",
+      "path": ".agents/agents/rules-fixer.md",
+      "digest": "3ea5a4b583adafafc14cdf8f08322a0185d522dff398048f5eb3d88b640e9892"
+    },
+    {
+      "id": "agent/specs-checker",
+      "path": ".agents/agents/specs-checker.md",
+      "digest": "9b88a77e8250ea504b80bf5a455b69f97f78a0528d7acc450e900a12a079f893"
+    },
+    {
+      "id": "agent/specs-fixer",
+      "path": ".agents/agents/specs-fixer.md",
+      "digest": "e45d94d429cd09872e38a8011c3f24a7a3294dc102106a36d816bc3c69148a59"
     },
     {
       "id": "agent/swe-code-checker",
@@ -40,7 +105,7 @@
     {
       "id": "skill/applying-maker-checker-fixer",
       "path": ".agents/skills/applying-maker-checker-fixer/SKILL.md",
-      "digest": "aa84b43cb03fd35334d7855d7d1c087b8237d9cac494f0a08e9721771b292657"
+      "digest": "69efca916e6441e899e6585c40988ce43c6485c7c1fb9529f7b3e0ff58522998"
     },
     {
       "id": "skill/assessing-criticality-confidence",
@@ -60,7 +125,7 @@
     {
       "id": "skill/generating-validation-reports",
       "path": ".agents/skills/generating-validation-reports/SKILL.md",
-      "digest": "7168a6bef0bff3d47935c7498c3d54dfe2c56878b7ecab2793156a0b3f2518db"
+      "digest": "c3243bf1d0c2ce5827fa52773502331be2ca03e0594b8c7d63646d4cf4fa3b46"
     },
     {
       "id": "skill/grill-me",
@@ -105,7 +170,7 @@
     {
       "id": "skill/release-cut",
       "path": ".agents/skills/release-cut/SKILL.md",
-      "digest": "72cc8b097e714d6d7c7f07b2762bed8fe8becf9ad880cf079243eb681669d3ba"
+      "digest": "58caabe2f9fefff7aabe036d1e69fc09e22eaf0d40f2817652f50a5702f404bb"
     },
     {
       "id": "skill/spec-impact-assessment",

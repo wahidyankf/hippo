@@ -34,7 +34,7 @@ surprised the same way; its fix may be documentation.
 5. **Only when the defect blocks the work in hand and no workaround exists, fix it.** Write a
    [bug-fix plan](../conventions/plans/010-bug-fix-plan.md) in the owning repository, researching the cause and the
    solution and citing every source. Land the plan alone on the owner's trunk through its route first, run the plan
-   quality gate on it, and on a passing verdict execute it through the owner's delivery, regression test first. Once its
+   quality gate on it, and after its verdict execute it through the owner's delivery, regression test first. Once its
    regression test and the owner's full release gate pass on the exact revision, release it through the owner's release
    cut without a further prompt, skipping no step, and repin every consumer.
 

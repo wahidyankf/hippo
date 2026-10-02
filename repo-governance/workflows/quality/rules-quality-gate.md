@@ -1,34 +1,94 @@
 # Rules Quality Gate
 
-A review of this tree, run **only on explicit request**. It is not part of any automated gate and never blocks a change
-on its own.
+This gate follows the [Quality Gate Contract](../../development/workflow/quality-gate-contract.md): a read-only checker,
+a frozen ledger, one separate writer, at most three cycles, and an advisory verdict. This file states only what is
+specific to rules.
 
-## Why It Is Requested Rather Than Automatic
+## Entry
 
-Judging whether a rule is well-placed, well-reasoned, and still true is a reading task. Wiring it into every pull
-request would either produce noise nobody reads, or produce a check that passes on documents nobody read either.
+The gate starts only on an explicit request that names it. A rule change, a review request, a
+[rules grooming](../maintenance/rules-grooming.md) run, or a propagation run never starts it alone.
 
-## The Review
+## Inputs
 
-For each document:
+| Input        | Type    | Values                                                 | Default  |
+| ------------ | ------- | ------------------------------------------------------ | -------- |
+| `subject`    | string  | A rule outcome with its reason, `proposal`/`effective` | required |
+| `mode`       | enum    | `lax`, `normal`, `strict`, `all`                       | `normal` |
+| `max-cycles` | integer | 1, 2, or 3                                             | 3        |
 
-- **Does it state a rule, or describe a practice?** A description with no obligation belongs in `docs/` or in a
-  specification.
-- **Does it give the reason?** A rule without one is followed until it is inconvenient.
-- **Is it at the right level?** See [rules](../../conventions/rules.md).
-- **Does anything below it contradict it?** A lower level may not contradict a higher one.
-- **Is it reachable from [`AGENTS.md`](../../../AGENTS.md)?** An unreachable rule is an unfollowed rule.
-- **Is it enforced, and does it say so?** Where a gate checks it, name the gate. Where none does, say that too.
-- **Is it within budget for the right reason?**
+A `proposal` subject compares a requested outcome with the current rules before any edit; an `effective` subject judges
+the repository after propagation wrote. Any other `max-cycles` value, or a missing subject, refuses to start.
 
-## Output
+## Deterministic Boundary
 
-Findings, ordered by how likely each is to cause someone to do the wrong thing. Each names the document, what is wrong,
-and what would make it right.
+The checker reports none of these properties. The entry and exit checks run their owners instead.
 
-The review produces findings; it does not produce commits. They go to [rules propagation](rules-propagation.md), which
-is the sole writer, and the repairs land through [worktree to pull request](../maintenance/worktree-to-pull-request.md)
-like anything else.
+| Property                            | Owned by                   | This repository runs                        |
+| ----------------------------------- | -------------------------- | ------------------------------------------- |
+| Markdown formatting and line length | the formatter and linter   | `prettier`, `markdownlint-cli2`             |
+| Internal links                      | the link validator         | `./rhino md internal-link validate`         |
+| Directory maps                      | the map validator          | `./rhino governance directory-map validate` |
+| Word budgets                        | the word-budget validator  | `./rhino governance word-budget validate`   |
+| Gate and propagation structure      | the quality-gate validator | `./rhino governance quality-gates validate` |
+| Harness adapters match their source | the adapter validator      | `./rhino harness adapters validate`         |
 
-The machine-checkable part — budgets, links, maps, diagrams, harness parity — already runs on every gate. This gate is
-for what a validator cannot read.
+A property no tool of its own owns leaves the table and becomes judgeable.
+
+## Cycle
+
+Each cycle is one full audit by `rules-checker` and one repair by [Rules Propagation](rules-propagation.md), run by
+`rules-fixer`, per
+[Sequence and Termination](../../development/workflow/quality-gate-contract/002-sequence-and-termination.md). The frozen
+subject records intended strength, scope, consumers, any move or deletion, canonical sources, and the enforcement route.
+The audit covers the affected rule, its uses, the authority above it, and overlapping guidance; for grooming, that run's
+manifest. It asks whether:
+
+1. the need, outcome, and reason are concrete enough to judge;
+2. the wording's strength matches the intended strength, per [Rule Definition](../../conventions/rules.md);
+3. scope, trigger, action, boundaries, and necessary exceptions are explicit;
+4. the rule sits at the right level, and nothing lower contradicts a higher rule;
+5. one canonical source owns the meaning, and links keep it findable without copies;
+6. every enforcement claim names a truthful route, with evidence where automation cannot decide;
+7. the rule survives compaction and handover at every entry point;
+8. a reasonable reader can act without inventing policy; and
+9. a move or deletion keeps unique intent and updates its consumers.
+
+Only a rule violation, or a gap leaving the outcome unsafe, contradictory, undiscoverable, or materially ambiguous, is a
+finding. Wording preference, speculative cases, and unneeded automation are not, per
+[Minimal Sufficiency](../../principles/minimal-sufficiency.md). After the first repair, a `proposal` subject is audited
+as written.
+
+## Termination
+
+The contract's
+[termination table](../../development/workflow/quality-gate-contract/002-sequence-and-termination.md#termination)
+applies unchanged. This gate adds no row.
+
+## Verdict
+
+| Verdict              | The caller                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `PASS`               | records the verdict and continues; for a proposal, current rules already suffice    |
+| `PASS_WITH_FINDINGS` | records the verdict and the open non-blocking rows, and continues                   |
+| `FAIL`               | gives each open blocking row an owner (idea brief, plan item, or issue), continues  |
+| `BLOCKED`            | records the cause (tooling, input-changed, or unavailable), then acts as for `FAIL` |
+
+No verdict stops the caller, and none authorizes a commit or a push.
+
+## Ledger
+
+`local-tmp/quality/rules/<outcome-slug>__<YYYYMMDDTHHMMZ>.md`, with the columns and closing verdict block in
+[the contract](../../development/workflow/quality-gate-contract/003-verdicts-ledger-and-relations.md#ledger). It is
+never committed.
+
+## Example Usage
+
+```text
+Run rules-quality-gate on proposal "Require a dry run for every script that deletes files."
+```
+
+## Related Workflows
+
+- [Rules Propagation](rules-propagation.md) repairs every blocking row.
+- [Rules Grooming](../maintenance/rules-grooming.md) may request a verdict after its reductions.
