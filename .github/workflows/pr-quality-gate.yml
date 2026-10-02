@@ -168,6 +168,44 @@ jobs:
       - name: Verify asset inventory
         run: ./tests/artifacts/release-assets.sh dist v0.0.0 "$GITHUB_SHA"
 
+      - name: Record the checksum inventory
+        id: inventory
+        run: |
+          cat dist/checksums.txt
+          {
+            echo "checksums<<EOF"
+            cat dist/checksums.txt
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+    outputs:
+      checksums: ${{ steps.inventory.outputs.checksums }}
+
+  release-reproducibility:
+    name: Release reproducibility
+    # The archives must depend on the commit alone, not on the machine that
+    # built them: macOS ships a different tar, gzip, and filesystem from the
+    # Linux runner that publishes releases. Rebuilding the same commit here and
+    # requiring the Linux job's checksums byte for byte proves it on every pull
+    # request, before a release tag ever relies on it.
+    needs: [release-build]
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build all supported assets
+        run: ./scripts/build-release.sh v0.0.0 "$GITHUB_SHA" dist
+
+      - name: Require the Linux checksum inventory
+        env:
+          LINUX_CHECKSUMS: ${{ needs.release-build.outputs.checksums }}
+        run: printf '%s\n' "${LINUX_CHECKSUMS}" | diff -u - dist/checksums.txt
+
   quality-gate:
     name: Quality gate
     # The single required status check. Branch protection names one context, so
@@ -175,7 +213,14 @@ jobs:
     # job that is added but forgotten here still cannot pass unnoticed, because
     # `needs` fails the aggregate when any dependency does.
     needs:
-      [formatting, test, repository-contract, consumer-bootstrap, release-build]
+      [
+        formatting,
+        test,
+        repository-contract,
+        consumer-bootstrap,
+        release-build,
+        release-reproducibility,
+      ]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
