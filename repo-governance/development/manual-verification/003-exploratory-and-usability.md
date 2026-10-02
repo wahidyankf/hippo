@@ -3,8 +3,8 @@
 One workflow, not several. A repository with two overlapping versions of this review has two places for a finding to be
 missed, and each assumes the other covered it.
 
-The canonical procedure is [Exploratory and Usability Review](../../workflows/exploratory-usability-review.md). This
-module states what it must record.
+The canonical procedure is [Exploratory and Usability Review](../../workflows/quality/exploratory-usability-review.md).
+This module states what it must record.
 
 ## What Is Recorded
 

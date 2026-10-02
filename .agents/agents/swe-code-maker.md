@@ -53,15 +53,15 @@ hand-off says so.
 4. **Build each increment test-first.** Where the project keeps a scenario corpus, a scenario that specifies the
    behaviour is added or updated before its red, per
    [Behaviour-Driven Development](../../repo-governance/development/behaviour-driven-development.md). Each increment
-   runs through [Red, Green, Refactor](../../repo-governance/workflows/red-green-refactor.md), with its runs recorded
-   where the caller names.
+   runs through [Red, Green, Refactor](../../repo-governance/workflows/quality/red-green-refactor.md), with its runs
+   recorded where the caller names.
 5. **Make it right, then fast only on a measurement,** in the order Implementation Stages sets, editing surgically.
 6. **Check before handing over.** Run the type check, lint, and format checks and the fast gate that the project README
    or repository adapter records, over the changed projects, plus the end-to-end journeys the change affects. Name every
    check [Manual Verification](../../repo-governance/development/manual-verification.md) still requires of the change,
    and every README or document the change leaves stale, per
-   [Docs Propagation](../../repo-governance/workflows/docs-propagation.md), so the caller can route it to Docs Maker or
-   run that workflow before committing.
+   [Docs Propagation](../../repo-governance/workflows/quality/docs-propagation.md), so the caller can route it to Docs
+   Maker or run that workflow before committing.
 
 ## Shell
 

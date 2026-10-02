@@ -11,16 +11,16 @@ Someone has asked for a formal plan, or a brief has been promoted by [Ideas Groo
 2. **Run the pre-write gate.** Every material branch is resolved here, and **no plan document is authored until it
    completes**. A plan written first and questioned afterwards has already committed to the answers. The gate also asks,
    for each delivery unit, whether it changes what a document describes; one that does carries a
-   [docs propagation](docs-propagation.md) item.
+   [docs propagation](../quality/docs-propagation.md) item.
 3. **Author all six documents.** `README.md`, `brd.md`, `prd.md`, one technical shape, `delivery.md`, `learnings.md`. A
-   [bug-fix plan](../conventions/plans/010-bug-fix-plan.md) is not planned through this workflow. The document set and
-   its rules are the [Plans Convention](../conventions/plans.md)'s; this workflow does not restate them.
+   [bug-fix plan](../../conventions/plans/010-bug-fix-plan.md) is not planned through this workflow. The document set
+   and its rules are the [Plans Convention](../../conventions/plans.md)'s; this workflow does not restate them.
 4. **Write `delivery.md` last.** It depends on every other document, and writing it first produces a checklist for a
    plan that does not exist yet.
 5. **Run the post-write gate.** A separate gate, on the complete draft, resolving what only became visible once the plan
    existed. It does not merge into the first gate — see
-   [Decision Gates](../development/planning-capabilities/003-decision-gates.md).
-6. **Run the [Quality Gate](plan-quality-gate.md)** and repair within its bounded budget.
+   [Decision Gates](../../development/planning-capabilities/003-decision-gates.md).
+6. **Run the [Quality Gate](../quality/plan-quality-gate.md)** and repair within its bounded budget.
 
 ## Exit
 

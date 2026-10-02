@@ -1,8 +1,8 @@
 # Docs Quality Gate
 
-An audit of the human-facing documents, run **only on explicit request** or by [release cut](release-cut.md). It never
-edits a document and never blocks a change on its own; a change or a [docs propagation](docs-propagation.md) run never
-authorizes it.
+An audit of the human-facing documents, run **only on explicit request** or by
+[release cut](../maintenance/release-cut.md). It never edits a document and never blocks a change on its own; a change
+or a [docs propagation](docs-propagation.md) run never authorizes it.
 
 ## Why It Is Requested Rather Than Automatic
 
@@ -24,30 +24,31 @@ Under `change`, audit the documents the change touches and every document citing
 set. For each document, without editing it:
 
 - **Is every claim true** to the implementation, and was every command shown executed against the current build or
-  marked as not exercised? See [documentation architecture](../conventions/documentation-architecture.md#truth).
+  marked as not exercised? See [documentation architecture](../../conventions/documentation-architecture.md#truth).
 - **Does it still describe something the repository has?** If not, it is obsolete and its resolution is removal.
 - **Does each fact have one home**, with a summary above its detail per
-  [progressive disclosure](../principles/progressive-disclosure.md), and does each `docs/` page serve one Diátaxis mode?
+  [progressive disclosure](../../principles/progressive-disclosure.md), and does each `docs/` page serve one Diátaxis
+  mode?
 - **Can a newcomer use it?** From the opening they learn what it is and why it matters, and they find the next step.
   Judged by reading, never by a score.
 - **Can the setup be followed as written?** Under `all`, or when setup changed, a reader with no prior context follows
   it from a clean checkout, marking each step smooth, frustrating, or blocking.
-- **Does it agree with its specification?** [`specs/`](../../specs/README.md) is canonical.
+- **Does it agree with its specification?** [`specs/`](../../../specs/README.md) is canonical.
 
 The machine-checkable part — budgets, links, maps, diagrams, harness parity — already runs on every gate under
-[documentation hygiene](../development/software-quality-enforcement.md#documentation-hygiene). The audit consumes that
-result rather than repeating it.
+[documentation hygiene](../../development/software-quality-enforcement.md#documentation-hygiene). The audit consumes
+that result rather than repeating it.
 
 ## Output
 
-A finite ledger, written under `generated-reports/` per [working tree](../conventions/working-tree.md). Each row names
-the document, the gap, the resolution — update, move, or remove — the evidence, and a status: `open`, `resolved`,
+A finite ledger, written under `generated-reports/` per [working tree](../../conventions/working-tree.md). Each row
+names the document, the gap, the resolution — update, move, or remove — the evidence, and a status: `open`, `resolved`,
 `not-applicable` with evidence, or `blocked`. Admit only a document that is wrong, obsolete, unreachable, or unusable by
-a newcomer; a wording preference is not a finding, per [minimal sufficiency](../principles/minimal-sufficiency.md).
+a newcomer; a wording preference is not a finding, per [minimal sufficiency](../../principles/minimal-sufficiency.md).
 
 An audit's verdict is `clear` when its ledger holds no open finding, otherwise `needs-propagation`. A finding only the
 owner can decide, such as a specification that disagrees with the implementation, is asked through
-[grill-me](../../.agents/skills/grill-me/SKILL.md). A verdict authorizes neither commit nor push.
+[grill-me](../../../.agents/skills/grill-me/SKILL.md). A verdict authorizes neither commit nor push.
 
 ## After a Finding: Repair to Zero Findings
 

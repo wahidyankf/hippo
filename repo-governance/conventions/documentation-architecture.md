@@ -24,8 +24,8 @@ is indistinguishable from a real one to every reader, and it stays wrong long af
 changed. Where a path cannot be exercised safely — a destructive operation, a host state that cannot be arranged — say
 so plainly instead.
 
-Each change carries its documents with it through [docs propagation](../workflows/docs-propagation.md); the
-[docs quality gate](../workflows/docs-quality-gate.md) audits them on request.
+Each change carries its documents with it through [docs propagation](../workflows/quality/docs-propagation.md); the
+[docs quality gate](../workflows/quality/docs-quality-gate.md) audits them on request.
 
 ## Structure
 

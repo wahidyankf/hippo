@@ -27,8 +27,8 @@ execution, and release.
 
 This repository plans only what it can deliver alone. Work spanning repositories is planned where it is coordinated and
 arrives here as its own change with its own evidence, for the reason
-[rules propagation](../workflows/rules-propagation.md) gives: something that crosses a boundary is decided again on the
-other side, or it arrives without the argument that justified it.
+[rules propagation](../workflows/quality/rules-propagation.md) gives: something that crosses a boundary is decided again
+on the other side, or it arrives without the argument that justified it.
 
 ## Ideas Are Filed by Quadrant
 
@@ -39,12 +39,12 @@ the two.
 
 ## Delivery Items That Ship Code
 
-A checkbox that ships code states its [red-green-refactor](../workflows/red-green-refactor.md) cycle as three checkboxes
-— RED, GREEN, REFACTOR — each naming the test path, the command, and the failure or pass expected. Never one checkbox,
-and never prose.
+A checkbox that ships code states its [red-green-refactor](../workflows/quality/red-green-refactor.md) cycle as three
+checkboxes — RED, GREEN, REFACTOR — each naming the test path, the command, and the failure or pass expected. Never one
+checkbox, and never prose.
 
 A recovery task carries an explicit trigger and stays dormant until it fires. At reconciliation it takes a dated,
 evidenced `Not triggered` disposition; a checkmark would claim something ran that did not.
 
 Where execution may change a repository rule, `delivery.md` carries an `[AI]` task that applies
-[rules propagation](../workflows/rules-propagation.md) and records its result.
+[rules propagation](../workflows/quality/rules-propagation.md) and records its result.

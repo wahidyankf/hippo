@@ -16,7 +16,7 @@ A plan in `plans/in-progress/` whose quality gate returned a terminal verdict pe
    batch of ticks applied at the end of a session cannot say which item produced which result.
 5. **Record results, not only ticks.** What was produced, what changed, what was surprising. A tick says an action
    happened; it does not say what it found. See
-   [Verification Routing](../development/planning-capabilities/006-verification-routing.md).
+   [Verification Routing](../../development/planning-capabilities/006-verification-routing.md).
 6. **Fix what fails, including what was already failing.** A check that was red before the plan started is still red
    because of this plan's work by the time it ships. Pre-existing is an explanation, not an exemption.
 7. **Route discoveries to `learnings.md`**, or a bug-fix plan's Learnings section, as they happen, not from memory

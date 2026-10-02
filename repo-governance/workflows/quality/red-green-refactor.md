@@ -27,9 +27,9 @@ Improve the shape with the test still green. Nothing new — if behaviour change
 
 For anything the binary does, the RED begins in Gherkin, not in Go: write the scenario, see it undefined, bind it, see
 it fail at an **executing** adapter, then write the code. See
-[specification maintenance](../development/specification-maintenance.md).
+[specification maintenance](../../development/specification-maintenance.md).
 
 ## Reporting
 
 Name the test, the boundary, and both outputs. "Tested locally" is not evidence — see
-[software quality enforcement](../development/software-quality-enforcement.md).
+[software quality enforcement](../../development/software-quality-enforcement.md).

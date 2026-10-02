@@ -5,8 +5,8 @@ description: Take a change from a fresh worktree to a merged pull request in thi
 
 # Worktree to Pull Request
 
-The authoritative procedure is [`repo-governance/workflows/worktree-to-pull-request.md`][worktree-workflow]. Read it
-before acting; this skill exists to make sure it is the thing that gets read.
+The authoritative procedure is [`repo-governance/workflows/maintenance/worktree-to-pull-request.md`][worktree-workflow].
+Read it before acting; this skill exists to make sure it is the thing that gets read.
 
 ## Order
 
@@ -32,4 +32,4 @@ before acting; this skill exists to make sure it is the thing that gets read.
 - Never `--no-verify`. Fix the cause.
 - Check GitHub no more often than every three minutes, and never with a watching mode.
 
-[worktree-workflow]: ../../../repo-governance/workflows/worktree-to-pull-request.md
+[worktree-workflow]: ../../../repo-governance/workflows/maintenance/worktree-to-pull-request.md

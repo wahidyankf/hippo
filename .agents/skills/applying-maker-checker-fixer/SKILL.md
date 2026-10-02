@@ -72,8 +72,8 @@ next.
 This pattern is recorded as contradicting the planning roster, and planning wins inside its own scope.
 [Skill and Agent Roster](../../../repo-governance/development/planning-capabilities/002-skill-and-agent-roster.md) has
 the plan maker apply validated findings itself, within the repair budget of
-[Plan Quality Gate](../../../repo-governance/workflows/plan-quality-gate.md), because a loop waiting for an empty report
-can always reach one.
+[Plan Quality Gate](../../../repo-governance/workflows/quality/plan-quality-gate.md), because a loop waiting for an
+empty report can always reach one.
 
 Outside planning, a workflow may declare a dedicated fixer. In both arrangements, whoever applies findings uses the
 judgement above.

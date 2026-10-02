@@ -46,7 +46,7 @@ is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
 the retired `ci.yml` ran. Its aggregate check, `Quality gate`, treats a skipped or cancelled job as failure, because a
 skipped required check never reports at all. The ruleset requires it and the `leak-review` status that
 [`leak-review.yml`](../../.github/workflows/leak-review.yml) publishes from the posted
-[leak review](../workflows/pr-leak-review/003-enforcement.md). Workflow storage stays inside the free allowance:
+[leak review](../workflows/quality/pr-leak-review/003-enforcement.md). Workflow storage stays inside the free allowance:
 [GitHub Actions storage](github-actions-storage.md).
 
 ## Never Nx

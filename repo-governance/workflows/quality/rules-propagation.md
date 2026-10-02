@@ -1,12 +1,12 @@
 # Rules Propagation
 
-Apply this workflow automatically whenever a [rule](../conventions/rules.md) in this tree is created, changed, moved, or
-deleted, or an explicitly requested [rules quality gate](rules-quality-gate.md) hands over findings. No separate user
+Apply this workflow automatically whenever a [rule](../../conventions/rules.md) in this tree is created, changed, moved,
+or deleted, or an explicitly requested [rules quality gate](rules-quality-gate.md) hands over findings. No separate user
 instruction is required: the actor that proposes or notices the change enters propagation as part of the work in hand,
 and the absence of a request to run it is never permission to skip it.
 
-Propagation is the sole writer. The quality gate and [grooming](rules-grooming.md) discover, rank, and hand off; neither
-edits. Edits made inside one transaction do not start another.
+Propagation is the sole writer. The quality gate and [grooming](../maintenance/rules-grooming.md) discover, rank, and
+hand off; neither edits. Edits made inside one transaction do not start another.
 
 ## It Stops at This Repository's Boundary
 
@@ -19,10 +19,10 @@ which repositories may want it and why, and let each decide in its own change wi
 without that step arrives without the reason that justified it, and the first reader to find it inconvenient will delete
 it correctly.
 
-A rule that fits one repository is not thereby owed to another. [Worktree location](../conventions/worktree-location.md)
-is the worked example: worktrees below the checkout were adopted here only after this repository's own Go release
-provenance was checked, not because a sibling had the layout; adopting it on that ground alone would have been the blind
-propagation this workflow exists to prevent.
+A rule that fits one repository is not thereby owed to another.
+[Worktree location](../../conventions/worktree-location.md) is the worked example: worktrees below the checkout were
+adopted here only after this repository's own Go release provenance was checked, not because a sibling had the layout;
+adopting it on that ground alone would have been the blind propagation this workflow exists to prevent.
 
 Three phrasings of one rule across three repositories is three repositories having decided, not one having decayed.
 Divergence is never a finding here; where it _is_ decay, grooming catches it.
@@ -43,12 +43,12 @@ or handoff. A material change to those inputs returns `BLOCKED_INPUT_CHANGED`; i
    - place each rule at the level that owns it, and leave `AGENTS.md` linking rather than restating;
    - resolve conflicts in the order `vision > principles > conventions > development > workflows`;
    - keep one canonical statement, merge unique meaning, replace copies with links, and apply
-     [progressive disclosure](../principles/progressive-disclosure.md);
+     [progressive disclosure](../../principles/progressive-disclosure.md);
    - change only stale, misplaced, overlapping, or repeated content the ledger implicates; and
-   - name truthful enforcement under [software quality enforcement](../development/software-quality-enforcement.md),
+   - name truthful enforcement under [software quality enforcement](../../development/software-quality-enforcement.md),
      adding machinery only for a demonstrated need.
 3. Read the repaired surfaces once for semantic closure. Resolve only conflicts the repair caused, under the hierarchy
-   and [minimal sufficiency](../principles/minimal-sufficiency.md). Never broaden the ledger.
+   and [minimal sufficiency](../../principles/minimal-sufficiency.md). Never broaden the ledger.
 4. Run the gate:
 
    ```sh

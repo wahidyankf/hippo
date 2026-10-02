@@ -27,13 +27,13 @@ Adopted as written: [Type and Boundary Safety](../code/type-and-boundary-safety.
 
 Kept under their local owners, which an adopted document links wherever the catalog linked its own:
 [test-driven development](../../test-driven-development.md) and
-[red, green, refactor](../../../workflows/red-green-refactor.md),
+[red, green, refactor](../../../workflows/quality/red-green-refactor.md),
 [behaviour-driven development](../../behaviour-driven-development.md),
 [end-to-end testing](../../end-to-end-testing.md), [quality gates](../../quality-gates.md),
 [software quality enforcement](../../software-quality-enforcement.md),
 [specification maintenance](../../specification-maintenance.md), [public contract](../../public-contract.md),
 [code clarity](../../code-clarity.md), [dependency selection](../../dependency-selection.md), and
-[docs propagation](../../../workflows/docs-propagation.md). One rule lives in one document here, per
+[docs propagation](../../../workflows/quality/docs-propagation.md). One rule lives in one document here, per
 [rules](../../../conventions/rules.md).
 
 Not adopted, each with its reason:

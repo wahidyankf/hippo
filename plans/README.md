@@ -31,8 +31,8 @@ work will disagree, and nothing says which one is current.
 
 Work it can deliver by itself. A plan whose delivery would change another repository is planned where that work is
 coordinated, and reaches this one as its own change carrying its own evidence — the same boundary
-[rules propagation](../repo-governance/workflows/rules-propagation.md) draws for a rule. Planning a sibling's change
-from here would be the blind propagation that document exists to prevent.
+[rules propagation](../repo-governance/workflows/quality/rules-propagation.md) draws for a rule. Planning a sibling's
+change from here would be the blind propagation that document exists to prevent.
 
 ## Directory Map
 

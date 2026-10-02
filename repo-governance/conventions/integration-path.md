@@ -38,7 +38,7 @@ deletion for every actor, including the repository owner. There is no bypass.
   whose run failed, and say so, rather than deleting the evidence.
 - Cut a release from a worktree on `main` like any other work. A release exception would have to name a checkout by
   topology, and topology is a per-clone property this repository does not fix. See
-  [release cut](../workflows/release-cut.md).
+  [release cut](../workflows/maintenance/release-cut.md).
 
 ## Why the Server Enforces It
 

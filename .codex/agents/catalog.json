@@ -5,7 +5,7 @@
     {
       "id": "agent/gherkin-implementation-reviewer",
       "path": ".agents/agents/gherkin-implementation-reviewer.md",
-      "digest": "5ee52ab353d9a2acc7626fe2e63d8a7365b3c64929d7772c728c1716c535ef9e"
+      "digest": "66e52fc12303436f2e7198e95205278619e2a71f9175e3887a6662b730032c2f"
     },
     {
       "id": "agent/plan-checker",
@@ -30,17 +30,17 @@
     {
       "id": "agent/swe-code-fixer",
       "path": ".agents/agents/swe-code-fixer.md",
-      "digest": "a8a47afde7c968a0cb73716754df33b4f28586089a2ba0d4920581dc4f9fe8f7"
+      "digest": "7e95ea6d672c12031b98854ae36915fa7f5bd985a97be58bc260454fc6288435"
     },
     {
       "id": "agent/swe-code-maker",
       "path": ".agents/agents/swe-code-maker.md",
-      "digest": "f3e6664668921ebea1fff14a5bb437a718e66ea71effd5d286c760601367b998"
+      "digest": "24b7af094fb228f346d93ea74f2a3a388867ddf4863b77028b654b4607f7a6e3"
     },
     {
       "id": "skill/applying-maker-checker-fixer",
       "path": ".agents/skills/applying-maker-checker-fixer/SKILL.md",
-      "digest": "fe3f74683b48b1cebd6f406f9c1a3bacd64e199b171b7aff8d70fe68acf1990d"
+      "digest": "aa84b43cb03fd35334d7855d7d1c087b8237d9cac494f0a08e9721771b292657"
     },
     {
       "id": "skill/assessing-criticality-confidence",
@@ -55,12 +55,12 @@
     {
       "id": "skill/developing-applications",
       "path": ".agents/skills/developing-applications/SKILL.md",
-      "digest": "f21a1ce6686d84df31e1345d630db4b6cf8ac8f6bf1c704c8e15f159f7926f8f"
+      "digest": "f15973c72b05de53c5f40d9ce9654e2f63971a12697a34677c5820cb83b6d582"
     },
     {
       "id": "skill/generating-validation-reports",
       "path": ".agents/skills/generating-validation-reports/SKILL.md",
-      "digest": "8735d8e6b9b1cb299d0cca649753ee0e8c9640f40e22608703ab1a6c20872569"
+      "digest": "7168a6bef0bff3d47935c7498c3d54dfe2c56878b7ecab2793156a0b3f2518db"
     },
     {
       "id": "skill/grill-me",
@@ -70,7 +70,7 @@
     {
       "id": "skill/plan-creating-project-plans",
       "path": ".agents/skills/plan-creating-project-plans/SKILL.md",
-      "digest": "87d22f1b501a58f6c0e66d5986b74f449a3d1e2098e6b7909f17ab36815d0272"
+      "digest": "28418eb39129b23db7ad6f059c836d29430d189afd1f635467701a06b24210c2"
     },
     {
       "id": "skill/plan-grooming-idea-briefs",
@@ -95,17 +95,17 @@
     {
       "id": "skill/programming-golang",
       "path": ".agents/skills/programming-golang/SKILL.md",
-      "digest": "c041ed31bc55d6a0faf94e4c83ffec6d5840c2ffa1b9cf200ce004dbd5dd87c9"
+      "digest": "bdbf64e108b9386861c33e4895abd91d0ba898dd84a41ce3d81655f8e1bc831a"
     },
     {
       "id": "skill/programming-shell",
       "path": ".agents/skills/programming-shell/SKILL.md",
-      "digest": "5c630303db968a229e52b76b2c25f21b6c9f01e8eadc5089f26c4090b2ca9b3c"
+      "digest": "d7443b1701533049575fec22b26f472673af2ae32e105f2bc1cc9d5d7a981bb1"
     },
     {
       "id": "skill/release-cut",
       "path": ".agents/skills/release-cut/SKILL.md",
-      "digest": "3bb94b8c4f21c9df338f2a13a0f4d935e7c4db2e965c538d48521b222a0f99bd"
+      "digest": "72cc8b097e714d6d7c7f07b2762bed8fe8becf9ad880cf079243eb681669d3ba"
     },
     {
       "id": "skill/spec-impact-assessment",
@@ -115,12 +115,12 @@
     {
       "id": "skill/worktree-to-pr",
       "path": ".agents/skills/worktree-to-pr/SKILL.md",
-      "digest": "234f73b524ce0aa1e44962bfc21ab8f0120ee219a57dbd1d4ea4489d2affc05d"
+      "digest": "63df133d38c373fc94efd630dd0fce5eee5b665ac3b1b50f7c81a7e63d46222f"
     },
     {
       "id": "instruction",
       "path": "AGENTS.md",
-      "digest": "85dbde30d498d833b8959918331858ab252c35a63ddaff4b1381bf6b04cde479"
+      "digest": "5614749e8ea46393368c4a686830ca2dfe4ffaea66b637bd6f625cf8972b7014"
     }
   ]
 }

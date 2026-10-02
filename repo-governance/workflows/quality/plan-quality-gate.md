@@ -8,7 +8,7 @@ A complete draft, with both decision gates finished. The draft is frozen at a na
 
 1. **Freeze the snapshot.** Record the commit. A gate that re-reads a changing draft cannot state what it verified.
 2. **Run structural validation** against the frozen snapshot. Structure is mechanical and is checked mechanically — see
-   [Structural Validation](../conventions/plans/006-structural-validation.md).
+   [Structural Validation](../../conventions/plans/006-structural-validation.md).
 3. **Review what validation cannot reach**: whether the acceptance criteria are testable and the right ones, whether
    `delivery.md` is genuinely executable by someone who was not present, whether the technical shape matches the work.
 4. **Record one terminal verdict** — `PASS`, `PASS_WITH_FINDINGS`, or `FAIL` — with the command, the commit, the time,
