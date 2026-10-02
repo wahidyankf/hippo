@@ -8,5 +8,4 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-- [Resource policy reference misstates thresholds](resource-policy-reference-misstates-thresholds.md) — the reference
-  shows fixed thresholds no command uses, misdescribes `capabilities`, and omits the sustained-warning shed.
+This quadrant holds no idea brief, so this README has no siblings to map.
