@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.8.0/schemas/repo-config/v2.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.9.0/schemas/repo-config/v2.schema.json
 # HIPPO owns this consumer policy. RHINO owns the schema and renderer; the
 # repository declares only its lifecycle, canonical harness, and validators.
 
@@ -206,6 +206,40 @@ policies:
         - { path: plans }
         - { path: specs/behaviours }
         - { path: repo-governance }
+    # Owner: repo-governance/development/workflow/quality-gate-adapter.md
+    quality-gates:
+      root: repo-governance/workflows
+      agents: .agents/agents
+      groups: [plan, quality, maintenance]
+      gate-group: quality
+      gate-headings:
+        - Entry
+        - Inputs
+        - Deterministic Boundary
+        - Cycle
+        - Termination
+        - Verdict
+        - Ledger
+      verdict-heading: Verdict
+      verdicts: [PASS, PASS_WITH_FINDINGS, FAIL, BLOCKED]
+      retired-inputs: [max-iterations, min-iterations, max-audits]
+      propagation-headings:
+        - Contract
+        - Scope
+        - Executor
+        - Row Verification
+        - Family Rules
+      defaults:
+        mode: normal
+        max-cycles: 3
+      gates:
+        - family: plan
+        - family: docs
+        - family: rules
+        - family: harness
+        - family: ci
+        - family: pr-review
+        - family: specs
 
 gates:
   composition:
@@ -335,6 +369,17 @@ gates:
           [
             { literal: governance },
             { literal: word-budget },
+            { literal: validate },
+          ]
+      run-on: { pre-push: {}, pull-request: {}, main: {} }
+    - id: quality-gates
+      type: check
+      command:
+        executable: ./rhino
+        args:
+          [
+            { literal: governance },
+            { literal: quality-gates },
             { literal: validate },
           ]
       run-on: { pre-push: {}, pull-request: {}, main: {} }
