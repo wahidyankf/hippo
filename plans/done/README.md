@@ -16,6 +16,9 @@ then verifies the archive rather than assuming it.
 
 ## Completed Plans
 
+- 2026-10-02 —
+  [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md):
+  the Linux reading subtracts the cgroup's inactive file cache from its usage; released as v0.8.3.
 - 2026-09-26 — [Repair supervision readiness race](2026-09-26__repair-supervision-readiness-race/README.md): the
   collector-failure fixture waits for the child-published PID before it injects the failure.
 - 2026-09-26 — [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md): shell scripts are gated
@@ -27,6 +30,8 @@ then verifies the archive rather than assuming it.
 
 ## Directory Map
 
+- [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md) is
+  the delivery record for the v0.8.3 page-cache fix.
 - [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the
   shell-lint gate.
 - [Isolate test coordination state](2026-09-26__isolate-test-coordination-state/README.md) is the delivery record for
