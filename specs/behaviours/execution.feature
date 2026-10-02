@@ -121,6 +121,12 @@ Feature: Guarded process execution
     Then the guard terminates its child and exits with code 124 naming hippo.limit.pressure-shed
 
   @e2e-exempt
+  Scenario: Warning that outlasts the class grace sheds eligible work
+    Given an admitted ephemeral child encounters lasting memory warning
+    When the guard observes warning past the ephemeral grace
+    Then the guard sheds its child after memory warning and exits with code 124 naming hippo.limit.pressure-shed
+
+  @e2e-exempt
   Scenario: Worsening warning sheds degraded work
     Given an admitted degraded ephemeral child encounters growing compressor pressure
     When the guard observes warning through the grace
