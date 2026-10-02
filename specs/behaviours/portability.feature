@@ -8,6 +8,12 @@ Feature: Portable host evidence
     Then effective memory is 4 GiB
 
   @e2e-exempt
+  Scenario: Linux reclaimable file cache stays available
+    Given a Linux cgroup whose usage is mostly inactive file cache
+    When the Linux evidence is collected
+    Then available memory excludes the inactive file cache
+
+  @e2e-exempt
   Scenario: Linux without swap remains usable
     Given Linux reports no usable swap
     When development pressure is assessed

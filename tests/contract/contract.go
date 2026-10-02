@@ -174,6 +174,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Checkout aliases cannot name one consumer twice", Boundary: consumerHarnessBoundary, Reason: "requires temporary checkout symlinks and private manifest inspection"},
 		{Scenario: "Every checkout is reconciled after any command failure", Boundary: consumerHarnessBoundary, Reason: "requires intentionally mutating temporary checkouts across failing manifest phases"},
 		{Scenario: "Linux cgroup memory limits host capacity", Boundary: hostEvidenceBoundary, Reason: "requires synthetic proc and cgroup files instead of the public host filesystem"},
+		{Scenario: "Linux reclaimable file cache stays available", Boundary: hostEvidenceBoundary, Reason: "requires synthetic proc and cgroup files instead of the public host filesystem"},
 		{Scenario: "Linux without swap remains usable", Boundary: hostEvidenceBoundary, Reason: "requires synthetic swap capabilities instead of the public host state"},
 		{Scenario: "Linux PSI detects active memory contention", Boundary: hostEvidenceBoundary, Reason: "requires synthetic PSI evidence instead of the public host state"},
 		{Scenario: "An exclusive session advertises compatibility coordination", Boundary: leaseOwnershipBoundary, Reason: "requires deterministic inspection of private coordination ownership unavailable through the compiled binary"},

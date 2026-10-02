@@ -151,3 +151,48 @@ func TestRootedFileReaderReadsKernelPathsBeneathItsRoot(t *testing.T) {
 		t.Fatalf("a path climbing above / escaped the root: %q error=%v", data, err)
 	}
 }
+
+func TestCgroupAvailableMemoryExcludesInactiveFileCache(t *testing.T) {
+	// The kernel reclaims the inactive file list first, so it is not usage:
+	// the cgroup's working set is memory.current less inactive_file, the
+	// figure the kubelet's node-pressure eviction uses.
+	const (
+		hostAvailable = 22 * policy.GiB
+		limit         = 6 * policy.GiB
+	)
+	pageCache := []byte("anon 122880\nfile 6438256640\nactive_file 0\ninactive_file 6438256640\n")
+
+	for _, test := range []struct {
+		name                string
+		memAvailable, limit int64
+		current, stat       []byte
+		want                int64
+	}{
+		// The container reproduction: a cgroup full of cache it can drop.
+		{"inactive file cache is available", hostAvailable, limit, []byte("6441140224\n"), pageCache, limit - 2883584},
+		// The hosted-runner reading: no memory.max, so MemAvailable binds.
+		{
+			"host availability still caps the cgroup", 14 * policy.GiB, 16 * policy.GiB, []byte("13352443904\n"),
+			[]byte("inactive_file 11884974080\n"), 14 * policy.GiB,
+		},
+		{"no memory.stat keeps the whole usage", hostAvailable, limit, []byte("1073741824\n"), nil, 5 * policy.GiB},
+		{
+			"a malformed inactive_file keeps the whole usage", hostAvailable, limit, []byte("1073741824\n"),
+			[]byte("inactive_file lots\n"), 5 * policy.GiB,
+		},
+		{
+			"cache above usage never exceeds the limit", hostAvailable, limit, []byte("1048576\n"),
+			[]byte("inactive_file 2097152\n"), limit,
+		},
+		{
+			"usage above the limit floors at zero", hostAvailable, limit, []byte("7516192768\n"),
+			[]byte("inactive_file 0\n"), 0,
+		},
+		{"no memory.current leaves MemAvailable", hostAvailable, limit, nil, pageCache, hostAvailable},
+		{"no effective limit leaves MemAvailable", hostAvailable, 0, []byte("1073741824\n"), pageCache, hostAvailable},
+	} {
+		if got := host.CgroupAvailableMemory(test.memAvailable, test.limit, test.current, test.stat); got != test.want {
+			t.Errorf("%s: available %d, want %d", test.name, got, test.want)
+		}
+	}
+}
