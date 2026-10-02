@@ -7,5 +7,4 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-- [Linux available memory counts page cache](linux-available-memory-counts-page-cache.md) — on Linux, clean page cache
-  charged to the job cgroup reads as used memory, so HIPPO defers or sheds work on a healthy host.
+This quadrant holds no idea brief, so this README has no siblings to map.

@@ -15,4 +15,5 @@ that already exists, with both stage indexes updated in that one change.
 
 ## Directory Map
 
-This stage holds no plan folder, so this README has no siblings to map.
+- [Fix: Linux available memory counts page cache](fix-linux-available-memory-counts-page-cache/README.md) is the bug-fix
+  plan for Linux readings that count reclaimable page cache as used memory.
