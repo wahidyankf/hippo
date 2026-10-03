@@ -14,6 +14,7 @@ A convention chooses a path. It does not authorize anyone to walk it; see
   callers.
 - [Command-line interface modules](command-line-interface/README.md) — the ordered modules of that contract.
 - [Commit authorization](commit-authorization.md) — when committing and pushing are permitted.
+- [Delegated agent concurrency](delegated-agent-concurrency.md) — at most three delegated agents at once, at any depth.
 - [Directory maps](directory-maps.md) — every mapped directory lists its siblings.
 - [Documentation architecture](documentation-architecture.md) — Diátaxis, and what `docs/` may not contradict.
 - [File naming](file-naming.md) — the ordered prefix an accompanying set carries.
