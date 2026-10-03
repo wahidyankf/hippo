@@ -23,8 +23,9 @@ change type qualifies, prose, governance, and plans included.
 4. **Carry delegated work unchanged.** Predicates in `delegated-checks` and their evidence pass through untouched; an
    empty list suppresses nothing, and pending evidence is neither a finding nor a reason to wait. A leak screen stays
    with [PR Leak Review](pr-leak-review.md), and broad reviewers do not repeat it.
-5. **Review concurrently.** The selected specialists read the same pinned brief in parallel. A trivial route dispatches
-   none and leaves one generalist review to synthesis.
+5. **Review concurrently.** The selected specialists read the same pinned brief in parallel, within the
+   [delegated agent cap](../../conventions/delegated-agent-concurrency.md). A trivial route dispatches none and leaves
+   one generalist review to synthesis.
 6. **Synthesize one review.** Merge the raw findings, the brief, `angle`, and `prior-findings`; deduplicate; and rate
    each finding per Finding Criticality and Confidence. A clean result is still a review.
 7. **Confirm the head, then post once.** If the live head differs from the pin, post nothing and end `stale`. Otherwise
