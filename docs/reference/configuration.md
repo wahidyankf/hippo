@@ -153,17 +153,25 @@ Profile overrides tune the resolved envelope. A profile `extends` one of the bui
 {
   "schemaVersion": 2,
   "coordination": { "mode": "reservation" },
-  "defaultProfile": "local-constrained",
+  "defaultProfile": "local-balanced",
   "profiles": {
-    "local-constrained": {
-      "extends": "constrained",
-      "fallback": "minimal",
+    "local-balanced": {
+      "extends": "balanced",
+      "fallback": "constrained",
       "strict": false,
-      "maxCpuUtilizationPercent": 90
+      "maxCpuUtilizationPercent": 80
     }
   }
 }
 ```
+
+A profile keeps what its `extends` lineage allows, beyond the fields it overrides.
+[Degraded admission on macOS](./resource-policy.md#degraded-admission-on-macos) belongs to `balanced` and to every
+profile whose lineage reaches it, so `local-balanced` above may use it. A profile that extends `constrained` or
+`minimal` never does: under a stable macOS warning its ephemeral work waits for normal pressure and defers with `124`
+naming `hippo.limit.capacity-deferred`, and a running ephemeral child of it is shed once that warning outlasts the class
+grace. No field turns the path on or off. `status --json` reports whether the resolved profile may use it as
+`profile.degradedAdmission`.
 
 | Field                        | Type    | Meaning                                                          |
 | ---------------------------- | ------- | ---------------------------------------------------------------- |

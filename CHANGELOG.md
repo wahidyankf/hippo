@@ -7,6 +7,34 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.8.4] — 2026-10-03
+
+### Fixed
+
+- Degraded admission on macOS now follows a profile's `extends` lineage instead of its name. Only a profile literally
+  named `balanced` could start ephemeral work at concurrency `1` under a stable macOS warning, so a configured profile
+  that extends `balanced` waited out the admission window and deferred with `124` naming
+  `hippo.limit.capacity-deferred`. Such a profile now admits as `balanced` does, at any depth of `extends`. A configured
+  profile that extends `constrained` or `minimal` never used the path in practice and still does not; it is now refused
+  by lineage rather than by name. No configuration key turns the path on or off.
+- A stable macOS warning no longer sheds a running `ephemeral` child of a profile that may use degraded admission merely
+  because the child was admitted under normal pressure. The grace exemption covered only a child admitted through the
+  degraded path, so an identical child admitted a moment earlier was shed after the 10 s ephemeral grace with `124`
+  naming `hippo.limit.pressure-shed`. A warning that grows swap-outs or the compressor payload past their thresholds,
+  critical pressure, and a disk below its warning reserve still shed, and `service` children and profiles outside
+  `balanced`'s lineage keep the class grace.
+
+### Added
+
+- `status --json` and `watch --json` report `profile.degradedAdmission`, `true` when the resolved profile may use
+  degraded admission on macOS. Status stays schema 5; the field is additive.
+
+### Changed
+
+- `hippo.local.json.example` selects the built-in `balanced` profile and no longer defines a profile derived from
+  `constrained`, which could never use degraded admission. The configuration reference's profile example now extends
+  `balanced` and says which profiles may use the path.
+
 ## [v0.8.3] — 2026-10-02
 
 ### Fixed
@@ -466,6 +494,7 @@ Entries are reconstructed from the repository's own history. For the complete co
 
 - First standalone release, published as Resource Guard.
 
+[v0.8.4]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.4
 [v0.8.3]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.3
 [v0.8.2]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.2
 [v0.8.1]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.1

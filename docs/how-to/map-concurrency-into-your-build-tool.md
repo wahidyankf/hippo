@@ -137,8 +137,8 @@ Something upstream is exporting `0`, a negative number, or a non-number. Fix the
 
 ## Note on degraded admission
 
-Balanced ephemeral work on macOS can admit under a stable warning window at concurrency `1`. When that happens,
-**every** mapped variable is forced to `1` as well, and HIPPO says so:
+Ephemeral work of `balanced`, or of a configured profile that extends it, can admit on macOS under a stable warning
+window at concurrency `1`. When that happens, **every** mapped variable is forced to `1` as well, and HIPPO says so:
 
 ```console
 HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1.

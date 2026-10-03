@@ -22,7 +22,7 @@ compatibility contract. Field _order_ is not part of any contract.
 ## `version --json`
 
 The smallest public document has three required fields: integer `schemaVersion` `1`, the release string in `version`,
-and the exact source commit in `commit`. Release builds currently report `v0.8.3`; source builds report `dev` and
+and the exact source commit in `commit`. Release builds currently report `v0.8.4`; source builds report `dev` and
 `unknown`, and the repository's test builds report `v0.0.0-test` with an all-zero commit.
 
 ## `monitor --json`
@@ -89,7 +89,8 @@ Schema 5. The latest host sample at the top level, plus the current assessment, 
     "diskReserveBytes": 21474836480,
     "decision": "run",
     "exitCode": 0,
-    "retryable": false
+    "retryable": false,
+    "degradedAdmission": true
   },
   "coordination": {
     "schemaVersion": 5,
@@ -132,6 +133,11 @@ Schema 5. The latest host sample at the top level, plus the current assessment, 
   "configHash": "3e8ef8adada2d85bbb2750b80e25de0828f35bc4d032a58dd263522e02cf020b"
 }
 ```
+
+`profile.degradedAdmission` is `true` when the resolved profile may use
+[degraded admission on macOS](./resource-policy.md#degraded-admission-on-macos): the built-in `balanced` profile, or a
+configured profile whose `extends` lineage reaches it. It does not say the host is in a warning window, and Linux never
+takes the path. `watch --json` carries the same field.
 
 An idle coordination epoch reports zeroes for `capacity`, `allocated`, and every count. In exclusive mode, each live
 compatibility session appears as an `active` owner with `legacy: true`; the heavy lease and its matching session are one
