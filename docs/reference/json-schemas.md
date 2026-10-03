@@ -136,8 +136,9 @@ Schema 5. The latest host sample at the top level, plus the current assessment, 
 
 `profile.degradedAdmission` is `true` when the resolved profile may use
 [degraded admission on macOS](./resource-policy.md#degraded-admission-on-macos): the built-in `balanced` profile, or a
-configured profile whose `extends` lineage reaches it. It does not say the host is in a warning window, and Linux never
-takes the path. `watch --json` carries the same field.
+configured profile whose `extends` lineage reaches it. It is a property of the profile, not a prediction: `status` takes
+two samples and cannot judge a full stable window, so under any warning `decision` stays `wait` even when
+`degradedAdmission` is `true`. Linux never takes the path. `watch --json` carries the same field.
 
 An idle coordination epoch reports zeroes for `capacity`, `allocated`, and every count. In exclusive mode, each live
 compatibility session appears as an `active` owner with `legacy: true`; the heavy lease and its matching session are one

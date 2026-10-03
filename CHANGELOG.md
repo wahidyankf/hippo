@@ -12,17 +12,19 @@ Entries are reconstructed from the repository's own history. For the complete co
 ### Fixed
 
 - Degraded admission on macOS now follows a profile's `extends` lineage instead of its name. Only a profile literally
-  named `balanced` could start ephemeral work at concurrency `1` under a stable macOS warning, so a configured profile
-  that extends `balanced` waited out the admission window and deferred with `124` naming
-  `hippo.limit.capacity-deferred`. Such a profile now admits as `balanced` does, at any depth of `extends`. A configured
-  profile that extends `constrained` or `minimal` never used the path in practice and still does not; it is now refused
-  by lineage rather than by name. No configuration key turns the path on or off.
+  named `balanced` could admit ephemeral work under a stable macOS warning, so a configured profile that extends
+  `balanced` waited out the admission window and deferred with `124` naming `hippo.limit.capacity-deferred`. Such a
+  profile now admits as `balanced` does, at any depth of `extends`. Where a profile's name and lineage disagree, lineage
+  decides: a configured profile named `balanced` with `extends: constrained` used the path before and no longer does. A
+  configured `balanced` without `extends` still starts from the built-in `balanced` and keeps the path. No configuration
+  key turns the path on or off.
 - A stable macOS warning no longer sheds a running `ephemeral` child of a profile that may use degraded admission merely
   because the child was admitted under normal pressure. The grace exemption covered only a child admitted through the
   degraded path, so an identical child admitted a moment earlier was shed after the 10 s ephemeral grace with `124`
-  naming `hippo.limit.pressure-shed`. A warning that grows swap-outs or the compressor payload past their thresholds,
-  critical pressure, and a disk below its warning reserve still shed, and `service` children and profiles outside
-  `balanced`'s lineage keep the class grace.
+  naming `hippo.limit.pressure-shed`. Only a warning that would itself admit degraded work is excused: a warning that
+  grows swap-outs or the compressor payload past their thresholds, leaves less than the warning-admission memory, or
+  fails any other degraded-admission check still counts, critical pressure and a disk below its warning reserve still
+  shed, and `service` children and profiles outside `balanced`'s lineage keep the class grace.
 
 ### Added
 

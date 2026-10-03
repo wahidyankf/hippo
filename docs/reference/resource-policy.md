@@ -174,11 +174,11 @@ govern, and an owner admitted legitimately can be shed:
 - **Warning pressure** sheds once it outlasts the guarded child's class grace — 10 s for `ephemeral`, 30 s for `service`
   — counted from the first warning sample and reset by any normal one (`internal/guard/run.go`). For a running
   `ephemeral` child whose profile may use [degraded admission](#degraded-admission-on-macos), a warning that would admit
-  degraded work does not count toward it, however that child was admitted. A warning that grows swap-outs or the
-  compressor payload past their thresholds, critical pressure, and a disk below its warning reserve still count, and
-  `service` children are not spared. The guard reports, for example,
-  `HIPPO shedding ephemeral child after memory-warning.` and exits `124` naming `hippo.limit.pressure-shed`, or
-  `hippo.limit.storage-blocked` when the warning is `disk-warning`.
+  degraded work does not count toward it, however that child was admitted. Any other warning still counts — one that
+  grows swap-outs or the compressor payload past their thresholds, leaves less than the warning-admission memory, or
+  fails another check below — as do critical pressure and a disk below its warning reserve, and `service` children are
+  not spared. The guard reports, for example, `HIPPO shedding ephemeral child after memory-warning.` and exits `124`
+  naming `hippo.limit.pressure-shed`, or `hippo.limit.storage-blocked` when the warning is `disk-warning`.
 
 Outside reservation coordination a `transactional` guard is never shed. Under reservation coordination either trigger
 starts one victim selection, which picks ephemeral and then service work and reaches transactional work only at the
@@ -197,7 +197,9 @@ remains available and the CPU, disk, OOM, swap-out, and compressor-growth checks
 `constrained` or `minimal` never uses this path; `status --json` reports `profile.degradedAdmission` for the resolved
 profile.
 
-This degraded path forces canonical concurrency and every consumer-selected mapping to `1`, and announces itself:
+Under schema-1 exclusive coordination this degraded path forces canonical concurrency and every consumer-selected
+mapping to `1`; under reservation coordination the child keeps its reservation allocation. Either way it announces
+itself:
 
 ```console
 $ hippo run --disk-path . -- sh -c 'sleep 10'
