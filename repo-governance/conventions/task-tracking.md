@@ -16,14 +16,19 @@ compaction, and the work it described is rediscovered from scratch — see
   the record afterwards.
 - Where work follows a plan, the plan's own delivery list is the tracked list and the only written record of its
   progress, and it is updated in the same change as the work it describes.
+- Away from a plan, a progress file in `local-tmp/` is the written progress record. Open it before the task's first
+  action; record the goal, every active rule decision, and each item with its status; and update it as items resolve, so
+  a session that breaks off resumes from it. It stays until the whole task has ended, delivery and clean-up in every
+  repository included, and is then removed under
+  [dev artifact clean-up](../workflows/maintenance/dev-artifact-clean-up.md).
 
 ## What Belongs in the Repository
 
 Anything the next reader needs to resume: the plan, its delivery units, the evidence each unit produced, and the
 decisions taken along the way. Scratch work belongs in ignored `local-tmp/`; a report someone asked for belongs in
 ignored `generated-reports/`. Neither is authoritative, and neither is a plan. Scratch holds what a run needs and then
-discards — scripts, assets, logs, the touched-path ledger — never a copy of a delivery list, its ticks, or its status.
-Away from a plan, a scratch file may hold working notes that have to survive a context boundary.
+discards — scripts, assets, logs, the touched-path ledger, and away from a plan the progress record — never a copy of a
+delivery list, its ticks, or its status.
 
 ## New Direction Mid-Task
 
