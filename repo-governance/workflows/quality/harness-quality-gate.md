@@ -40,10 +40,11 @@ Each cycle is one full audit by `harness-checker`, loading the `checking-harness
 [Harness Propagation](harness-propagation.md), run by `harness-fixer`, per
 [Sequence and Termination](../../development/workflow/quality-gate-contract/002-sequence-and-termination.md).
 
-The audit researches each harness in the subject, one task per harness, in parallel because none reads another's result,
-handed over as Web Research Delegation requires. Each task returns file locations, metadata keys, model identifier
-format, permission schema, and breaking changes, citing each fact's authoritative source and retrieval date. Disagreeing
-sources come back as a conflict, not a choice.
+The audit researches each harness in the subject, one task per harness, in parallel because none reads another's result
+and within the [delegated agent cap](../../conventions/delegated-agent-concurrency.md), handed over as Web Research
+Delegation requires. Each task returns file locations, metadata keys, model identifier format, permission schema, and
+breaking changes, citing each fact's authoritative source and retrieval date. Disagreeing sources come back as a
+conflict, not a choice.
 
 The checker compares the research with the reference record and the committed bindings. Each difference is a finding
 with its local path and upstream citation.

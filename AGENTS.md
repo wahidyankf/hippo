@@ -58,8 +58,7 @@ Go and shell stack standards, and every local deviation: the
 
 A pinned RHINO or FERRET defect: [upstream tool defects](repo-governance/development/upstream-tool-defects.md).
 
-HIPPO cannot guard HIPPO; the reason, and the contract this repository owes consumers, is in
-[resource-aware development](repo-governance/development/resource-aware-development.md).
+HIPPO cannot guard HIPPO: [resource-aware development](repo-governance/development/resource-aware-development.md).
 
 ## Version Control
 
@@ -94,7 +93,8 @@ One canonical instruction body, expressed per harness:
 ## Working Here
 
 Write in [English](repo-governance/conventions/language.md). Keep
-[task state in the repository](repo-governance/conventions/task-tracking.md).
+[task state in the repository](repo-governance/conventions/task-tracking.md). Run at most
+[three delegated agents at once](repo-governance/conventions/delegated-agent-concurrency.md).
 [Exhaust the repository before asking](repo-governance/conventions/last-resort-questions.md). Diagrams are
 [ASCII](repo-governance/conventions/markdown-visualizations.md), Markdown
 [fits 120 columns](repo-governance/conventions/markdown-line-length.md), and every internal
