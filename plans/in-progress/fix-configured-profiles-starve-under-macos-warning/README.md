@@ -602,16 +602,30 @@ release's pin values that each repin uses.
       unit, so the live warning could not be reproduced. A build of the branch reported, at level `1`,
       `balanced degradedAdmission=true`, `local-balanced degradedAdmission=true`, and
       `local-constrained degradedAdmission=false` for the three reproduction configurations.
-- [ ] `[AI]` Run `npm test`; proof: the full gate exits `0` on the branch head. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-08]`
-      `[AC-09]`
+- [x] `[AI]` Run `npm test`; proof: the full gate exits `0` on the branch head. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-08]`
+      `[AC-09]` **Result:** `npm test` exited `0` on `59147f5`: the quick gate, the integration adapter, the end-to-end
+      suite, the race-enabled run, and `No vulnerabilities found.` from `govulncheck`. The later commits change
+      documentation only, and the rebase onto `091b4e4` brought only governance documents.
 
 ### Phase 5: Integrate and Release
 
 - [ ] `[AI]` Land the fix unit through a pull request, with the leak review posted for the exact head and every merge
       precondition holding; proof: the merge commit on `origin/main`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-08]`
       `[AC-09]`
-- [ ] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
-      `all` at that commit, as release cut requires; proof: one verdict line recorded here. `[AC-06]`
+- [x] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
+      `all` at that commit, as release cut requires; proof: one verdict line recorded here. `[AC-06]` **Result:** one
+      cycle on the fix head `59147f5`; entry tooling clean; 44 documents and about 210 claims; no CRITICAL or HIGH row,
+      so the run ended without a writer pass. **Deviation:** it ran on the pull request's head rather than the merge
+      commit, so that rows within this plan's own documentation scope could land in the same unit; the commits on `main`
+      since then change only governance, which is outside the gate's scope. This plan's docs propagation then repaired
+      the rows it owns: the name-versus-lineage narrowing in the changelog (DQG-02), `extends` accepting a configured
+      parent and the `balanced` recommendation (DQG-03, DQG-08), the stable-warning exception stated as a rule and in
+      the shedding explanation (DQG-05, DQG-06), the `decision`-stays-`wait` note (DQG-08), and the exclusive-mode limit
+      on forcing concurrency `1` (DQG-01). Left open: the first-command tutorial's claim that a warning does not affect
+      it (DQG-04, MEDIUM, outside this fix), `profile.exitCode` carrying internal numbers (DQG-07, needs-decision), the
+      degraded-admission message naming concurrency `1` under reservation coordination (DQG-01, needs-decision), and the
+      dated idea brief's present tense (DQG-09).
+      `docs-quality-gate: PASS_WITH_FINDINGS (1 cycle, 0 blocking, 4 MEDIUM and 5 LOW open)`
 - [ ] `[AI]` Cut `v0.8.4` on the merge commit through
       [release cut](../../../repo-governance/workflows/maintenance/release-cut.md), screening the generated notes and
       the tag name first; proof: the release's `checksums.txt` and the tag's peeled commit recorded here. `[AC-06]`
