@@ -21,7 +21,9 @@ owner it would like to shed still cannot touch it.
 
 Under critical pressure, some owner must actually stop. Warning pressure gets a grace first: once it has lasted 10 s
 under an ephemeral guard, or 30 s under a service guard, it is treated the same way, because a warning that does not
-clear is pressure the host is not recovering from. A single normal sample resets the grace. The thresholds are in
+clear is pressure the host is not recovering from. A single normal sample resets the grace. One warning is excused: a
+stable macOS warning, safe enough to admit degraded work, never counts toward the grace of an ephemeral child whose
+profile may use degraded admission. The thresholds are in
 [resource policy](../reference/resource-policy.md#host-pressure-remains-authoritative).
 
 The mechanism is mark-and-observe:

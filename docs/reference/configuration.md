@@ -147,7 +147,9 @@ be loosened by a permissive peer.
 
 ## `profiles`
 
-Profile overrides tune the resolved envelope. A profile `extends` one of the built-in profiles and may set a `fallback`.
+Profile overrides tune the resolved envelope. A profile `extends` a built-in profile or another configured profile and
+may set a `fallback`. On a macOS workstation, prefer the built-in `balanced` profile, or a profile that extends it, so
+that ephemeral work can still run under a stable memory warning.
 
 ```json
 {
@@ -175,7 +177,7 @@ grace. No field turns the path on or off. `status --json` reports whether the re
 
 | Field                        | Type    | Meaning                                                          |
 | ---------------------------- | ------- | ---------------------------------------------------------------- |
-| `extends`                    | string  | Built-in profile this one derives from                           |
+| `extends`                    | string  | Built-in or configured profile this one derives from             |
 | `fallback`                   | string  | Profile to resolve to when this one does not fit                 |
 | `strict`                     | boolean | When true, no fallback is attempted; a misfit replans with `125` |
 | `memoryReservePercent`       | number  | Share of effective memory held back                              |
