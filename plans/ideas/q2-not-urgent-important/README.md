@@ -8,4 +8,5 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-This quadrant holds no idea brief, so this README has no siblings to map.
+- [Rust for stricter domain modeling](rust-for-stricter-domain-modeling.md) — whether closed enums, exhaustive `match`,
+  and no implicit zero values justify moving from Go, or stricter Go modeling gets most of it.
