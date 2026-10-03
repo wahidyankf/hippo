@@ -172,8 +172,11 @@ govern, and an owner admitted legitimately can be shed:
 
 - **Critical pressure** sheds at once.
 - **Warning pressure** sheds once it outlasts the guarded child's class grace — 10 s for `ephemeral`, 30 s for `service`
-  — counted from the first warning sample and reset by any normal one (`internal/guard/run.go`). For a child admitted
-  under degraded macOS warning, warning that stays stable does not count toward it. The guard reports, for example,
+  — counted from the first warning sample and reset by any normal one (`internal/guard/run.go`). For a running
+  `ephemeral` child whose profile may use [degraded admission](#degraded-admission-on-macos), a warning that would admit
+  degraded work does not count toward it, however that child was admitted. A warning that grows swap-outs or the
+  compressor payload past their thresholds, critical pressure, and a disk below its warning reserve still count, and
+  `service` children are not spared. The guard reports, for example,
   `HIPPO shedding ephemeral child after memory-warning.` and exits `124` naming `hippo.limit.pressure-shed`, or
   `hippo.limit.storage-blocked` when the warning is `disk-warning`.
 
@@ -188,8 +191,11 @@ the lifetime outcome `emergency-safety-stop`, and never auto-retries that payloa
 
 ## Degraded admission on macOS
 
-Balanced **ephemeral** work on Darwin may admit after a full stable warning window when 25% of effective memory —
-clamped to 4–8 GiB — remains available and the CPU, disk, OOM, swap-out, and compressor-growth checks are all safe.
+**Ephemeral** work of the built-in `balanced` profile, or of a configured profile whose `extends` lineage reaches
+`balanced`, may admit on Darwin after a full stable warning window when 25% of effective memory — clamped to 4–8 GiB —
+remains available and the CPU, disk, OOM, swap-out, and compressor-growth checks are all safe. A profile that extends
+`constrained` or `minimal` never uses this path; `status --json` reports `profile.degradedAdmission` for the resolved
+profile.
 
 This degraded path forces canonical concurrency and every consumer-selected mapping to `1`, and announces itself:
 
@@ -198,7 +204,8 @@ $ hippo run --disk-path . -- sh -c 'sleep 10'
 HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1.
 ```
 
-Services, fallback profiles, Linux PSI, transactional work, and releases cannot use this path.
+Services, profiles outside `balanced`'s lineage (including a `constrained` or `minimal` fallback), Linux PSI,
+transactional work, and releases cannot use this path.
 
 ## Supported evidence
 

@@ -57,7 +57,7 @@ Download a tagged archive for `darwin` or `linux` on `amd64` or `arm64`, and ver
 `checksums.txt`. **Pin both the tag and the expected SHA-256; never follow `main` at runtime.**
 
 ```sh
-VERSION=v0.8.3
+VERSION=v0.8.4
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -73,7 +73,7 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ./hippo version --json
 ```
 
-The checksum command prints `hippo_v0.8.3_<os>_<arch>.tar.gz: OK`; `version --json` reports `v0.8.3` and the exact
+The checksum command prints `hippo_v0.8.4_<os>_<arch>.tar.gz: OK`; `version --json` reports `v0.8.4` and the exact
 release commit.
 
 From a source checkout, the tracked `./hippo` bootstrap compiles the CLI once and caches it. Details:

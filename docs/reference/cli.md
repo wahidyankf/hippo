@@ -83,10 +83,10 @@ Without a request for help, each of those mistakes still exits `2` naming `hippo
 
 ```console
 $ hippo version
-v0.8.3 (<commit>)
+v0.8.4 (<commit>)
 
 $ hippo version --json
-{"schemaVersion":1,"version":"v0.8.3","commit":"<commit>"}
+{"schemaVersion":1,"version":"v0.8.4","commit":"<commit>"}
 ```
 
 The text form reports the release followed by its exact source commit. The JSON form carries the same values in
