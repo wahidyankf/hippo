@@ -492,69 +492,116 @@ release's pin values that each repin uses.
       amendment after their verdicts.
       `plan-quality-gate: PASS_WITH_FINDINGS (run 1: 2 cycles, 1 HIGH, 2 MEDIUM, 6 LOW resolved, 1 LOW open)`
       `plan-quality-gate: PASS_WITH_FINDINGS (run 2: 2 cycles, 1 HIGH, 2 LOW resolved, 1 MEDIUM open)`
-- [ ] `[AI]` Land the D-06 amendment, the gate's repairs, and the gate's verdict lines to this plan alone through a pull
-      request, before any fix is committed; proof: the merge commit on `origin/main`. `[AC-07]`
+- [x] `[AI]` Land the D-06 amendment, the gate's repairs, and the gate's verdict lines to this plan alone through a pull
+      request, before any fix is committed; proof: the merge commit on `origin/main`. `[AC-07]` **Result:** #123 merged
+      by rebase at `3a3afb0` after every check passed and a leak review posted `pass` for head `b70d02b`.
 
 ### Phase 2: Specification and Regression Tests
 
-- [ ] `[AI]` Add the two `admission.feature` scenarios and the `public-cli.feature` outline from
+- [x] `[AI]` Add the two `admission.feature` scenarios and the `public-cli.feature` outline from
       [Specification Changes](#specification-changes), and the two exemptions to `tests/contract/contract.go`; proof:
       `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` reports the new steps undefined. `[AC-01]` `[AC-02]`
-      `[AC-03]`
-- [ ] `[AI]` RED, behaviour: bind the new steps in `tests/support/steps.go` and `tests/support/driver.go`, decoding the
+      `[AC-03]` **Result:** `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` reported the new steps undefined.
+      **Deviation:** that command only checks the corpus against its bindings; the scenarios themselves run under
+      `go test -count=1 -run TestUnitBehaviours ./tests/unit` and
+      `go test -count=1 -run TestIntegrationBehaviours ./tests/integration`, which every later proof in this plan uses
+      instead.
+- [x] `[AI]` RED, behaviour: bind the new steps in `tests/support/steps.go` and `tests/support/driver.go`, decoding the
       status `profile` object as a map so a missing field fails by assertion; proof: the unit and integration adapters
       fail "A configured profile derived from balanced admits degraded work" because the guard deferred the work, and
       the outline because `profile.degradedAdmission` is absent, while "outside balanced's lineage" passes. `[AC-01]`
-      `[AC-02]` `[AC-03]`
-- [ ] `[AI]` RED, unit: add `TestConfiguredProfilesInheritDegradedAdmission` to `tests/unit/adaptive_test.go`, loading a
+      `[AC-02]` `[AC-03]` **Result:** both adapters failed exactly the expected scenarios. "A configured profile derived
+      from balanced admits degraded work" failed with
+      `profile "local-balanced": exit=75 stderr="HIPPO deferred task: safe admission was not reached."`; both status
+      rows failed with `status profile has no boolean degradedAdmission`; "outside balanced's lineage" passed on the
+      integration adapter. The bindings live in `tests/support/degraded_lineage.go`. **Deviations:** the guard runs over
+      an `advancingCollector` that stamps each repeated reading one step later, not a `sequenceCollector`, so the window
+      stays stable through the admission wait; and the capacity-deferral Then holds the guard's internal deferral
+      status, as the existing `requireDeferred` does, because the command line cannot shorten its admission window to
+      reach the deferral within a test.
+- [x] `[AI]` RED, unit: add `TestConfiguredProfilesInheritDegradedAdmission` to `tests/unit/adaptive_test.go`, loading a
       temporary schema-3 file with a `balanced`-derived profile, a profile derived from that one, a
       `constrained`-derived profile, and a configured `balanced` override, and resolving each, plus a `balanced` request
       that falls back on a small sample; proof: `go test -count=1 -run DegradedAdmission ./tests/unit` fails to build on
-      the missing `Resolution.DegradedAdmission`. `[AC-01]` `[AC-02]` `[AC-03]`
-- [ ] `[AI]` RED, shed: add the three `execution.feature` entries and their exemptions, and bind them; proof: the
+      the missing `Resolution.DegradedAdmission`. `[AC-01]` `[AC-02]` `[AC-03]` **Result:**
+      `go test -count=1 -run DegradedAdmission ./tests/unit` failed to build:
+      `resolution.DegradedAdmission undefined (type policy.Resolution has no field or method DegradedAdmission)`.
+      **Deviation:** the temporary file is schema 2, not schema 3, because schema 3 refuses a file without adaptive
+      coordination (`schema 3 requires adaptive coordination`) and the test concerns profiles only.
+- [x] `[AI]` RED, shed: add the three `execution.feature` entries and their exemptions, and bind them; proof: the
       integration adapter fails "Stable warning spares a balanced ephemeral child admitted under normal pressure" with
       exit `74` (`guard.PressureShedExitCode`, which the command line reports as 124 naming `hippo.limit.pressure-shed`)
       and `HIPPO shedding ephemeral child after memory-warning.` on stderr, because `degraded` is false for a normally
       admitted child; every row of the two shedding outlines passes. With the advancing sample source the window is
-      stable for the whole run, so no other cause can produce that shed. `[AC-08]` `[AC-09]`
+      stable for the whole run, so no other cause can produce that shed. `[AC-08]` `[AC-09]` **Result:** the integration
+      adapter failed "Stable warning spares a balanced ephemeral child admitted under normal pressure" with
+      `exit=74 completed=false stderr="HIPPO shedding ephemeral child after memory-warning."`, and every row of both
+      shedding outlines passed. Two unrelated scenarios failed in the same run only because they compile `./tests/unit`,
+      which the unit RED above left unbuildable.
 
 ### Phase 3: Fix
 
-- [ ] `[AI]` GREEN: add the attribute to `Profile`, `BuiltinCatalog`, `Resolution`, and `Resolve` in
+- [x] `[AI]` GREEN: add the attribute to `Profile`, `BuiltinCatalog`, `Resolution`, and `Resolve` in
       `internal/policy/profiles.go`; gate `internal/guard/run.go` on it; update `assessAdmission` and
       `observeDegradedWarning` in `tests/support/driver.go`; proof: the _Focused tests_ pass, including every existing
-      degraded-admission scenario. `[AC-01]` `[AC-02]` `[AC-03]`
-- [ ] `[AI]` GREEN, shed: replace `degraded &&` in the supervision loop of `internal/guard/run.go` with the class and
+      degraded-admission scenario. `[AC-01]` `[AC-02]` `[AC-03]` **Result:**
+      `go test -count=1 -run DegradedAdmission ./tests/unit` passed, and
+      `go test -count=1 -run TestUnitBehaviours ./tests/unit` and
+      `go test -count=1 -run TestIntegrationBehaviours ./tests/integration` both exited `0`, including every existing
+      degraded-admission scenario.
+- [x] `[AI]` GREEN, shed: replace `degraded &&` in the supervision loop of `internal/guard/run.go` with the class and
       lineage conditions from [Second Fix](#second-fix-stable-warning-spares-every-eligible-child), and remove the
       `degraded` local; proof: the integration adapter passes every `execution.feature` scenario, including "Worsening
       warning sheds degraded work" and "Warning that outlasts the class grace sheds eligible work". `[AC-08]` `[AC-09]`
-- [ ] `[AI]` REFACTOR: confirm the degraded gate no longer reads a profile name
+      **Result:** the same two adapter runs passed every `execution.feature` scenario, including "Worsening warning
+      sheds degraded work" and "Warning that outlasts the class grace sheds eligible work"; the `degraded` local is
+      gone.
+- [x] `[AI]` REFACTOR: confirm the degraded gate no longer reads a profile name
       (`grep -n '"balanced"' internal/guard/run.go` prints nothing) and that the only other name-keyed paths are the two
       listed under the conditions above, and keep `internal/policy` and `internal/config` at the 99% coverage floor;
-      proof: `npm run test:quick` exits `0`. `[AC-01]`
-- [ ] `[AI]` Run the
+      proof: `npm run test:quick` exits `0`. `[AC-01]` **Result:** `grep -n '"balanced"' internal/guard/run.go` printed
+      nothing; `npm run test:quick` exited `0` with `0 issues.` from the linter and
+      `selected production line coverage: 99.30% (846/852 statements)`.
+- [x] `[AI]` Run the
       [Gherkin implementation review](../../../repo-governance/workflows/quality/gherkin-implementation-review.md) on
       the new scenarios, the rebound "Stable macOS warning admits degraded work", and the rebound status step; proof:
       its status recorded here, with these break tests: reverting `run.go`'s gate to the name check fails "A configured
       profile derived from balanced admits degraded work"; removing the attribute from `BuiltinCatalog`'s `balanced`
       fails "Stable macOS warning admits degraded work"; dropping the `Resolution` field's JSON tag fails the status
       outline; and restoring `degraded &&` in the supervision loop fails "Stable warning spares a balanced ephemeral
-      child admitted under normal pressure". `[AC-01]` `[AC-03]` `[AC-08]`
+      child admitted under normal pressure". `[AC-01]` `[AC-03]` `[AC-08]` **Result:** every new scenario and row, the
+      rebound "Stable macOS warning admits degraded work", and the rebound status step are `implemented`; none is
+      `untested`, `unimplemented`, or `drifted`. Each named break test failed its scenario and was reverted: the name
+      gate failed "A configured profile derived from balanced admits degraded work" (`exit=75`); dropping the built-in
+      attribute failed "Stable macOS warning admits degraded work" (`admitted=false`); dropping the JSON tag failed both
+      status rows (`no boolean degradedAdmission`); and disabling the supervision exemption, as `degraded &&` does for a
+      normally admitted child, failed "Stable warning spares a balanced ephemeral child admitted under normal pressure"
+      (`exit=74`). Four more breaks hold the shedding rows: dropping the class condition failed the service row,
+      dropping the lineage condition failed the `constrained` row, ignoring warning readiness failed the compressor,
+      swap-out, and disk rows, and ignoring critical state failed the critical row.
 
 ### Phase 4: Example, Documentation, and Verification
 
-- [ ] `[AI]` Set `defaultProfile` to `balanced` in `hippo.local.json.example` and drop its `profiles` entry; proof:
-      `./hippo status --config hippo.local.json.example` exits `0` naming `profile=balanced`. `[AC-04]`
-- [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md): the configuration
+- [x] `[AI]` Set `defaultProfile` to `balanced` in `hippo.local.json.example` and drop its `profiles` entry; proof:
+      `./hippo status --config hippo.local.json.example` exits `0` naming `profile=balanced`. `[AC-04]` **Result:** a
+      build of the branch printed `state=normal reason=normal profile=balanced concurrency=11 ...` for
+      `status --config hippo.local.json.example` and exited `0`.
+- [x] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md): the configuration
       reference's `## profiles` example and lineage note, the resource policy's degraded-admission section and its "Host
       pressure remains authoritative" warning bullet (stable warning spares every eligible running ephemeral child, not
       only one admitted through the degraded path), the map-concurrency note, the status schema's
       `profile.degradedAdmission`, a `v0.8.4` `CHANGELOG.md` entry, and every document naming the current release;
       proof: `npm run format:check` exits `0` and `git grep -n -I 'local-constrained' -- ':!plans' ':!tests'` prints
-      nothing. `[AC-04]` `[AC-06]`
-- [ ] `[AI]` Run the _Reproduction_ with a build of the branch, once the host reads pressure level `2`; proof: the
+      nothing. `[AC-04]` `[AC-06]` **Result:** updated the configuration reference (example now extends `balanced`, with
+      the lineage note), the resource policy (both the warning bullet and the degraded-admission section), the
+      map-concurrency note, the status schema (`profile.degradedAdmission`), `CHANGELOG.md` (`v0.8.4`), and the five
+      pages naming the current release; `npm run format:check` exited `0` and the `git grep` printed nothing.
+- [x] `[AI]` Run the _Reproduction_ with a build of the branch, once the host reads pressure level `2`; proof: the
       transcript recorded here, or a dated `Not observable` with the level read when the host never reached `2` during
-      the unit. `[AC-05]`
+      the unit. `[AC-05]` **Result:** `Not observable` on 2026-10-03: the host read pressure level `1` throughout the
+      unit, so the live warning could not be reproduced. A build of the branch reported, at level `1`,
+      `balanced degradedAdmission=true`, `local-balanced degradedAdmission=true`, and
+      `local-constrained degradedAdmission=false` for the three reproduction configurations.
 - [ ] `[AI]` Run `npm test`; proof: the full gate exits `0` on the branch head. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-08]`
       `[AC-09]`
 
