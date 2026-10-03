@@ -255,6 +255,7 @@ type Driver struct {
 	exclusiveStatusState     map[string][]byte
 	interruption             interruptionScenario
 	ungatedPackages          []string
+	lineage                  lineageScenario
 }
 
 type failingStream struct {
@@ -459,7 +460,7 @@ func (driver *Driver) assessAdmission() {
 	driver.admitted = resolution.ExitCode == 0 && policy.AdmissionReady(driver.samples, resolution.Policy)
 	if !driver.admitted &&
 		driver.taskClass == taskClassEphemeral &&
-		resolution.ResolvedProfile == profileBalanced &&
+		resolution.DegradedAdmission &&
 		policy.WarningAdmissionReady(driver.samples, resolution.Policy) {
 		driver.resolution.Concurrency = 1
 		driver.admitted = true
@@ -1760,10 +1761,11 @@ func (driver *Driver) observeDegradedWarning() error {
 		Collector:              &sequenceCollector{samples: samples},
 		Policy:                 resourcePolicy,
 		Resolution: policy.Resolution{
-			RequestedProfile: profileBalanced,
-			ResolvedProfile:  profileBalanced,
-			FallbackChain:    []string{profileBalanced},
-			Concurrency:      7,
+			RequestedProfile:  profileBalanced,
+			ResolvedProfile:   profileBalanced,
+			FallbackChain:     []string{profileBalanced},
+			Concurrency:       7,
+			DegradedAdmission: true,
 		},
 		Sleep:  func(time.Duration) {},
 		Now:    time.Now,
@@ -3410,14 +3412,16 @@ func (driver *Driver) statusWithConfig() {
 
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
+	stdout := &bytes.Buffer{}
 	code, err := (cli.Application{
-		Stdout:    &bytes.Buffer{},
+		Stdout:    stdout,
 		Stderr:    &bytes.Buffer{},
 		Collector: collector,
 		Sleep:     func(time.Duration) {},
 	}).Run(context.Background(), []string{statusCommandName, jsonFlag, configFlag, driver.configPath})
 
 	driver.exitCode = code
+	driver.output = stdout.String()
 	if err != nil {
 		driver.errorOutput = err.Error()
 	}

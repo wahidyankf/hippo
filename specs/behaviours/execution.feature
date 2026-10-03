@@ -132,6 +132,36 @@ Feature: Guarded process execution
     When the guard observes warning through the grace
     Then the degraded child starts and is terminated with exit 124 naming hippo.limit.pressure-shed
 
+  @e2e-exempt
+  Scenario: Stable warning spares a balanced ephemeral child admitted under normal pressure
+    Given an ephemeral child of the built-in balanced profile admitted under normal pressure
+    When the host then holds a stable macOS warning past the class grace
+    Then the child finishes with its own exit code
+
+  @e2e-exempt
+  Scenario Outline: Unsafe pressure still sheds a balanced ephemeral child admitted under normal pressure
+    Given an ephemeral child of the built-in balanced profile admitted under normal pressure
+    When the host then shows <pressure> past the class grace
+    Then the guard sheds the child and exits with code 124 naming <reason>
+
+    Examples:
+      | pressure                       | reason                      |
+      | growing compressor payload     | hippo.limit.pressure-shed   |
+      | growing swap-outs              | hippo.limit.pressure-shed   |
+      | critical memory pressure       | hippo.limit.pressure-shed   |
+      | disk below its warning reserve | hippo.limit.storage-blocked |
+
+  @e2e-exempt
+  Scenario Outline: Stable warning still sheds work outside the exemption
+    Given <child> admitted under normal pressure
+    When the host then holds a stable macOS warning past the class grace
+    Then the guard sheds the child and exits with code 124 naming hippo.limit.pressure-shed
+
+    Examples:
+      | child                                                    |
+      | an ephemeral child of a profile derived from constrained |
+      | a service child of the built-in balanced profile         |
+
   Scenario: Exclusive coordination refuses an admission wait it cannot apply
     Given the compiled HIPPO binary
     When run asks to wait for admission under schema one exclusive coordination

@@ -844,7 +844,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	deadline := config.Now().Add(config.Policy.AdmissionWindow)
 	var previous policy.CPUState
 	samples := []policy.Sample{}
-	admitted, degraded := false, false
+	admitted := false
 	// A caller that cancels while the host is still being sampled cancels
 	// work that never started, exactly as one that cancels a queued waiter
 	// does, and leaves the same receipt so it may requeue once.
@@ -898,9 +898,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		}
 
 		if config.TaskClass == policy.TaskEphemeral &&
-			config.Resolution.ResolvedProfile == "balanced" &&
+			config.Resolution.DegradedAdmission &&
 			policy.WarningAdmissionReady(samples, config.Policy) {
-			admitted, degraded = true, true
+			admitted = true
 			if !config.ReservationPolicy.Enabled {
 				config.Resolution.Concurrency = 1
 				config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true, config.ConcurrencyEnvironment)
@@ -1063,8 +1063,13 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			}
 
 			assessment := policy.ResourceAssessment(samples, config.Policy)
-			stableDegradedWarning := degraded && policy.WarningAdmissionReady(samples, config.Policy)
-			if assessment.State == policy.StateNormal || stableDegradedWarning {
+			// A stable macOS warning never counts toward the grace of a running
+			// ephemeral child whose profile may use degraded admission, however
+			// that child was admitted: the same warning would admit it now.
+			stableWarning := config.TaskClass == policy.TaskEphemeral &&
+				config.Resolution.DegradedAdmission &&
+				policy.WarningAdmissionReady(samples, config.Policy)
+			if assessment.State == policy.StateNormal || stableWarning {
 				warningSince = nil
 			} else if assessment.State == policy.StateWarning && warningSince == nil {
 				value := config.Now()

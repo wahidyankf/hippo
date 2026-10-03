@@ -506,6 +506,10 @@ func (driver *Driver) admissionBindings() []contract.StepBinding {
 		step(`^development admission is assessed$`, driver.assessAdmission),
 		step(`^the work is admitted$`, driver.requireAdmitted),
 		step(`^a full stable Darwin warning window with safe headroom$`, driver.stableDarwinWarning),
+		step(`^a configuration whose default profile extends (balanced|constrained)$`, driver.derivedProfileConfiguration),
+		step(`^the guard runs ephemeral work under that configuration$`, driver.guardUnderConfiguration),
+		step(`^the guard admits the child at concurrency one and says so$`, driver.requireConfiguredDegradedAdmission),
+		step(`^the guard defers the work naming hippo\.limit\.capacity-deferred$`, driver.requireConfiguredDeferral),
 		step(`^ephemeral work is admitted with concurrency one$`, driver.requireDegradedAdmitted),
 		step(`^Darwin warning samples with excessive compressor growth$`, driver.growingDarwinWarning),
 		step(`^degraded work is deferred$`, driver.requireDegradedDeferred),
@@ -608,6 +612,12 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^an admitted degraded ephemeral child encounters growing compressor pressure$`, driver.degradedGrowthChild),
 		step(`^the guard observes warning through the grace$`, driver.observeDegradedWarning),
 		step(`^the degraded child starts and is terminated with exit 124 naming hippo\.limit\.pressure-shed$`, driver.requireDegradedShed),
+		step(`^an ephemeral child of the built-in balanced profile admitted under normal pressure$`, driver.balancedEphemeralChild),
+		step(`^(an ephemeral child of a profile derived from constrained|a service child of the built-in balanced profile) admitted under normal pressure$`, driver.childOutsideExemption),
+		step(`^the host then holds a stable macOS warning past the class grace$`, driver.holdStableWarning),
+		step(`^the host then shows (growing compressor payload|growing swap-outs|critical memory pressure|disk below its warning reserve) past the class grace$`, driver.showUnsafePressure),
+		step(`^the child finishes with its own exit code$`, driver.requireChildFinished),
+		step(`^the guard sheds the child and exits with code 124 naming (hippo\.limit\.pressure-shed|hippo\.limit\.storage-blocked)$`, driver.requireLineageShed),
 		step(`^a service port already leased by a live owner$`, func() error {
 			return driver.prepareReservationScenarioV04("held service port", requireV04HeldPortDefersContender)
 		}),
@@ -754,6 +764,7 @@ func (driver *Driver) publicCLIBindings() []contract.StepBinding {
 		step(`^the command exits 2 naming hippo\.args\.invalid before collecting evidence$`, driver.requireReleaseUsageMistakeRefused),
 		step(`^an explicit HIPPO config with an unknown field$`, driver.invalidExplicitConfig),
 		step(`^JSON status is requested with that config$`, driver.statusWithConfig),
+		step(`^status reports degraded admission only for the profile derived from balanced$`, driver.requireStatusDegradedAdmission),
 		step(`^configuration fails with exit 125$`, driver.requireConfigExit),
 	}
 }
