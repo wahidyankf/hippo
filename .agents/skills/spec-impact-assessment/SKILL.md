@@ -1,6 +1,8 @@
 ---
 name: spec-impact-assessment
 description: Assess what a proposed change does to specs/behaviours and specs/architecture.md before writing any code.
+when_to_use: >-
+  Use before every repository change, before any code is written, to decide what it does to the specifications.
 ---
 
 # Specification Impact Assessment

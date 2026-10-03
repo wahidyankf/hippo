@@ -3,7 +3,7 @@
 This file is an index. Every rule lives in [`repo-governance/`](repo-governance/README.md); this file states none of its
 own.
 
-New here? Start with [the vision](repo-governance/vision/README.md): what a guard nobody notices is for.
+New here? Start with [the vision](repo-governance/vision/README.md).
 
 ## The Product
 
@@ -55,6 +55,8 @@ done: [software quality enforcement](repo-governance/development/software-qualit
 
 Go and shell stack standards, and every local deviation: the
 [repository adapter](repo-governance/development/quality/stacks/repository-adapter.md).
+
+Coding work: [SWE delegation](repo-governance/conventions/swe-delegation.md).
 
 A pinned RHINO or FERRET defect: [upstream tool defects](repo-governance/development/upstream-tool-defects.md).
 

@@ -30,6 +30,12 @@ Adopted from the shared catalog with the software-development agents.
   confidence.
 - [generating-validation-reports](generating-validation-reports/SKILL.md) — write an audit or fix report that survives
   interruption.
+- [modeling-threats](modeling-threats/SKILL.md) — name a design's assets, trust boundaries, entry points, and the
+  threats each choice opens or closes.
+- [producing-review-findings](producing-review-findings/SKILL.md) — decide what a review discipline raises and return it
+  as findings.
+- [usability-heuristic-evaluation](usability-heuristic-evaluation/SKILL.md) — judge an interface as a first-time user,
+  citing a named principle for every finding.
 
 ## This Repository
 

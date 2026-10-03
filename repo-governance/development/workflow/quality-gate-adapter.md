@@ -58,14 +58,13 @@ operation here states its own bound.
 - **Review surface.** A hosted pull request, under the merge preconditions.
 - **Review route.** No scout or lens checker is adopted, so every pass takes the trivial tier: `pr-review-checker`
   reviews the change alone.
-- **Agent fields.** Catalog `capabilities` become `requires` and `denies`, `read-only` becomes a denied
-  `repository-write` with `inline-result-only`, and `tier: execution` is dropped, since only `plan` is declared. No
-  harness here declares `network`, so `docs-checker` returns each outside-world research need to its caller.
+- **Agent fields.** Catalog fields and tiers are kept as written, and each `read-only` agent also keeps the local
+  `inline-result-only` constraint. `docs-checker` declares no `network`, so it returns each outside-world research need
+  to its caller.
 - **Skills not adopted.** `authoring-documentation`, `propagating-rules`, `checking-harness-compatibility`,
   `applying-ci-standards`, `validating-specification-structure`, `resolving-review-threads`,
-  `synthesizing-review-findings`, `producing-review-findings`, `validating-factual-accuracy`, `validating-links`,
-  `validating-governance-rules`, and `understanding-governance-architecture`. Each executor works from its workflow and
-  agent text.
+  `synthesizing-review-findings`, `validating-factual-accuracy`, `validating-links`, `validating-governance-rules`, and
+  `understanding-governance-architecture`. Each executor works from its workflow and agent text.
 - **Docs propagation.** A specification that disagrees with the implementation is asked through `grill-me`, under
   last-resort questions.
 - **Rules propagation.** It stops at this repository's boundary, as the governance README records. It records no sibling

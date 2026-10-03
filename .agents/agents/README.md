@@ -1,7 +1,15 @@
+---
+description: >-
+  Indexes this repository's canonical agent definitions, each declaring what it needs before any harness adapter
+  translates that declaration.
+when_to_use: >-
+  Use when locating a canonical agent definition or deciding what a new one must declare.
+---
+
 # Agents
 
-Canonical agent definitions. Each declares its identity, the capabilities it requires, the ones it denies itself, and
-nothing about any particular harness. The per-harness wrappers under `.claude/`, `.codex/`, and `.opencode/` are
+Canonical agent definitions. Each declares its identity, its tier, the capabilities it needs, the constraints it keeps,
+and nothing about any particular harness. The per-harness wrappers under `.claude/`, `.codex/`, and `.opencode/` are
 generated from these only by `./rhino harness adapters generate` and are never edited in place; see the
 [coding harness contract](../../repo-governance/conventions/coding-harness-contract.md).
 
@@ -28,14 +36,40 @@ changes nothing; each fixer runs its family's propagation on a frozen ledger.
 
 ## Software Development
 
-Adopted from the shared catalog. The maker loads each project's stack skill and standard on demand from the inventory;
-see the [repository adapter](../../repo-governance/development/quality/stacks/repository-adapter.md).
+Adopted from the shared catalog. Each loads a project's stack skill and standard on demand from the inventory; see the
+[repository adapter](../../repo-governance/development/quality/stacks/repository-adapter.md).
 
-- [swe-code-maker](swe-code-maker.md) — builds behaviour test-first in the projects named.
-- [swe-code-checker](swe-code-checker.md) — audits code against the adopted standards and reports; changes nothing.
-- [swe-code-fixer](swe-code-fixer.md) — applies re-validated checker findings and records every disposition.
+- [swe-architect](swe-architect.md) — designing boundaries before a build, reviewing it after, and the architecture
+  review lens
+- [swe-debugger](swe-debugger.md) — repairing failing type checks, lint, and tests at the cause
+- [swe-developer](swe-developer.md) — building behaviour test-first and applying re-validated findings
+- [swe-orchestrator](swe-orchestrator.md) — decomposing a deterministic goal and dispatching the swe family until its
+  checks pass
+- [swe-releaser](swe-releaser.md) — cutting releases, deploying artifacts, and repinning tools through documented
+  workflows
+- [swe-reviewer](swe-reviewer.md) — auditing code, component source, and scenario bindings against adopted standards
+- [swe-usability-tester](swe-usability-tester.md) — judging first use of a live web interface or command-line tool
+  without its specifications
 
-## This Repository
+## Old-to-New Map
 
-- [gherkin-implementation-reviewer](gherkin-implementation-reviewer.md) — reviews whether a changed scenario would
-  actually fail.
+Each agent the swe family replaced, and where its work went. A reader holding an old name finds its replacement here.
+
+| Replaced agent                    | New agent              | Mode or charter   |
+| --------------------------------- | ---------------------- | ----------------- |
+| `swe-code-maker`                  | `swe-developer`        | build             |
+| `swe-ui-maker`                    | `swe-developer`        | build (UI skills) |
+| `swe-code-fixer`, `swe-ui-fixer`  | `swe-developer`        | apply findings    |
+| `ui-web-fixer`, `api-http-fixer`  | `swe-developer`        | apply findings    |
+| `bugs-solver`                     | `swe-debugger`         | —                 |
+| `swe-code-checker`                | `swe-reviewer`         | code              |
+| `swe-ui-checker`                  | `swe-reviewer`         | interface         |
+| `gherkin-implementation-reviewer` | `swe-reviewer`         | scenario trace    |
+| `ui-web-checker`                  | `swe-web-tester`       | spec              |
+| `web-design-tester`               | `swe-web-tester`       | design            |
+| `web-exploratory-tester`          | `swe-web-tester`       | exploratory       |
+| `web-usability-tester`            | `swe-usability-tester` | —                 |
+| `api-http-checker`                | `swe-api-tester`       | contract          |
+| `api-exploratory-tester`          | `swe-api-tester`       | exploratory       |
+| `pr-review-architecture-checker`  | `swe-architect`        | lens              |
+| `apps-*-deployer` (per app)       | `swe-releaser`         | deploy            |

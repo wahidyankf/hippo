@@ -13,8 +13,8 @@ exact sources and their digests.
   instruction file is an adapter that routes to it and adds nothing.
 - **Skills**: `.agents/skills/<name>/SKILL.md`. Codex and OpenCode read that path natively; Claude receives the
   generated native route.
-- **Agents**: `.agents/agents/<name>.md`, carrying its own capability declaration — what it requires, what it denies,
-  what constrains it.
+- **Agents**: `.agents/agents/<name>.md`, carrying its own declaration — its tier, the capabilities it needs, the
+  constraints it keeps, and any agents it dispatches.
 
 ## Adapters
 

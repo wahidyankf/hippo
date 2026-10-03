@@ -1,6 +1,8 @@
 ---
 name: worktree-to-pr
 description: Take a change from a fresh worktree to a merged pull request in this repository, in the order the rules require.
+when_to_use: >-
+  Use when a change starts in a fresh worktree and must reach a merged pull request.
 ---
 
 # Worktree to Pull Request
