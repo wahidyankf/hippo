@@ -45,3 +45,8 @@ and new direction becomes visible; carrying both silently resolves it by acciden
 Work found on the way is a new item, said out loud. Folding it into the current one hides both: the reviewer cannot find
 the fix, and the discovery has no record of why it was needed. See
 [pull request boundaries](pull-request-boundaries.md).
+
+## Enforcement
+
+No check enforces this document. For the progress record that is a decision: the owner declined a hook or harness
+setting for it, so it depends on attention, and review verifies it.
