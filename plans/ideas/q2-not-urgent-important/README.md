@@ -8,5 +8,5 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-- [Rust for stricter domain modeling](rust-for-stricter-domain-modeling.md) — whether closed enums, exhaustive `match`,
-  and no implicit zero values justify moving from Go, or stricter Go modeling gets most of it.
+- [Strict Go linting and domain modeling](strict-go-linting-and-domain-modeling.md) — carry outcomes, reasons, profile
+  lineage, and the admission decision as Go types, and tighten the lint configuration, so a missing case fails a gate.
