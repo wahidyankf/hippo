@@ -209,6 +209,16 @@ Feature: Public HIPPO CLI
     When JSON status is requested with that config
     Then configuration fails with exit 125
 
+  Scenario Outline: JSON status says whether the resolved profile may use degraded admission
+    Given a configuration whose default profile extends <base>
+    When JSON status is requested with that config
+    Then status reports degraded admission only for the profile derived from balanced
+
+    Examples:
+      | base        |
+      | balanced    |
+      | constrained |
+
   Scenario: Run validates its command boundary
     Given the compiled HIPPO binary
     When run is requested without a command separator

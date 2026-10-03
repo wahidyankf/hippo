@@ -26,6 +26,20 @@ Feature: Resource-aware admission
     Then degraded work is deferred
 
   @e2e-exempt
+  Scenario: A configured profile derived from balanced admits degraded work
+    Given a configuration whose default profile extends balanced
+    And a full stable Darwin warning window with safe headroom
+    When the guard runs ephemeral work under that configuration
+    Then the guard admits the child at concurrency one and says so
+
+  @e2e-exempt
+  Scenario: A configured profile outside balanced's lineage never uses degraded admission
+    Given a configuration whose default profile extends constrained
+    And a full stable Darwin warning window with safe headroom
+    When the guard runs ephemeral work under that configuration
+    Then the guard defers the work naming hippo.limit.capacity-deferred
+
+  @e2e-exempt
   Scenario: Balanced work falls back on a small runner
     Given a healthy 5 GiB runner without swap
     When development admission is assessed

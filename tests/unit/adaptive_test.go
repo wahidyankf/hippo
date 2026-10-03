@@ -355,3 +355,40 @@ func TestNoSwapPSIAndOOMAssessment(t *testing.T) {
 		t.Fatal("resolution profile is empty")
 	}
 }
+
+// TestConfiguredProfilesInheritDegradedAdmission proves degraded admission
+// follows the extends lineage: a profile derived from balanced, at any depth,
+// and a configured override of balanced keep it; a profile derived from
+// constrained, and a balanced request that falls back, do not.
+func TestConfiguredProfilesInheritDegradedAdmission(t *testing.T) {
+	loaded, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":2,"profiles":{
+  "local-balanced":{"extends":"balanced"},
+  "local-balanced-child":{"extends":"local-balanced","maxConcurrency":2},
+  "local-constrained":{"extends":"constrained"},
+  "balanced":{"maxConcurrency":3}
+}}`), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	roomy := adaptiveSample(32*policy.GiB, 20*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active")
+	for profile, want := range map[string]bool{
+		"balanced":             true,
+		"local-balanced":       true,
+		"local-balanced-child": true,
+		"local-constrained":    false,
+		"constrained":          false,
+		"minimal":              false,
+	} {
+		resolution, resolveError := loaded.Catalog.Resolve(profile, "ephemeral", roomy)
+		if resolveError != nil || resolution.ResolvedProfile != profile || resolution.DegradedAdmission != want {
+			t.Fatalf("profile %q resolved to %+v error=%v, want degradedAdmission=%t", profile, resolution, resolveError, want)
+		}
+	}
+
+	small := adaptiveSample(5*policy.GiB, 800*policy.MiB, 12*policy.GiB, 14*policy.GiB, "unavailable")
+	fallback, err := policy.BuiltinCatalog().Resolve("balanced", "ephemeral", small)
+	if err != nil || fallback.ResolvedProfile != "constrained" || fallback.DegradedAdmission {
+		t.Fatalf("a balanced request that fell back kept degraded admission: %+v error=%v", fallback, err)
+	}
+}

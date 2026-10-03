@@ -63,6 +63,12 @@ type Profile struct {
 	DiskReserveMaxBytes         int64   `json:"diskReserveMaxBytes"`
 	MaxConcurrency              int     `json:"maxConcurrency"`
 	MaxCPUUtilizationPercent    float64 `json:"maxCpuUtilizationPercent"`
+	// DegradedAdmission lets ephemeral work of this profile start at
+	// concurrency one under a stable macOS warning, and spares its running
+	// ephemeral children while that warning stays stable. Only the built-in
+	// balanced profile sets it; a configured profile inherits it through its
+	// extends lineage and can never set it, since it has no configuration key.
+	DegradedAdmission bool `json:"-"`
 }
 
 // Catalog owns the named profile graph.
@@ -83,7 +89,10 @@ type Resolution struct {
 	Decision         Decision `json:"decision"`
 	ExitCode         int      `json:"exitCode"`
 	Retryable        bool     `json:"retryable"`
-	Policy           Policy   `json:"-"`
+	// DegradedAdmission reports whether the resolved profile may use degraded
+	// admission under a stable macOS warning.
+	DegradedAdmission bool   `json:"degradedAdmission"`
+	Policy            Policy `json:"-"`
 }
 
 // BuiltinCatalog returns deterministic capacity-relative defaults.
@@ -102,6 +111,7 @@ func BuiltinCatalog() Catalog {
 			DiskReserveMinBytes:         2 * GiB,
 			DiskReserveMaxBytes:         20 * GiB,
 			MaxCPUUtilizationPercent:    85,
+			DegradedAdmission:           true,
 		},
 		profileConstrained: {
 			Name:                        profileConstrained,
@@ -234,15 +244,16 @@ func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sam
 		chain = append(chain, current)
 		policy, memoryReserve, diskReserve, concurrency := profilePolicy(profile, sample)
 		resolution := Resolution{
-			RequestedProfile: requested,
-			ResolvedProfile:  current,
-			FallbackChain:    append([]string(nil), chain...),
-			Strict:           strictClass || profile.Strict,
-			Concurrency:      concurrency,
-			MemoryReserve:    memoryReserve,
-			DiskReserve:      diskReserve,
-			Decision:         DecisionRun,
-			Policy:           policy,
+			RequestedProfile:  requested,
+			ResolvedProfile:   current,
+			FallbackChain:     append([]string(nil), chain...),
+			Strict:            strictClass || profile.Strict,
+			Concurrency:       concurrency,
+			MemoryReserve:     memoryReserve,
+			DiskReserve:       diskReserve,
+			Decision:          DecisionRun,
+			DegradedAdmission: profile.DegradedAdmission,
+			Policy:            policy,
 		}
 
 		if sample.DiskFreeBytes == nil || *sample.DiskFreeBytes < HardDiskFloorBytes {
