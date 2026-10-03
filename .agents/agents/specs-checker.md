@@ -6,16 +6,14 @@ description: >-
 when_to_use: >-
   Use as the checker in a specification quality gate, or before restructuring, migrating, or bulk-editing a named set of
   specification folders.
-skills:
-  - assessing-criticality-confidence
-mode: subagent
-requires:
+tier: execution
+capabilities:
   - repository-read
   - shell
-denies:
-  - repository-write
-  - nested-agent
+skills:
+  - assessing-criticality-confidence
 constraints:
+  - read-only
   - inline-result-only
 ---
 
@@ -94,5 +92,4 @@ folder cannot be read, reporting it as not run.
 
 It never edits a file, audits an unlisted folder, counts features or resolves links by hand in place of an adopted
 check, decides adoption, runs tests, or judges whether a statement is complete and testable. What each binding asserts
-belongs to [Gherkin Implementation Reviewer](gherkin-implementation-reviewer.md), and repairs to
-[Specs Fixer](specs-fixer.md).
+belongs to [SWE Reviewer](swe-reviewer.md), and repairs to [Specs Fixer](specs-fixer.md).

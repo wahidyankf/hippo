@@ -1,6 +1,6 @@
 ---
 description: |-
-  Implements application, library, script, and test code in named projects test-first under the adopted language-neutral and stack standards, reusing what the repository already holds before adding code.
+  Designs module boundaries, dependencies, and tradeoffs before implementation, judges finished work against that design, and serves as the architecture lens of a review pass, writing nothing but decision records.
 mode: subagent
 permission:
   bash: allow
@@ -8,9 +8,10 @@ permission:
   glob: allow
   grep: allow
   read: allow
-  task: deny
+  webfetch: allow
+  websearch: allow
 ---
 
 Before acting, read the complete canonical agent definition at the repository-root path
-.agents/agents/swe-code-maker.md
+.agents/agents/swe-architect.md
 and follow it as authoritative. If it cannot be read, stop and report the missing path.

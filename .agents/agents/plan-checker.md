@@ -6,16 +6,13 @@ description: >-
 when_to_use: >-
   Use as the checker of a plan quality gate cycle, after a complete six-document draft, before execution begins.
 tier: plan
-skills:
-  - plan-validating-quality
-mode: subagent
-requires:
+capabilities:
   - repository-read
   - shell
-denies:
-  - repository-write
-  - nested-agent
+skills:
+  - plan-validating-quality
 constraints:
+  - read-only
   - inline-result-only
 ---
 

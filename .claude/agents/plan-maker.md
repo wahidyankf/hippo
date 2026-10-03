@@ -1,8 +1,7 @@
 ---
 description: |-
   Authors a complete formal plan from a request or groomed brief, runs both decision gates, and submits the draft to the plan quality gate, whose findings a separate fixer repairs.
-effort: high
-model: opus
+model: inherit
 name: plan-maker
 tools: |-
   Read, Glob, Grep, Write, Edit, Bash

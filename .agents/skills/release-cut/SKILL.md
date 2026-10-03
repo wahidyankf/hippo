@@ -1,6 +1,8 @@
 ---
 name: release-cut
 description: Cut and publish a HIPPO release, with the immutability rules that make a published tag safe to pin.
+when_to_use: >-
+  Use when cutting and publishing a HIPPO release, or when checking that a published tag is safe to pin.
 ---
 
 # Release Cut

@@ -9,7 +9,7 @@ when_to_use: >-
 # Repository Adapter
 
 This document owns the `extensions.software-development` inventory in [`repo-config.yml`](../../../../repo-config.yml).
-A stronger local rule always wins over an adopted one, and every difference is recorded here with its reason.
+A stronger local rule wins over an adopted one, and every difference is recorded here with its reason.
 
 ## Adopted Packs
 
@@ -25,7 +25,7 @@ Adopted as written: [Type and Boundary Safety](../code/type-and-boundary-safety.
 [Meaningful Coverage](../testing/meaningful-coverage.md), and
 [Stack Packs](../../../conventions/structure/stack-packs.md).
 
-Kept under their local owners, which an adopted document links wherever the catalog linked its own:
+Kept under local owners, linked wherever the catalog linked its own:
 [test-driven development](../../test-driven-development.md) and
 [red, green, refactor](../../../workflows/quality/red-green-refactor.md),
 [behaviour-driven development](../../behaviour-driven-development.md),
@@ -36,27 +36,34 @@ Kept under their local owners, which an adopted document links wherever the cata
 [docs propagation](../../../workflows/quality/docs-propagation.md). One rule lives in one document here, per
 [rules](../../../conventions/rules.md).
 
-Not adopted, each with its reason:
+Not adopted:
 
-- **Test Boundaries and Gates.** Its fast gate never runs an integration or end-to-end suite; the quick gate here runs
-  all three behaviour adapters by design, per [quality gates](../../quality-gates.md). The local rule is stricter.
-- **Test Doubles, Test Data Isolation, and Git Fixture Isolation.** Each rests on owners this repository does not hold —
-  hexagonal ports, browser and identity fixtures, and a six-layer rule for every fixture Git call that the existing
-  fixtures do not yet meet. Each waits for its own adoption together with any fixture repair it needs.
+- **Test Boundaries and Gates.** Its fast gate runs no integration or end-to-end suite; the stricter quick gate here
+  runs all three behaviour adapters, per [quality gates](../../quality-gates.md).
+- **Test Doubles, Test Data Isolation, and Git Fixture Isolation.** Each rests on owners absent here — hexagonal ports,
+  browser and identity fixtures, and a six-layer fixture Git rule the existing fixtures do not yet meet — each awaits
+  its own adoption with any fixture repair.
 - **A human reference page under `docs/`.**
   [Documentation architecture](../../../conventions/documentation-architecture.md) keeps contributor rules out of
   `docs/`; the [stack index](README.md) serves instead.
 
-A catalog owner with no local counterpart stays named in the adopted text without a link.
+A catalog owner with no local counterpart is named in adopted text, unlinked.
 
 ## Adopter Decisions
 
 Grouped by the source that leaves the choice open; each entry reads decision: choice — reason.
 
-- `swe-code-maker`
-  - stack skill loading: read on demand — a new stack needs no agent edit
-- `swe-code-checker`
-  - stack rules: the adopted catalog standards — shared, reviewed choices
+- `swe-architect`
+  - ADR location: `docs/explanation/decisions/`, the default
+- `swe-developer`
+  - Stack skills: read on demand — a new stack needs no agent edit
+  - Host-integrated proof: not required, the default
+- `swe-reviewer`
+  - Reviewer output: inline — the copy keeps `read-only`
+  - Specification completeness: not checked, the default
+  - Test boundary: Test Boundaries and Gates, the default
+- `swe-releaser`
+  - Deploy targets: none; releases follow [release cut](../../../workflows/maintenance/release-cut.md)
 - **test-driven development**
   - coverage floor: 99% over the deterministic core, in the unit run — local floor; integration and end-to-end prove
     boundaries instead
@@ -67,7 +74,7 @@ Grouped by the source that leaves the choice open; each entry reads decision: ch
   - integration selection: a separate test directory per boundary under `tests/` — the layer is visible by path
   - unit test placement: deviation: most unit tests live in `tests/unit` — one corpus runs through three boundary
     adapters
-  - race detection: deviation: the full gate's race pass, not the coverage run — the quick gate stays fast enough never
+  - race detection: deviation: the full gate's race pass, not the coverage run — keeps the quick gate fast enough never
     to be bypassed
   - gates: `gofumpt` and `goimports`; golangci-lint with every linter enabled — stronger than the standard; each
     disabled linter carries its reason in `.golangci.yml`
@@ -78,15 +85,17 @@ Grouped by the source that leaves the choice open; each entry reads decision: ch
     pinned-tool wrappers `rhino`, `ferret`, and `scripts/shellcheck.sh`, and the gate scripts `format-staged.sh` and
     `check-commit-message.sh` — the bootstrap wrappers run before any toolchain on macOS and Linux; both stay as adopted
 - `shell-standards.md`
-  - static analysis: the `shell-lint` gate: pinned ShellCheck at `--severity=warning` over `scripts/shell-files.sh`, the
-    list `shfmt -d` also reads — one list keeps the analyser and the formatter from drifting; the pin keeps a green
-    result meaning the same on every machine
+  - static analysis: the `shell-lint` gate in [quality gates](../../quality-gates.md) — one file list keeps the analyser
+    and the formatter from drifting; the pin keeps a green result meaning the same on every machine
   - test tool: plain shell runners and the behaviour corpus — no shell test dependency to pin
+
+## Skill Names
+
+- `cutting-releases` is [release-cut](../../../../.agents/skills/release-cut/SKILL.md).
 
 ## Project Applicability
 
-- [hippo](../../../../README.md) — the CLI, and `cmd/hippo-conformance` built from the same module; the root README
-  names its commands.
+- [hippo](../../../../README.md) — the CLI and `cmd/hippo-conformance`, one module; the root README names its commands.
 - [public-safety](../../../../scripts/public-safety/README.md) — the adopted outbound scanner and its case suite.
 - repo-scripts — `scripts/`, `tests/artifacts/`, the `./hippo`, `./rhino`, and `./ferret` wrappers, and the Git hooks.
   It has no README: [quality gates](../../quality-gates.md) names the commands, `tests/artifacts/run.sh` and the

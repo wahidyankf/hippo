@@ -7,16 +7,13 @@ when_to_use: >-
   Use as the checker of a rules quality gate, for a repository-wide consistency check of its rules, after a structural
   change to governance, or when two skills or agents may need merging.
 tier: plan
-skills:
-  - assessing-criticality-confidence
-mode: subagent
-requires:
+capabilities:
   - repository-read
   - shell
-denies:
-  - repository-write
-  - nested-agent
+skills:
+  - assessing-criticality-confidence
 constraints:
+  - read-only
   - inline-result-only
 ---
 
