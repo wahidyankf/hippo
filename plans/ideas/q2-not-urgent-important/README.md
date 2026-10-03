@@ -8,5 +8,4 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-- [Degraded admission ignores configured profiles](degraded-admission-ignores-configured-profiles.md) — under a stable
-  macOS warning, only the built-in `balanced` profile admits, so a configured profile defers indefinitely.
+This quadrant holds no idea brief, so this README has no siblings to map.
