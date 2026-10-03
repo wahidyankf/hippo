@@ -8,4 +8,5 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-This quadrant holds no idea brief, so this README has no siblings to map.
+- [Degraded-admission release audit follow-ups](degraded-admission-release-audit-follow-ups.md) — the reservation-mode
+  degraded-admission message, `profile.exitCode` in status, and the first tutorial's claim about warning.
