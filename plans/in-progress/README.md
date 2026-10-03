@@ -15,5 +15,4 @@ that already exists, with both stage indexes updated in that one change.
 
 ## Directory Map
 
-- [Fix: Configured profiles starve under macOS warning](fix-configured-profiles-starve-under-macos-warning/README.md) is
-  the bug-fix plan for configured profiles that never take degraded admission under a stable macOS warning.
+This stage holds no plan folder, so this README has no siblings to map.

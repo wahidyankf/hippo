@@ -16,6 +16,10 @@ then verifies the archive rather than assuming it.
 
 ## Completed Plans
 
+- 2026-10-03 —
+  [Fix: Configured profiles starve under macOS warning](2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md):
+  degraded admission and its stable-warning shed exemption follow the `balanced` lineage, not the name; released as
+  v0.8.4.
 - 2026-10-02 —
   [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md):
   the Linux reading subtracts the cgroup's inactive file cache from its usage; released as v0.8.3.
@@ -30,6 +34,8 @@ then verifies the archive rather than assuming it.
 
 ## Directory Map
 
+- [Fix: Configured profiles starve under macOS warning](2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md)
+  is the delivery record for the v0.8.4 degraded-admission lineage fix.
 - [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md) is
   the delivery record for the v0.8.3 page-cache fix.
 - [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the

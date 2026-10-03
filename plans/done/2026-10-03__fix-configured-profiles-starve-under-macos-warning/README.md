@@ -1,6 +1,6 @@
 # Fix: Configured Profiles Starve Under macOS Warning
 
-Status: In progress (2026-10-03)
+Status: Done (2026-10-03)
 
 Under a stable macOS memory-pressure warning, the degraded admission path admits ephemeral work only when the resolved
 profile is literally named `balanced`. Every configured profile, including the configuration reference's own example and
@@ -489,7 +489,8 @@ release's pin values that each repin uses.
       source that repeated one timestamp could not keep a warning stable) and two LOW (the D-06 outcome missing from the
       public contract section, gate and amendment order); all were repaired, and cycle 2 found one new MEDIUM (the
       shedding rows' short child could finish before the shed on a loaded host). Both open rows were repaired in this
-      amendment after their verdicts.
+      amendment after their verdicts. Run 2 judged the uncommitted D-06 amendment draft, before its repairs were
+      committed as `3f6949d`.
       `plan-quality-gate: PASS_WITH_FINDINGS (run 1: 2 cycles, 1 HIGH, 2 MEDIUM, 6 LOW resolved, 1 LOW open)`
       `plan-quality-gate: PASS_WITH_FINDINGS (run 2: 2 cycles, 1 HIGH, 2 LOW resolved, 1 MEDIUM open)`
 - [x] `[AI]` Land the D-06 amendment, the gate's repairs, and the gate's verdict lines to this plan alone through a pull
@@ -609,60 +610,119 @@ release's pin values that each repin uses.
 
 ### Phase 5: Integrate and Release
 
-- [ ] `[AI]` Land the fix unit through a pull request, with the leak review posted for the exact head and every merge
+- [x] `[AI]` Land the fix unit through a pull request, with the leak review posted for the exact head and every merge
       precondition holding; proof: the merge commit on `origin/main`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-08]`
-      `[AC-09]`
+      `[AC-09]` **Result:** #126 merged by rebase at `abde2ec` (fix commit `9a3c142`), after a rebase onto `091b4e4`,
+      every check passing on head `7545895`, a leak review posted `pass` for that head, and merge state `CLEAN`. A
+      Quality gate failure and a cancelled reproducibility job on that head belonged to run `37103066107`, superseded
+      when the pull request was marked ready; run `37103077426` passed.
 - [x] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
       `all` at that commit, as release cut requires; proof: one verdict line recorded here. `[AC-06]` **Result:** one
       cycle on the fix head `59147f5`; entry tooling clean; 44 documents and about 210 claims; no CRITICAL or HIGH row,
       so the run ended without a writer pass. **Deviation:** it ran on the pull request's head rather than the merge
       commit, so that rows within this plan's own documentation scope could land in the same unit; the commits on `main`
-      since then change only governance, which is outside the gate's scope. This plan's docs propagation then repaired
-      the rows it owns: the name-versus-lineage narrowing in the changelog (DQG-02), `extends` accepting a configured
-      parent and the `balanced` recommendation (DQG-03, DQG-08), the stable-warning exception stated as a rule and in
-      the shedding explanation (DQG-05, DQG-06), the `decision`-stays-`wait` note (DQG-08), and the exclusive-mode limit
-      on forcing concurrency `1` (DQG-01). Left open: the first-command tutorial's claim that a warning does not affect
-      it (DQG-04, MEDIUM, outside this fix), `profile.exitCode` carrying internal numbers (DQG-07, needs-decision), the
+      since then change only governance, which is outside the gate's scope, but the repairs below changed six in-scope
+      documents after the verdict and no cycle re-checked them before the tag; the execution check spot-checked them
+      against `internal/guard/run.go` and found them consistent. This plan's docs propagation then repaired the rows it
+      owns: the name-versus-lineage narrowing in the changelog (DQG-02), `extends` accepting a configured parent and the
+      `balanced` recommendation (DQG-03, DQG-08), the stable-warning exception stated as a rule and in the shedding
+      explanation (DQG-05, DQG-06), the `decision`-stays-`wait` note (DQG-08), and the exclusive-mode limit on forcing
+      concurrency `1` (DQG-01). Left open: the first-command tutorial's claim that a warning does not affect it (DQG-04,
+      MEDIUM, outside this fix), `profile.exitCode` carrying internal numbers (DQG-07, needs-decision), the
       degraded-admission message naming concurrency `1` under reservation coordination (DQG-01, needs-decision), and the
-      dated idea brief's present tense (DQG-09).
-      `docs-quality-gate: PASS_WITH_FINDINGS (1 cycle, 0 blocking, 4 MEDIUM and 5 LOW open)`
-- [ ] `[AI]` Cut `v0.8.4` on the merge commit through
+      dated idea brief's present tense (DQG-09), which the archival pull request repairs with a dated note that the fix
+      shipped in v0.8.4. `docs-quality-gate: PASS_WITH_FINDINGS (1 cycle, 0 blocking, 4 MEDIUM and 5 LOW open)`
+- [x] `[AI]` Cut `v0.8.4` on the merge commit through
       [release cut](../../../repo-governance/workflows/maintenance/release-cut.md), screening the generated notes and
       the tag name first; proof: the release's `checksums.txt` and the tag's peeled commit recorded here. `[AC-06]`
-- [ ] `[AI]` Run the install commands in `docs/how-to/install-a-pinned-release.md` against the release; proof: the
-      checksum line reads `OK` and `version --json` names `v0.8.4`. `[AC-06]`
+      **Result:** `scripts/test.sh` exited `0` on a clean detached `abde2ec`; the tag name and the notes
+      `generate-notes` returned passed both outbound screens; `scripts/build-release.sh` and
+      `tests/artifacts/release-assets.sh` passed; the annotated tag `v0.8.4` (tag object `4cd24db`) peels to
+      `abde2ecbeff7513549cfd1c0805fd20b5d232c01`, and `release.yml` run `37105395978` published
+      <https://github.com/wahidyankf/hippo/releases/tag/v0.8.4> with this `checksums.txt`: `darwin_amd64`
+      `a9c976992dad8a7a8d116e85743dbc7cbc77b67eb139da9300a8c43e1fb8f6cc`, `darwin_arm64`
+      `07b57189f6f4cc80d1913e55dcb386718bdc6aa3b0d34d8e0e8fedd089acc9f2`, `linux_amd64`
+      `4247e0f91135a0becef83fdf45e10e66b440d0ae0b8fa30b66cf2b3d15031afc`, and `linux_arm64`
+      `f1e6e02a2fa641c37555d10eae64450571ee70a9bd57268d9cfb914792bfc11b`, each for `hippo_v0.8.4_<os>_<arch>.tar.gz`.
+      The build before tagging differed, because Go stamps the module version from the tags a checkout holds, as release
+      cut says; rebuilt at the tag with the tag fetched, `scripts/build-release.sh` reproduced that `checksums.txt` byte
+      for byte. No consumer was repinned.
+- [x] `[AI]` Run the install commands in `docs/how-to/install-a-pinned-release.md` against the release; proof: the
+      checksum line reads `OK` and `version --json` names `v0.8.4`. `[AC-06]` **Result:** in an empty directory the
+      commands printed `hippo_v0.8.4_darwin_arm64.tar.gz: OK`, and `version --json` reported
+      `{"schemaVersion":1,"version":"v0.8.4","commit":"abde2ecbeff7513549cfd1c0805fd20b5d232c01"}`; the `jq -e` check
+      printed `true`.
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
-      owner or its reason. `[AC-07]`
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
-      verdict recorded here. `[AC-07]`
+- [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
+      owner or its reason. `[AC-07]` **Result:** two entries routed to idea briefs, three discarded with reasons.
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
+      verdict recorded here. `[AC-07]` **Result:** one run found scope, AC-01 to AC-06 and AC-08 to AC-09, the checklist
+      evidence, the gates, and every learning sound, with seven LOW rows and none blocking. Four were repaired here: the
+      docs gate deviation now says the repairs after its verdict were not re-gated, DQG-09's repair is recorded, the
+      follow-up brief's status-schema claim is corrected, and plan gate run 2's revision is named. The other three close
+      with this archival change: AC-07 and the clean-up it carries, the archived path the two briefs link to, and the
+      routed briefs shipping in the same pull request.
+      `plan-execution-check: PASS_WITH_FINDINGS (1 run, 7 LOW, 4 repaired, 3 closed by archival)`
 
 ### Archival
 
-- [ ] `[AI]` Move this folder to `plans/done/<completion date>__fix-configured-profiles-starve-under-macos-warning/`
+- [x] `[AI]` Move this folder to `plans/done/<completion date>__fix-configured-profiles-starve-under-macos-warning/`
       with both stage indexes updated, and land it through a pull request; proof: the merge commit on `origin/main`, and
-      no copy left under `plans/in-progress/`. `[AC-07]`
+      no copy left under `plans/in-progress/`. `[AC-07]` **Result:** moved with `git mv` to
+      `plans/done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/` on
+      `worktree/fix-configured-profiles-starve-under-macos-warning-record`, with the in-progress and done indexes
+      updated in the same change, and the strict-Go-linting brief's link repointed to the archived path. **Merge carried
+      by the archival pull request (2026-10-03):** an archived file cannot record its own merge, so the merge commit is
+      posted on that pull request.
 - [ ] `[AI]` Run [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md);
-      proof: the worktree and every branch copy are gone and primary `main` equals `origin/main`. `[AC-07]`
+      proof: the worktree and every branch copy are gone and primary `main` equals `origin/main`. `[AC-07]` **Carried by
+      the archival pull request (2026-10-03):** one worktree served every unit, so it goes once the archival unit lands.
+      Classified before then:
+  - _Remote branches_ `worktree/degraded-admission-profile-brief`, `...-plan`, and
+    `worktree/fix-configured-profiles-starve-under-macos-warning`: scratch, already deleted on merge;
+    `git ls-remote origin 'refs/heads/worktree/*'` printed nothing. `...-record` goes on its merge.
+  - _Local branches_ `worktree/degraded-admission-profile-brief`, `...-plan`,
+    `worktree/fix-configured-profiles-starve-under-macos-warning`, and `...-record`: scratch, their content landed
+    through #121, #123, and #126; deleted once the archival merge lands.
+  - _The worktree `worktrees/degraded-admission-profile-brief` and its ignored `local-tmp/`_ (the plan and docs gate
+    ledgers, never committed by contract): scratch; removed with `git worktree remove` without `--force`.
+  - _Session scratch outside the repository_ (reproduction configurations, release builds, test output): scratch,
+    removed with the session.
+
+  After the merge, the proof is posted on the archival pull request: `git worktree list` without this worktree, no local
+  `worktree/*` branch of this plan, and `git rev-list --left-right --count main...origin/main` reading `0 0` after
+  `git fetch --prune` and `git merge --ff-only origin/main`.
 
 ## Learnings
 
 - **An outer workstation guard meets this repository's self-hosting rule at ad hoc commands.** The consumer workstation
   refuses bare `npm ci` and `npx` outside a HIPPO boundary, so this worktree's install and formatter ran under its own
   `./hippo` with the built-in `balanced` profile; with a `local-constrained` configuration they would have starved on
-  this very defect. Not yet routed.
+  this very defect. **Discarded:** the outer guard is the workstation's, not this repository's, and v0.8.4 removes the
+  starvation itself.
 - **The brief's first draft misread owner shares.** It claimed a configured profile's automatic owner shares ignore
-  `extends`; `inheritShares` shows they follow it. Corrected here before landing. Not yet routed.
+  `extends`; `inheritShares` shows they follow it. Corrected here before landing. **Discarded:** a one-off reading
+  error, corrected before the plan landed; no rule would have prevented it.
 - **`Resolve`'s last-resort floor is keyed on the name `minimal`.** A configured profile derived from `minimal` that
   does not fit gets no last-resort floor (`internal/policy/profiles.go`, line 255), the same name-versus-lineage shape
-  as this defect, found by the plan quality gate. Not yet routed; candidate owner: an idea brief.
+  as this defect, found by the plan quality gate. **Routed** to the idea brief [Strict Go linting and domain
+  modeling][linting-brief], whose profile-lineage item now names this path.
+- **This plan's behaviour proofs named the binding-compliance command.**
+  `HIPPO_BDD_ADAPTER=<adapter> go test ./tests/bdd` resolves bindings and runs no scenario; the executing adapters are
+  `./tests/unit` and `./tests/integration`. Recorded as a deviation in Phase 2. **Discarded:** behaviour-driven
+  development and software quality enforcement already say so; the plan, not the rule, was wrong.
+- **The release-time docs gate found rows outside this fix.** The degraded-admission message under reservation
+  coordination, `profile.exitCode` in status, and the first tutorial's claim about warning. **Routed** to the idea brief
+  [Degraded-admission release audit follow-ups][followups-brief].
 
 ## Directory Map
 
 This plan is one document, so this README has no siblings to map.
 
+[followups-brief]: ../../ideas/q4-not-urgent-not-important/degraded-admission-release-audit-follow-ups.md
+[linting-brief]: ../../ideas/q2-not-urgent-important/strict-go-linting-and-domain-modeling.md
 [config-go]: https://github.com/wahidyankf/hippo/blob/209718c/internal/config/config.go
 [driver-go]: https://github.com/wahidyankf/hippo/blob/209718c/tests/support/driver.go
 [luchta-347]: https://github.com/dobesv/luchta/issues/347

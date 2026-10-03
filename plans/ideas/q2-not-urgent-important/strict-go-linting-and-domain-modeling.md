@@ -34,9 +34,9 @@ pressure cannot be injected there (`tests/contract/contract.go`). No scenario re
 
 The consumer worked around it by switching to the built-in `balanced` profile. The fix is in Go, under the bug-fix plan
 [`fix-configured-profiles-starve-under-macos-warning`][bug-fix-plan]. That plan is in progress, and its fix has not
-merged as of this filing. Its decision D-01 adds lineage as an internal inherited attribute. This brief asks the wider
-question: which modeling and lint changes would make this class of defect fail a gate everywhere in HIPPO, not only on
-this path?
+merged as of this filing; it shipped in v0.8.4 on 2026-10-03, so code cited here as current describes the code before
+it. Its decision D-01 adds lineage as an internal inherited attribute. This brief asks the wider question: which
+modeling and lint changes would make this class of defect fail a gate everywhere in HIPPO, not only on this path?
 
 ## Problem and Evidence
 
@@ -143,8 +143,10 @@ A sketch. Each measure names what it would have caught.
    `switch`, replaces the `73`/`74`/`75` integers. Catches `0efd802` and `be03781`. For the boundary class, it makes
    every unmapped error a visible decision.
 3. **Profile lineage as a type.** Each resolved profile carries its built-in base as a closed enum, set in
-   `buildCatalog`, and policy rules key on that base, never on a name. This covers the background defect and the
-   owner-share `switch` in `reservation.go`.
+   `buildCatalog`, and policy rules key on that base, never on a name. This covers the background defect, the
+   owner-share `switch` in `reservation.go`, and `Resolve`'s last-resort floor, which still applies only to the profile
+   named `minimal` (`internal/policy/profiles.go`), so a configured profile derived from `minimal` that does not fit
+   gets none. The bug-fix plan found that path and routed it here.
 4. **Admission path as a type.** A closed value (normal, degraded under warning, deferred, cleanup, replan) replaces the
    `admitted, degraded` booleans.
 5. **One admission decision.** A single policy function returns that value. `run`, `status`, and the test driver all
@@ -212,4 +214,4 @@ The history above also shows that every modeling defect is reachable in Go.
 
 Promote this brief to a formal plan once the bug-fix plan lands and the owner asks for it.
 
-[bug-fix-plan]: ../../in-progress/fix-configured-profiles-starve-under-macos-warning/README.md
+[bug-fix-plan]: ../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md
