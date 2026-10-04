@@ -39,57 +39,18 @@ The caller names the mode. Findings in the input mean Apply Findings; otherwise 
 
 New or changed behaviour, test-first, reusing what the repository holds.
 
-1. **State the criteria** a check can confirm or refute, per Implementation Stages. A requirement too ambiguous for that
-   goes back to the caller as a question.
-2. **Research before adding.** Read the code and tests around the change, and extend an existing function, module,
-   component, or dependency rather than writing a near-duplicate, per Code as Liability. A new dependency passes
-   [Dependency Selection](../../repo-governance/development/dependency-selection.md).
-3. **Place the code** by what each piece decides or does, as
-   [Developing Applications](../skills/developing-applications/SKILL.md) teaches.
-4. **Build each increment test-first** through
-   [Red, Green, Refactor](../../repo-governance/workflows/quality/red-green-refactor.md), with its runs recorded where
-   the caller names. Where the project keeps a scenario corpus, the scenario is added or updated before its red, per
-   [Behaviour-Driven Development](../../repo-governance/development/behaviour-driven-development.md).
-5. **Make it right, then fast only on a measurement,** in the order Implementation Stages sets, editing surgically.
-6. **Check before handing over.** Run the type check, lint, format checks, and fast gate the project records, over the
-   changed projects, plus the end-to-end journeys the change affects. Name every check Behaviour Change Verification
-   still requires, and every document the change leaves stale, per
-   [Docs Propagation](../../repo-governance/workflows/quality/docs-propagation.md).
-
-An interface component also starts from its approved design for every declared viewport class, per Plan UI Design,
-composes the design-system primitive the design names, and styles from the token layer only, per Design Tokens. A
-missing design, an unnamed primitive, or a colour with no token role is a question for the design's owner, never a local
-choice.
+The rest of this section is in
+[SWE Developer Build](../../repo-governance/conventions/swe-agent-procedures/swe-developer-build.md#build); read it in
+full before acting.
 
 ### Apply Findings
 
 Re-validate each finding from a review, a tester, or a frozen quality-gate ledger against the current code, then fix it
 test-first or record why not.
 
-1. **Read the findings and the accepted false positives,** and order them by priority, as
-   [Assessing Criticality and Confidence](../skills/assessing-criticality-confidence/SKILL.md) explains.
-2. **Re-validate each one** at the stated file and line under the stated standard, or by replaying its reproduction
-   steps or request against the running service, and rate confidence per Confidence and Re-Validation.
-3. **Dispose of it.** `HIGH`: apply the fix, changing only what the finding names. `MEDIUM`: leave it for a person with
-   the evidence. `FALSE_POSITIVE`: record the disproof and what would stop it being raised again.
-4. **Fix test-first where a fix needs a test.** A missing regression test, untested behaviour, or a fix that changes
-   what renders, what a keyboard operates, or what a request returns lands with a test seen to fail first, per
-   [Regression Tests](../../repo-governance/development/test-driven-development.md).
-5. **Confirm each fix** by reading the code again and running the static checks and unit layer over the edited projects.
-   A fix that did not land, or turns a passing test red, is undone and recorded as failed.
-6. **Write the fix report** per [Generating Validation Reports](../skills/generating-validation-reports/SKILL.md),
-   naming each disposition, the red and green runs, and the changed files a scoped re-validation needs.
-
-A fix is `HIGH` only when the code and the cited standard leave one correct edit, such as an unused import or a query
-rewritten with parameters. Moving code across layers, removing duplication that may be deliberate, a change for speed
-without a measurement, a new token, a changed public interface, and any change to observable behaviour are `MEDIUM`, per
-[Applying Maker, Checker, and Fixer](../skills/applying-maker-checker-fixer/SKILL.md).
-
-Inside a quality gate's propagation, such as UI Web Propagation or API HTTP Propagation, it follows that workflow's
-sequence once per frozen row: correct but unspecified behaviour gains scenarios, as
-[Writing Gherkin Criteria](../skills/plan-writing-gherkin-criteria/SKILL.md) teaches; a design-system change or a
-breaking contract change is `needs-decision`; and a served interface is rebuilt and redeployed before verification. It
-never re-runs the audit, repairs a row twice, or widens scope.
+The rest of this section is in
+[Apply Findings](../../repo-governance/conventions/swe-agent-procedures/swe-developer-apply-findings.md); read it in
+full before acting.
 
 ## Adopter Decision: Stack skills
 

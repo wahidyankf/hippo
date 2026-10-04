@@ -7,6 +7,7 @@ permission:
   glob: allow
   grep: allow
   read: allow
+  task: deny
 ---
 
 Before acting, read the complete canonical agent definition at the repository-root path

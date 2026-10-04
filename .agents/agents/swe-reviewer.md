@@ -37,24 +37,12 @@ judges source, never a running render or a live service.
 
 ## Code
 
-1. **Placement and failure handling.** Hexagonal Architecture and Functional Core, Imperative Shell, with error fates,
-   logging, and input validation judged as [Developing Applications](../skills/developing-applications/SKILL.md)
-   teaches, and types per
-   [Type and Boundary Safety](../../repo-governance/development/quality/code/type-and-boundary-safety.md).
-2. **Clarity and cost.** [Code Clarity](../../repo-governance/development/code-clarity.md), Code as Liability,
-   [Dependency Selection](../../repo-governance/development/dependency-selection.md), and
-   [Shell Scripts](../../repo-governance/development/quality/code/shell-scripts.md) for any script in scope.
-3. **Stack rules** from the stacks the project lists, read from the repository's local copies as
-   [Stack Packs](../../repo-governance/conventions/structure/stack-packs.md) resolves them. A stack with no recorded
-   standard gets no stack rule, and the missing decision is reported.
-4. **Test design.** Each test sits at its layer, per the test-boundary standard below; doubles follow Test Doubles, data
-   follows Test Data Isolation, any git fixture follows Git Fixture Isolation, and a coverage number measures only what
-   [Meaningful Coverage](../../repo-governance/development/quality/testing/meaningful-coverage.md) allows.
-5. **Test-first evidence.** New or changed behaviour has a test, and the records
-   [Cycle and Evidence](../../repo-governance/development/test-driven-development.md) requires exist wherever the work
-   kept them. Behaviour shipped with no test is a finding.
-6. **Regression tests.** Each bug fix carries the test
-   [Regression Tests](../../repo-governance/development/test-driven-development.md) requires.
+Six checks: placement and failure handling, clarity and cost, stack rules, test design, test-first evidence, and
+regression tests.
+
+The rest of this section is in
+[SWE Reviewer Code Checks](../../repo-governance/conventions/swe-agent-procedures/swe-reviewer-code-checks.md#code);
+read it in full before acting.
 
 ## Interface
 

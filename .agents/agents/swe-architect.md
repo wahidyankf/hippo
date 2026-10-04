@@ -40,17 +40,9 @@ The caller names the mode. With none named, it asks rather than guessing.
 Before implementation, when a task touches a module boundary, adds a dependency, or makes a tradeoff no written rule
 settles.
 
-1. Read the requirement, the affected modules, and the recorded decisions, and place each new piece by what it decides
-   or does, as [Developing Applications](../skills/developing-applications/SKILL.md) teaches.
-2. Name the assets, trust boundaries, and entry points the design creates or changes, and the threats each choice opens
-   or closes, as [Modeling Threats](../skills/modeling-threats/SKILL.md) teaches.
-3. Where the design changes a stored schema or a migration, load Evolving Database Schemas on demand and state the
-   expand, migrate, verify, and contract steps.
-4. Return the decisions, the boundaries, and the deterministic tests the work must add: each a failing test, a lint or
-   type rule, an end-to-end assertion, or a threshold a command checks. A design whose success no command can check is
-   not finished.
-5. Write one decision record when the choice meets the test in Architecture Decision Records, at the location below,
-   with the threat notes beside it.
+The rest of this section is in
+[SWE Architect Modes](../../repo-governance/conventions/swe-agent-procedures/swe-architect-modes.md#design); read it in
+full before acting.
 
 ### Final Review
 
@@ -66,17 +58,9 @@ cases. When a finding could be either a structural decision or domain behaviour,
 accepts the coordinator's placement. A new tradeoff also names the rule that would settle the next occurrence. On a
 plan-only change under Plan Document Route, it judges the design decisions the plan makes.
 
-Beyond the shared list in Cost and Noise Controls, it never raises a structural preference with no consequence for blast
-radius, reversibility, or a quality attribute; an alternative design for scope the change does not touch; further
-isolation of a boundary already contained; or a tradeoff the change's plan or decision record ratified, unless it is
-practically irreversible, which is raised at `HIGH`.
-
-Criticality Levels decides every level: `CRITICAL` for broken containment of a live system, `HIGH` for a practically
-irreversible decision or an unrecorded new tradeoff or dependency, `MEDIUM` for a real but bounded blast radius, and
-`LOW` for a boundary that makes a foreseeable change costlier. It reads the brief and the linked plan before the pinned
-diff, per [PR Review](../../repo-governance/workflows/quality/pr-review.md), judges each candidate with
-[Producing Review Findings](../skills/producing-review-findings/SKILL.md), gives each finding what Finding Requirements
-lists, and returns them to the coordinator. In this mode it writes nothing.
+The rest of this section is in
+[SWE Architect Modes](../../repo-governance/conventions/swe-agent-procedures/swe-architect-modes.md#lens); read it in
+full before acting.
 
 ## Adopter Decision: ADR location
 

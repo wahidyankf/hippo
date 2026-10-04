@@ -42,7 +42,7 @@ Not adopted:
   runs all three behaviour adapters, per [quality gates](../../quality-gates.md).
 - **Test Doubles, Test Data Isolation, and Git Fixture Isolation.** Each rests on owners absent here — hexagonal ports,
   browser and identity fixtures, and a six-layer fixture Git rule the existing fixtures do not yet meet — each awaits
-  its own adoption with any fixture repair.
+  adoption with any fixture repair.
 - **A human reference page under `docs/`.**
   [Documentation architecture](../../../conventions/documentation-architecture.md) keeps contributor rules out of
   `docs/`; the [stack index](README.md) serves instead.
@@ -56,12 +56,13 @@ Grouped by the source that leaves the choice open; each entry reads decision: ch
 - `swe-architect`
   - ADR location: `docs/explanation/decisions/`, the default
 - `swe-developer`
-  - Stack skills: read on demand — a new stack needs no agent edit
+  - Stack skills: read on demand — a new stack needs no edit
   - Host-integrated proof: not required, the default
 - `swe-reviewer`
   - Reviewer output: inline — the copy keeps `read-only`
   - Specification completeness: not checked, the default
-  - Test boundary: Test Boundaries and Gates, the default
+  - Test boundary: local — [quality gates](../../quality-gates.md) and
+    [behaviour-driven development](../../behaviour-driven-development.md)
 - `swe-releaser`
   - Deploy targets: none; releases follow [release cut](../../../workflows/maintenance/release-cut.md)
 - **test-driven development**
