@@ -37,9 +37,13 @@ A convention chooses a path. It does not authorize anyone to walk it; see
 - [Pull request body](pull-request-body.md) — what a reviewer is owed.
 - [Pull request boundaries](pull-request-boundaries.md) — one delivery boundary per pull request.
 - [Pull request merge](pull-request-merge.md) — the preconditions for merging.
+- [PR review agent procedures](pr-review-agent-procedures/README.md) — the procedure moved out of the
+  `pr-review-checker` definition to fit its word budget.
 - [Push hook verification](push-hook-verification.md) — fix the cause, never bypass the hook.
 - [Rules](rules.md) — how a rule is written and where it lives.
 - [Structure](structure/README.md) — where each kind of adopted catalog artifact lives.
+- [SWE agent procedures](swe-agent-procedures/README.md) — the procedure sections moved out of three `swe-*` agent
+  definitions to fit their word budget.
 - [SWE delegation](swe-delegation.md) — coding work goes to the fitting `swe-*` agent, with three exceptions.
 - [Task tracking](task-tracking.md) — task state lives in the repository.
 - [Thematic commits](thematic-commits.md) — one theme per commit.

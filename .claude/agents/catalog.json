@@ -55,7 +55,7 @@
     {
       "id": "agent/pr-review-checker",
       "path": ".agents/agents/pr-review-checker.md",
-      "digest": "5f78699b888907781cbf07a0ca3d71a996da2c1cbd629a15d19af32aaaf9f213"
+      "digest": "f2dbe7cab8c8494c853e2e1fe3bbf6bf3ac042a3412942f415bf64a72827cf20"
     },
     {
       "id": "agent/pr-review-fixer",
@@ -85,7 +85,7 @@
     {
       "id": "agent/swe-architect",
       "path": ".agents/agents/swe-architect.md",
-      "digest": "9e2a95c915e8a14fee64f9c3b9305652cc29b6713ef367042ed42fc371f64535"
+      "digest": "260db77996c4c65aef66dbf0a360a65268b61ba58753fb341bfff250d431e55e"
     },
     {
       "id": "agent/swe-debugger",
@@ -95,7 +95,7 @@
     {
       "id": "agent/swe-developer",
       "path": ".agents/agents/swe-developer.md",
-      "digest": "689b3255549baa9f2dced5b072f88b5591680aab62cbb1b59844ba442682b02b"
+      "digest": "d5c2f462c6ab6d3dbdd35c6c7bb96b3cb74780e55480a70645bfc5da63b15c64"
     },
     {
       "id": "agent/swe-orchestrator",
@@ -110,7 +110,7 @@
     {
       "id": "agent/swe-reviewer",
       "path": ".agents/agents/swe-reviewer.md",
-      "digest": "6460499d7844bdbace47c110996c77c01f93023a2f9a9bbd516c80edf6eefd0b"
+      "digest": "e0b3d1678492875b2da01983e6d8f2be0ee72fb47043d12ba1e84ad572bfc489"
     },
     {
       "id": "agent/swe-usability-tester",
@@ -120,7 +120,7 @@
     {
       "id": "skill/applying-maker-checker-fixer",
       "path": ".agents/skills/applying-maker-checker-fixer/SKILL.md",
-      "digest": "69efca916e6441e899e6585c40988ce43c6485c7c1fb9529f7b3e0ff58522998"
+      "digest": "50c63c9084c1ce85e8a0284d2ad04af1608dbce77cb94aa47110b8aad188d664"
     },
     {
       "id": "skill/assessing-criticality-confidence",
@@ -155,7 +155,7 @@
     {
       "id": "skill/plan-creating-project-plans",
       "path": ".agents/skills/plan-creating-project-plans/SKILL.md",
-      "digest": "28418eb39129b23db7ad6f059c836d29430d189afd1f635467701a06b24210c2"
+      "digest": "b613230cf95bca5a049f9edd3ab2be18362d9fc89deb128ae6d041bc4c62859c"
     },
     {
       "id": "skill/plan-grooming-idea-briefs",
