@@ -24,4 +24,5 @@ been rewritten, and starting it unread is how a plan quietly becomes fiction. Th
 
 ## Directory Map
 
-This stage holds no plan folder, so this README has no siblings to map.
+- [Strict Go linting and domain modeling](strict-go-linting-and-domain-modeling/README.md) — carry outcomes, internal
+  reasons, profile lineage, and the admission decision as Go types, and gate the result.
