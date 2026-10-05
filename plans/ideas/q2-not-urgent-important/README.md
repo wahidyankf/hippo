@@ -8,5 +8,4 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
-- [Strict Go linting and domain modeling](strict-go-linting-and-domain-modeling.md) — carry outcomes, reasons, profile
-  lineage, and the admission decision as Go types, and tighten the lint configuration, so a missing case fails a gate.
+This quadrant holds no idea brief, so this README has no siblings to map.
