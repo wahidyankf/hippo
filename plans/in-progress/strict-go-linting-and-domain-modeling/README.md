@@ -1,6 +1,6 @@
 # Strict Go Linting and Domain Modeling
 
-Status: Backlog — authored 2026-10-06 from the idea brief filed 2026-10-03; not started.
+Status: In progress — authored 2026-10-06 from the idea brief filed 2026-10-03; execution started 2026-10-06.
 
 HIPPO carries several domain concepts as strings, integers, and booleans: a run's outcome, the five internal reasons
 behind exit `124` and `125`, a profile's identity and lineage, and the path admission takes. No tool can say when a case
