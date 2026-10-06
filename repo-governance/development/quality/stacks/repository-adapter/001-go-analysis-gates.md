@@ -1,7 +1,7 @@
 ---
 description: >-
-  Records the Go analysis gates beyond golangci-lint's defaults: nilness, exhaustive map checks, the pinned NilAway run
-  and its exclusions, the domain literal analysis and its ratchet allowlist, and gochecksumtype's empty target.
+  Records the Go analysis gates beyond golangci-lint's defaults: nilness, exhaustive map checks, scoped exhaustruct_v5,
+  the pinned NilAway run and its exclusions, the domain literal analysis and its ratchet, and gochecksumtype's target.
 when_to_use: >-
   Use when changing `.golangci.yml`, the NilAway line in `scripts/test-quick.sh`, a `//nolint:nilaway` directive, or the
   domain literal analysis or its allowlist.
@@ -21,6 +21,9 @@ decision: choice — reason. Commands live where they run, in [`.golangci.yml`](
   to be nil is a defect
 - `exhaustive`: `switch` and `map` — a map keyed by an enumerated type names every member, so a new member needs a
   decision, as the `retryable` map in `internal/status/status.go` shows
+- `exhaustruct_v5`: `explicit-mode: true` with one `enforce-patterns` regex per closed domain struct, matched against
+  the full `import/path.TypeName` — a missing field in such a literal forges a value; without explicit mode every
+  literal is checked, and the fixture brittleness that keeps `exhaustruct` disabled returns
 - `gochecksumtype`: enabled with no `//sumtype:decl` target — every domain concept is a scalar enum, which `exhaustive`
   reaches; the first sealed interface is checked with no configuration change
 
