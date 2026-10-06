@@ -15,8 +15,8 @@ exemption fails behavior compliance.
   child-process stream behavior.
 - [`public-cli.feature`](public-cli.feature) specifies the safe executable and Unix stream boundary.
 - [`portability.feature`](portability.feature) specifies normalized macOS, Linux, cgroup, swap, and PSI evidence.
-- [`quality-gates.feature`](quality-gates.feature) specifies strict module-local Go lint and Gherkin adapter
-  enforcement.
+- [`quality-gates.feature`](quality-gates.feature) specifies strict module-local Go lint, NilAway, the domain literal
+  analysis, and Gherkin adapter enforcement.
 - [`release.feature`](release.feature) specifies release-specific capacity evidence.
 - [`reservations.feature`](reservations.feature) specifies overflow-safe vector allocation, FIFO admission, strict
   ownership, owner-side shedding, and schema evolution.

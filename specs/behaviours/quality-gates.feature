@@ -6,7 +6,9 @@ Feature: HIPPO quality gates
     When lint gate wiring is inspected
     Then the configuration enables all linters and unlimited findings
     And exported documentation diagnostics remain errors
+    And govet runs nilness and exhaustive checks switch statements and map literals
     And the quick gate invokes module-local lint
+    And the quick gate invokes the pinned NilAway over the module
 
   @e2e-exempt
   Scenario: Behavior adapter wiring is complete
@@ -49,6 +51,11 @@ Feature: HIPPO quality gates
   Scenario: Every package with tests runs in a gate
     When gate package wiring is inspected
     Then every package that holds tests is run by a gate
+
+  @e2e-exempt
+  Scenario: Production code compares no domain value with a literal
+    When the domain literal analysis runs over production code
+    Then every finding is on the ratchet allowlist and every allowlist entry holds a finding
 
   @e2e-exempt
   Scenario: The loaded gate declares saturation only when every core is busy

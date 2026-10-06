@@ -255,6 +255,7 @@ type Driver struct {
 	exclusiveStatusState     map[string][]byte
 	interruption             interruptionScenario
 	ungatedPackages          []string
+	domainFindings           []domainFinding
 	lineage                  lineageScenario
 }
 
@@ -2877,10 +2878,125 @@ func (driver *Driver) requirePackageDocumentation() error {
 	return nil
 }
 
+// requireNilnessAndExhaustiveMaps pins the two lint settings that reach beyond the default analyzers: govet's nilness
+// and exhaustive's map-literal check, which makes a keyed enumeration name every member.
+func (driver *Driver) requireNilnessAndExhaustiveMaps() error {
+	govet := settingsBlock(driver.lintConfiguration, "govet:")
+
+	if !slices.Contains(listItems(settingsBlock(govet, "enable:")), "nilness") {
+		return errors.New("govet does not enable nilness")
+	}
+
+	if slices.Contains(listItems(settingsBlock(govet, "disable:")), "nilness") {
+		return errors.New("govet disables nilness that it also enables")
+	}
+
+	checked := listItems(settingsBlock(settingsBlock(driver.lintConfiguration, "exhaustive:"), "check:"))
+	for _, check := range []string{"switch", "map"} {
+		if !slices.Contains(checked, check) {
+			return fmt.Errorf("exhaustive does not check %s", check)
+		}
+	}
+
+	return nil
+}
+
+// settingsBlock returns the lines of configuration indented below the first line whose trimmed text is key, with their
+// indentation kept so a nested key can be looked up in the result. Comment and blank lines are dropped: a comment that
+// mentions a setting is not the setting.
+func settingsBlock(configuration, key string) string {
+	var block []string
+
+	keyIndent := -1
+
+	for line := range strings.SplitSeq(configuration, "\n") {
+		trimmed := strings.TrimSpace(line)
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+
+		switch {
+		case trimmed == "" || strings.HasPrefix(trimmed, "#"):
+		case keyIndent < 0:
+			if trimmed == key {
+				keyIndent = indent
+			}
+		case indent > keyIndent:
+			block = append(block, line)
+		default:
+			return strings.Join(block, "\n")
+		}
+	}
+
+	return strings.Join(block, "\n")
+}
+
+// listItems returns the exact text of each "- item" line of a block returned by settingsBlock.
+func listItems(block string) []string {
+	var items []string
+
+	for line := range strings.SplitSeq(block, "\n") {
+		if item, found := strings.CutPrefix(strings.TrimSpace(line), "- "); found {
+			items = append(items, strings.TrimSpace(item))
+		}
+	}
+
+	return items
+}
+
 func (driver *Driver) requireModuleScopedLint() error {
 	if !strings.Contains(driver.lintCommand, "go tool golangci-lint run") || strings.Contains(driver.lintCommand, "../") {
 		return errors.New("lint is not scoped to the standalone module")
 	}
+	return nil
+}
+
+// requirePinnedNilAway pins NilAway as a failing quick-gate step: a go.mod tool directive, and an invocation that runs
+// after golangci-lint over the whole module without -json, whose exit status is always zero.
+func (driver *Driver) requirePinnedNilAway() error {
+	command := ""
+
+	for line := range strings.SplitSeq(driver.lintCommand, "\n") {
+		if strings.HasPrefix(line, "go tool nilaway ") {
+			command = line
+
+			break
+		}
+	}
+
+	if command == "" {
+		return errors.New("the quick gate does not invoke the pinned NilAway")
+	}
+
+	// Any of these lets the line succeed, run beside the gate, or hand its exit status to another command, so a
+	// diagnostic would no longer stop the script.
+	for _, swallowing := range []string{"|", "&", ";"} {
+		if strings.Contains(command, swallowing) {
+			return fmt.Errorf("the NilAway invocation contains %q, which can hide its exit status", swallowing)
+		}
+	}
+
+	for _, required := range []string{"-include-pkgs=github.com/wahidyankf/hippo", "-pretty-print=false", " ./..."} {
+		if !strings.Contains(command, required) {
+			return fmt.Errorf("the NilAway invocation lacks %q", required)
+		}
+	}
+
+	if strings.Contains(command, "-json") {
+		return errors.New("the NilAway invocation uses -json, which always exits 0")
+	}
+
+	if strings.Index(driver.lintCommand, command) < strings.Index(driver.lintCommand, "go tool golangci-lint run") {
+		return errors.New("NilAway runs before golangci-lint")
+	}
+
+	modulePins, err := os.ReadFile(filepath.Join(toolRoot(), "go.mod"))
+	if err != nil {
+		return err
+	}
+
+	if !strings.Contains(string(modulePins), "\tgo.uber.org/nilaway/cmd/nilaway\n") {
+		return errors.New("go.mod does not pin NilAway as a tool")
+	}
+
 	return nil
 }
 
