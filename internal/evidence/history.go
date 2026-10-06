@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 const (
@@ -28,32 +30,32 @@ const (
 
 // Summary is the queryable, privacy-safe subset shared by current and archived evidence.
 type Summary struct {
-	SchemaVersion                          int                   `json:"schemaVersion"`
-	RunID                                  string                `json:"runId,omitempty"`
-	StartedAt                              string                `json:"startedAt,omitempty"`
-	FinishedAt                             string                `json:"finishedAt,omitempty"`
-	Source                                 string                `json:"source,omitempty"`
-	Tags                                   map[string]string     `json:"tags,omitempty"`
-	ResourceTier                           string                `json:"resourceTier,omitempty"`
-	TaskClass                              string                `json:"taskClass,omitempty"`
-	Outcome                                RecordedOutcome       `json:"outcome,omitzero"`
-	AvailableNonCompressedEstimateMinBytes *int64                `json:"availableNonCompressedEstimateMinBytes,omitempty"`
-	MemoryPressureLevelMax                 *int                  `json:"memoryPressureLevelMax,omitempty"`
-	CPUUtilizationP95Percent               float64               `json:"cpuUtilizationP95Percent,omitempty"`
-	SwapOutsDelta                          int64                 `json:"swapOutsDelta,omitempty"`
-	PeakOwnerCount                         int                   `json:"peakOwnerCount,omitempty"`
-	BudgetOutcome                          RecordedBudgetOutcome `json:"budgetOutcome,omitzero"`
-	AggregateCount                         int                   `json:"aggregateCount,omitempty"`
+	SchemaVersion                          int                      `json:"schemaVersion"`
+	RunID                                  string                   `json:"runId,omitempty"`
+	StartedAt                              string                   `json:"startedAt,omitempty"`
+	FinishedAt                             string                   `json:"finishedAt,omitempty"`
+	Source                                 string                   `json:"source,omitempty"`
+	Tags                                   map[string]string        `json:"tags,omitempty"`
+	ResourceTier                           string                   `json:"resourceTier,omitempty"`
+	TaskClass                              policy.RecordedTaskClass `json:"taskClass,omitzero"`
+	Outcome                                RecordedOutcome          `json:"outcome,omitzero"`
+	AvailableNonCompressedEstimateMinBytes *int64                   `json:"availableNonCompressedEstimateMinBytes,omitempty"`
+	MemoryPressureLevelMax                 *int                     `json:"memoryPressureLevelMax,omitempty"`
+	CPUUtilizationP95Percent               float64                  `json:"cpuUtilizationP95Percent,omitempty"`
+	SwapOutsDelta                          int64                    `json:"swapOutsDelta,omitempty"`
+	PeakOwnerCount                         int                      `json:"peakOwnerCount,omitempty"`
+	BudgetOutcome                          RecordedBudgetOutcome    `json:"budgetOutcome,omitzero"`
+	AggregateCount                         int                      `json:"aggregateCount,omitempty"`
 }
 
 // Query selects history rows without exposing commands, arguments, or paths.
-// An Outcome of OutcomeUnset selects every outcome.
+// An Outcome of OutcomeUnset selects every outcome, and an empty Class every class.
 type Query struct {
 	Since   time.Duration
 	Now     time.Time
 	Source  string
 	Tags    map[string]string
-	Class   string
+	Class   policy.TaskClass
 	Tier    string
 	Outcome Outcome
 }
@@ -133,8 +135,20 @@ func archiveFallback(name string) time.Time {
 	return parsed
 }
 
+// matchesClass reports whether a summary's recorded class is the one a query
+// asks for. A class this version has no member for matches no class, so a
+// filter, which takes only members, can never select it.
+func matchesClass(recorded policy.RecordedTaskClass, wanted policy.TaskClass) bool {
+	if wanted == "" {
+		return true
+	}
+	class, known := recorded.TaskClass()
+
+	return known && class == wanted
+}
+
 func matchesQuery(summary Summary, query Query) bool {
-	if query.Source != "" && summary.Source != query.Source || query.Class != "" && summary.TaskClass != query.Class ||
+	if query.Source != "" && summary.Source != query.Source || !matchesClass(summary.TaskClass, query.Class) ||
 		query.Tier != "" && summary.ResourceTier != query.Tier ||
 		query.Outcome != OutcomeUnset && summary.Outcome.Outcome() != query.Outcome {
 		return false
@@ -556,7 +570,7 @@ func aggregateHistoryRows(rows []Summary) []Summary {
 		}
 		sort.Strings(tagKeys)
 		parts := make([]string, 0, 4+2*len(tagKeys))
-		parts = append(parts, row.Source, row.TaskClass, row.ResourceTier, row.Outcome.String())
+		parts = append(parts, row.Source, row.TaskClass.String(), row.ResourceTier, row.Outcome.String())
 		for _, tagKey := range tagKeys {
 			parts = append(parts, tagKey, row.Tags[tagKey])
 		}

@@ -505,19 +505,27 @@ func admissionWaitConflict(schemaVersion int, resourceTier string, wait time.Dur
 	}
 }
 
+// runClass reads the --class flag of run: the class it names, or ephemeral for
+// an empty one, which is what an unset class has always meant. A class run can
+// never accept is the caller's mistake, found before anything else runs. Release
+// work is guarded by the release commands, never by run.
+func runClass(flag string) (policy.TaskClass, error) {
+	if flag == "" {
+		return policy.TaskEphemeral, nil
+	}
+	class, err := policy.ParseTaskClass(flag)
+	if err != nil || class == policy.TaskRelease {
+		return "", status.Fail(status.CodeArgsInvalid, "class must be ephemeral, service, or transactional")
+	}
+
+	return class, nil
+}
+
 // runArgumentMistake refuses flag values run can never accept. Each is the
 // caller's mistake, so it is found here, before any configuration, host
 // evidence, or coordination state is read, and reported as a usage mistake
 // rather than as HIPPO failing.
 func runArgumentMistake(options runOptions) error {
-	switch policy.TaskClass(options.class) {
-	case "", policy.TaskEphemeral, policy.TaskService, policy.TaskTransactional:
-	case policy.TaskRelease:
-		// Release work is guarded by the release commands, never by run.
-		fallthrough
-	default:
-		return status.Fail(status.CodeArgsInvalid, "class must be ephemeral, service, or transactional")
-	}
 	if _, known := guard.DefaultResourceTiers()[options.resourceTier]; options.resourceTier != "" && !known {
 		return status.Fail(status.CodeArgsInvalid, "resource tier must be light, standard, or heavy")
 	}
@@ -615,7 +623,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 		return 1, collectError
 	}
 
-	taskClass := policy.TaskClass(options.class)
+	taskClass := options.class
 	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile(), taskClass, probe.Sample)
 	if resolveError != nil {
 		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)

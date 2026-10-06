@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func writeHistoryFixture(t *testing.T, root, name string, value Summary, modified time.Time) {
@@ -32,7 +35,7 @@ func TestReadHistoryAcceptsLegacyMultilineArchive(t *testing.T) {
 	finished := now.Add(-48 * time.Hour)
 	summary := Summary{
 		SchemaVersion: 5, RunID: "legacy-pretty", Source: "hippo", ResourceTier: "standard",
-		TaskClass: "ephemeral", Outcome: Recorded(OutcomePassed), FinishedAt: finished.Format(time.RFC3339Nano),
+		TaskClass: policy.RecordedClass(policy.TaskEphemeral), Outcome: Recorded(OutcomePassed), FinishedAt: finished.Format(time.RFC3339Nano),
 	}
 	encoded, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
@@ -57,7 +60,7 @@ func TestCleanupCompactsRawAndPriorDaySummaries(t *testing.T) {
 	old := now.Add(-48 * time.Hour)
 	writeHistoryFixture(t, root, "run-one", Summary{
 		SchemaVersion: 5, RunID: "run-one", Source: "hippo", ResourceTier: "standard",
-		TaskClass: "ephemeral", Outcome: Recorded(OutcomePassed), FinishedAt: old.Format(time.RFC3339Nano),
+		TaskClass: policy.RecordedClass(policy.TaskEphemeral), Outcome: Recorded(OutcomePassed), FinishedAt: old.Format(time.RFC3339Nano),
 	}, old)
 	raw := filepath.Join(root, "run-one.jsonl")
 	if err := os.WriteFile(raw, []byte("{\"sample\":1}\n"), 0o600); err != nil {
@@ -129,7 +132,7 @@ func TestPromotionRequiresLastHealthyOverlapsAcrossThreeSources(t *testing.T) {
 		writeHistoryFixture(t, root, "run-"+time.Duration(index).String(), Summary{
 			SchemaVersion: 5, RunID: "run-" + time.Duration(index).String(),
 			Source: []string{"hippo", "rhino", "ose-public"}[index%3], ResourceTier: "standard",
-			TaskClass: "ephemeral", Outcome: Recorded(OutcomePassed), FinishedAt: finished.Format(time.RFC3339Nano),
+			TaskClass: policy.RecordedClass(policy.TaskEphemeral), Outcome: Recorded(OutcomePassed), FinishedAt: finished.Format(time.RFC3339Nano),
 			PeakOwnerCount: 2, AvailableNonCompressedEstimateMinBytes: &minimum,
 			MemoryPressureLevelMax: &pressure, CPUUtilizationP95Percent: 70,
 		}, finished)
@@ -146,7 +149,7 @@ func TestPromotionRequiresLastHealthyOverlapsAcrossThreeSources(t *testing.T) {
 	unsafe := now.Add(time.Minute)
 	writeHistoryFixture(t, root, "run-unsafe", Summary{
 		SchemaVersion: 5, RunID: "run-unsafe", Source: "hippo", ResourceTier: "heavy",
-		TaskClass: "ephemeral", Outcome: Recorded(OutcomePressureShed), FinishedAt: unsafe.Format(time.RFC3339Nano),
+		TaskClass: policy.RecordedClass(policy.TaskEphemeral), Outcome: Recorded(OutcomePressureShed), FinishedAt: unsafe.Format(time.RFC3339Nano),
 		PeakOwnerCount: 2, AvailableNonCompressedEstimateMinBytes: &minimum,
 		MemoryPressureLevelMax: &pressure, CPUUtilizationP95Percent: 70,
 	}, unsafe)
@@ -164,7 +167,7 @@ func TestHistoryListsAnUnknownOutcomeAsRecordedAndNeverPromotesOnIt(t *testing.T
 	minimum := int64(12 * 1024 * 1024 * 1024)
 	pressure := 1
 	healthy := Summary{
-		SchemaVersion: 5, RunID: "run-healthy", Source: "hippo", ResourceTier: "standard", TaskClass: "ephemeral",
+		SchemaVersion: 5, RunID: "run-healthy", Source: "hippo", ResourceTier: "standard", TaskClass: policy.RecordedClass(policy.TaskEphemeral),
 		Outcome: Recorded(OutcomePassed), BudgetOutcome: RecordedBudget(BudgetOutcomeAdmitted),
 		FinishedAt: finished.Format(time.RFC3339Nano), PeakOwnerCount: 2, AvailableNonCompressedEstimateMinBytes: &minimum,
 		MemoryPressureLevelMax: &pressure, CPUUtilizationP95Percent: 70,
@@ -229,10 +232,10 @@ func TestAggregationKeepsACancelledRunApartFromADeferral(t *testing.T) {
 	// oldest day must not merge them or the aggregate would report one as
 	// another.
 	rows := aggregateHistoryRows([]Summary{
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionCancelled)},
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionCancelled)},
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeCapacityDeferred)},
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionFailed)},
+		{Source: "repo", TaskClass: policy.RecordedClass(policy.TaskEphemeral), ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionCancelled)},
+		{Source: "repo", TaskClass: policy.RecordedClass(policy.TaskEphemeral), ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionCancelled)},
+		{Source: "repo", TaskClass: policy.RecordedClass(policy.TaskEphemeral), ResourceTier: "light", Outcome: Recorded(OutcomeCapacityDeferred)},
+		{Source: "repo", TaskClass: policy.RecordedClass(policy.TaskEphemeral), ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionFailed)},
 	})
 	counts := map[string]int{}
 	for _, row := range rows {
@@ -246,5 +249,103 @@ func TestAggregationKeepsACancelledRunApartFromADeferral(t *testing.T) {
 		matchesQuery(Summary{Outcome: Recorded(OutcomeAdmissionCancelled)}, Query{Outcome: OutcomeCapacityDeferred}) ||
 		matchesQuery(Summary{Outcome: Recorded(OutcomeAdmissionFailed)}, Query{Outcome: OutcomeCapacityDeferred}) {
 		t.Fatal("the outcome filter does not separate a cancellation from a deferral")
+	}
+}
+
+// classHistoryFixture stages three current summaries in a root of their own: one whose class this version has no
+// member for, one it has, and one that records no class.
+func classHistoryFixture(t *testing.T, now time.Time) string {
+	t.Helper()
+	root := t.TempDir()
+	finished := now.Add(-time.Minute).Format(time.RFC3339Nano)
+	for run, class := range map[string]string{"run-batch": "batch", "run-ephemeral": "ephemeral", "run-unrecorded": ""} {
+		document := map[string]any{
+			"schemaVersion": 5, "runId": run, "source": "hippo", "outcome": "passed", "finishedAt": finished,
+		}
+		if class != "" {
+			document["taskClass"] = class
+		}
+		encoded, err := json.Marshal(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(root, run+".summary.json"), append(encoded, '\n'), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return root
+}
+
+func TestHistoryListsAClassThisVersionHasNoMemberForAsRecorded(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	rows, err := ReadHistory(classHistoryFixture(t, now), Query{Since: HistoryRetention, Now: now})
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("history rows=%+v error=%v, want all three, none refused", rows, err)
+	}
+	byRun := map[string]Summary{}
+	for _, row := range rows {
+		byRun[row.RunID] = row
+	}
+	if batch := byRun["run-batch"].TaskClass; batch.String() != "batch" {
+		t.Errorf("an unknown class reads %q, want the recorded text", batch.String())
+	} else if class, known := batch.TaskClass(); known || class != "" {
+		t.Errorf("an unknown class read as the member %q, want no member", class)
+	}
+	if class, known := byRun["run-ephemeral"].TaskClass.TaskClass(); !known || class != policy.TaskEphemeral {
+		t.Errorf("a recorded ephemeral class read as %q (known=%t)", class, known)
+	}
+	if unrecorded := byRun["run-unrecorded"].TaskClass; !unrecorded.IsZero() || unrecorded.String() != "" {
+		t.Errorf("a summary with no class reads %q, want nothing recorded", unrecorded.String())
+	}
+	for run, want := range map[string]string{"run-batch": `"taskClass":"batch"`, "run-ephemeral": `"taskClass":"ephemeral"`} {
+		if listed, marshalError := json.Marshal(byRun[run]); marshalError != nil || !bytes.Contains(listed, []byte(want)) {
+			t.Errorf("history lists %s as %s (%v), want %s back", run, listed, marshalError, want)
+		}
+	}
+	if listed, marshalError := json.Marshal(byRun["run-unrecorded"]); marshalError != nil || bytes.Contains(listed, []byte("taskClass")) {
+		t.Errorf("history lists a summary with no class as %s (%v), want the field omitted", listed, marshalError)
+	}
+}
+
+// A filter takes a class this version has a member for, so it selects exactly the rows recorded as that member and can
+// never select a class it has none for.
+func TestHistoryClassFilterSelectsOnlyAKnownClass(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	root := classHistoryFixture(t, now)
+	for _, test := range []struct {
+		class policy.TaskClass
+		want  []string
+	}{
+		{policy.TaskEphemeral, []string{"run-ephemeral"}},
+		{policy.TaskService, []string{}},
+	} {
+		rows, err := ReadHistory(root, Query{Since: HistoryRetention, Now: now, Class: test.class})
+		got := make([]string, 0, len(rows))
+		for _, row := range rows {
+			got = append(got, row.RunID)
+		}
+		if err != nil || !slices.Equal(got, test.want) {
+			t.Errorf("the %s filter listed %v (%v), want %v", test.class, got, err, test.want)
+		}
+	}
+}
+
+func TestAggregationKeepsAClassItHasNoMemberForApartAndAsRecorded(t *testing.T) {
+	rows := aggregateHistoryRows([]Summary{
+		{Source: "repo", TaskClass: policy.RecordedClass("batch"), ResourceTier: "light", Outcome: Recorded(OutcomePassed)},
+		{Source: "repo", TaskClass: policy.RecordedClass("batch"), ResourceTier: "light", Outcome: Recorded(OutcomePassed)},
+		{Source: "repo", TaskClass: policy.RecordedClass(policy.TaskEphemeral), ResourceTier: "light", Outcome: Recorded(OutcomePassed)},
+	})
+	counts := map[string]int{}
+	for _, row := range rows {
+		counts[row.TaskClass.String()] += row.AggregateCount
+	}
+	if len(rows) != 2 || counts["batch"] != 2 || counts["ephemeral"] != 1 {
+		t.Fatalf("aggregation merged or lost classes: %+v over %d rows", counts, len(rows))
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 )
 
 const (
@@ -104,6 +105,95 @@ const (
 	// TaskRelease identifies strict release work.
 	TaskRelease TaskClass = "release"
 )
+
+// TaskClasses returns every task class, in the order the history filter lists
+// them. It is the one list the accepted text derives from: decoding and the
+// history filter both read it, so a class added to the constants above is added
+// here once. The reservation ledger's check does not read it: it names each
+// member in a switch the exhaustive linter holds complete, so a new class is
+// decided there instead of admitted for being listed here.
+func TaskClasses() []TaskClass {
+	return []TaskClass{TaskEphemeral, TaskService, TaskTransactional, TaskRelease}
+}
+
+// ParseTaskClass reads the text of one task class, and refuses any text that is
+// no member of TaskClasses, the empty one included, naming it. It is the one
+// place text becomes a class: the strict decoder and the tolerant reader both
+// ask it, so they cannot disagree about what a member is.
+func ParseTaskClass(text string) (TaskClass, error) {
+	class := TaskClass(text)
+	if !slices.Contains(TaskClasses(), class) {
+		return "", fmt.Errorf("unknown task class %q", text)
+	}
+
+	return class, nil
+}
+
+// UnmarshalText decodes strictly: only a member of TaskClasses is accepted, and
+// any other text is refused. It is for input that decides something, such as a
+// reservation ledger, never for evidence a run recorded, which may carry a class
+// this version has no member for; that is read as RecordedTaskClass.
+func (class *TaskClass) UnmarshalText(text []byte) error {
+	parsed, err := ParseTaskClass(string(text))
+	if err != nil {
+		return err
+	}
+	*class = parsed
+
+	return nil
+}
+
+// RecordedTaskClass is a task class as evidence recorded it: the member this
+// version knows it as, if any, and the text that was recorded. A class this
+// version has no member for reads with no member and its text kept, so a reader
+// lists what a newer or older version wrote instead of failing or guessing, and
+// a decision that needs a member can tell that it has none.
+type RecordedTaskClass struct {
+	class TaskClass
+	text  string
+}
+
+// RecordedClass returns the recording of class: its text, and the member it
+// names when it is one. A value that is no member is kept as the text it is.
+func RecordedClass(class TaskClass) RecordedTaskClass {
+	member, err := ParseTaskClass(string(class))
+	if err != nil {
+		return RecordedTaskClass{class: "", text: string(class)}
+	}
+
+	return RecordedTaskClass{class: member, text: string(class)}
+}
+
+// TaskClass is the member the recorded text names. It reports false for text
+// this version has no member for, and for nothing recorded.
+func (recorded RecordedTaskClass) TaskClass() (TaskClass, bool) {
+	return recorded.class, recorded.class != ""
+}
+
+// String is the text that was recorded.
+func (recorded RecordedTaskClass) String() string {
+	return recorded.text
+}
+
+// IsZero reports that nothing was recorded, so an omitzero tag leaves the field
+// out as omitempty left out an empty string.
+func (recorded RecordedTaskClass) IsZero() bool {
+	return recorded.text == ""
+}
+
+// MarshalText writes back the text that was recorded.
+func (recorded RecordedTaskClass) MarshalText() ([]byte, error) {
+	return []byte(recorded.text), nil
+}
+
+// UnmarshalText never fails: a class this version has a member for reads as that
+// member, any other text, the empty one included, reads with no member, and
+// either keeps the text.
+func (recorded *RecordedTaskClass) UnmarshalText(text []byte) error {
+	*recorded = RecordedClass(TaskClass(text))
+
+	return nil
+}
 
 // Decision is the action selected by profile resolution.
 type Decision string

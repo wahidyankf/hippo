@@ -43,6 +43,11 @@ Feature: Public HIPPO CLI
     When JSON history is requested for thirty days
     Then it exits 0 and that row's outcome reads future-outcome
 
+  Scenario: History lists a task class this version does not know as recorded
+    Given a current summary whose task class is batch
+    When JSON history is requested for thirty days
+    Then it exits 0 and that row's task class reads batch
+
   @e2e-exempt
   Scenario: An unreadable history archive is not reported as a refused write
     Given a history archive that is not valid gzip

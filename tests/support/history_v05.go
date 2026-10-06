@@ -108,7 +108,8 @@ func (driver *Driver) labeledHistoryV05() error {
 	for _, source := range []string{hippoFixtureName, "rhino"} {
 		row := evidence.Summary{
 			SchemaVersion: 5, RunID: source, Source: source, Tags: map[string]string{"checkout": worktreeTagValue},
-			TaskClass: "ephemeral", ResourceTier: standardTierName, Outcome: evidence.Recorded(evidence.OutcomePassed),
+			TaskClass: policy.RecordedClass(policy.TaskEphemeral), ResourceTier: standardTierName,
+			Outcome:    evidence.Recorded(evidence.OutcomePassed),
 			FinishedAt: now.Format(time.RFC3339Nano),
 		}
 		encoded, encodeError := json.Marshal(row)
@@ -282,29 +283,45 @@ func (driver *Driver) requireUnreadableHistory() error {
 	return nil
 }
 
-// recordedOutcomeRun names the one summary the recorded-outcome scenario writes.
-const recordedOutcomeRun = "recorded-outcome"
+// recordedOutcomeRun and recordedTaskClassRun name the one summary each
+// recorded-word scenario writes.
+const (
+	recordedOutcomeRun   = "recorded-outcome"
+	recordedTaskClassRun = "recorded-task-class"
+)
 
 // summaryRecordingOutcome leaves, in a root of its own, the bytes a run wrote
 // with the given outcome. It writes plain JSON rather than an evidence.Summary,
 // because the point is a word another HIPPO version recorded and this one has
 // no name for: the typed summary could not even hold it.
 func (driver *Driver) summaryRecordingOutcome(outcome string) error {
+	return driver.writeRecordedSummary(recordedOutcomeRun, string(policy.TaskEphemeral), outcome)
+}
+
+// summaryRecordingTaskClass is summaryRecordingOutcome for the task class: the
+// bytes a run wrote with a class this version has no name for.
+func (driver *Driver) summaryRecordingTaskClass(class string) error {
+	return driver.writeRecordedSummary(recordedTaskClassRun, class, "passed")
+}
+
+// writeRecordedSummary stages one current summary, as plain JSON, in a root of
+// the scenario's own.
+func (driver *Driver) writeRecordedSummary(runID, class, outcome string) error {
 	root, err := driver.temporaryRoot()
 	if err != nil {
 		return err
 	}
 	driver.leaseRoot = root
 	encoded, err := json.Marshal(map[string]any{
-		"schemaVersion": 5, "runId": recordedOutcomeRun, "source": hippoFixtureName,
-		"taskClass": "ephemeral", "resourceTier": standardTierName, "outcome": outcome,
+		"schemaVersion": 5, "runId": runID, "source": hippoFixtureName,
+		"taskClass": class, "resourceTier": standardTierName, "outcome": outcome,
 		"finishedAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(root, recordedOutcomeRun+".summary.json"), append(encoded, '\n'), 0o600)
+	return os.WriteFile(filepath.Join(root, runID+".summary.json"), append(encoded, '\n'), 0o600)
 }
 
 // requestJSONHistory asks for thirty days of history as JSON from the root the
@@ -343,21 +360,51 @@ func (driver *Driver) runBinaryInRoot(root string, arguments ...string) error {
 }
 
 func (driver *Driver) requireHistoryRowOutcome(outcome string) error {
-	if driver.exitCode != 0 {
-		return fmt.Errorf("history exit=%d stderr=%s", driver.exitCode, driver.errorOutput)
-	}
-	var payload struct {
-		Rows []struct {
-			RunID   string `json:"runId"`
-			Outcome string `json:"outcome"`
-		} `json:"rows"`
-	}
-	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
+	row, err := driver.onlyHistoryRow(recordedOutcomeRun)
+	if err != nil {
 		return err
 	}
-	if len(payload.Rows) != 1 || payload.Rows[0].RunID != recordedOutcomeRun || payload.Rows[0].Outcome != outcome {
-		return fmt.Errorf("history rows %+v, want one %s row whose outcome reads %s", payload.Rows, recordedOutcomeRun, outcome)
+	if row.Outcome != outcome {
+		return fmt.Errorf("history row %+v, want its outcome to read %s", row, outcome)
 	}
 
 	return nil
+}
+
+func (driver *Driver) requireHistoryRowTaskClass(class string) error {
+	row, err := driver.onlyHistoryRow(recordedTaskClassRun)
+	if err != nil {
+		return err
+	}
+	if row.TaskClass != class {
+		return fmt.Errorf("history row %+v, want its task class to read %s", row, class)
+	}
+
+	return nil
+}
+
+// historyRow is the part of one history row the recorded-word scenarios read.
+type historyRow struct {
+	RunID     string `json:"runId"`
+	Outcome   string `json:"outcome"`
+	TaskClass string `json:"taskClass"`
+}
+
+// onlyHistoryRow returns the single row history listed, which must be the
+// summary the scenario staged under runID, after history exited 0.
+func (driver *Driver) onlyHistoryRow(runID string) (historyRow, error) {
+	if driver.exitCode != 0 {
+		return historyRow{}, fmt.Errorf("history exit=%d stderr=%s", driver.exitCode, driver.errorOutput)
+	}
+	var payload struct {
+		Rows []historyRow `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
+		return historyRow{}, err
+	}
+	if len(payload.Rows) != 1 || payload.Rows[0].RunID != runID {
+		return historyRow{}, fmt.Errorf("history rows %+v, want one %s row", payload.Rows, runID)
+	}
+
+	return payload.Rows[0], nil
 }

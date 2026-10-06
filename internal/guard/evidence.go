@@ -191,7 +191,7 @@ type EvidenceSummary struct {
 	Tags                                   map[string]string      `json:"tags,omitempty"`
 	ResourceTier                           string                 `json:"resourceTier,omitempty"`
 	SampleCount                            int                    `json:"sampleCount"`
-	TaskClass                              string                 `json:"taskClass"`
+	TaskClass                              policy.TaskClass       `json:"taskClass"`
 	Outcome                                evidence.Outcome       `json:"outcome"`
 	AvailableParallelism                   int                    `json:"availableParallelism"`
 	AvailableNonCompressedEstimateMinBytes *int64                 `json:"availableNonCompressedEstimateMinBytes"`
@@ -239,7 +239,7 @@ func (writer *EvidenceWriter) Finalize(taskClass policy.TaskClass, outcome evide
 	}
 	writer.output = nil
 
-	writer.summary.TaskClass = string(taskClass)
+	writer.summary.TaskClass = taskClass
 	writer.summary.Outcome = outcome
 	writer.summary.HealthFailures = healthFailures
 	writer.summary.RequestedProfile = writer.resolution.RequestedProfile

@@ -55,7 +55,7 @@ Feature: HIPPO quality gates
   @e2e-exempt
   Scenario: Production code compares no domain value with a literal
     When the domain literal analysis runs over production code
-    Then every finding is on the ratchet allowlist and every allowlist entry holds a finding
+    Then it reports no finding
 
   @e2e-exempt
   Scenario: The loaded gate declares saturation only when every core is busy

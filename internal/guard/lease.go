@@ -18,15 +18,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// leaseOwner is a lease or session record. Its class is read tolerantly, as the
+// record a later version wrote: the record is refused afterwards, where a record
+// must carry a class this version has a member for, and described as recorded
+// where it only has to be named.
 type leaseOwner struct {
-	SchemaVersion  int    `json:"schemaVersion"`
-	PID            int    `json:"pid"`
-	Token          string `json:"token,omitempty"`
-	Port           int    `json:"port,omitempty"`
-	Owner          string `json:"owner,omitempty"`
-	Class          string `json:"class,omitempty"`
-	IdentityDevice uint64 `json:"identityDevice,omitempty"`
-	IdentityInode  uint64 `json:"identityInode,omitempty"`
+	SchemaVersion  int                      `json:"schemaVersion"`
+	PID            int                      `json:"pid"`
+	Token          string                   `json:"token,omitempty"`
+	Port           int                      `json:"port,omitempty"`
+	Owner          string                   `json:"owner,omitempty"`
+	Class          policy.RecordedTaskClass `json:"class,omitzero"`
+	IdentityDevice uint64                   `json:"identityDevice,omitempty"`
+	IdentityInode  uint64                   `json:"identityInode,omitempty"`
 }
 
 // Session identifies an owned or inherited guarded session.
@@ -149,12 +153,9 @@ func validSessionRecord(owner *leaseOwner, recordToken string) bool {
 		return false
 	}
 
-	switch policy.TaskClass(owner.Class) {
-	case policy.TaskEphemeral, policy.TaskService, policy.TaskTransactional, policy.TaskRelease:
-		return true
-	default:
-		return false
-	}
+	_, known := owner.Class.TaskClass()
+
+	return known
 }
 
 func compatibilityOwnerAlive(root string, owner *leaseOwner) (bool, error) {
@@ -320,7 +321,7 @@ func DescribeHeavyLease(root string) string {
 		return "the heavy-work lease reports no live owner"
 	}
 
-	class := owner.Class
+	class := owner.Class.String()
 	if class == "" {
 		class = "unknown"
 	}
@@ -501,7 +502,7 @@ func registerSession(root, lockPath string, class policy.TaskClass) (*Session, e
 		SchemaVersion:  1,
 		PID:            os.Getpid(),
 		Token:          value,
-		Class:          string(class),
+		Class:          policy.RecordedClass(class),
 		IdentityDevice: identityDevice,
 		IdentityInode:  identityInode,
 	}

@@ -148,7 +148,9 @@ func liveExclusiveHeavyOwner(root string) (*leaseOwner, bool, error) {
 }
 
 func appendExclusiveOwner(totals *ReservationTotals, runID string, owner leaseOwner) {
-	class := policy.TaskClass(owner.Class)
+	// A legacy owner is published as recorded, even when its class is one this
+	// version has no member for: the count below skips it, as it always has.
+	class := policy.TaskClass(owner.Class.String())
 	totals.ActiveOwners++
 	totals.LegacyEntries++
 	switch class {

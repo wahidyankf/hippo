@@ -46,7 +46,8 @@ func TestHistoryJSONFiltersSourceAndTag(t *testing.T) {
 	for index, source := range []string{"hippo", "rhino"} {
 		row := evidence.Summary{
 			SchemaVersion: 5, RunID: source, Source: source, Tags: map[string]string{"checkout": "worktree"},
-			TaskClass: "ephemeral", ResourceTier: "standard", Outcome: evidence.Recorded(evidence.OutcomePassed),
+			TaskClass: policy.RecordedClass(policy.TaskEphemeral), ResourceTier: "standard",
+			Outcome:    evidence.Recorded(evidence.OutcomePassed),
 			FinishedAt: now.Add(time.Duration(index) * time.Minute).Format(time.RFC3339Nano),
 		}
 		data, err := json.Marshal(row)
@@ -128,5 +129,45 @@ func TestHistoryReportsAnUnreadableArchiveAsUnreadable(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "hippo: [hippo.evidence.unreadable] reading run history:") {
 		t.Fatalf("an unreadable archive was not reported as hippo.evidence.unreadable: %q", stderr.String())
+	}
+}
+
+func TestHistoryListsAClassThisVersionHasNoMemberForAsRecordedInEveryFormat(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	for run, class := range map[string]string{"future": "batch", "known": "ephemeral"} {
+		document := `{"schemaVersion":5,"runId":"` + run + `","source":"hippo","taskClass":"` + class +
+			`","resourceTier":"standard","outcome":"passed","finishedAt":"` + now.Format(time.RFC3339Nano) + `"}` + "\n"
+		if err := os.WriteFile(filepath.Join(root, run+".summary.json"), []byte(document), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, test := range map[string]struct {
+		arguments []string
+		want      string
+		unwanted  string
+	}{
+		"text":             {[]string{"history"}, "run=future source=hippo class=batch tier=standard outcome=passed count=1", ""},
+		"json":             {[]string{"history", "--json"}, `"runId":"future","finishedAt":"` + now.Format(time.RFC3339Nano) + `","source":"hippo","resourceTier":"standard","taskClass":"batch"`, ""},
+		"jsonl":            {[]string{"history", "--jsonl"}, `"taskClass":"batch"`, ""},
+		"a known filter":   {[]string{"history", "--class", "ephemeral"}, "run=known", "run=future"},
+		"a service filter": {[]string{"history", "--class", "service"}, "", "run="},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			output := &bytes.Buffer{}
+			application := Application{
+				Stdout: output, Stderr: &bytes.Buffer{}, Environment: []string{"HIPPO_ROOT=" + root},
+				Now: func() time.Time { return now.Add(time.Hour) },
+			}
+			code, err := application.Run(context.Background(), append(test.arguments, "--since", "30d"))
+			if err != nil || code > 1 || !strings.Contains(output.String(), test.want) ||
+				test.unwanted != "" && strings.Contains(output.String(), test.unwanted) {
+				t.Fatalf("code=%d error=%v output=%q, want %q and not %q", code, err, output, test.want, test.unwanted)
+			}
+		})
 	}
 }

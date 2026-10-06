@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -31,11 +30,17 @@ func parseRollingDuration(value string) (time.Duration, error) {
 	return time.ParseDuration(value)
 }
 
-// historyTaskClasses are the classes a recorded run can carry. release is
-// among them because runs recorded before run refused it stay in history for
-// the whole retention window.
-var historyTaskClasses = []string{
-	string(policy.TaskEphemeral), string(policy.TaskService), string(policy.TaskTransactional), string(policy.TaskRelease),
+// classNames lists every class a recorded run can carry, as the --class filter
+// names them. release is among them because runs recorded before run refused it
+// stay in history for the whole retention window.
+func classNames() []string {
+	classes := policy.TaskClasses()
+	names := make([]string, 0, len(classes))
+	for _, class := range classes {
+		names = append(names, string(class))
+	}
+
+	return names
 }
 
 // outcomeNames lists every outcome a run's lifetime summary can record, as the
@@ -51,26 +56,57 @@ func outcomeNames() []string {
 	return names
 }
 
-// historyFilterMistake refuses a filter value no recorded run can carry. An
-// empty answer to it would read as "nothing matched" when the question could
-// never have matched anything, which hides a typo behind a valid result.
-func historyFilterMistake(options historyOptions) error {
+// historyFilters are the filters history takes that name a closed set, read from
+// their flags.
+type historyFilters struct {
+	class   policy.TaskClass
+	outcome evidence.Outcome
+}
+
+// readHistoryFilters refuses a filter value no recorded run can carry, and reads
+// the rest: --class as the class it names, or the empty class for no filter, and
+// --outcome as the outcome it names, or OutcomeUnset for no filter. An empty
+// answer to a refused value would read as "nothing matched" when the question
+// could never have matched anything, which hides a typo behind a valid result.
+// The checks run in the order the flags are documented: source, class, resource
+// tier, outcome.
+func readHistoryFilters(options historyOptions) (historyFilters, error) {
 	if err := identity.ValidateOverrides(options.source, nil); err != nil {
-		return status.Fail(status.CodeArgsInvalid, "--source: %v", err)
+		return historyFilters{}, status.Fail(status.CodeArgsInvalid, "--source: %v", err)
 	}
-	if options.taskClass != "" && !slices.Contains(historyTaskClasses, options.taskClass) {
-		return status.Fail(status.CodeArgsInvalid, "--class must be one of %s", strings.Join(historyTaskClasses, ", "))
+	class, err := classFilter(options.classFlag)
+	if err != nil {
+		return historyFilters{}, err
 	}
 	if _, known := guard.DefaultResourceTiers()[options.resourceTier]; options.resourceTier != "" && !known {
-		return status.Fail(status.CodeArgsInvalid, "--resource-tier must be light, standard, or heavy")
+		return historyFilters{}, status.Fail(status.CodeArgsInvalid, "--resource-tier must be light, standard, or heavy")
+	}
+	outcome, err := outcomeFilter(options.outcomeFlag)
+	if err != nil {
+		return historyFilters{}, err
 	}
 
-	return nil
+	return historyFilters{class: class, outcome: outcome}, nil
+}
+
+// classFilter reads the --class flag: the class it names, or the empty class for
+// no filter. A class no recorded run can carry is a usage mistake, for the
+// reason readHistoryFilters gives.
+func classFilter(flag string) (policy.TaskClass, error) {
+	if flag == "" {
+		return "", nil
+	}
+	class, err := policy.ParseTaskClass(flag)
+	if err != nil {
+		return "", status.Fail(status.CodeArgsInvalid, "--class must be one of %s", strings.Join(classNames(), ", "))
+	}
+
+	return class, nil
 }
 
 // outcomeFilter reads the --outcome flag: the outcome it names, or
 // OutcomeUnset for no filter. A word no run records is a usage mistake, for the
-// reason historyFilterMistake gives.
+// reason readHistoryFilters gives.
 func outcomeFilter(flag string) (evidence.Outcome, error) {
 	if flag == "" {
 		return evidence.OutcomeUnset, nil
@@ -89,10 +125,7 @@ func (application Application) history(options historyOptions) (int, error) {
 	if options.jsonOutput && options.jsonLines {
 		return 0, status.Fail(status.CodeArgsInvalid, "--json and --jsonl are mutually exclusive")
 	}
-	if err := historyFilterMistake(options); err != nil {
-		return 0, err
-	}
-	outcome, err := outcomeFilter(options.outcomeFlag)
+	filters, err := readHistoryFilters(options)
 	if err != nil {
 		return 0, err
 	}
@@ -107,7 +140,7 @@ func (application Application) history(options historyOptions) (int, error) {
 	root := host.DefaultEvidenceRoot(environmentMap(application.Environment))
 	rows, err := evidence.ReadHistory(root, evidence.Query{
 		Since: since, Now: application.Now(), Source: options.source, Tags: tags,
-		Class: options.taskClass, Tier: options.resourceTier, Outcome: outcome,
+		Class: filters.class, Tier: options.resourceTier, Outcome: filters.outcome,
 	})
 	if err != nil {
 		return 0, status.Fail(status.CodeEvidenceUnreadable, "reading run history: %v", err)

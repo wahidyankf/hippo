@@ -31,6 +31,7 @@ import (
 const (
 	compatibilityDeferralAttempts = 40
 	taskClassEphemeral            = "ephemeral"
+	taskClassRelease              = "release"
 	taskClassFlag                 = "--class"
 	diskPathFlag                  = "--disk-path"
 	profileBalanced               = "balanced"
