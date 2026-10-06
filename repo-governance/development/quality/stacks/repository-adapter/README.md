@@ -11,5 +11,5 @@ Read in order, after the [Repository Adapter](../repository-adapter.md) entrypoi
 
 ## Directory Map
 
-- [001 Go Analysis Gates](001-go-analysis-gates.md) — nilness, exhaustive map checks, NilAway and its exclusions, the
-  domain literal analysis and its ratchet, and `gochecksumtype`'s empty target
+- [001 Go Analysis Gates](001-go-analysis-gates.md) — nilness, exhaustive map checks, scoped `exhaustruct_v5`, NilAway
+  and its exclusions, the domain literal analysis and its ratchet, and `gochecksumtype`'s empty target
