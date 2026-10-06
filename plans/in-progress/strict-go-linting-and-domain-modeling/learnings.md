@@ -76,3 +76,36 @@ one durable owner or discard it with a reason. -->
   symbol, rule) omits the identifier. Accepted for now as outside the PW-1 and PW-2 rules. Routing candidate: the Unit 6
   item that removes the allowlist, which can drop the key gap, and an idea brief if a later defect shows one of the
   other gaps matters.
+- (2026-10-06, Unit 2) **The unit adapter shells out to `go test ./internal/guard`, so a RED in that package fails the
+  adapter.** About a dozen unit-adapter scenarios ("Schema-one ownership survives supervisor-only death", "Transactional
+  owners are the final emergency victim", and others) call `runInternalGuardRegression` and run a named `internal/guard`
+  test; when `internal/guard`'s tests do not compile, each reports `FAIL ... [build failed]` and the suite exits `1`
+  (`go test -count=1 ./tests/unit` showed 156 `FAIL` lines for two undefined symbols). A RED item that leaves
+  `internal/guard` uncompilable therefore cannot be followed by a unit-adapter run until its GREEN, and an adapter run
+  that overlaps edits to `internal/guard` is contaminated. Unit 2's items already order the runs this way; later units
+  that add RED tests to `internal/guard` or `internal/policy` inherit it. Routing candidate: the Unit 3 to 5 items that
+  name a unit-adapter run, and the plan-propagation note on _Unit adapter_.
+- (2026-10-06, Unit 2) **`exhaustruct_v5` checks every literal unless `explicit-mode` is on, and `enforce-patterns` are
+  full-path regexes.** The plan scopes the linter with `enforce-patterns` alone; in the default implicit mode that would
+  require every struct literal in the module to be complete and bring back the brittleness that disabled `exhaustruct`.
+  `dev.gaijin.team/go/exhaustruct/v5@v5.0.3` reads each pattern as a regex over `import/path.TypeName`, so Unit 2 sets
+  `explicit-mode: true` with `^github\.com/wahidyankf/hippo/internal/evidence\.RecordedOutcome$` (and the same for
+  `RecordedBudgetOutcome`); a planted literal missing its unexported `text` field reported
+  `evidence.RecordedOutcome is missing field text (exhaustruct_v5)`, and the rest of the module (incomplete literals
+  everywhere) still passes. Units 5 and 6 add their patterns the same way. Routing candidate:
+  `tech-docs/002-gates-and-analysis.md`'s `exhaustruct_v5` scope paragraph, and the adapter's gates entry (the Unit 2
+  close item). **Routed** (2026-10-06, Unit 2 close) to both: the as-built paragraph in `tech-docs/002`, and the
+  `exhaustruct_v5` entry in `repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md`.
+- (2026-10-06, Unit 2) **File impact additions.** Beyond `tech-docs/004-file-impact.md`'s Unit 2 list, the unit also
+  touched `internal/guard/reservation.go` (the cancelled-receipt reason used a deleted constant),
+  `internal/cli/interruption_test.go`, `tests/support/interruption_v082.go`, `tests/support/driver.go`,
+  `tests/support/pending_v04.go`, and `tests/integration/lease_evidence_test.go` (typed reads and `Finalize` calls), and
+  it added `internal/evidence.RecordedBudgetOutcome` and `BudgetOutcomeUnknown`, which the design implied (D6) but did
+  not list. Routing candidate: `tech-docs/004-file-impact.md`, Unit 2. **Routed** (2026-10-06, Unit 2 close) to
+  `tech-docs/004-file-impact.md`, Unit 2, with the docs propagation's `docs/reference/cli.md` and
+  `specs/architecture.md`.
+- (2026-10-06, Unit 2) **The full gate's race step sits near Go's default 10-minute package timeout under host load.**
+  At load averages of 15–18 (an indexing workstation), `go test -race ./tests/integration` passed 600 s and failed the
+  gate; the same step alone took 359 s, and a rerun at lower load took 534 s, against 275 s during Unit 1. The non-race
+  integration run moved from 213 s to 220 s at comparable load, so the code did not slow it. Routing candidate:
+  `scripts/test.sh` (an explicit `-timeout` on the race step) or the quality-gates page, as a separate change.

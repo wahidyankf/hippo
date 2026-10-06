@@ -54,9 +54,16 @@ tests/support/interruption_v082.go                                [E] typed outc
 tests/support/history_v05.go                                      [E] typed outcome reads; unknown-outcome writer
 tests/support/steps.go                                            [E] unknown-outcome history steps
 tests/support/domain_literals_allowlist.go                        [E] outcome entries removed
-.golangci.yml                                                     [E] exhaustruct_v5 on for evidence.RecordedOutcome
+.golangci.yml                                                     [E] exhaustruct_v5 on, explicit, two Recorded* types
 specs/behaviours/public-cli.feature                               [E] unknown-outcome history scenario
 docs/reference/json-schemas.md                                    [E] history lists an unknown outcome as recorded
+docs/reference/cli.md                                             [E] --outcome cannot select an unknown outcome
+specs/architecture.md                                             [E] history lists an unknown outcome as recorded
+internal/guard/reservation.go                                     [E] cancelled-receipt reason typed (Unit 2)
+internal/cli/interruption_test.go                                 [E] typed reads (Unit 2)
+tests/support/driver.go                                           [E] typed Finalize calls (Unit 2)
+tests/support/pending_v04.go                                      [E] typed Finalize calls (Unit 2)
+tests/integration/lease_evidence_test.go                          [E] typed Finalize calls (Unit 2)
 repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md [E] exhaustruct_v5 scope
 ```
 

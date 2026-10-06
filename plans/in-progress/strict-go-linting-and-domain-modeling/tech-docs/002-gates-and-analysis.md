@@ -28,6 +28,12 @@ struct type, with one pattern per new struct: `evidence.RecordedOutcome` (Unit 2
 `dev.gaijin.team/go/exhaustruct/v5` at Unit 2 by planting an incomplete literal and seeing it refused. Its disabling
 reason in `.golangci.yml` becomes a scoping comment.
 
+As built in Unit 2 (2026-10-06): `dev.gaijin.team/go/exhaustruct/v5@v5.0.3` reads each pattern as a regex over the full
+`import/path.TypeName`, for example `^github\.com/wahidyankf/hippo/internal/evidence\.RecordedOutcome$`, and in its
+default implicit mode checks every struct literal whatever the patterns say, so `enforce-patterns` alone would not scope
+it. Unit 2 therefore also sets `explicit-mode: true`. It adds a second pattern, for `evidence.RecordedBudgetOutcome`,
+the other struct the unit creates; Units 5 and 6 add theirs the same way.
+
 **`gochecksumtype`.** It checks `switch` statements over interfaces annotated `//sumtype:decl`. This plan models every
 new concept as a scalar enum, because no member carries data the others lack, so `exhaustive` is the checker that
 reaches them. The repository adapter records that `gochecksumtype` stays enabled with no annotated target, so the first
