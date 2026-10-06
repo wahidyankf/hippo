@@ -17,8 +17,5 @@ that already exists, with both stage indexes updated in that one change.
 
 - [Fix: Cancelled waiter cleanup flakes under load](fix-cancelled-waiter-cleanup-flake/README.md) — the cancelled
   waiter's cleanup never refuses a free coordination lock, and its scenario tolerates a loaded host.
-- [Fix: Distinct-root coordination lock test flakes under load](fix-distinct-root-lock-test-flake/README.md) — the
-  distinct-root lock test judges serialization by a zero-wait refusal, not the wall clock, so a slow runner no longer
-  fails it.
 - [Strict Go linting and domain modeling](strict-go-linting-and-domain-modeling/README.md) — carry outcomes, internal
   reasons, profile lineage, and the admission decision as Go types, and gate the result.

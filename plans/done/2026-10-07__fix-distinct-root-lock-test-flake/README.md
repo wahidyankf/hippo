@@ -1,6 +1,6 @@
 # Fix: Distinct-Root Coordination Lock Test Flakes Under Load
 
-Status: In progress (2026-10-06)
+Status: Done (2026-10-07)
 
 On a heavily loaded host, the unit test `TestCoordinationLockAllowsDistinctRootsInParallel` fails intermittently with
 "distinct-root coordination was serialized" although nothing was serialized: the second root's lock was taken without
@@ -569,13 +569,18 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ### Archival
 
-- [ ] `[AI]` Move this folder with `git mv` to `plans/done/<completion date>__fix-distinct-root-lock-test-flake/`,
+- [x] `[AI]` Move this folder with `git mv` to `plans/done/<completion date>__fix-distinct-root-lock-test-flake/`,
       update `plans/in-progress/README.md` and `plans/done/README.md` in the same change, and land it with _Land_;
       proof: the merge commit, posted on the archival pull request, and no copy left under `plans/in-progress/`.
       `[AC-08]`
+  - Result: (2026-10-07) moved with `git mv` to `plans/done/2026-10-07__fix-distinct-root-lock-test-flake/` on
+    `worktree/fix-distinct-root-lock-test-flake-record`, with the in-progress and done indexes updated in the same
+    change. An archived file cannot record its own merge, so the merge commit is posted on the archival pull request.
 - [ ] `[AI]` Run [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for
       the record worktree right after that merge; proof, posted on the archival pull request: `git worktree list` omits
       it, no local or remote `worktree/fix-distinct-root-*` branch remains, and _Reconcile_ reads `0 0`. `[AC-08]`
+  - Carried by the archival pull request (2026-10-07): the record worktree and its branch are removed right after its
+    merge, and the proof is posted there, since the archived copy cannot hold it.
 
 ## Learnings
 
