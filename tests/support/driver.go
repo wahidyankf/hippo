@@ -150,7 +150,11 @@ type Driver struct {
 	samples            []policy.Sample
 	assessment         policy.Assessment
 	admitted, accepted bool
-	exitCode           int
+	// admission is the path DecideAdmission took for the scenario's samples, which
+	// the scenarios that assert why work was not admitted read, so a rule broken
+	// inside the decision fails them even where the profile resolution says the same.
+	admission policy.AdmissionPath
+	exitCode  int
 	// reason is why the work stopped, when the scenario saw HIPPO's own layers stop it: the reason of the stop a
 	// guarded run returned, or the one a scenario's setup implies.
 	reason                   policy.Reason
@@ -465,13 +469,25 @@ func (driver *Driver) assessAdmission() {
 	driver.resolution = resolution
 	driver.reason = resolution.Reason
 	driver.assessment = policy.ResourceAssessment(driver.samples, resolution.Policy)
-	driver.admitted = resolution.Reason == policy.ReasonNone && policy.AdmissionReady(driver.samples, resolution.Policy)
-	if !driver.admitted &&
-		driver.taskClass == taskClassEphemeral &&
-		resolution.Lineage.DegradedAdmission() &&
-		policy.WarningAdmissionReady(driver.samples, resolution.Policy) {
+	path, decisionError := policy.DecideAdmission(policy.AdmissionInput{
+		Resolution: resolution, TaskClass: driver.taskClass, Samples: driver.samples,
+		Policy: resolution.Policy, Window: policy.WindowSampling,
+	})
+	if decisionError != nil {
+		driver.errorOutput = decisionError.Error()
+
+		return
+	}
+
+	driver.admission = path
+	switch path {
+	case policy.AdmissionNormal:
+		driver.admitted = true
+	case policy.AdmissionDegraded:
 		driver.resolution.Concurrency = 1
 		driver.admitted = true
+	case policy.AdmissionWait, policy.AdmissionCleanup, policy.AdmissionReplan, policy.AdmissionUnset:
+		driver.admitted = false
 	}
 }
 
@@ -516,10 +532,12 @@ func (driver *Driver) requireDegradedDeferred() error {
 }
 
 // requireStorageBlocked observes the policy decision the command boundary
-// reports as 124 naming hippo.limit.storage-blocked.
+// reports as 124 naming hippo.limit.storage-blocked, and that admission decided
+// the cleanup path for the samples, not only that the profile resolved to it.
 func (driver *Driver) requireStorageBlocked() error {
-	if !driver.assessment.StorageBlocked || driver.reason != policy.ReasonStorageBlocked {
-		return fmt.Errorf("got %+v and reason %d", driver.assessment, driver.reason)
+	if !driver.assessment.StorageBlocked || driver.reason != policy.ReasonStorageBlocked ||
+		driver.admission != policy.AdmissionCleanup {
+		return fmt.Errorf("got %+v, reason %d, and admission path %d", driver.assessment, driver.reason, driver.admission)
 	}
 
 	return driver.requireAdmissionReasonAtBoundary(status.LimitShed, status.CodeLimitStorageBlocked)
@@ -3505,9 +3523,13 @@ func (driver *Driver) strictTransaction() {
 	driver.samples = []policy.Sample{capacitySample(5*policy.GiB, 700*policy.MiB)}
 }
 
+// requireReplan observes the policy decision the command boundary reports as
+// 125 naming hippo.policy.replan-required, and that admission decided the replan
+// path for the samples, not only that the profile resolved to it.
 func (driver *Driver) requireReplan() error {
-	if driver.reason != policy.ReasonReplanRequired || driver.resolution.Decision != "replan" {
-		return fmt.Errorf("got %+v reason %d", driver.resolution, driver.reason)
+	if driver.reason != policy.ReasonReplanRequired || driver.resolution.Decision != "replan" ||
+		driver.admission != policy.AdmissionReplan {
+		return fmt.Errorf("got %+v, reason %d, and admission path %d", driver.resolution, driver.reason, driver.admission)
 	}
 
 	return driver.requireAdmissionReasonAtBoundary(status.GuardFailed, status.CodePolicyReplanRequired)
