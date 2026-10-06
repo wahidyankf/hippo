@@ -112,6 +112,11 @@ tests/unit/reservation_test.go              [E] lineage and owner-share default 
 tests/support/driver.go                     [E] resolve through config.Load; fallback override
 tests/support/degraded_lineage.go           [E] resolve through config.Load; fallback override
 tests/support/steps.go                      [E] outline steps
+tests/integration/lease_evidence_test.go    [E] FallbackChain as []policy.ProfileName (Unit 4)
+tests/integration/run_test.go               [E] FallbackChain as []policy.ProfileName (Unit 4)
+tests/support/blockers_v04.go               [E] share maps keyed by ProfileName (Unit 4)
+tests/support/pending_v04.go                [E] share maps keyed by ProfileName (Unit 4)
+tests/support/review_v04.go                 [E] corruptionKind field (Unit 4)
 tests/contract/contract.go                  [E] exemptions for the three outlines
 tests/support/domain_literals_allowlist.go  [E] profile entries removed
 specs/behaviours/admission.feature          [E] minimal-lineage outline

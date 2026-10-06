@@ -1210,53 +1210,216 @@ Branch `worktree/profile-lineage-rules`.
 
 - [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-17]`
   - Result: `worktree/profile-lineage-rules` from `origin/main` at `a0e7819`.
-- [ ] `[AI]` Replace every `policy.BuiltinCatalog()` call in `tests/support` with a helper resolving the scenario's
+- [x] `[AI]` Replace every `policy.BuiltinCatalog()` call in `tests/support` with a helper resolving the scenario's
       configuration through `config.Load` (`swe-developer`); run the unit adapter and
       `git grep -n 'BuiltinCatalog()' -- tests/support`; acceptance: the adapter exits `0` and the grep prints nothing.
       `[AC-17]` `[AC-18]` `[AC-19]`
-- [ ] `[AI]` **RED** (`swe-developer`): replace "Minimal work still runs on a tiny machine" with the outline in
+  - Result: (2026-10-06) `tests/support` no longer calls `policy.BuiltinCatalog()`: `Driver.resolveProfile` in
+    `degraded_lineage.go` resolves the requested profile, or the default, through `config.Load`, which returns the
+    built-in catalog when the scenario names no configuration and the scenario's own file when it does.
+    `assessAdmission`, `assessPressure`, `assessRelease`, `balancedEphemeralChild`, and `childOutsideExemption` call it,
+    and `resolveConfigured` is `resolveProfile` with no request. `git grep -n 'BuiltinCatalog()' -- tests/support`
+    prints nothing (exit `1`), and `go test -count=1 -timeout 45m -run TestUnitBehaviours ./tests/unit` exits `0` in 199
+    s.
+- [x] `[AI]` **RED** (`swe-developer`): replace "Minimal work still runs on a tiny machine" with the outline in
       [the specification changes](tech-docs/003-specification-changes.md), bind it, and update its exemption in
       `tests/contract/contract.go`; run the unit adapter; acceptance: the extends-minimal row fails with exit `125`
       naming `hippo.policy.replan-required`. `[AC-17]`
-- [ ] `[AI]` **RED** (`swe-developer`): add "Automatic owner shares follow the profile lineage" to
+  - Result: (2026-10-06) `specs/behaviours/admission.feature` replaces "Minimal work still runs on a tiny machine" with
+    the Scenario Outline "The last-resort floor follows the minimal lineage", the plan's three rows and its
+    `@e2e-exempt` tag, and `tests/contract/contract.go` carries the exemption under the new name with the same
+    `hostEvidenceBoundary`. The steps bind in `tests/support/steps.go`: `tinyMachineUnder` writes the row's
+    configuration (`derivedProfileConfiguration` for the minimal row, and `derivedProfileWithoutFallback`, which sets
+    `"fallback":""`, for the constrained row), `requireConfiguredMinimal` holds the second row to `local-minimal` at
+    concurrency one, and `requireNoUsableFallbackReplan` holds the third row to the replan and then runs the scenario's
+    own configuration through the public command line for exit `125` naming `hippo.policy.replan-required`. Resolution
+    goes through `config.Load`. RED observed with
+    `go test -count=1 -v -run 'TestUnitBehaviours/The_last-resort' ./tests/unit`: the built-in and no-fallback rows pass
+    and the extends-minimal row fails with "the configured profile was refused with exit 125 naming
+    hippo.policy.replan-required: resource profile has no usable fallback"
+    (`340 scenarios (2 passed, 1 failed, 337 undefined)`, the rest unselected).
+- [x] `[AI]` **RED** (`swe-developer`): add "Automatic owner shares follow the profile lineage" to
       `specs/behaviours/reservations.feature`, bound with an empty share map, plus its exemption; run the unit adapter;
       acceptance: the extends-balanced row fails with one share instead of four. `[AC-18]`
-- [ ] `[AI]` **RED** (`swe-developer`): convert "Stable warning spares a balanced ephemeral child admitted under normal
+  - Result: (2026-10-06) `specs/behaviours/reservations.feature` gains the `@e2e-exempt` Scenario Outline "Automatic
+    owner shares follow the profile lineage" with the plan's four rows, after the scenario it extends, and
+    `tests/contract/contract.go` exempts it with `reservationCapacityBoundary` (the binary always plans with the
+    configuration's filled share map). `hostWithProfileOfNoOwnerShare` resolves the row's profile through `config.Load`
+    (a derived configuration for the three configured rows), `planAutomaticReservation` calls `guard.PlanReservation`
+    with `OwnerShares: map[string]int{}`, and `requireOwnerShares` recomputes the vector for the stated number of shares
+    and, on a mismatch, names the number the capacity was divided into. RED observed with
+    `go test -count=1 -v -run 'TestUnitBehaviours/Automatic_owner_shares' ./tests/unit`: the built-in and
+    extends-minimal rows pass, and the extends-balanced row fails with
+    `profile "local-balanced" divided capacity into 1 owner shares instead of 4` (the extends-constrained row fails the
+    same way, `1 ... instead of 2`).
+- [x] `[AI]` **RED** (`swe-developer`): convert "Stable warning spares a balanced ephemeral child admitted under normal
       pressure" to the outline, bind the configured row, and rename its exemption; run the unit adapter; acceptance: the
       steps bind and both rows pass, the configured row already carrying lineage through v0.8.4's attribute; the
       mutation below proves the row can fail. `[AC-19]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `tests/unit/policy_test.go` tests of each lineage answer and of the floor
+  - Result: (2026-10-06) `specs/behaviours/execution.feature` converts "Stable warning spares a balanced ephemeral child
+    admitted under normal pressure" into the `@e2e-exempt` Scenario Outline "Stable warning spares an ephemeral child of
+    the balanced lineage" with the plan's two rows, and `tests/contract/contract.go` renames the exemption, keeping
+    `processControlBoundary`. The built-in row's text was the replaced scenario's, so "Unsafe pressure still sheds a
+    balanced ephemeral child admitted under normal pressure" and "Stable warning still sheds work outside the exemption"
+    keep their own steps. `balancedLineageChild` resolves the row's profile through `config.Load` (a derived
+    configuration for the configured row, and it fails if the configuration resolved some other profile), and
+    `holdStableWarning` binds both the old "class grace" and the new "ephemeral grace" wording.
+    `go test -count=1 -v -run 'TestUnitBehaviours/Stable_warning_spares' ./tests/unit` exits `0` with both rows passing
+    (`6 steps (6 passed)`), the configured row carrying lineage through v0.8.4's `Profile.DegradedAdmission`; the
+    mutation item below proves the rows can fail.
+- [x] `[AI]` **RED** (`swe-developer`): add to `tests/unit/policy_test.go` tests of each lineage answer and of the floor
       for a catalog whose profile extends `minimal`, and to `tests/unit/reservation_test.go` the owner-share default per
       lineage with an empty share map; run `go test -count=1 ./tests/unit`; acceptance: compilation fails on
       `policy.Lineage`. `[AC-17]` `[AC-18]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `ProfileName` and `Lineage` to `internal/policy/profiles.go`, set lineage
+  - Result: (2026-10-06) `tests/unit/policy_test.go` gains `TestEachLineageAnswersItsThreeQuestions`
+    (`DegradedAdmission`, `LastResortFloor`, and `DefaultOwnerShares` for balanced `true`/`false`/`4`, constrained
+    `false`/`false`/`2`, minimal `false`/`true`/`1`, and an unset lineage `false`/`false`/`1`),
+    `TestBuiltinProfilesCarryTheirLineage`, `TestTheLastResortFloorFollowsTheMinimalLineage` (a catalog whose profiles
+    extend `minimal`, directly and through a child, resolve to themselves on a tiny machine at concurrency one with the
+    relaxed memory and disk thresholds and `LineageMinimal` on the resolution; strict work on such a profile still
+    replans; a constrained-lineage profile with no fallback still has none; a balanced request still ends on built-in
+    `minimal`), and `TestResolveRefusesAProfileWithNoLineage`. `tests/unit/reservation_test.go` gains
+    `TestAutomaticOwnerSharesDefaultByLineage` (an empty share map, a name the old `switch` never knew and `balanced`
+    itself, each lineage to its `4`, `2`, `1`, `1`) and `TestAConfiguredOwnerShareOutranksTheLineageDefault`. RED
+    observed: `go test -count=1 ./tests/unit` fails `[build failed]` with `undefined: policy.Lineage` (and
+    `LineageBalanced`, `LineageConstrained`, `LineageMinimal`, `LineageUnset`, `policy.ProfileName`).
+- [x] `[AI]` **GREEN** (`swe-developer`): add `ProfileName` and `Lineage` to `internal/policy/profiles.go`, set lineage
       on the built-ins, key the floor on `LastResortFloor()` and `internal/guard/reservation.go`'s default on
       `DefaultOwnerShares()`; in this same item delete the Unit 4 entries for the owner-share `switch` in
       `internal/guard/reservation.go` from `tests/support/domain_literals_allowlist.go`, because the analysis fails on
       an entry whose violation is gone; run `go test -count=1 ./tests/unit` and the unit adapter; acceptance: both pass,
       including the three outlines. `[AC-17]` `[AC-18]` `[AC-19]` `[AC-08]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): delete `Profile.DegradedAdmission` for `Lineage.DegradedAdmission()`, build
+  - Result: (2026-10-06) `internal/policy/profiles.go` adds `ProfileName` (a defined string, the same JSON) and
+    `Lineage` (`LineageUnset`, `LineageBalanced`, `LineageConstrained`, `LineageMinimal`) with three exhaustive `switch`
+    answers: `DegradedAdmission()` (balanced), `LastResortFloor()` (minimal), and `DefaultOwnerShares()` (`4`, `2`, `1`,
+    and `1` for an unset lineage, the share v0.8.4 gave a name it did not know). `Profile.Lineage` (JSON `-`) replaces
+    `Profile.DegradedAdmission`, the built-ins carry theirs, `Resolution.Lineage` (JSON `-`) is copied by `Resolve`,
+    which sets `Resolution.DegradedAdmission` from `Lineage.DegradedAdmission()`, takes the floor from
+    `profile.Lineage.LastResortFloor()` instead of `current == profileMinimal`, and refuses a profile whose lineage is
+    unset. `internal/guard/reservation.go`'s default is `resolution.Lineage.DefaultOwnerShares()`, which removes the
+    owner-share `switch`. Behaviour change (D5): a configured profile that extends `minimal` and does not fit now
+    resolves to itself on the relaxed floor where it was refused with "resource profile has no usable fallback" (exit
+    `125` naming `hippo.policy.replan-required`); configuration keys and JSON are unchanged. Deviation: the typed
+    `Resolution` fields the RED tests read forced every profile name the file impact lists to be typed in this item, so
+    `ProfileName` already types `Catalog`, `Profile`, `Resolution`, `EvidenceSummary`, `ReservationOwner`,
+    `reservationWaiter`, `ReservationEntry`, `ReservationPolicy.OwnerShares`, `Coordination`, the configuration file's
+    names, the two `AcquireReservation` parameters, and the monitor line, `configOptions.requestedProfile` became
+    `requestedProfileFlag` with a `requestedProfile()` reader, and all 14 Unit 4 entries went from
+    `tests/support/domain_literals_allowlist.go` here (the analysis reported each as stale, and the owner-share entries
+    are the two `PlanReservation` ones), so the REFACTOR item below has no entry or constant left to delete.
+    `go test -count=1 ./tests/unit` exits `0` in 203 s (the unit adapter included), and
+    `-run 'TestUnitBehaviours/(The_last-resort|Automatic_owner_shares|Stable_warning_spares|Production_code_compares)'`
+    passes all ten rows: `345 scenarios (10 passed, 335 undefined)` with the rest unselected. Extra test beyond the
+    plan: `TestConfiguredProfilesInheritTheirLineageAndOwnerShares` (lineage and share inheritance through extends, and
+    a `minimal` that extends `balanced` refused at load by the fallback cycle).
+- [x] `[AI]` **REFACTOR** (`swe-developer`): delete `Profile.DegradedAdmission` for `Lineage.DegradedAdmission()`, build
       `reservationCoordination`'s shares from the built-ins' lineage, and type every profile name the file impact lists;
       in this same item delete the remaining Unit 4 entries from `tests/support/domain_literals_allowlist.go`; run
       `go test -count=1 ./internal/... ./tests/unit`, the unit adapter, and _Lint_; acceptance: all exit `0`. `[AC-17]`
       `[AC-18]` `[AC-08]`
-- [ ] `[AI]` Mutation: make `LineageBalanced.DegradedAdmission()` return `false`, run the unit adapter, record the
+  - Result: (2026-10-06) The REFACTOR's three edits landed in the GREEN above, because that item could not compile
+    without them: `Profile.DegradedAdmission` is gone for `Lineage.DegradedAdmission()` (nothing reads the field;
+    `git grep -n 'profile.DegradedAdmission' -- '*.go'` prints nothing), `reservationCoordination` builds its share
+    table from each built-in profile's `Lineage.DefaultOwnerShares()` (`internal/config/config.go`), and every profile
+    name the file impact lists is a `policy.ProfileName`, with the only text conversions at the process boundary
+    (`HIPPO_PROFILE` in `internal/guard/run.go`, the monitor's state line, and `--profile` read by
+    `configOptions.requestedProfile()`). No quoted `"balanced"`, `"constrained"`, or `"minimal"` is left in production
+    code outside the three `ProfileName` constants, and no Unit 4 allowlist entry or constant is left to delete.
+    Acceptance after a review of the diff found nothing further to extract: `go test -count=1 ./internal/...` exits `0`
+    (10 packages), `go test -count=1 ./tests/unit` exits `0` in 203 s with the unit adapter inside it (the run of the
+    GREEN above, with no Go change since), `go tool golangci-lint run` exits `0` with `0 issues` (it first reported a
+    `gosec` G703 taint on the scenario configuration read back from disk, which `Driver.configDocument` now holds
+    instead, and an unused `nolint:cyclop` on the floor test, removed), and NilAway exits `0`.
+- [x] `[AI]` Mutation: make `LineageBalanced.DegradedAdmission()` return `false`, run the unit adapter, record the
       output, restore it; acceptance: both rows of the stable-warning outline fail, and pass once restored. `[AC-19]`
-- [ ] `[AI]` Confirm Unit 4's entries are gone from `tests/support/domain_literals_allowlist.go`, each deleted in the
+  - Result: (2026-10-06) Mutation: `LineageBalanced.DegradedAdmission()` in `internal/policy/profiles.go` returned
+    `false` instead of `true`, and `go test -count=1 -v ./tests/unit` with
+    `-run 'TestUnitBehaviours/(Stable_warning_spares|A_configured_profile_derived|Stable_macOS_warning_admits)'` failed
+    `345 scenarios (4 failed, 341 undefined)`: both rows of "Stable warning spares an ephemeral child of the balanced
+    lineage" fail (`exit=0 completed=false stderr="HIPPO shedding ephemeral child after memory-warning."`, the child
+    shed instead of spared), and so do "Stable macOS warning admits degraded work"
+    (`got admitted=false ... DegradedAdmission:false Lineage:1`) and "A configured profile derived from balanced admits
+    degraded work" (`profile "local-balanced": exit=0 stderr="HIPPO deferred task: safe admission was not reached."`);
+    `TestEachLineageAnswersItsThreeQuestions` fails too (`lineage 1 DegradedAdmission() = false, want true`). Restored
+    byte for byte (`cmp` against the copy taken before the edit), and the same selection passes:
+    `345 scenarios (4 passed, 341 undefined)`, `13 steps (13 passed)`.
+- [x] `[AI]` Confirm Unit 4's entries are gone from `tests/support/domain_literals_allowlist.go`, each deleted in the
       item that removed its violation; run the unit adapter; acceptance: the allowlist holds no entry tagged Unit 4 and
       the adapter exits `0`. `[AC-08]`
-- [ ] `[AI]` Synchronize `specs/architecture.md`'s policy-engine element with the lineage clause; proof:
+  - Result: (2026-10-06) `git grep -n 'Unit 4\|removedByLineage' -- tests/support/domain_literals_allowlist.go` prints
+    nothing (exit `1`): the allowlist holds only the six Unit 6 entries, and the `removedByLineage` constant and the
+    `guardReservation` file constant went with the entries that named them. Each of the 14 entries was deleted in the
+    GREEN item above, the item that removed its violation: the analysis reported all 14 as stale the moment the profile
+    types landed (`domain literal analysis found 14 problems`, each `holds no finding`) and "Production code compares no
+    domain value with a literal" passes once they are gone.
+    `go test -count=1 -timeout 45m -run TestUnitBehaviours ./tests/unit` (the _Unit adapter_) exits `0` in 353 s, and
+    `go test -count=1 -timeout 45m ./tests/integration` exits `0` in 367 s; both finished inside Go's 10-minute default,
+    so the longer `-timeout` was only a precaution at host load 7 to 16.
+- [x] `[AI]` Synchronize `specs/architecture.md`'s policy-engine element with the lineage clause; proof:
       `./rhino md internal-link validate` exits `0`. `[AC-17]`
+  - Result: (2026-10-06) `specs/architecture.md`'s "Policy engine and profiles" element now reads "classify evidence,
+    choose an adaptive development profile, key every profile rule on the built-in lineage a profile inherits through
+    `extends`, and preserve strict transaction and release envelopes", which is the plan's text without Unit 5's
+    admission clause; the ledger bullet's "internal shedding cause: storage (73) or other pressure (75)" stays true.
+    `./rhino md internal-link validate` exits `0` (`checked 1278 links, no findings`) and
+    `npx prettier --check specs/architecture.md` passes.
 
 ### Unit 4 close
 
-- [ ] `[AI]` Run docs propagation: `docs/reference/resource-policy.md` (the floor follows the `minimal` lineage) and
+- [x] `[AI]` Run docs propagation: `docs/reference/resource-policy.md` (the floor follows the `minimal` lineage) and
       `docs/reference/configuration.md` (the lineage note covers the floor and default owner shares); proof: status
       recorded and `npm run format:check` exits `0`. `[AC-17]` `[AC-18]`
-- [ ] `[AI]` Run the Gherkin implementation review over the three outlines; proof: statuses recorded. `[AC-17]`
+  - Result: (2026-10-06) status `landed`. Updated: `docs/reference/resource-policy.md` (Derived thresholds: when no
+    profile fits, ordinary work resolves to the first profile of the `minimal` lineage its fallback chain reaches, built
+    in or configured, at relaxed memory and disk; a chain that reaches none, such as a `constrained`-lineage profile
+    with no `fallback`, fails `125` naming `hippo.policy.replan-required`), `docs/reference/configuration.md` (the
+    lineage note now covers the last-resort floor, and says a profile `automaticOwnerShares` does not name takes the
+    share of the profile it extends, 4, 2, or 1 by lineage), and `tech-docs/004-file-impact.md` (Unit 4 gains the five
+    files the file-impact learning names, now routed). Checked and unchanged: the built-in share tables in
+    `resource-policy.md` and `docs/how-to/enable-reservation-coordination.md`, the `balanced` → `constrained` →
+    `minimal` sentences there and in `README.md`, and every `hippo.policy.replan-required` page (`exit-codes.md`,
+    `respond-to-exit-codes.md`, the concurrency pages, the two-repository tutorial). Each describes built-ins or another
+    replan cause and still reads true. `specs/architecture.md` was synchronized in the item above. `CHANGELOG.md`: no
+    entry, since the `Fixed` entry is Unit 7's. Removed: none. Not run: none; no changed page shows a command.
+    `npm run format:check` exits `0`.
+- [x] `[AI]` Run the Gherkin implementation review over the three outlines; proof: statuses recorded. `[AC-17]`
       `[AC-18]` `[AC-19]`
-- [ ] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-17]`
-- [ ] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-17]` `[AC-18]` `[AC-19]`
+  - Result: (2026-10-06) all three `implemented`; each row passes on this rerun in `TestUnitBehaviours` and
+    `TestIntegrationBehaviours` (9 rows, `--- PASS`), all `@e2e-exempt` with recorded exemptions. "The last-resort floor
+    follows the minimal lineage" (`admission.feature`): implementation `Resolve` in `internal/policy/profiles.go`
+    (`profile.Lineage.LastResortFloor()`); bound in `tests/support/driver.go` (`tinyMachineUnder`,
+    `requireConfiguredMinimal`, `requireNoUsableFallbackReplan`, which also checks exit `125` at the command-line
+    boundary); tests `TestTheLastResortFloorFollowsTheMinimalLineage` in `tests/unit/policy_test.go`. The
+    extends-minimal row failed before the GREEN. "Automatic owner shares follow the profile lineage"
+    (`reservations.feature`): implementation `PlanReservation` in `internal/guard/reservation.go`
+    (`resolution.Lineage.DefaultOwnerShares()`); bound in `tests/support/degraded_lineage.go`
+    (`hostWithProfileOfNoOwnerShare`, `planAutomaticReservation` with an empty share map, `requireOwnerShares`, which
+    names the share count it found); tests `TestAutomaticOwnerSharesDefaultByLineage` in
+    `tests/unit/reservation_test.go`. The extends-balanced and extends-constrained rows failed before the GREEN (1 share
+    instead of 4 or 2). "Stable warning spares an ephemeral child of the balanced lineage" (`execution.feature`,
+    built-in and configured rows): implementation `Lineage.DegradedAdmission()` copied into
+    `Resolution.DegradedAdmission` and read at `internal/guard/run.go` lines 910 and 1080; bound in
+    `tests/support/degraded_lineage.go` (`balancedLineageChild`, `holdStableWarning`); tests
+    `TestEachLineageAnswersItsThreeQuestions`. The mutation item above failed both rows.
+- [x] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-17]`
+  - Result: (2026-10-06) no blocking finding. MEDIUM (reproduced): the floor ignored a profile's own `fallback`, so a
+    configured `minimal`-lineage profile with a fallback was admitted at the relaxed floor where `v0.8.4` fell back to
+    `minimal` at normal thresholds; fixed test-first — the floor applies only at the end of the chain
+    (`LastResortFloor() && Fallback == "" && !Strict`), pinned by a unit test with the reviewer's configuration and
+    outline row `#02`. LOW: the built-in-name overrides `minimal` extends `constrained` (no floor, `125`) and `balanced`
+    extends `minimal` (floor) pinned by tests as deliberate D5 consequences; no consumer configuration on this
+    workstation overrides a built-in name. LOW: the guard reads degraded admission from `Resolution.Lineage`, the
+    boolean kept only as the published status field. LOW accepted: the guard-level owner-share fallback is unreachable
+    from the binary, since configuration fills every share.
+- [x] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-17]` `[AC-18]` `[AC-19]`
+  - Result: (2026-10-06) not exit `0` in one pass; deviation recorded. Quick gate passed, coverage 99.35% (911/917). At
+    load averages 34–47, `npm test`'s non-race integration step hit Go's 10-minute default; rerun with `-timeout 30m`:
+    integration `ok` (578 s), e2e `ok` (52 s), `govulncheck` found no vulnerabilities. Race pass 1 failed only
+    "Cancelled FIFO waiters use a fresh cleanup deadline", a pre-existing flake (failure rate equal on `892c462`; see
+    learnings), which passed 5/5 alone under `-race`. Race pass 2 (`-timeout 30m`) passed it and failed only "Release
+    versions use exact semantic syntax", whose build lost files from the Go build cache trimmed mid-run; that scenario
+    passed under `-race` in both adapters on rerun. Every scenario passed under `-race` in at least one pass on this
+    tree. The FIFO flake is now its own bug-fix plan, `fix-cancelled-waiter-cleanup-flake`.
 
 ### Unit 4 landing
 
@@ -1269,6 +1432,27 @@ Branch `worktree/profile-lineage-rules`.
       `[AC-17]`
 
 > **Pause Safety**: Unit 4 is on `main`. Safe to stop. To resume: the starting commands for Unit 5.
+
+## Phase 4a: Discovered — Explicit Gate Timeouts
+
+Added on 2026-10-06 as discovered work, its own pull request on branch `worktree/gate-test-timeouts`, landed before Unit
+5 starts. Every `go test` step of `scripts/test-quick.sh` and `scripts/test.sh` ran under Go's 10-minute package
+default, and on this workstation, where every repository runs HIPPO and host load reached 34–47, the full gate failed on
+timeouts in Units 2, 3, and 4 with no test failing (see [learnings](learnings.md)). The release cut requires
+`scripts/test.sh` to pass, so the gate must not depend on host load. A timeout changes no assertion.
+
+- [ ] `[AI]` Create the branch from `origin/main` once Unit 4 has merged; proof: `git branch --show-current` prints it.
+      `[AC-24]`
+- [ ] `[AI]` **RED** (`swe-developer`): add a step to the lint-wiring scenario requiring every `go test` invocation in
+      both gate scripts to pass an explicit `-timeout`; run the unit adapter; acceptance: it fails naming the first
+      invocation without one. `[AC-24]`
+- [ ] `[AI]` **GREEN** (`swe-developer`): add `-timeout 30m` to each `go test` invocation in both scripts; run the unit
+      adapter and the quick gate; acceptance: both exit `0`. `[AC-24]`
+- [ ] `[AI]` **REFACTOR** (`swe-developer`): state the reason beside the first invocation in each script; run
+      `./scripts/format-check.sh` and `npm run format:check`; acceptance: both exit `0`. `[AC-24]`
+- [ ] `[AI]` Apply rules propagation to `repo-governance/development/quality-gates.md` if it describes the steps'
+      timeouts, and run the _Full gate_; proof: the status recorded and exit `0`. `[AC-24]`
+- [ ] `[AI]` Land it through the same landing steps as each unit; proof: the merge commit and `0 0` recorded. `[AC-24]`
 
 ## Phase 5: Unit 5 — Admission Path and Decision
 
@@ -1431,6 +1615,19 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
       `[AC-24]`
 - [ ] `[AI]` Run `scripts/test.sh` in this worktree, now a clean detached checkout of the merge commit; proof: exit `0`
       and `git status --porcelain --untracked-files=all` still printing nothing. `[AC-24]`
+- [ ] `[AI]` Manual exploratory test of the release candidate, added at the owner's direction on 2026-10-06 because
+      every repository on the workstation runs HIPPO: build `hippo` from this clean detached checkout into
+      `local-tmp/manual-v0.8.5/`, fetch the published `v0.8.4` binary beside it as the baseline, and run both under an
+      isolated `HIPPO_ROOT` in `local-tmp/` through these charters: `run` of a passing, a failing, and a signalled child
+      (exit statuses and summary outcomes); `status --json` with the built-in and a configured profile (`profile` fields
+      unchanged); `history` and `history --outcome` over evidence holding an outcome word this build does not know
+      (listed as recorded, not selectable); a configured profile that extends `minimal` and does not fit (the floor
+      applies where `v0.8.4` exited `125`); automatic owner shares of a profile that extends `balanced`; a configuration
+      whose `coordination.mode` is unknown and one whose mode is empty; and an invalid invocation (`2`,
+      `hippo.args.invalid`). Proof: a session log under `local-tmp/manual-v0.8.5/` and a table recorded here naming each
+      charter with the observed status, code, and output against the baseline; every difference from `v0.8.4` is the
+      intended floor and owner-share fix or a finding, and any finding blocks the tag until a new pull request fixes it.
+      `[AC-24]`
 - [ ] `[AI]` Screen the tag name and the notes
       `gh api repos/wahidyankf/hippo/releases/generate-notes -f tag_name=v0.8.5 --jq .body` returns with
       `scripts/public-safety/outbound-preflight.sh --surface release`; proof: exit `0`. `[AC-24]`
