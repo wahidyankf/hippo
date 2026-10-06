@@ -1,10 +1,11 @@
 ---
 description: >-
   Records the Go analysis gates beyond golangci-lint's defaults: nilness, exhaustive map checks, scoped exhaustruct_v5,
-  the pinned NilAway run and its exclusions, the domain literal analysis and its ratchet, and gochecksumtype's target.
+  the pinned NilAway run and its exclusions, the domain literal analysis and its no-finding rule, and gochecksumtype's
+  target.
 when_to_use: >-
   Use when changing `.golangci.yml`, the NilAway line in `scripts/test-quick.sh`, a `//nolint:nilaway` directive, or the
-  domain literal analysis or its allowlist.
+  domain literal analysis.
 ---
 
 # Go Analysis Gates
@@ -65,9 +66,5 @@ The two exclusions, both false positives that tests beside them failed to reach:
   golangci-lint build and no new test-support dependency
 - reach: non-test files under `cmd/` and `internal/` built on the running platform; its header comment states both rules
   and the name list — only `internal/host` has platform-only files, and it carries no domain name
-- ratchet: [`domain_literals_allowlist.go`](../../../../../tests/support/domain_literals_allowlist.go), 31 entries at
-  introduction, grouped by the strict Go linting plan's unit that removes them: Unit 2, 11; Unit 4, 14; Unit 6, 6 — a
-  finding without an entry fails, and so does an entry without a finding, so the list only shrinks; the last removal
-  deletes the file
-- counting: per file, symbol, and rule — a unit deletes one entry per finding it removes, and a symbol with more
-  findings than entries reports all of them, since the new one cannot be told apart
+- findings: none — the scenario fails on any; a violation is fixed where it stands, and no allowlist, waiver, or
+  exemption exists
