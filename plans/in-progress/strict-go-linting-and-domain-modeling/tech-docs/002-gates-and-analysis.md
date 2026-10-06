@@ -42,6 +42,10 @@ sealed interface someone adds is checked without a configuration change.
 - _What it pulls in._ A tool-only dependency: `go.uber.org/nilaway` with `golang.org/x/tools`, `golang.org/x/exp`,
   `golang.org/x/sync`, `golang.org/x/mod`, and `github.com/klauspost/compress` (the modules a scratch `go run` fetched
   on 2026-10-06). None is imported by production code; `depguard` keeps it that way, and `govulncheck` covers the tree.
+  The pin is not tool-only in one respect: by minimal version selection it raised shared modules, among them the
+  production dependency `golang.org/x/sys` from v0.47.0 to v0.48.0, with `x/tools` v0.50.0, `x/mod` v0.41.0, `x/sync`
+  v0.23.0, and newer `x/exp/typeparams` and `x/telemetry` pseudo-versions (Unit 1, 2026-10-06). Build, lint, and the
+  quick gate pass under them, and the full gate's `govulncheck` covers the raised tree.
 - _If abandoned._ It is a gate, not a library: removing the tool line and its `go.mod` directive retires it with no code
   change.
 - _Boundaries._ It reads source only; it touches no network, process table, or file outside the module at run time.
@@ -143,4 +147,7 @@ All of them run in `scripts/test-quick.sh`, which the `pre-push` hook and the pu
 hook, registry entry, or workflow changes. [Quality gates](../../../../repo-governance/development/quality-gates.md)
 gains NilAway and the analysis in its quick-gate order, and the
 [repository adapter](../../../../repo-governance/development/quality/stacks/repository-adapter.md) records the pin, the
-exclusions, the scoped `exhaustruct_v5`, and `gochecksumtype`'s empty target.
+exclusions, the scoped `exhaustruct_v5`, and `gochecksumtype`'s empty target. Unit 1 placed that record in the adapter's
+first module,
+[Go analysis gates](../../../../repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md),
+because the adapter had no room for it under its word budget.
