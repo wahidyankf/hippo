@@ -324,10 +324,11 @@ removes it after its own merge.
 1. _Plan_ — this file and the in-progress index entry alone. Rollback: revert its merge.
 2. _Fix_ — the rewritten test and this plan's execution record. Rollback: revert its merge; no release depends on it.
 3. _Release_ — `v0.8.5`, cut by the linting plan's Unit 7 after unit 2 merges; this plan only records it. That plan's
-   Unit 7 item "Before cutting, confirm both bug-fix plans this release carries have merged", in its worktree on
-   2026-10-06 and landing with its Unit 5, names the two sibling plans and not this one; adding this plan there belongs
-   to that plan's executor. Until it does, or if the tag is cut anyway, Phase 4's tag check and Phase 5's Recovery item
-   cover it. A published tag is never replaced.
+   Unit 7 holds the cut until this fix has merged, in its item "Before cutting, confirm every bug-fix plan this release
+   carries has merged: `fix-cancelled-waiter-cleanup-flake`, `fix-degraded-lineage-scenario-flake`, and
+   `fix-distinct-root-lock-test-flake` … wait for it rather than cut without it", which lands with that plan's Unit 5.
+   If it does not land, or the tag is cut anyway, Phase 4's tag check and Phase 5's Recovery item cover it. A published
+   tag is never replaced.
 4. _Record_ — the release record, the execution check, and the move to `plans/done/`. Rollback: revert its merge.
 
 **Out of scope: repinning consumers.** The binary is unchanged, so no consumer repins for this plan; the linting plan
@@ -344,13 +345,18 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 - [ ] `[AI]` Land this file and its `plans/in-progress/README.md` entry alone with _Land_, from
       `worktree/fix-distinct-root-lock-test-flake`; proof: the merge commit on `origin/main` and _Reconcile_ reading
       `0 0`. `[AC-08]`
-- [ ] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
+- [x] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
       `git switch -c worktree/fix-distinct-root-lock-test-flake-fix origin/main`, then `npm ci`; proof:
       `git branch --show-current` prints the branch and `git status --porcelain` prints nothing. `[AC-05]`
-- [ ] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
+- [x] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
       in mode `normal`, at most three cycles, and commit its repairs and its verdict line as the fix branch's first
       commit, a `docs(plans)` commit; proof: one terminal `plan-quality-gate:` verdict line recorded here and
       `git status --porcelain` printing nothing. `[AC-08]`
+  - Result: `plan-quality-gate: PASS_WITH_FINDINGS (1 cycle, 0 rows fixed; 1 LOW open)`. Entry checks: prettier,
+    `markdownlint-cli2` 0 issues, `./rhino md internal-link validate` and `./rhino governance directory-map validate` no
+    findings. RED, GREEN, and break overlays each reproduced 3 runs of 3. The open row, PQG-01 (delivery unit 3 said the
+    linting plan's Unit 7 item omits this plan), was outdated by that item's later wording and is restated below in the
+    sibling plans' form. Fix branch created at `33ca271` with `npm ci` under HIPPO.
 
 ### Phase 2: The Test Reads Serialization From the Refusal
 
