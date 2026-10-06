@@ -46,8 +46,11 @@ Commands the items name:
   [resource-aware development](../../../repo-governance/development/resource-aware-development.md).
 - _Lint_: `go tool golangci-lint run`.
 - _NilAway_: `go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...`.
-- _Unit adapter_: `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd`. _Integration adapter_: the same with
-  `HIPPO_BDD_ADAPTER=integration`.
+- _Unit adapter_: `go test -count=1 -run TestUnitBehaviours ./tests/unit`, which executes the scenarios (one scenario:
+  `-run 'TestUnitBehaviours/<Scenario_name_with_underscores>'`), beside the structural binding check
+  `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd`. _Integration adapter_: the same with
+  `-run TestIntegrationBehaviours ./tests/integration` and `HIPPO_BDD_ADAPTER=integration`. Corrected on 2026-10-06
+  during Unit 1: the structural form alone executes no scenario (see [learnings](learnings.md)).
 - _Analysis fixtures_: `go test -count=1 -run DomainLiteral ./tests/support`.
 - _Policy coverage_: `mkdir -p coverage`, then
   `go test -count=1 -coverpkg=./internal/policy -coverprofile=coverage/unit.out ./tests/unit`, then
@@ -137,20 +140,25 @@ which now runs before landing).
 
 ## Phase 0: Readiness
 
-- [ ] `[AI]` Confirm the checkout once the plan pull request has merged: `git -C ../.. worktree list` lists this
+- [x] `[AI]` Confirm the checkout once the plan pull request has merged: `git -C ../.. worktree list` lists this
       worktree once, and `git status --porcelain` prints nothing; proof: both outputs recorded here. `[AC-25]`
-- [ ] `[AI]` Confirm every post-write question has an answer. From the worktree root, with
+  - Result: (2026-10-06) the plan PR #131 merged as `a3c6b82`; `git -C ../.. worktree list` lists this worktree once, on
+    `worktree/strict-go-linting-gates` at `a3c6b82`, and `git status --porcelain` printed nothing.
+- [x] `[AI]` Confirm every post-write question has an answer. From the worktree root, with
       `plan=plans/in-progress/strict-go-linting-and-domain-modeling/delivery.md`, run
       `grep -cE '^- \*\*PW-[0-9]+\*\*' "$plan"` and
       `tr '\n' ' ' < "$plan" | grep -oE 'Answer \(owner, +[0-9-]+\)' | wc -l`; proof: both print `7`, one answer for
       each of PW-1 to PW-7, and the counts are recorded here. `[AC-25]`
-- [ ] `[AI]` Run the quick gate on `origin/main` as the baseline; proof: exit `0` and the core coverage figure recorded
+  - Result: both counts print `7`.
+- [x] `[AI]` Run the quick gate on `origin/main` as the baseline; proof: exit `0` and the core coverage figure recorded
       here. `[AC-01]`
+  - Result: exit `0` at `a3c6b82`; selected production line coverage 99.30% (846/852 statements).
 
 ### Phase 0 Gate
 
-- [ ] `[AI]` Run `./rhino md internal-link validate` and `./rhino governance directory-map validate`; proof: both exit
+- [x] `[AI]` Run `./rhino md internal-link validate` and `./rhino governance directory-map validate`; proof: both exit
       `0`. `[AC-25]`
+  - Result: both exit `0` (1257 links; 50 directories; no findings).
 
 > **Pause Safety**: nothing has changed. To resume: re-run the Phase 0 Gate.
 
@@ -160,114 +168,428 @@ Branch `worktree/strict-go-linting-gates`.
 
 ### Lint settings
 
-- [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-03]`
-- [ ] `[AI]` **RED** (`swe-developer`): add the step "govet runs nilness and exhaustive checks switch statements and map
+- [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-03]`
+  - Result: (2026-10-06) the branch already existed when this executor started, created from `origin/main` at `a3c6b82`
+    with `npm ci` done; `git branch --show-current` prints `worktree/strict-go-linting-gates`.
+- [x] `[AI]` **RED** (`swe-developer`): add the step "govet runs nilness and exhaustive checks switch statements and map
       literals" to "Lint gate wiring is exhaustive and module scoped" in `specs/behaviours/quality-gates.feature`, bound
       in `tests/support/steps.go` to read `.golangci.yml`; run the unit adapter; acceptance: it fails at that step
       because `.golangci.yml` names neither setting. `[AC-03]` `[AC-04]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `govet: enable: [nilness]` and `exhaustive: check: [switch, map]` to
+  - Result: (2026-10-06) the step is added to the scenario, bound in `tests/support/steps.go` to
+    `requireNilnessAndExhaustiveMaps` (new, in `tests/support/driver.go`, beside the other lint checks, reading the
+    `govet:` and `exhaustive:` blocks of `.golangci.yml`). **Deviation:** the _Unit adapter_ command as written,
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd`, only verifies that every step resolves to a binding
+    (`contract.Verify`), executes no scenario, and exits `0` with the new step bound. The executing adapter is
+    `go test -count=1 -run TestUnitBehaviours ./tests/unit`; it exited `1`: `336 scenarios (335 passed, 1 failed)`,
+    `Scenario: Lint gate wiring is exhaustive and module scoped`,
+    `And govet runs nilness and exhaustive checks switch statements and map literals`,
+    `Error: govet does not enable nilness`. This reading of "the unit adapter" applies to every item below; see
+    [learnings](learnings.md).
+- [x] `[AI]` **GREEN** (`swe-developer`): add `govet: enable: [nilness]` and `exhaustive: check: [switch, map]` to
       `.golangci.yml`; run the unit adapter, then _Lint_; acceptance: the adapter passes, and lint reports exactly one
       finding, `exhaustive` at `internal/status/status.go:179`. `[AC-03]` `[AC-04]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): list all 18 codes in `retryable` (`internal/status/status.go`), `true` only
+  - Result: (2026-10-06) `.golangci.yml` gains `exhaustive: check: [switch, map]` and `govet: enable: [nilness]` under
+    `linters.settings`, each with a comment. The executing unit adapter
+    (`go test -count=1 -run TestUnitBehaviours ./tests/unit`) exits `0` in 187 s, and the structural form
+    (`HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd`) exits `0`. _Lint_ then reported `2 issues`: the expected
+    one, `exhaustive` at `internal/status/status.go:179:17` (`missing keys in map of key type status.Code`, 16 codes
+    named), and a `gofumpt` finding in the new `settingsBlock` helper (`group-params`: `configuration, key string`),
+    fixed in the same item; the rerun reports exactly `1 issues: * exhaustive: 1`.
+- [x] `[AI]` **GREEN** (`swe-developer`): list all 18 codes in `retryable` (`internal/status/status.go`), `true` only
       for `CodeLimitCapacityDeferred` and `CodeLimitPressureShed`; run _Lint_ and `go test -count=1 ./tests/unit`;
       acceptance: both exit `0`. `[AC-04]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): rewrite the `retryable` comment to say every code is listed so a new code
+  - Result: (2026-10-06) `retryable` now names all 18 codes in `status.All` order, `true` for the two named. _Lint_
+    exits `0` (`0 issues.`); `go test -count=1 ./tests/unit` exits `0` (`ok ... 191.899s`).
+- [x] `[AI]` **REFACTOR** (`swe-developer`): rewrite the `retryable` comment to say every code is listed so a new code
       needs a decision; run _Lint_; acceptance: exit `0`. `[AC-04]`
-- [ ] `[AI]` Mutation: add `internal/policy/nilness_mutation.go` dereferencing a pointer inside its own `== nil` branch,
+  - Result: (2026-10-06) the comment now says every code is listed, the false ones too, so a new code needs a decision
+    on whether waiting helps, and that `exhaustive` refuses an omission. _Lint_ exits `0` (`0 issues.`).
+- [x] `[AI]` Mutation: add `internal/policy/nilness_mutation.go` dereferencing a pointer inside its own `== nil` branch,
       run _Lint_, record the output, delete the file; acceptance: lint fails naming `govet` and `nilness`, and passes
       once the file is gone. `[AC-03]`
-- [ ] `[AI]` Mutation: delete the `CodeArgsInvalid` key from `retryable`, run _Lint_, record the output, restore it;
+  - Result: (2026-10-06) the planted file read `if box == nil { return box.value }`. _Lint_ exited `1`:
+    `internal/policy/nilness_mutation.go:7:14: nilness: nil dereference in field selection (govet)`, plus two `unused`
+    findings for the file's own scaffolding (`3 issues: govet: 1, unused: 2`). The file was deleted; _Lint_ then exited
+    `0` (`0 issues.`) and `git status --short` shows no trace of it.
+- [x] `[AI]` Mutation: delete the `CodeArgsInvalid` key from `retryable`, run _Lint_, record the output, restore it;
       acceptance: lint fails naming `exhaustive` and `status.CodeArgsInvalid`, and passes once restored. `[AC-04]`
+  - Result: (2026-10-06) with the `CodeArgsInvalid` key removed, _Lint_ exited `1`:
+    `internal/status/status.go:181:17: missing keys in map of key type status.Code: status.CodeArgsInvalid (exhaustive)`
+    (`1 issues: exhaustive: 1`). The file was restored byte for byte (`diff` against the saved copy is empty); _Lint_
+    then exited `0` (`0 issues.`).
 
 ### NilAway
 
-- [ ] `[AI]` Pin it: `go get -tool go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260918162853-acb8859b9031`, then
+- [x] `[AI]` Pin it: `go get -tool go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260918162853-acb8859b9031`, then
       `go mod tidy`; proof: `go.mod`'s `tool` block names `go.uber.org/nilaway/cmd/nilaway` and `go tool nilaway -h`
       exits `0`. `[AC-01]`
-- [ ] `[AI]` Run _NilAway_ and record every diagnostic here; acceptance: it exits `3`, and the list is compared with the
+  - Result: (2026-10-06) `go get -tool go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260918162853-acb8859b9031` exited `0`,
+    as did `go mod tidy`. `go.mod`'s `tool` block now lists `go.uber.org/nilaway/cmd/nilaway`, and `go tool nilaway -h`
+    exits `0`. Surprising: the pin raises shared dependencies through minimal version selection: `golang.org/x/sys`
+    v0.47.0 to v0.48.0 (a direct, production dependency), `golang.org/x/tools` v0.49.0 to v0.50.0, `golang.org/x/mod`
+    v0.40.0 to v0.41.0, `golang.org/x/sync` v0.22.0 to v0.23.0, `golang.org/x/exp/typeparams` and
+    `golang.org/x/telemetry` to September 2026 pseudo-versions, and it adds `github.com/klauspost/compress` v1.20.0 and
+    `go.uber.org/nilaway` itself as `// indirect` requirements (`go.mod` +9/-6, `go.sum` +18/-14). `go build ./...` and
+    _Lint_ still exit `0` (`0 issues.`) under the raised versions.
+- [x] `[AI]` Run _NilAway_ and record every diagnostic here; acceptance: it exits `3`, and the list is compared with the
       eight diagnostics [the gates](tech-docs/002-gates-and-analysis.md#nilaway) record, any difference named. `[AC-01]`
-- [ ] `[AI]` Bounded checkpoint, one attempt: put `//nolint:nilaway // <reason>` on one finding classified as a false
+  - Result: (2026-10-06) exit `3`, 8 diagnostics (about 1 s), the same eight the gates document records, with one
+    difference named below. Each is "Potential nil panic detected": (1) `internal/guard/exclusive_status.go:60:40`, a
+    literal `nil` returned from `liveExclusiveHeavyOwner()` at line 125, position 0, dereferenced through `heavy` (line
+    42); (2) `internal/guard/lease.go:315:19`, result 0 of `readLeaseOwner()` unguarded, field `SchemaVersion`, via
+    `owner` (line 307), same source also at lines 322:11 and 327:74; (3) `tests/support/release_v04.go:1416:29`,
+    unassigned variable `outputs` sliced into, also at 1432:49 and 1436:50; (4) `internal/guard/run_test.go:1909:15`,
+    unassigned `holder` accessed field `Process`; (5) `tests/integration/lease_evidence_test.go:41:20`, a literal `nil`
+    returned from `AcquireSession()` (`internal/guard/lease.go:472:11`), field `Inherited` read through `inherited`
+    (line 40), same source also at `tests/integration/run_test.go:182:46`; (6)
+    `tests/integration/lease_evidence_test.go:281:2`, unassigned `owner` written at an index, also at 288:2; (7) the
+    same file at `324:2`, also at 331:2; (8) `tests/support/isolation_test.go:119:75`, result 0 of `os.Stat()`
+    unguarded, `IsDir()` via `info` (line 118). **Difference:** diagnostic (5) also reaches
+    `tests/integration/run_test.go:182:46`, a file the file-impact table does not list; the six-test-code-findings item
+    below fixes it with the others and the file impact gains that path. The two production sources stand as the plan
+    recorded them: four production sites in all (one in `exclusive_status.go`, three in `lease.go`).
+- [x] `[AI]` Bounded checkpoint, one attempt: put `//nolint:nilaway // <reason>` on one finding classified as a false
       positive (or, if none is, on a scratch copy of one finding), run _Lint_; acceptance: exit `0` makes inline
       directives the mechanism; a `nolintlint` finding makes `-exclude-errors-in-files` on the `scripts/test-quick.sh`
       line the mechanism, with nothing retried. Record which. `[AC-01]`
-- [ ] `[AI]` **RED** (`swe-developer`): for the `internal/guard/exclusive_status.go:60` finding, add a test in
+  - Result: (2026-10-06) no finding was classified as a false positive yet, so the one attempt used a scratch copy of
+    the `exclusive_status.go:60` shape (`internal/guard/nilaway_scratch.go`, an exported function dereferencing the
+    first result of a `(*T, bool)` source with `//nolint:nilaway // <reason>` on the dereferencing line; deleted
+    afterwards). _Lint_ exited `0` (`0 issues.`, no `nolintlint` finding), so **inline `//nolint:nilaway // <reason>`
+    directives are the mechanism**; `-exclude-errors-in-files` is not used and nothing was retried. Verification beyond
+    the attempt, not a second attempt: the scratch copy did not itself reproduce a NilAway diagnostic (NilAway honours
+    the `(*T, bool)` return contract), so the same directive was placed on the real
+    `internal/guard/exclusive_status.go:60` line and reverted after: NilAway then reported 7 diagnostics, none in that
+    file (8 without the directive), and _Lint_ again exited `0` with `0 issues.` but printed
+    `level=warning msg="[runner/nolint_filter] Found unknown linters in //nolint directives: nilaway"`, a warning that
+    does not fail the gate. The file is byte for byte as before.
+- [x] `[AI]` **RED** (`swe-developer`): for the `internal/guard/exclusive_status.go:60` finding, add a test in
       `internal/guard/exclusive_status_test.go` where `liveExclusiveHeavyOwner` returns `nil` and the caller proceeds;
       run `go test -count=1 -run Exclusive ./internal/guard`; acceptance: it panics with a nil dereference. At most two
       attempts; if neither reaches the dereference, the finding is a false positive and the next GREEN and REFACTOR
       record `Not applicable` while the exclusion item covers it. `[AC-01]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): guard the nil result in `internal/guard/exclusive_status.go`; run the same
+  - Result: (2026-10-06) two attempts, both spent, neither panicked, so the finding is a false positive. Attempt 1,
+    `TestExclusiveStatusWithoutHeavyOwnerCountsSessionsOnly`: an exclusive-mode root with a live service session and no
+    `heavy.lock`, so `liveExclusiveHeavyOwner` returns `nil` with `live` false; `ExclusiveStatus` returns the session
+    totals before line 60. Attempt 2, `TestExclusiveStatusRefusesNullHeavyOwnerDocument`: `heavy.lock/owner.json`
+    holding `null`, the one decoder shape that could yield no owner; `readLeaseOwner` still returns a non-nil
+    zero-valued owner, schema 0, and `ExclusiveStatus` returns an unreadable-state error that is not a protocol
+    mismatch, leaving the document unchanged. `go test -count=1 -v -run Exclusive ./internal/guard` exits `0` with all
+    four `Exclusive` tests passing (`ok ... 0.402s`) and _Lint_ exits `0`. The two tests are kept: they pin the
+    invariant that the exclusion reason below rests on. Reachability finding: `liveExclusiveHeavyOwner` returns a `nil`
+    owner only together with `live` false or a non-nil error, and the caller stops on both, but NilAway does not
+    correlate the three results.
+- [x] `[AI]` **GREEN** (`swe-developer`): guard the nil result in `internal/guard/exclusive_status.go`; run the same
       command; acceptance: it passes. `[AC-01]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): keep the guard in the shape the surrounding error handling uses; run
+  - Result: Not applicable (2026-10-06): the RED item found no reachable dereference, so the finding is a false positive
+    and the exclusion item below covers it.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): keep the guard in the shape the surrounding error handling uses; run
       `go test -count=1 ./internal/guard` and _NilAway_; acceptance: the tests pass and NilAway no longer reports the
       file. `[AC-01]`
-- [ ] `[AI]` **RED** (`swe-developer`): for the `internal/guard/lease.go:315` finding, add a test in
+  - Result: Not applicable (2026-10-06): no guard was added; the exclusion item below covers
+    `internal/guard/exclusive_status.go:60`.
+- [x] `[AI]` **RED** (`swe-developer`): for the `internal/guard/lease.go:315` finding, add a test in
       `tests/integration/lease_evidence_test.go` where `readLeaseOwner` returns a `nil` owner without an error; run
       `go test -count=1 ./tests/integration`; acceptance: it panics with a nil dereference, under the same two-attempt
       rule. `[AC-01]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): guard the nil owner in `internal/guard/lease.go`; run the same command;
+  - Result: (2026-10-06) `readLeaseOwner` is unexported, so both attempts reach lines 315 to 327 through the exported
+    `DescribeHeavyLease`, and neither panicked: the finding is a false positive. Attempt 1,
+    `TestDescribeHeavyLeaseReportsNullOwnerDocumentAsUnverifiable`: `heavy.lock/owner.json` holding `null`; the decoder
+    leaves a non-nil zero-valued owner (schema 0) and the description reads "cannot be verified".
+    `go test -count=1 ./tests/integration` exits `0` (`ok ... 213.180s`). Attempt 2,
+    `TestDescribeHeavyLeaseReportsEmptyOwnerDocumentAsUnverifiable`: an empty `owner.json`; the decode error returns a
+    `nil` owner with `err` set, and line 315 short-circuits on `err != nil` before reading `SchemaVersion`. Run narrowed
+    to save 3.5 minutes, `go test -count=1 -v -run DescribeHeavyLease ./tests/integration`: exits `0`, both tests pass;
+    _Lint_ exits `0`. Both tests are kept as the evidence for the exclusion reason. Reachability finding:
+    `readLeaseOwner` returns `&owner` with a `nil` error and `nil` with a non-nil error, and every caller tests `err`
+    first; NilAway appears to lose that contract at the join after line 310 reassigns `err`, so line 315 reads as a path
+    with a nil owner and a nil `err`, which the code cannot produce.
+- [x] `[AI]` **GREEN** (`swe-developer`): guard the nil owner in `internal/guard/lease.go`; run the same command;
       acceptance: it passes. `[AC-01]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): fold the guard into the existing owner checks at lines 315–327; run the
+  - Result: Not applicable (2026-10-06): no reachable dereference, so no guard; the exclusion item below covers
+    `internal/guard/lease.go:315`, 322, and 327.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): fold the guard into the existing owner checks at lines 315–327; run the
       same command and _NilAway_; acceptance: both clean for the file. `[AC-01]`
-- [ ] `[AI]` Fix the six test-code findings by checking each value before use (`t.Fatal` on `nil`) in
+  - Result: Not applicable (2026-10-06): no guard was added; the exclusion item below covers the file.
+- [x] `[AI]` Fix the six test-code findings by checking each value before use (`t.Fatal` on `nil`) in
       `tests/support/release_v04.go`, `internal/guard/run_test.go`, `tests/integration/lease_evidence_test.go`, and
       `tests/support/isolation_test.go` (`swe-developer`); run _NilAway_; acceptance: no diagnostic names those files.
       `[AC-01]`
-- [ ] `[AI]` Exclude each remaining false positive with the mechanism the checkpoint chose, each with its reason; run
+  - Result: (2026-10-06) each value is checked before use, failing the test on nil:
+    `tests/integration/lease_evidence_test.go` (the inherited session at line 41 gains `inherited == nil`, and a new
+    helper `readOwnerDocument` replaces the two unchecked `json.Unmarshal` into a nil map at lines 281 and 324, failing
+    on an unreadable or null document), `tests/integration/run_test.go` (the unlisted site at line 182:
+    `err != nil || session == nil`), `internal/guard/run_test.go` (`holder == nil || holder.Process == nil` before
+    `holder.Process.Kill()`), `tests/support/isolation_test.go` (`info != nil` in the probe's root test), and
+    `tests/support/release_v04.go` (`len(outputs) != 2` is refused before `outputs[0]`). NilAway exits `3` with exactly
+    two diagnostics left, `internal/guard/exclusive_status.go:60:40` and `internal/guard/lease.go:315:19`; none names a
+    test file. Regression: _Lint_ exits `0`; `go test -count=1 ./internal/guard ./tests/support` exits `0`; the scenario
+    "Rebuilding a release commit reproduces its archives" passes in the unit adapter
+    (`-run TestUnitBehaviours/<scenario>`); the touched integration tests pass
+    (`-run 'TestHeavyLease|TestPortLease|TestDescribeHeavyLease|TestInheritedGuardRunsDirectly' ./tests/integration`,
+    `ok`). The file impact gains `tests/integration/run_test.go`.
+- [x] `[AI]` Exclude each remaining false positive with the mechanism the checkpoint chose, each with its reason; run
       _NilAway_; acceptance: exit `0`. `[AC-01]`
-- [ ] `[AI]` **RED** (`swe-developer`): add the step "the quick gate invokes the pinned NilAway over the module" to the
+  - Result: (2026-10-06) two inline exclusions, the only two false positives left, each a
+    `//nolint:nilaway // <reason>`: (1) `internal/guard/exclusive_status.go:60`, trailing the
+    `appendExclusiveOwner(&totals, runID, *heavy)` line: "liveExclusiveHeavyOwner returns a nil owner only with live
+    false or an error, and both return above; NilAway does not correlate the three results"; (2)
+    `internal/guard/lease.go:315`, on its own line directly above `if err != nil || owner.SchemaVersion != 1 {` in
+    `DescribeHeavyLease`: "readLeaseOwner returns a nil owner only with an error, which this condition tests first;
+    NilAway loses that once err is reassigned above". NilAway exits `0`. Surprising: NilAway scopes a directive to the
+    AST node `ast.NewCommentMap` attaches it to (`diagnostic/nolint.go`), so a comment trailing the `{` of an `if` line
+    did not cover the finding on that line (still reported at `lease.go:315:19`), while a comment line directly above
+    the `if` covers the whole statement and, because NilAway groups the three sites by one nil source, also suppresses
+    the grouped sites at lines 322 and 327. _Lint_ exits `0` (`0 issues.`) but now prints
+    `level=warning msg="[runner/nolint_filter] Found unknown linters in //nolint directives: nilaway"` on every run; it
+    does not fail the gate. The reasons go into the repository adapter in the Unit 1 close.
+- [x] `[AI]` **RED** (`swe-developer`): add the step "the quick gate invokes the pinned NilAway over the module" to the
       lint-wiring scenario, bound to read `scripts/test-quick.sh`; run the unit adapter; acceptance: it fails at that
       step. `[AC-01]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add the _NilAway_ command to `scripts/test-quick.sh` directly after
+  - Result: (2026-10-06) the step is added after "the quick gate invokes module-local lint" in "Lint gate wiring is
+    exhaustive and module scoped", bound in `tests/support/steps.go` to `requirePinnedNilAway` (new, in
+    `tests/support/driver.go`): it reads `scripts/test-quick.sh` and `go.mod`, and requires a `go tool nilaway` line
+    with `-include-pkgs=github.com/wahidyankf/hippo`, `-pretty-print=false`, and `./...`, no `-json`, running after
+    `go tool golangci-lint run`, plus the tool directive in `go.mod`. Run narrowed to the scenario
+    (`go test -count=1 -run 'TestUnitBehaviours/Lint_gate_wiring' ./tests/unit`, the full adapter having run in the
+    lint-settings items): exit `1`, `And the quick gate invokes the pinned NilAway over the module`,
+    `Error: the quick gate does not invoke the pinned NilAway`, `6 steps (5 passed, 1 failed)`.
+- [x] `[AI]` **GREEN** (`swe-developer`): add the _NilAway_ command to `scripts/test-quick.sh` directly after
       `go tool golangci-lint run`; run the unit adapter and the quick gate; acceptance: both exit `0`. `[AC-01]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): give the new line a comment stating why NilAway runs beside golangci-lint
+  - Result: (2026-10-06) `go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...` is now
+    the line directly after `go tool golangci-lint run` in `scripts/test-quick.sh`. The executing unit adapter
+    (`go test -count=1 -run TestUnitBehaviours ./tests/unit`) exits `0` (`ok ... 193.116s`) and the structural form
+    exits `0`. `npm run test:quick` exits `0` in 3 min 41 s (the first attempt stopped at the format check, because the
+    plan file was not yet Prettier-formatted; after `npx prettier --write` the rerun passed every step): lint
+    `0 issues.` with the unknown-linter warning, the NilAway step silent,
+    `selected production line coverage: 99.30% (846/852 statements)`, and the three `tests/bdd` adapters `ok`.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): give the new line a comment stating why NilAway runs beside golangci-lint
       and why `-json` is not used; run `./scripts/format-check.sh`; acceptance: exit `0`. `[AC-01]`
-- [ ] `[AI]` Mutation: add a production line reading a field of `liveExclusiveHeavyOwner`'s result unguarded, run the
+  - Result: (2026-10-06) a six-line comment above the line says NilAway follows nil flow across functions and packages,
+    which golangci-lint's per-function `nilness` cannot, so it runs beside the linter; that it exits `3` on a diagnostic
+    and `1` when loading fails, either of which stops the script; that `-json` is not used because it always exits `0`,
+    so a finding would pass; and that a false positive is excluded where it stands with a reasoned `//nolint:nilaway`
+    directive. `./scripts/format-check.sh` exits `0` (gofumpt/goimports diff clean, `shfmt -d` clean, Prettier clean).
+- [x] `[AI]` Mutation: add a production line reading a field of `liveExclusiveHeavyOwner`'s result unguarded, run the
       quick gate, record the output, remove it; acceptance: the gate fails at the NilAway step naming that file and
       line, and passes once removed. `[AC-02]`
+  - Result: (2026-10-06) **Deviation:** the mutation as written cannot fail the gate, so it was run as written and then
+    on a substitute source. As written, `_ = heavy.PID` after the error check in `ExclusiveStatus` (also
+    `totals.ActiveOwners = heavy.PID`, `_ = *heavy`, and an index into `heavy.Token`, each tried): `go tool nilaway`
+    exits `0` with the line-60 exclusion in place, and with the exclusion removed it still reports only the original
+    `*heavy` site, never the new line. Cause, from `diagnostic/conflict.go` and the observed output: NilAway reports one
+    conflict per nil source (here result 0 of `liveExclusiveHeavyOwner`), so the exclusion on that source also hides
+    every later unguarded read of it. The full quick gate then ran past NilAway and failed only at `internal/guard` unit
+    tests, where my own `TestExclusiveStatusWithoutHeavyOwnerCountsSessionsOnly` panicked on the real nil dereference
+    (`exclusive_status.go:46`), exit `1`. Substitute: a source with no exclusion, `AcquireSession`, which returns
+    `nil, nil` for a deferral (`internal/guard/lease.go:473`). The planted line
+    `config.noteDeferralf("HIPPO session %s.\n", session.Token)` in `internal/guard/run.go`, before the `session == nil`
+    check, made `npm run test:quick` pass format, build, and _Lint_ and then fail at the NilAway step, exit `3`:
+    `internal/guard/run.go:658:46: Potential nil panic detected`, with the flow
+    `literal nil returned from AcquireSession() in position 0` to `result 0 of AcquireSession() accessed field Token`.
+    `run.go` was restored (`git diff` empty) and `npm run test:quick` exits `0` again (`ok ... 193.300s`,
+    `selected production line coverage: 99.30% (846/852 statements)`). The `exclusive_status.go` mutation was reverted
+    to the excluded state, and `go tool nilaway` exits `0`.
 
 ### Domain literal analysis
 
-- [ ] `[AI]` **RED** (`swe-developer`): add `tests/support/domain_literals_internal_test.go` with fixtures for each rule
+- [x] `[AI]` **RED** (`swe-developer`): add `tests/support/domain_literals_internal_test.go` with fixtures for each rule
       in [the gates](tech-docs/002-gates-and-analysis.md#domain-literal-analysis): a `ResolvedProfile == "balanced"`
       comparison, a `case "constrained":` over a profile, a raw `Outcome string` field, a raw `class string` parameter,
       a defined-type value compared with a literal, and the negatives (`""`, `0`, test files, unlisted names), plus a
       stale allowlist entry; run _Analysis fixtures_; acceptance: it fails to compile because the analysis does not
       exist. `[AC-05]` `[AC-06]` `[AC-07]`
-- [ ] `[AI]` Bounded checkpoint, one attempt: load every production package with `go list -export -json` and
+  - Result: (2026-10-06) the file holds eleven `TestDomainLiteral...` tests: the `ResolvedProfile == "balanced"`
+    comparison, a `case "constrained":` over a profile, raw `Outcome string`/`Decision bool`/`Lineage int` fields, raw
+    `class string`, interface-method, and function-literal parameters, a defined-type `Mode`/`Level` compared with a
+    literal in `==`, `!=` (literal on the left), and `case`, and the negatives (`""` and `0` comparisons, `_test.go`
+    files, a path outside `cmd/` and `internal/`, the unlisted names `Path`, `State`, `Reason`, `outcomeFlag`, an
+    interface-typed `Outcome`, and a typed constant), a package that does not type-check, the reconcile function (a
+    finding off the allowlist, a stale entry, a matched pair), and the module loader against a temporary module
+    importing `strings` (plus a directory with no module). `go test -count=1 -run DomainLiteral ./tests/support` exits
+    `1` at build time: `undefined: analyzeDomainPackage`, `undefined: domainPackage`, `undefined: domainFinding`,
+    `undefined: ruleRawField`, `undefined: ruleLiteralComparison` (ten errors listed, then `too many errors`;
+    `FAIL ... [build failed]`).
+- [x] `[AI]` Bounded checkpoint, one attempt: load every production package with `go list -export -json` and
       `go/importer` in `gc` mode; acceptance: all load, or the syntax-only fallback is adopted and recorded here.
       `[AC-05]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): implement `tests/support/domain_literals.go`; run _Analysis fixtures_;
+  - Result: (2026-10-06) one attempt, all load, so **the typed analysis is adopted** and the syntax-only fallback is not
+    needed. A scratch program outside the repository (in the session scratchpad) ran
+    `go list -export -deps -json ./cmd/... ./internal/...` in the module root, collected each package's `Export` file,
+    and type-checked the non-test files of every package with `go/types` and `importer.ForCompiler(fset, "gc", lookup)`:
+    147 packages with export data, 12 production packages, `typechecked 12 of 12`, in 0.7 s warm. One difference from
+    the command as written: `-deps` is required, because the `gc` importer resolves each import, the standard library
+    included, through its own export file, and `go list -export` without `-deps` lists none for them. Nothing was
+    retried.
+- [x] `[AI]` **GREEN** (`swe-developer`): implement `tests/support/domain_literals.go`; run _Analysis fixtures_;
       acceptance: every fixture passes. `[AC-05]` `[AC-06]` `[AC-07]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): sort findings and print `<path>:<line>: <rule>: <identifier>`; run
+  - Result: (2026-10-06) `tests/support/domain_literals.go` implements the analysis as designed, on the standard library
+    only: `analyzeDomainLiterals(root)` lists packages with `go list -export -deps -json ./cmd/... ./internal/...`,
+    type-checks each production package with `go/types` through `importer.ForCompiler(..., "gc", lookup)`, and
+    `analyzeDomainPackage` walks the syntax for the two rules (`literal-comparison` by name list or by a module-declared
+    defined string or integer type; `raw-field` for fields and parameters); `reconcileDomainFindings` counts findings
+    against allowlist entries. Fixture adjustments made while greening, both mistakes in the fixtures and not in the
+    rules: a `case ModeFast` constant that duplicated `case "fast"` is now `"turbo"`, and the temporary module for the
+    loader test gained a `cmd/tool` package, because `go list ./cmd/...` exits `1`
+    (`lstat ./cmd/: no such file or directory`) when the directory is missing; it now also proves the `cmd/` tree is
+    read. `go test -count=1 -v -run DomainLiteral ./tests/support` exits `0`: 11 tests, 11 `--- PASS`, 0 `--- FAIL`
+    (`ok ... 0.393s`). The first _Lint_ run reported `musttag` (the `go list` struct lacked `json` tags) and
+    `varnamelen` (`ok`), both fixed; _Lint_ then exits `0` (`0 issues.`). Known limit, recorded in the file's header
+    comment: files a build constraint excludes on the running platform are not analysed; only `internal/host` has such
+    files and it carries no domain name.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): sort findings and print `<path>:<line>: <rule>: <identifier>`; run
       _Analysis fixtures_ and _Lint_; acceptance: both exit `0`. `[AC-05]`
-- [ ] `[AI]` **RED** (`swe-developer`): add "Production code compares no domain value with a literal" to
+  - Result: (2026-10-06) the sorting (`compareDomainFindings`: path, line, rule, identifier, applied in
+    `analyzeDomainPackage` and again across packages in `analyzeDomainLiterals`) and the `domainFinding.String()` form
+    `<path>:<line>: <rule>: <identifier>` were already in place from the GREEN item, because the fixtures assert that
+    form; the refactor that remained was in the fixture file, where two copies of the finding printing became one
+    helper, `findingLines`. _Analysis fixtures_ exit `0` (`ok ... 0.400s`) and _Lint_ exits `0` (`0 issues.`).
+- [x] `[AI]` **RED** (`swe-developer`): add "Production code compares no domain value with a literal" to
       `specs/behaviours/quality-gates.feature` with its end-to-end exemption in `tests/contract/contract.go`; run the
       unit adapter, then bind the steps with an empty allowlist and run it again; acceptance: first undefined, then
       failing with the current findings, whose count and list are recorded here. `[AC-05]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `tests/support/domain_literals_allowlist.go` with one entry per finding,
+  - Result: (2026-10-06) the scenario ("When the domain literal analysis runs over production code", "Then every finding
+    is on the ratchet allowlist and every allowlist entry holds a finding") is added to
+    `specs/behaviours/quality-gates.feature` tagged `@e2e-exempt`, with its exemption in `tests/contract/contract.go`
+    (boundary `repositoryConfigBoundary`: the analysis reads production source, outside the compiled binary). First run,
+    steps unbound: both the structural form (`HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd`) and the executing
+    form (`go test -count=1 -run TestUnitBehaviours ./tests/unit`) exit `1`:
+    `undefined behavior step "the domain literal analysis runs over production code"` and
+    `undefined behavior step "every finding is on the ratchet allowlist and every allowlist entry holds a finding"`.
+    Second run, steps bound in `tests/support/steps.go` to `runDomainLiteralAnalysis` and `requireDomainLiteralRatchet`
+    with an empty `domainLiteralAllowlist` (new `tests/support/domain_literals_allowlist.go`), narrowed to the scenario
+    (`-run 'TestUnitBehaviours/Production_code_compares_no_domain_value_with_a_literal'`): exit `1`, the `When` step
+    passes and the `Then` step fails with `Error: domain literal analysis found 31 problems`. **31 findings: 26
+    `raw-field` and 5 `literal-comparison`**, the same total as the scratch syntax scan the gates document records (21
+    fields and 5 parameters, and 5 comparisons): internal/cli/commands.go:15: raw-field: requestedProfile;
+    internal/cli/commands.go:43: raw-field: taskClass; internal/cli/commands.go:45: raw-field: outcome;
+    internal/cli/commands.go:64: raw-field: class; internal/cli/development.go:345: raw-field: Profile;
+    internal/evidence/history.go:38: raw-field: TaskClass; internal/evidence/history.go:39: raw-field: Outcome;
+    internal/evidence/history.go:45: raw-field: BudgetOutcome; internal/evidence/history.go:55: raw-field: Class;
+    internal/evidence/history.go:57: raw-field: Outcome; internal/evidence/history.go:212: literal-comparison: Outcome;
+    internal/evidence/history.go:217: literal-comparison: BudgetOutcome; internal/evidence/history.go:217:
+    literal-comparison: BudgetOutcome; internal/guard/evidence.go:59: raw-field: outcome;
+    internal/guard/evidence.go:194: raw-field: TaskClass; internal/guard/evidence.go:195: raw-field: Outcome;
+    internal/guard/evidence.go:209: raw-field: RequestedProfile; internal/guard/evidence.go:210: raw-field:
+    ResolvedProfile; internal/guard/evidence.go:220: raw-field: BudgetOutcome; internal/guard/evidence.go:232:
+    raw-field: outcome; internal/guard/lease.go:27: raw-field: Class; internal/guard/owner_metadata.go:44: raw-field:
+    Profile; internal/guard/owner_metadata.go:192: raw-field: profile; internal/guard/reservation.go:113: raw-field:
+    Profile; internal/guard/reservation.go:131: raw-field: Profile; internal/guard/reservation.go:266:
+    literal-comparison: ResolvedProfile; internal/guard/reservation.go:268: literal-comparison: ResolvedProfile;
+    internal/guard/reservation.go:1046: raw-field: profile; internal/guard/reservation.go:1062: raw-field: profile;
+    internal/policy/profiles.go:82: raw-field: RequestedProfile; internal/policy/profiles.go:83: raw-field:
+    ResolvedProfile.
+- [x] `[AI]` **GREEN** (`swe-developer`): add `tests/support/domain_literals_allowlist.go` with one entry per finding,
       each tagged with the unit that removes it; run the unit and integration adapters; acceptance: both exit `0`.
       `[AC-05]` `[AC-07]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): group the entries by removing unit with a comment per group; run the unit
+  - Result: (2026-10-06) `tests/support/domain_literals_allowlist.go` holds 31 `domainAllowance` entries, one per
+    finding in path order, each with the enclosing symbol the analysis printed (for example `Summary.Outcome`,
+    `PlanReservation`, `EvidenceWriter.Finalize.outcome`) and the unit that removes it, by the plan's removal table: 11
+    for Unit 2 (outcomes and budget outcomes: the `internal/guard/evidence.go` writer and summary,
+    `internal/evidence/history.go`, and `outcome` in the CLI history options), 14 for Unit 4 (profile names in
+    `internal/policy`, `internal/guard`, `internal/cli`, and the two owner-share `switch` comparisons in
+    `PlanReservation`), and 6 for Unit 6 (task classes and the CLI class flags). Both executing adapters exit `0`
+    (`go test -count=1 -run TestUnitBehaviours ./tests/unit`: `ok ... 195.113s`;
+    `go test -count=1 -run TestIntegrationBehaviours ./tests/integration`: `ok ... 194.983s`), and so do the structural
+    forms (`HIPPO_BDD_ADAPTER=unit` and `=integration go test -count=1 ./tests/bdd`).
+- [x] `[AI]` **REFACTOR** (`swe-developer`): group the entries by removing unit with a comment per group; run the unit
       adapter; acceptance: exit `0`. `[AC-07]`
-- [ ] `[AI]` Mutation: add `if resolution.ResolvedProfile == "balanced" {}` to `internal/guard/reservation.go`, run the
+  - Result: (2026-10-06) the 31 entries now sit in three groups, Unit 2 (11), Unit 4 (14), and Unit 6 (6), each opened
+    by a comment saying what that unit removes. The first regrouped file failed _Lint_ with six `goconst` findings,
+    because the same path literal now repeats across the entries and `tests/support/release_v04.go`; four path constants
+    (`cliCommands`, `evidenceHistory`, `guardEvidence`, `guardReservation`) and one symbol constant (`promotionSummary`)
+    in the allowlist file fixed them, and _Lint_ exits `0` (`0 issues.`). The executing unit adapter exits `0`
+    (`ok ... 193.492s`) and so does the structural form.
+- [x] `[AI]` Mutation: add `if resolution.ResolvedProfile == "balanced" {}` to `internal/guard/reservation.go`, run the
       unit adapter, record the output, remove it; acceptance: it fails naming that file, that line, and the
       literal-comparison rule, and passes once removed. `[AC-05]`
+  - Result: (2026-10-06) the line was planted before `shares := settings.OwnerShares[...]` in `PlanReservation` (line
+    263). **Deviation, fixed test-first:** the first run, narrowed to the scenario
+    (`go test -count=1 -run 'TestUnitBehaviours/Production_code_compares_no_domain_value_with_a_literal' ./tests/unit`),
+    exited `1` with
+    `domain literal analysis found 1 problems: internal/guard/reservation.go:270: literal-comparison: ResolvedProfile`,
+    naming the file and the rule but line 270, the old `case "constrained":` line shifted down, not the planted line
+    263: with entries counted per symbol, the list cannot say which of three findings in `PlanReservation` is new, so
+    the reconcile reported the last in line order. RED: `TestDomainLiteralReportsFindingsOffTheAllowlistAndStaleEntries`
+    now expects every finding of an over-budget symbol, and failed with only `a.go:31` reported. GREEN:
+    `reconcileDomainFindings` reports all findings of a symbol and rule whose findings outnumber its entries; the
+    fixtures and _Lint_ exit `0`. Rerun with the line planted: exit `1`, `domain literal analysis found 3 problems:`
+    `internal/guard/reservation.go:263: literal-comparison: ResolvedProfile`, `:268`, and `:270`, so the planted line is
+    named with the file and the rule. After removal (`git diff --stat internal/guard/reservation.go` empty) the same
+    scenario passes (`ok ... 2.876s`). The scenario was run narrowed (about 3 s) in both mutation runs; with the
+    mutation removed and every item of this unit's gates in place, `npm run test:quick` exits `0` in 3 min 44 s, which
+    runs the whole unit and integration adapters (the new scenario included), the analysis fixtures, lint, and NilAway:
+    `selected production line coverage: 99.30% (846/852 statements)`.
 
 ### Unit 1 close
 
-- [ ] `[AI]` Apply [rules propagation](../../../repo-governance/workflows/quality/rules-propagation.md) to the gate
+- [x] `[AI]` Apply [rules propagation](../../../repo-governance/workflows/quality/rules-propagation.md) to the gate
       changes: the repository adapter's `golang-standards.md` gates entry (nilness, exhaustive maps, NilAway and its
       exclusions, the analysis, `gochecksumtype`'s empty target), its Version Sources, and `quality-gates.md`'s quick
       gate order; proof: the run's status and ledger recorded here, and `npm run test:quick` exits `0`. `[AC-01]`
-- [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) for the unit; proof:
+  - Result: (2026-10-06) status `landed`, eight rows. The adapter entrypoint sat at its 750-word ceiling (763 with the
+    first draft), so, as the stack-packs adapter convention's Size section allows, the record went to a new companion
+    module, `repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md` (indexed by a new
+    `repository-adapter/README.md` and by `stacks/README.md`), and the adapter's `golang-standards.md` gates entry now
+    links it, its formatter and disabled-linter text relocated there. Ledger: R1 `nilness`, R2 `exhaustive`
+    `switch`/`map`, R3 NilAway runner, plain output not `-json`, exit codes, `-include-pkgs`, and R4 its two inline
+    exclusions with reasons, scoping, masking, and the unknown-linters warning, R6 the analysis and its 31-entry ratchet
+    (Unit 2: 11, Unit 4: 14, Unit 6: 6), R7 `gochecksumtype`'s empty target: each `resolved`, placed in the module; R5
+    the tool pin raising shared modules: `resolved`, a review obligation in the module, with Dependency Selection's
+    "What does it pull in?" as the rule that already suffices; R8 Version Sources: `no-change`, still `go.mod`, because
+    the stack-packs adapter convention, a higher level, allows only manifest paths there and never a repeated version,
+    so the NilAway pseudo-version and the `x/sys` v0.47.0 to v0.48.0 move are recorded in
+    `tech-docs/002-gates-and-analysis.md` instead. `quality-gates.md`'s quick-gate order names NilAway directly after
+    strict lint and the analysis as a corpus scenario. Dispositions: covered by the lint-wiring and analysis scenarios,
+    except the masking review, unenforced by decision because NilAway stays silent by construction. Placement record:
+    `local-tmp/rules-propagation-2026-10-06-unit1-gates.md`. `./rhino governance word-budget validate`,
+    `directory-map validate`, and `./rhino md internal-link validate` exit `0`; `npm run test:quick` exits `0`
+    (`selected production line coverage: 99.30% (846/852 statements)`).
+- [x] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) for the unit; proof:
       its status and updated files recorded here. `[AC-01]`
-- [ ] `[AI]` Run the
+  - Result: (2026-10-06) status `landed`. Updated: `specs/behaviours/README.md` (the feature index now names NilAway and
+    the domain literal analysis), and the plan documents that describe the repository:
+    `tech-docs/003-specification-changes.md` (the scenario diff now carries the as-built step order and wording, and
+    four new steps, not three), `tech-docs/002-gates-and-analysis.md` (the `x/sys` move in the selection argument, and
+    where the adapter record now lives), and `tech-docs/004-file-impact.md` (Unit 1 gains
+    `tests/integration/run_test.go`, `tests/support/driver.go`, the adapter module and its index, and
+    `specs/behaviours/README.md`). Unchanged, checked: `README.md` (its `npm run test:quick` line already says "lint"
+    and lists no linter), `docs/` (no page describes the lint or analysis gates), `CHANGELOG.md` (no `Unreleased`
+    section exists or has existed; the `v0.8.5` entry is Unit 7's), and `specs/architecture.md` (describes no gate).
+    Removed: none. Not run: none; no affected document shows a command.
+- [x] `[AI]` Run the
       [Gherkin implementation review](../../../repo-governance/workflows/quality/gherkin-implementation-review.md) over
       the two changed scenarios; proof: each status with its implementation and test path recorded here, none
       `untested`, `unimplemented`, or `drifted`. `[AC-05]`
-- [ ] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: its findings recorded here with none blocking open.
+  - Result: (2026-10-06) both `implemented`, after one rerun. "Production code compares no domain value with a literal":
+    implementation `tests/support/domain_literals.go` (`analyzeDomainLiterals`, `reconcileDomainFindings`) over
+    `tests/support/domain_literals_allowlist.go`, bound in `tests/support/steps.go`; tests
+    `tests/support/domain_literals_internal_test.go` and the scenario in the unit and integration adapters, which failed
+    with 31 findings on an empty allowlist and named the planted line in the Unit 1 mutation. "Lint gate wiring is
+    exhaustive and module scoped": implementation `.golangci.yml`, `scripts/test-quick.sh`, and `go.mod`, checked by
+    `requireNilnessAndExhaustiveMaps` and `requirePinnedNilAway` in `tests/support/driver.go`; tests
+    `tests/support/lint_wiring_internal_test.go` and the scenario in both adapters. The first pass found the exhaustive
+    `switch`/`map` clause `untested`: the check matched those words in the block's own comment, so a scratch copy passed
+    with both list items deleted (see [learnings](learnings.md)). Review finding F1 below fixed it test-first: comment
+    and blank lines are dropped and the exact list items are required. The new mutation test covers `- map` and
+    `- switch` deleted, `check:` removed, `nilness` commented out, moved to `disable:`, or enabled and disabled, and the
+    NilAway line followed by `|| true`, `&`, `; true`, or `| cat`, each failing its step. Rerun:
+    `go test -count=1 -v -run 'LintWiring|DomainLiteral' ./tests/support` exits `0` (23 `--- PASS`), and both scenarios
+    pass in `TestUnitBehaviours` and `TestIntegrationBehaviours` (`ok`).
+- [x] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: its findings recorded here with none blocking open.
       `[AC-01]`
-- [ ] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-01]` `[AC-02]`
+  - Result: `swe-reviewer` (2026-10-06): F1 HIGH, the lint-wiring step could not catch its own mutation: fixed
+    test-first as above. F2 MEDIUM, no per-code `retryable` test: fixed by
+    `TestRetryableMarksOnlyTheCodesWhoseConditionLiftsOnItsOwn` in `tests/unit/vocabulary_test.go`, proved by two flips.
+    F3 MEDIUM, the `x/sys` bump unrecorded: recorded in the `tech-docs/002-gates-and-analysis.md` selection argument;
+    `govulncheck` runs in the full gate. F4 LOW, the NilAway exclusions are accurate but no gate detects a stale
+    directive: accepted, recorded in the adapter's Go analysis gates module. F5 LOW, a dead guard in
+    `tests/support/release_v04.go`: fixed with a fixed-size array. F6 LOW, analyzer gaps (`-1` and rune literals,
+    `string(x)` conversions, named results, an allowlist key without the identifier): accepted as outside the PW-1 and
+    PW-2 rules, recorded in [learnings](learnings.md). None blocking open.
+- [x] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-01]` `[AC-02]`
+  - Result: (2026-10-06) `npm test` exit `0`: selected production line coverage 99.30% (846/852), race detector clean,
+    `govulncheck` "No vulnerabilities found."
 
 ### Unit 1 landing
 
@@ -364,8 +686,8 @@ Branch `worktree/typed-run-outcome`.
 
 ### Unit 2 close
 
-- [ ] `[AI]` Apply rules propagation to the `exhaustruct_v5` change (`.golangci.yml` reason and the adapter); proof: its
-      status recorded here. `[AC-09]`
+- [ ] `[AI]` Apply rules propagation to the `exhaustruct_v5` change (`.golangci.yml` reason and the adapter's [Go
+      analysis gates][go-gates] module); proof: its status recorded here. `[AC-09]`
 - [ ] `[AI]` Run docs propagation: `docs/reference/json-schemas.md` says history lists an unknown outcome as recorded;
       proof: its status recorded and `npm run format:check` exits `0`. `[AC-11]`
 - [ ] `[AI]` Run the Gherkin implementation review over the new history scenario; proof: its status recorded. `[AC-11]`
@@ -559,7 +881,8 @@ Branch `worktree/single-admission-decision`.
 
 ### Unit 5 close
 
-- [ ] `[AI]` Apply rules propagation to the `exhaustruct_v5` scope change; proof: status recorded. `[AC-20]`
+- [ ] `[AI]` Apply rules propagation to the `exhaustruct_v5` scope change in the adapter's [Go analysis gates][go-gates]
+      module; proof: status recorded. `[AC-20]`
 - [ ] `[AI]` Run docs propagation; proof: status recorded. `[AC-14]`
 - [ ] `[AI]` Run the Gherkin implementation review over the rebound admission scenarios; proof: statuses recorded.
       `[AC-20]`
@@ -635,8 +958,8 @@ Branch `worktree/strict-enum-decoding`.
 
 ### Unit 6 close
 
-- [ ] `[AI]` Apply rules propagation to the closed ratchet and the final `exhaustruct_v5` scope in the adapter; proof:
-      status recorded. `[AC-08]`
+- [ ] `[AI]` Apply rules propagation to the closed ratchet and the final `exhaustruct_v5` scope in the adapter's [Go
+      analysis gates][go-gates] module; proof: status recorded. `[AC-08]`
 - [ ] `[AI]` Run docs propagation: `docs/reference/json-schemas.md` says history lists an unknown class as recorded;
       proof: status recorded. `[AC-22]`
 - [ ] `[AI]` Run the Gherkin implementation review over the new and changed scenarios; proof: statuses recorded.
@@ -719,3 +1042,5 @@ Branch `worktree/strict-go-linting-and-domain-modeling-record`, a docs-only pull
       worktree, every unit branch locally and on `origin`, and the release output directory; proof:
       `git -C ../.. worktree list` and `git -C ../.. branch -a` show neither the worktree nor any branch in the
       Execution Checkout table, recorded in the pull request. `[AC-25]`
+
+[go-gates]: ../../../repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md

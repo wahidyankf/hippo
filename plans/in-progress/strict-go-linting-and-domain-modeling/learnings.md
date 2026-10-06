@@ -3,4 +3,76 @@
 <!-- Append observations during execution, dated, as they happen. Resolve every entry before archival: promote it to
 one durable owner or discard it with a reason. -->
 
-No entries yet: execution has not started.
+- (2026-10-06, Unit 1) **The plan's _Unit adapter_ command only verifies bindings.**
+  `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` calls `contract.Verify`, which parses the corpus and checks that
+  every step resolves to exactly one binding; it executes no scenario. After the RED step was bound it exited `0` (0.4
+  s) although the new check fails. The scenarios execute in `tests/unit`
+  (`go test -count=1 -run TestUnitBehaviours ./tests/unit`, about 190 s for all 336 scenarios), `tests/integration`
+  (`-run TestIntegrationBehaviours`), and the compiled end-to-end adapter. Items that say "run the unit adapter"
+  therefore run the executing form, and the structural `./tests/bdd` form beside it. A single scenario runs in about 3 s
+  with `-run 'TestUnitBehaviours/<Scenario_name_with_underscores>'`. Later units inherit this: their RED and GREEN items
+  name "the unit adapter" and must be read the same way. Routing candidate: correct _Unit adapter_ and _Integration
+  adapter_ in `delivery.md`'s "Commands the items name" through plan propagation.
+
+- (2026-10-06, Unit 1) **NilAway reports one conflict per nil source, so an exclusion masks every later read of that
+  source.** `//nolint:nilaway` on the line-60 dereference of `liveExclusiveHeavyOwner`'s result also hides any new
+  unguarded read of the same result: NilAway reported only the original site with and without the directive, and the
+  plan's Unit 1 mutation (a new read of that result) could not fail the gate. The mutation was proved on an unexcluded
+  source instead (`AcquireSession`, `internal/guard/run.go`). Consequence for the adapter record: an exclusion's reason
+  must say it covers the whole source, and the next change to a source with an exclusion needs review, because NilAway
+  will stay quiet about it. Routing candidate: the repository adapter's NilAway exclusions entry. **Routed**
+  (2026-10-06, Unit 1 close) to
+  `repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md`, NilAway exclusions.
+- (2026-10-06, Unit 1) **`//nolint:nilaway` scope and noise.** NilAway scopes a directive to the AST node
+  `ast.NewCommentMap` attaches it to: a trailing comment after the `{` of an `if` line did not cover the finding on that
+  line, a comment line directly above the `if` covers the statement and the whole group of sites sharing the nil source.
+  golangci-lint accepts the directive (no `nolintlint` finding, so inline directives are the mechanism) but prints
+  `level=warning msg="[runner/nolint_filter] Found unknown linters in //nolint directives: nilaway"` on every run; the
+  exit status stays `0`. Routing candidate: the repository adapter. **Routed** (2026-10-06, Unit 1 close) to
+  `repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md`, NilAway exclusions.
+- (2026-10-06, Unit 1) **The NilAway pin raises shared modules.** `go get -tool` moved `golang.org/x/sys` (a direct,
+  production dependency) from v0.47.0 to v0.48.0 and `golang.org/x/tools`, `x/mod`, `x/sync`, `x/exp/typeparams`, and
+  `x/telemetry` with it, by minimal version selection; the plan's selection argument says the tool pulls in tool-only
+  modules and does not mention the `x/sys` bump. Build, lint, and the quick gate pass under the new versions. Routing
+  candidate: the dependency selection argument in `tech-docs/002-gates-and-analysis.md` and the Version Sources entry.
+  **Routed** (2026-10-06, Unit 1 close): the versions to `tech-docs/002-gates-and-analysis.md`'s selection argument; the
+  review obligation to `repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md`, pin
+  changes. Version Sources stays `go.mod`, because the repository adapter convention allows only manifest paths there
+  and never repeats a version.
+- (2026-10-06, Unit 1) **File impact additions.** NilAway's test-code findings reach one file the file impact does not
+  list, `tests/integration/run_test.go` (line 182, the same `AcquireSession` source as `lease_evidence_test.go:41`). The
+  two attempt tests for the false-positive classification went into `internal/guard/exclusive_status_test.go` and
+  `tests/integration/lease_evidence_test.go`, as planned. Routing candidate: `tech-docs/004-file-impact.md`, Unit 1.
+  **Routed** (2026-10-06, Unit 1 close) to `tech-docs/004-file-impact.md`, Unit 1, with `tests/support/driver.go`, which
+  holds the new wiring checks and was unlisted too.
+
+- (2026-10-06, Unit 1) **The analysis loader needs `go list -deps`, and reads only the running platform's files.**
+  `tech-docs/002-gates-and-analysis.md` names `go list -export -json ./cmd/... ./internal/...`; the `gc` importer
+  resolves every import, standard library included, through an export file, and `-export` without `-deps` lists none for
+  them. The loader runs `go list -export -deps -json`. A pattern whose directory is missing (`./cmd/...` in a module
+  without `cmd/`) is an error, not a warning. Files a build constraint excludes on the running platform are not
+  analysed, so a violation added only to a Linux-only or Darwin-only file is seen on one platform; today only
+  `internal/host` has such files and it carries no domain name. Routing candidate: the Domain Literal Analysis section
+  of `tech-docs/002-gates-and-analysis.md` and the repository adapter's entry for the analysis.
+- (2026-10-06, Unit 1) **An allowlist counted per symbol cannot name the new finding, so the report names the group.**
+  Entries are keyed by file, enclosing symbol, and rule, with a count. The mutation that planted a comparison in
+  `PlanReservation`, which already holds two allowlisted comparisons, was reported at an old line, not the planted one.
+  `reconcileDomainFindings` now reports every finding of a symbol and rule whose findings outnumber its entries. Units 2
+  to 6 delete entries by symbol and rule, so a unit that removes only some of a symbol's comparisons deletes exactly
+  that many entries.
+- (2026-10-06, Unit 1 close) **A lint-wiring step matched its own setting's comment.** `requireNilnessAndExhaustiveMaps`
+  (`tests/support/driver.go`) looks for the substrings `switch` and `map` anywhere in the `exhaustive:` block of
+  `.golangci.yml`, and that block's comment, "A map keyed by an enumerated type must name every member, as a switch over
+  it must.", holds both words. A scratch copy of the check run on a copy of `.golangci.yml` with `- switch` and `- map`
+  deleted still passed both, so the step's map and switch clause is assertion theatre; the `nilness` clause is not,
+  because the `govet:` comment does not say `nilness`. The lint behaviour itself is proved by the Unit 1 `retryable`
+  mutation. Routing candidate: a `swe-developer` fix that reads the `check:` list items, test-first, then the Gherkin
+  implementation review item rerun. **Resolved** (2026-10-06, Unit 1 close): review finding F1, fixed test-first in
+  `tests/support/driver.go` with `tests/support/lint_wiring_internal_test.go`; the review rerun records both scenarios
+  `implemented`.
+- (2026-10-06, Unit 1 close) **The domain literal analysis has known gaps, outside the agreed rules.** Review finding
+  F6: it does not refuse a comparison with `-1` (a unary expression, not a literal) or a rune literal, a comparison
+  through a `string(x)` conversion, or a domain name declared as a named result, and an allowlist entry's key (file,
+  symbol, rule) omits the identifier. Accepted for now as outside the PW-1 and PW-2 rules. Routing candidate: the Unit 6
+  item that removes the allowlist, which can drop the key gap, and an idea brief if a later defect shows one of the
+  other gaps matters.

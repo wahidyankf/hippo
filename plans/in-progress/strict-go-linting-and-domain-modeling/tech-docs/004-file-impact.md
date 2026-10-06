@@ -17,14 +17,22 @@ internal/guard/exclusive_status_test.go                           [E] NilAway ha
 internal/guard/run_test.go                                        [E] NilAway finding in test code
 tests/support/release_v04.go                                      [E] NilAway findings in test code
 tests/support/isolation_test.go                                   [E] NilAway findings in test code
-tests/integration/lease_evidence_test.go                          [E] NilAway findings in test code
+tests/integration/lease_evidence_test.go                          [E] NilAway findings in test code; lease attempt tests
+tests/integration/run_test.go                                     [E] NilAway finding in test code, added during Unit 1
 tests/support/domain_literals.go                                  [N] the analysis
 tests/support/domain_literals_internal_test.go                    [N] fixture tests of the analysis
 tests/support/domain_literals_allowlist.go                        [N] the ratchet allowlist
+tests/support/lint_wiring_internal_test.go                        [N] mutations of the lint-wiring checks (Unit 1)
+tests/unit/vocabulary_test.go                                     [E] per-code retryable test (Unit 1)
 tests/support/steps.go                                            [E] wiring and analysis steps
+tests/support/driver.go                                           [E] nilness, map, and NilAway wiring checks (Unit 1)
 tests/contract/contract.go                                        [E] end-to-end exemption for the analysis scenario
 specs/behaviours/quality-gates.feature                            [E] wiring steps; analysis scenario
-repo-governance/development/quality/stacks/repository-adapter.md  [E] gates, pin, exclusions, gochecksumtype
+specs/behaviours/README.md                                        [E] feature index names NilAway and the analysis
+repo-governance/development/quality/stacks/repository-adapter.md  [E] gates entry links its new module
+repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md [N] gates record
+repo-governance/development/quality/stacks/repository-adapter/README.md [N] module index
+repo-governance/development/quality/stacks/README.md              [E] indexes the adapter's modules
 repo-governance/development/quality-gates.md                      [E] quick-gate order names NilAway and the analysis
 ```
 
@@ -49,7 +57,7 @@ tests/support/domain_literals_allowlist.go                        [E] outcome en
 .golangci.yml                                                     [E] exhaustruct_v5 on for evidence.RecordedOutcome
 specs/behaviours/public-cli.feature                               [E] unknown-outcome history scenario
 docs/reference/json-schemas.md                                    [E] history lists an unknown outcome as recorded
-repo-governance/development/quality/stacks/repository-adapter.md  [E] exhaustruct_v5 scope
+repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md [E] exhaustruct_v5 scope
 ```
 
 ## Unit 3 — Internal Reasons
@@ -119,7 +127,7 @@ tests/support/driver.go                                           [E] assessAdmi
 .golangci.yml                                                     [E] exhaustruct_v5 adds policy.AdmissionInput
 specs/behaviours/admission.feature                                [E] bindings only (no text change)
 specs/architecture.md                                             [E] admission clause
-repo-governance/development/quality/stacks/repository-adapter.md  [E] exhaustruct_v5 scope
+repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md [E] exhaustruct_v5 scope
 ```
 
 ## Unit 6 — Strict Decoding and the End of the Ratchet
@@ -144,7 +152,7 @@ specs/behaviours/quality-gates.feature                            [E] the analys
 specs/behaviours/public-cli.feature                               [E] unknown-class history scenario
 .golangci.yml                                                     [E] exhaustruct_v5 adds policy.RecordedTaskClass
 docs/reference/json-schemas.md                                    [E] history lists an unknown class as recorded
-repo-governance/development/quality/stacks/repository-adapter.md  [E] ratchet closed; final exhaustruct_v5 scope
+repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md [E] ratchet closed; final scope
 ```
 
 ## Release and Archival

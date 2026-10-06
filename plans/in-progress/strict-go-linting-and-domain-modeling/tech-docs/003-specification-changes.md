@@ -32,19 +32,21 @@ Plan-only, each with its reason and the delivery item that verifies it:
      When lint gate wiring is inspected
      Then the configuration enables all linters and unlimited findings
      And exported documentation diagnostics remain errors
-     And the quick gate invokes module-local lint
 +    And govet runs nilness and exhaustive checks switch statements and map literals
+     And the quick gate invokes module-local lint
 +    And the quick gate invokes the pinned NilAway over the module
 
 +  @e2e-exempt
 +  Scenario: Production code compares no domain value with a literal
-+    When the domain literal analysis runs over the production packages
-+    Then every finding is on the reviewed allowlist and every allowlist entry still has its finding
++    When the domain literal analysis runs over production code
++    Then every finding is on the ratchet allowlist and every allowlist entry holds a finding
 ```
+
+- As built in Unit 1 (2026-10-06): the step order and the analysis steps' wording above are the ones `specs/` carries.
 
 - In Unit 6 the new scenario's `Then` becomes `Then it reports no finding`.
 - = Preserve every other scenario in the file.
-- → Bindings: `tests/support/steps.go` registers the three new steps; the wiring steps read `.golangci.yml` and
+- → Bindings: `tests/support/steps.go` registers the four new steps; the wiring steps read `.golangci.yml` and
   `scripts/test-quick.sh` beside the existing lint-wiring steps; the analysis steps call
   `tests/support/domain_literals.go`. The end-to-end boundary cannot carry either, because lint configuration and source
   text are outside the compiled binary; `tests/contract/contract.go` gains an exact exemption for the new scenario with
