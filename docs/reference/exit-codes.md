@@ -65,7 +65,7 @@ Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] mess
 | `hippo.limit.pressure-shed`             | `124`  | A started child was shed under host pressure           |
 | `hippo.limit.release-envelope-exceeded` | `124`  | Release evidence left the release envelope             |
 | `hippo.config.unreadable`               | `125`  | The resource configuration could not be read           |
-| `hippo.config.unresolvable`             | `125`  | The configuration was read and is not usable           |
+| `hippo.config.unresolvable`             | `125`  | Reserved; this version never returns it                |
 | `hippo.identity.invalid`                | `125`  | A run identity file is present and cannot be used      |
 | `hippo.policy.replan-required`          | `125`  | No profile admits this request as asked for            |
 | `hippo.coordination.protocol-mismatch`  | `125`  | Live peer state this client cannot safely join         |
@@ -76,6 +76,11 @@ Every HIPPO failure names exactly one of these, on stderr as `hippo: [code] mess
 | `hippo.supervision.failed`              | `125`  | HIPPO failed at a step it did not classify further     |
 | `hippo.child.not-executable`            | `126`  | The command exists and cannot be executed              |
 | `hippo.child.not-found`                 | `127`  | The command is not on `PATH` and not at the path given |
+
+`hippo.config.unresolvable` is reserved for a configuration that was read and is not usable, and it stays listed because
+the vocabulary is closed and published. This version never returns it: a configuration it cannot load, an unknown
+profile in the file included, names `hippo.config.unreadable`, and an unknown `--profile` names
+`hippo.policy.replan-required`.
 
 `hippo.host.unreadable` and `hippo.evidence.unwritable` are pre-launch reasons: HIPPO names them only when nothing was
 started. The first is host evidence HIPPO cannot read, such as a denied `/proc` or `sysctl` read or a `--disk-path` it

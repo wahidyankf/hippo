@@ -9,7 +9,7 @@ valid target: an archived plan's outward links are allowed to have aged, and rep
 finishing a plan generate findings. For what the tool does today, read [`specs/`](../../specs/README.md).
 
 Reconcile required and conditional delivery, acceptance, verification, and learnings before archiving.
-[Plan execution](../../repo-governance/workflows/plan-execution.md) owns the move itself: it refuses an existing
+[Plan execution](../../repo-governance/workflows/plan/plan-execution.md) owns the move itself: it refuses an existing
 destination rather than merging into it, overwriting it, or adding a suffix; records completion metadata and outcomes;
 moves the folder out of [`../in-progress/`](../in-progress/README.md); updates both stage indexes in one change; and
 then verifies the archive rather than assuming it.

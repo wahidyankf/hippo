@@ -12,9 +12,15 @@ hippo release check --disk-path /path/to/deployment
 ```
 
 Silent success means the host has the headroom to proceed. A stable exit code means it does not, and one diagnostic line
-says why: `124` naming `hippo.limit.capacity-deferred` when memory or CPU did not settle, so a later retry can pass;
-`124` naming `hippo.limit.storage-blocked` when the deployment disk is below the release reserve, so free space first;
-`125` when host evidence could not be collected.
+says why:
+
+- `125` naming `hippo.policy.replan-required` when the first reading does not fit the requested profile in memory, free
+  disk, or CPU. A release never falls back to a safer profile, so the profile or the host has to change.
+- `124` naming `hippo.limit.storage-blocked` when the deployment disk is below the immutable 256 MiB floor at the first
+  reading, or falls below the release reserve after a first reading that fit, so free space first.
+- `124` naming `hippo.limit.capacity-deferred` when memory or CPU did not settle after a first reading that fit, so a
+  later retry can pass.
+- `125` naming `hippo.host.unreadable` when host evidence could not be collected.
 
 ## Capture evidence during the window
 

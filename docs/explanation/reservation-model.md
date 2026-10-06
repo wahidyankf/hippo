@@ -2,8 +2,9 @@
 
 ## Two modes, one rollout
 
-HIPPO has two coordination modes. Which one a repository uses is decided by its configuration `schemaVersion`, and the
-choice is deliberate rather than incidental.
+HIPPO has two coordination modes across three schemas: schema 1 is exclusive, and schemas 2 and 3 are reservation. Which
+mode a repository uses is decided by its configuration `schemaVersion`, and the choice is deliberate rather than
+incidental.
 
 **Schema 1, exclusive.** The original model, retained from v0.3.1. Services own independent inheritable sessions;
 ephemeral and transactional work serializes on a single shared `heavy.lock`. One heavy task at a time, host-wide. Safe,

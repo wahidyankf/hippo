@@ -1,7 +1,7 @@
 # Command-line interface
 
-Complete command and flag inventory for the `hippo` executable. Generated from the binary's own help output; run
-`hippo <command> --help` to confirm against the version you have installed.
+Complete command and flag inventory for the `hippo` executable. Maintained by hand from the binary's own help output,
+with no generator behind it; run `hippo <command> --help` to confirm against the version you have installed.
 
 ## Command tree
 
@@ -283,10 +283,15 @@ Silent gate. Exits `0` when a release may proceed, and reports a stable exit cod
 | -------------------- | ------- | --------------- |
 | `--disk-path <path>` | `.`     | Deployment path |
 
-A failed check writes one diagnostic line naming its reason. Memory pressure or CPU use that does not settle defers the
-release, exit `124` naming `hippo.limit.capacity-deferred`, and a retry can succeed. A disk below the release reserve
-exits `124` naming `hippo.limit.storage-blocked`; free space first. Host evidence that cannot be collected exits `125`
-naming `hippo.host.unreadable`.
+A failed check writes one diagnostic line naming its reason. The first host reading must fit the requested profile, and
+`release` is a strict task class, so the check never falls back to a safer profile. A reading that does not fit in
+memory, free disk, or CPU exits `125` naming `hippo.policy.replan-required`; the profile or the host has to change. Free
+disk below the immutable 256 MiB floor is the exception: it exits `124` naming `hippo.limit.storage-blocked`; free space
+first. Host evidence that cannot be collected exits `125` naming `hippo.host.unreadable`.
+
+Once the first reading has fit, a later reading can still degrade. A disk that falls below the release reserve exits
+`124` naming `hippo.limit.storage-blocked`; free space first. Memory pressure or CPU use that does not settle defers the
+release, exit `124` naming `hippo.limit.capacity-deferred`, and a retry can succeed:
 
 ```console
 $ hippo release check --disk-path /srv/app

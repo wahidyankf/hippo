@@ -107,8 +107,9 @@ BUILD_WORKERS=11 TEST_JOBS=11 HIPPO_CONCURRENCY=11
 
 ### Name rules
 
-A mapped name must be a POSIX environment identifier and must not be one of HIPPO's own protocol variables. Violations
-are usage errors (exit `2`, `hippo.args.invalid`), rejected before anything runs.
+A mapped name must be a POSIX environment identifier and must not begin with `HIPPO_`: every `HIPPO_*` name is reserved
+for HIPPO, whether or not HIPPO sets it today. Violations are usage errors (exit `2`, `hippo.args.invalid`), rejected
+before anything runs.
 
 ### Value rules in reservation mode
 

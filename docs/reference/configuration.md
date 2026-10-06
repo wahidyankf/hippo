@@ -103,16 +103,20 @@ before activating schema 3; a schema-3 launch returns protocol-mismatch exit `12
 
 ## `coordination`
 
-| Field                  | Type    | Constraint                                             |
-| ---------------------- | ------- | ------------------------------------------------------ |
-| `mode`                 | string  | Must be `"reservation"` when set under schema 2        |
-| `maxCpu`               | integer | Nonnegative. `0` means no extra cap                    |
-| `maxMemoryMiB`         | integer | Nonnegative. If set, must be at least `256`            |
-| `maxActiveOwners`      | integer | Nonnegative, at most `20`. `0` means the default of 20 |
-| `automaticOwnerShares` | object  | Profile name → share count, each between `1` and `20`  |
+| Field                  | Type    | Constraint                                                     |
+| ---------------------- | ------- | -------------------------------------------------------------- |
+| `mode`                 | string  | Omitted, empty, or `"reservation"`; any other value is refused |
+| `maxCpu`               | integer | Nonnegative. `0` means no extra cap                            |
+| `maxMemoryMiB`         | integer | Nonnegative. If set, must be at least `256`                    |
+| `maxActiveOwners`      | integer | Nonnegative, at most `20`. `0` means the default of 20         |
+| `automaticOwnerShares` | object  | Profile name → share count, each between `1` and `20`          |
 
 These fields may only _tighten_ safety. `maxMemoryMiB` below 256 and `maxActiveOwners` above 20 are rejected at load
 time with exit `125` naming `hippo.config.unreadable`, so a local file cannot weaken the compiled floors.
+
+`mode` is closed. Under schemas 2 and 3 any value other than empty or `"reservation"` is refused at load, `"exclusive"`
+and `"adaptive"` included, with exit `125` naming `hippo.config.unreadable`. Schema 1 takes no `coordination` object at
+all, so a schema-1 file that carries one, `mode` or not, is refused the same way.
 
 Schema 3 additionally requires positive `maxCpu`, `maxMemoryMiB`, `baseActiveOwners`, and `maxActiveOwners`; exactly the
 `light`, `standard`, and `heavy` tiers; a positive deadline per tier; and minimum/maximum vectors that fit inside the

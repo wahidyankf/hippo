@@ -145,13 +145,13 @@ child. A live unresponsive victim blocks any further selection, so pressure cann
 Exit `125` means HIPPO failed to start or supervise the work: drain or upgrade an incompatible peer, change the request,
 or fix the configuration. [Exit codes and error codes](./docs/reference/exit-codes.md) lists both closed vocabularies.
 
-| Mode                     | Behavior                                                                              |
+| Schema and protocol      | Behavior                                                                              |
 | ------------------------ | ------------------------------------------------------------------------------------- |
-| Schema 1 — `exclusive`   | One heavy task host-wide; services keep separate sessions. Default when unconfigured. |
-| Schema 2 — `reservation` | Concurrent owners against a shared vector budget. Opt in per repository.              |
-| Schema 3 — `adaptive`    | Tiered FIFO admission, labeled status/history, and evidence-gated burst capacity.     |
+| 1 — exclusive            | One heavy task host-wide; services keep separate sessions. Default when unconfigured. |
+| 2 — reservation          | Concurrent owners against a shared vector budget. Opt in per repository.              |
+| 3 — adaptive reservation | Tiered FIFO admission, labeled status/history, and evidence-gated burst capacity.     |
 
-The modes never mix within one state root. A v1 client meeting the other live protocol exits `125` naming
+The protocols never mix within one state root. A v1 client meeting the other live protocol exits `125` naming
 `hippo.coordination.protocol-mismatch` without changing state; drain the old epoch before retrying.
 
 ## 📚 Documentation
