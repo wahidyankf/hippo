@@ -343,7 +343,7 @@ Phases 1–4 ticked and Phase 5 open.
 
 ### Phase 2: The Admission Window Counts Readings
 
-- [ ] `[AI]` RED: in `tests/support/driver.go`, add `readingStall time.Duration` after `Driver.lineage`, with a comment
+- [x] `[AI]` RED: in `tests/support/driver.go`, add `readingStall time.Duration` after `Driver.lineage`, with a comment
       saying it is real time the degraded-lineage admission collector takes over each reading, standing in for a runner
       the scheduler starves, zero in every scenario. In `tests/support/degraded_lineage.go`, add `stall time.Duration`
       to `advancingCollector`, call `time.Sleep(collector.stall)` in `Collect` after its context check, and set
@@ -356,23 +356,47 @@ Phases 1–4 ticked and Phase 5 open.
       `profile "local-balanced": exit=0 stderr="HIPPO deferred task: safe admission was not reached.\n"`, the
       `constrained` row and `TestTheGuardReadsDegradedAdmissionFromTheLineageAlone` pass, and _Focused scenarios_ pass
       at both adapters. `[AC-01]` `[AC-02]`
-- [ ] `[AI]` GREEN: in `tests/support/degraded_lineage.go`, add `type logicalClock struct{ now time.Time }` with
+  - Result: (2026-10-06) _Regression test_ at load averages 23–27: `TestDegradedAdmissionIgnoresARunnerStall/balanced`
+    failed 3 runs of 3, each at `degraded_lineage_internal_test.go:72` with
+    `profile "local-balanced": exit=0 stderr="HIPPO deferred task: safe admission was not reached.\n"`; `/constrained`
+    passed 3 of 3 and `TestTheGuardReadsDegradedAdmissionFromTheLineageAlone` (both rows) passed 3 of 3 (18 test results
+    in all: 12 passed, 6 failed, the six being the `balanced` rows and their three parents). _Focused scenarios_: unit
+    and integration adapters each printed `346 scenarios (2 passed, 344 undefined)`, `8 steps (8 passed)`, and `PASS`
+    for both scenarios.
+- [x] `[AI]` GREEN: in `tests/support/degraded_lineage.go`, add `type logicalClock struct{ now time.Time }` with
       `Now() time.Time` returning `now` and `Sleep(duration time.Duration)` adding `duration` to it; in `guardUnder`,
       create `clock := &logicalClock{now: time.Now()}` and pass `clock.Sleep` and `clock.Now` in place of `time.Sleep`
       and `time.Now`, keeping the 100 ms `AdmissionWindow`; proof: the _Regression test_ passes 3 runs of 3, and
       _Focused scenarios_ pass at both adapters. `[AC-01]` `[AC-02]` `[AC-03]`
-- [ ] `[AI]` REFACTOR: give `logicalClock` a comment saying time passes only when the guard pauses, so the window counts
+  - Result: (2026-10-06) `logicalClock` added and `guardUnder` runs on `clock.Sleep` and `clock.Now`, window still 100
+    ms. _Regression test_ at load averages 31–44 passed 3 runs of 3: `balanced` 0.27–0.38 s, `constrained` 1.40–1.48 s
+    (the 101 stalled readings of 10 ms each, with no wall-clock deadline to end them early), and both
+    `TestTheGuardReadsDegradedAdmissionFromTheLineageAlone` rows. _Focused scenarios_: both adapters printed
+    `346 scenarios (2 passed, 344 undefined)`, `8 steps (8 passed)`, and `PASS`; the admitting scenario took 0.08 s
+    (unit) and 0.06 s (integration), the deferral scenario 0.03 s and 0.02 s, against 0.12–0.17 s and 0.13 s before.
+- [x] `[AI]` REFACTOR: give `logicalClock` a comment saying time passes only when the guard pauses, so the window counts
       the guard's own readings, and amend `guardUnder`'s comment to say its window is logical; leave
       `superviseLineageChild` on the real clock; proof:
       `git grep -c -E 'time\.(Sleep|Now),' -- tests/support/degraded_lineage.go` prints
       `tests/support/degraded_lineage.go:2`, `go tool golangci-lint run ./tests/support/...` prints `0 issues.`, and the
       _Regression test_ and _Focused scenarios_ still pass. `[AC-03]` `[AC-04]`
-- [ ] `[AI]` Commit this phase's three files as one `test(support)` commit; proof: `git log --oneline origin/main..HEAD`
+  - Result: (2026-10-06) `logicalClock` carries the comment that time passes only when the guard pauses and the window
+    counts the guard's own readings, and `guardUnder`'s comment says its window is logical.
+    `git grep -c -E 'time\.(Sleep|Now),' -- tests/support/degraded_lineage.go` printed
+    `tests/support/degraded_lineage.go:2` (`superviseLineageChild` alone);
+    `go tool golangci-lint run ./tests/support/...` printed `0 issues.`; `gofmt -l tests/support` printed nothing.
+    _Regression test_ passed 3 runs of 3 (18 `--- PASS` lines) and _Focused scenarios_ passed at both adapters
+    (`346 scenarios (2 passed, 344 undefined)`).
+- [x] `[AI]` Commit this phase's three files as one `test(support)` commit; proof: `git log --oneline origin/main..HEAD`
       lists it and `git diff --name-only HEAD -- tests` prints nothing. `[AC-04]`
+  - Result: (2026-10-06) `c764eae` `test(support): count the degraded-lineage admission window in readings`, three
+    files, 56 insertions and 4 deletions, through the commit hooks (`public-safety-tree`, `format-staged`,
+    `public-safety-message`, and `commit-message` passed, none bypassed). `git log --oneline origin/main..HEAD` lists
+    `c764eae` and `260fec2`; `git diff --name-only HEAD -- tests` printed nothing.
 
 ### Phase 3: Review and Documentation
 
-- [ ] `[AI]` Run the
+- [x] `[AI]` Run the
       [Gherkin implementation review](../../../repo-governance/workflows/quality/gherkin-implementation-review.md) on
       the two scenarios, with these break tests, each reverted after it fails and checked with
       `git diff --quiet -- internal tests`: restoring `time.Sleep` and `time.Now` in `guardUnder` fails the `balanced`
@@ -383,21 +407,61 @@ Phases 1–4 ticked and Phase 5 open.
       `constrained` row with `profile "local-constrained": reason=0 exit=0` followed by the degraded-admission line.
       Proof: each scenario's status and each break test's failure recorded here, none `untested`, `unimplemented`, or
       `drifted`. `[AC-03]`
-- [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
+  - Result: (2026-10-06) Frozen list: the two scenarios of `specs/behaviours/admission.feature`, lines 29–33 and 35–40;
+    their text and `tests/contract/contract.go` entries are unchanged. Both **implemented**. Implementation:
+    `Lineage.DegradedAdmission` (`internal/policy/profiles.go`, line 50), read by the admission loop
+    (`internal/guard/run.go`, line 910) and driven by `guardUnder`. Tests: the step bindings
+    `requireConfiguredDegradedAdmission` and `requireConfiguredDeferral` at the unit and integration adapters,
+    `TestDegradedAdmissionIgnoresARunnerStall` (both rows), and `TestTheGuardReadsDegradedAdmissionFromTheLineageAlone`.
+    Break tests, each reverted from a scratch copy and checked with `git diff --quiet -- internal tests` (exit `0`) and
+    `cmp` (byte-identical; `shasum -a 256` of `profiles.go` `e1824cf6…` and `degraded_lineage.go` `a0ddb438…` as
+    before): (1) `time.Sleep` and `time.Now` restored in `guardUnder` (with `_ = clock` to compile): the `balanced` row
+    failed 3 runs of 3 with
+    `profile "local-balanced": exit=0 stderr="HIPPO deferred task: safe admission was not reached.\n"`, the
+    `constrained` row and the lineage test passed, and both scenarios still passed at the unit adapter (3 runs of 3), as
+    the plan expects, because only the stall test slows the runner. (2) `LineageBalanced.DegradedAdmission()` returning
+    `false`: the unit adapter failed "A configured profile derived from balanced admits degraded work" at its `Then`
+    step (`admission.feature:33`) with
+    `Error: profile "local-balanced": exit=0 stderr="HIPPO deferred task: safe admission was not reached.\n"`, the
+    `balanced` row failed with that same message, the lineage test's balanced row failed with
+    `admitted degraded = false, want true`, and the outside-lineage scenario passed. (3) `LineageConstrained` moved into
+    the `true` case: the unit adapter failed "A configured profile outside balanced's lineage never uses degraded
+    admission" (`admission.feature:40`) with `Error: profile "local-constrained": reason=0 exit=0` followed by
+    `stderr="HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1.\n"`, the
+    `constrained` row failed with the same `profile "local-constrained": reason=0 exit=0` line, the lineage test's
+    constrained row failed, and the admitting scenario passed. Statuses: none `untested`, `unimplemented`, or `drifted`.
+- [x] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
       page describes the fixture's clock and that, per [Release content](#solution), `CHANGELOG.md` gets no entry;
       proof: `git diff --name-only origin/main...HEAD -- README.md docs specs CHANGELOG.md` prints nothing. `[AC-04]`
+  - Result: (2026-10-06) No page describes the fixture's clock. A search of `README.md`, `docs/`, `specs/`,
+    `CHANGELOG.md`, and `repo-governance/` for `advancingCollector`, `guardUnder`, `logicalClock`, `readingStall`,
+    `evidenceDecidesAdmission`, `wall clock`, `logical clock`, `injectable clock`, `admission window`, and
+    `safe admission was not reached` found only production wording (`docs/how-to/respond-to-exit-codes.md` lines 70–72,
+    `docs/reference/resource-policy.md` line 103, `CHANGELOG.md` line 16), which the fix leaves true, and plan records
+    that still name `advancingCollector` correctly. Per [Release content](#solution) `CHANGELOG.md` gets no entry.
+    `git diff --name-only origin/main...HEAD -- README.md docs specs CHANGELOG.md` printed nothing. Status `no-change`.
 
 ### Phase 4: Verification
 
-- [ ] `[AI]` Bounded checkpoint: run the _Repeated tests_, then the _Repeated scenarios_, recording `uptime` before and
+- [x] `[AI]` Bounded checkpoint: run the _Repeated tests_, then the _Repeated scenarios_, recording `uptime` before and
       after each; proof: both exit `0`, with 50 `--- PASS` lines for each of the four support subtests and 10 for each
       scenario. Fallback, decided now: one failure stops the plan before landing; its output is recorded here, the cause
       it shows replaces the matching part of [Root Cause](#root-cause), and nothing lands until a new RED proves that
       cause. `[AC-05]`
-- [ ] `[AI]` Run the _Contention check_ on the fix branch's head, recording `uptime` before and after; proof: it logs
+  - Result: (2026-10-06) _Repeated tests_ exit `0`: 50 `--- PASS` for each of `TestDegradedAdmissionIgnoresARunnerStall`
+    (`balanced`, `constrained`) and `TestTheGuardReadsDegradedAdmissionFromTheLineageAlone` (both rows), no `--- FAIL`;
+    _Repeated scenarios_ exit `0`: 10 `--- PASS` for each of the two scenarios, no `--- FAIL`. `uptime` load averages
+    15.02 / 24.06 / 23.63 before, 23.10 / 20.34 / 21.92 between, 26.56 / 31.07 / 30.03 after.
+- [x] `[AI]` Run the _Contention check_ on the fix branch's head, recording `uptime` before and after; proof: it logs
       `deferred 0 of 200`, and `test ! -e tests/support/zz_contention_scratch_test.go` exits `0` once it is deleted.
       Fallback, decided now: as for the checkpoint above. `[AC-05]`
-- [ ] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-05]`
+  - Result: (2026-10-06) `TestContentionScratch` logged `deferred 0 of 200` (8 concurrent runs x 25, `GOMAXPROCS=1`,
+    `-race`; `ok` in 77 s), against 53 of 200 before the fix; load averages 21.35 / 29.31 / 29.43 before and 20.81 /
+    26.60 / 28.34 after; the scratch file was deleted and `git status --porcelain` lists only this README.
+- [x] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-05]`
+  - Result: (2026-10-06) `GOFLAGS=-timeout=30m npm test` at `c764eae`, the form the repository's loaded-host runner
+    uses, exit `0` at load 22–32 (`uptime` 31.77 before, 24.71 after): selected production line coverage 99.35%
+    (911/917), race detector clean, ending with "No vulnerabilities found."
 - [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
       `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
       `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
@@ -457,8 +521,25 @@ Phases 1–4 ticked and Phase 5 open.
 
 ## Learnings
 
-None yet. Entries are added as execution teaches something, and each is routed to a durable owner or discarded with a
-reason before archival.
+Entries are added as execution teaches something, and each is routed to a durable owner or discarded with a reason
+before archival.
+
+- (2026-10-06) _The stall test alone guards the clock._ Restoring the wall clock in `guardUnder` fails only the
+  `balanced` row of `TestDegradedAdmissionIgnoresARunnerStall`; both scenarios and the lineage test keep passing on an
+  unloaded runner, since only that test slows the readings. That is the design (the scenarios stay load-independent
+  specifications), but it makes the stall test the sole mutation guard of the clock. Route: none needed; discard, the
+  plan's break test 1 already pins it.
+- (2026-10-06) _A hoisted collector, not an inline one._ Setting `stall` inside the multi-line `advancingCollector`
+  literal in `guard.RunConfig` made `gofmt` realign every neighbouring field of the struct literal. `guardUnder` builds
+  the collector in a local `collector` instead, so the diff stays minimal; the plan's wording ("set `stall` in
+  `guardUnder`'s collector") holds.
+- (2026-10-06) _`rtk` rewrites `go test` and hides `--- PASS` lines._ The pre-tool hook turns `go test -v` into a JSON
+  summary, which cannot show the 50 `--- PASS` lines Phase 4's checkpoint counts. `rtk proxy go test …` prints Go's raw
+  output. Route: Phase 4 executor; no repository change.
+- (2026-10-06) _The deferral rows now cost 1.4 s._ With the window logical, `constrained` takes 101 stalled readings of
+  10 ms each (1.40–1.48 s per run) where the old fixture ended at 100 ms of wall clock; the scenarios themselves fell
+  from 0.12–0.17 s to 0.02–0.08 s. 50 repeats of the _Regression test_ add about a minute. Route: none; discard, the
+  cost is the stall the test asks for.
 
 ## Directory Map
 
