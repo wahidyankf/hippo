@@ -343,26 +343,43 @@ Phases 1–4 ticked and Phase 5 open.
 
 ### Phase 2: Mode 1 — The Scenario Honours a Configured Cleanup Wait
 
-- [ ] `[AI]` RED: in `tests/support/blockers_v04.go`, `requireV04CancelledWaiterCleanup`, change the release delay from
+- [x] `[AI]` RED: in `tests/support/blockers_v04.go`, `requireV04CancelledWaiterCleanup`, change the release delay from
       `20 * time.Millisecond` to `500 * time.Millisecond`; run _Focused scenarios_ at both adapters; proof: both fail
       "Cancelled FIFO waiters use a fresh cleanup deadline" with
       `cancelled waiter remained in FIFO accounting after fresh cleanup deadline`, and both pass "Failed
       cancelled-waiter cleanup retains verifiable FIFO ownership". `[AC-02]`
-- [ ] `[AI]` GREEN: add `CleanupWait` to `ReservationAdmissionOptions` in `internal/guard/reservation.go`, default zero
+  - Result: (2026-10-06) release delay changed from 20 ms to 500 ms; _Focused scenarios_ failed at both adapters, one
+    scenario of two each. Unit:
+    `--- FAIL: TestUnitBehaviours/Cancelled_FIFO_waiters_use_a_fresh_cleanup_deadline (0.22s)` with
+    `suite.go:640: cancelled waiter remained in FIFO accounting after fresh cleanup deadline`. Integration:
+    `--- FAIL: TestIntegrationBehaviours/Cancelled_FIFO_waiters_use_a_fresh_cleanup_deadline (0.22s)` with the same
+    message. "Failed cancelled-waiter cleanup retains verifiable FIFO ownership" passed at both (0.15s). Load average
+    10.75 at the start.
+- [x] `[AI]` GREEN: add `CleanupWait` to `ReservationAdmissionOptions` in `internal/guard/reservation.go`, default zero
       to `coordinationLifecycleWait` in `AcquireReservationWithOptions`, and give
       `removeReservationWaiterAfterCancellation` a `wait` parameter that replaces `coordinationLifecycleWait` in both
       its `context.WithTimeout` and its lock wait, leaving its context in place; the deferred cleanup passes the option
       and `retainReservationWaiterUntilCleanup` passes `coordinationLifecycleWait`. In the binding, call
       `guard.AcquireReservationWithOptions` with `guard.ReservationAdmissionOptions{CleanupWait: 2 * time.Second}`;
       proof: _Focused scenarios_ pass at both adapters. `[AC-02]` `[AC-03]`
-- [ ] `[AI]` REFACTOR: document the field in one comment naming its zero value, and keep `Run` (`internal/guard/run.go`)
+  - Result: (2026-10-06) `CleanupWait` added, zero defaulting to `coordinationLifecycleWait` in
+    `AcquireReservationWithOptions`; `removeReservationWaiterAfterCancellation` and `removeReservationWaiter` take
+    `wait` in place of `coordinationLifecycleWait` in both the `context.WithTimeout` and the lock wait; the deferred
+    cleanup passes the option and `retainReservationWaiterUntilCleanup` passes `coordinationLifecycleWait`; the binding
+    passes `guard.ReservationAdmissionOptions{CleanupWait: 2 * time.Second}` to `guard.AcquireReservationWithOptions`.
+    _Focused scenarios_ pass at both adapters: unit 2 of 2 (0.54 s and 0.15 s), integration 2 of 2 (0.53 s and 0.15 s).
+- [x] `[AI]` REFACTOR: document the field in one comment naming its zero value, and keep `Run` (`internal/guard/run.go`)
       without it; proof: `git grep -n 'CleanupWait' -- internal cmd` prints only `internal/guard/reservation.go` lines,
       `go tool golangci-lint run ./internal/guard/... ./tests/support/...` prints `0 issues.`, and _Focused scenarios_
       still pass at both adapters. `[AC-02]` `[AC-04]`
+  - Result: (2026-10-06) one comment above the field names its zero value; `Run` is untouched.
+    `git grep -n 'CleanupWait' -- internal cmd` prints `internal/guard/reservation.go` lines 53, 55, and 1164 only;
+    `go tool golangci-lint run ./internal/guard/... ./tests/support/...` prints `0 issues.` (gofumpt flagged the struct
+    once, until `gofmt -w` realigned it); _Focused scenarios_ pass again at both adapters, 2 of 2 each.
 
 ### Phase 3: Mode 2 — The Cleanup Never Refuses a Free Lock
 
-- [ ] `[AI]` RED: add `TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent` to `internal/guard/run_test.go`
+- [x] `[AI]` RED: add `TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent` to `internal/guard/run_test.go`
       beside `TestCoordinationLockRejectsPreCanceledContext`. It calls `ensureReservationCoordination`, writes with
       `writeReservationLedger` a ledger that passes `validateReservationLedger`, so the test fails at the lock alone:
       `SchemaVersion` `reservationLedgerSchemaVersion`, `NextSequence` 1, `Capacity` one CPU and 256 MiB
@@ -372,23 +389,53 @@ Phases 1–4 ticked and Phase 5 open.
       `removeReservationWaiterAfterCancellation(root, value, 0)` with no holder of the lock and requires a nil error and
       an empty `Waiters` from `readReservationLedger`; run the _Cleanup test_; proof: it fails all 20 passes with
       `context deadline exceeded`, and every `TestCoordinationLock` test passes. `[AC-01]`
-- [ ] `[AI]` GREEN: in `removeReservationWaiterAfterCancellation`, drop the context and acquire with
+  - Result: (2026-10-06) test added beside `TestCoordinationLockRejectsPreCanceledContext` with the ledger the item
+    names (`NextSequence` 1, one waiter at sequence 1, capacity and request one CPU and 256 MiB, `MaxOwners` 20); the
+    _Cleanup test_ (`go test -count=20 -timeout 30m -v ./internal/guard -run` with the plan's pattern) exited `1`: the
+    new test failed 20 of 20 passes with
+    `run_test.go:732: cleanup refused a free coordination lock: context deadline exceeded` (the lock-acquisition error
+    alone, as the ledger validates), and each of the 5 `TestCoordinationLock` tests passed 20 of 20
+    (`AllowsDistinctRootsInParallel`, `GrantsFreeRootWhenBudgetIsNearlySpent`, `RejectsPreCanceledContext`,
+    `SerializesSameProcessByRoot`, `UsesOneBoundedWaitBudget`). Load average 10.62 at the start.
+- [x] `[AI]` GREEN: in `removeReservationWaiterAfterCancellation`, drop the context and acquire with
       `acquireCoordinationLock(context.Background(), root, wait)`, folding `removeReservationWaiter` into it; proof: the
       _Cleanup test_ passes all 20 passes, and _Focused scenarios_ pass at both adapters. `[AC-01]` `[AC-03]`
-- [ ] `[AI]` REFACTOR: update the deferred function's `//nolint:contextcheck` explanation from "its own bounded context"
+  - Result: (2026-10-06) `removeReservationWaiterAfterCancellation(root, value, wait)` now acquires with
+    `acquireCoordinationLock(context.Background(), root, wait)` and `removeReservationWaiter` is folded into it. The
+    _Cleanup test_ passed all 20 passes, exit `0`: the new test 20 of 20 and each of the 5 `TestCoordinationLock` tests
+    20 of 20; _Focused scenarios_ pass at both adapters, 2 of 2 each (unit 0.53 s and 0.15 s, integration 0.52 s and
+    0.16 s).
+- [x] `[AI]` REFACTOR: update the deferred function's `//nolint:contextcheck` explanation from "its own bounded context"
       to "its own bounded wait" (the linter still requires the directive), and confirm the cleanup was the only context
       that merely repeated its wait; proof: `git grep -n 'context.WithTimeout' -- 'internal/guard/*.go' ':!*_test.go'`
       prints only `internal/guard/run.go` (`waitReservationVictimRelease`), and `npm run test:quick` exits `0`.
       `[AC-01]` `[AC-04]`
+  - Result: (2026-10-06) the `//nolint:contextcheck` explanation now ends "deliberately uses its own bounded wait.";
+    removing the directive makes `go tool golangci-lint run ./internal/guard/...` report a `contextcheck` finding:
+    `Function AcquireReservationWithOptions$1->removeReservationWaiterAfterCancellation` should pass the context
+    parameter, so it is still required (restored at once).
+    `git grep -n 'context.WithTimeout' -- 'internal/guard/*.go' ':!*_test.go'` prints only `internal/guard/run.go:300`
+    (`waitReservationVictimRelease`), and `context.WithDeadline` has no non-test use there.
+    `GOFLAGS=-timeout=30m npm run test:quick` on the tree with Phases 2–3 and the Phase 4 specification and
+    `CHANGELOG.md` edits exited `0`: `0 issues.` from `go tool golangci-lint run`, NilAway silent, `tests/unit` ok in
+    434.775 s, `selected production line coverage: 99.35% (911/917 statements)`, and the three `tests/bdd` adapters ok.
+    Run directly, not under `./hippo`; load average 6.99 at the start.
 
 ### Phase 4: Specification, Documentation, and Verification
 
-- [ ] `[AI]` Synchronize `specs/architecture.md`, line 248, as-built per [Specification Changes](#specification-changes)
+- [x] `[AI]` Synchronize `specs/architecture.md`, line 248, as-built per [Specification Changes](#specification-changes)
       under [specification maintenance](../../../repo-governance/development/specification-maintenance.md); proof:
       `grep -c 'fresh bounded lock wait' specs/architecture.md` prints `1`, and
       `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` and
       `HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd` exit `0`. `[AC-03]`
-- [ ] `[AI]` Run the
+  - Result: (2026-10-06) the reservation-lifecycle constraint now reads "cancelled waiter cleanup receives a fresh
+    bounded lock wait and takes a free lock however late it starts" (prettier reflowed the bullet;
+    `specs/behaviours/reservations.feature` unchanged); `grep -c 'fresh bounded lock wait' specs/architecture.md` prints
+    `1`; `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` and
+    `HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd` exit `0`. The assessment found no other stale mention:
+    the only other "fresh bounded context", `specs/architecture.md` line 307, concerns the conformance runner's final
+    reconciliation.
+- [x] `[AI]` Run the
       [Gherkin implementation review](../../../repo-governance/workflows/quality/gherkin-implementation-review.md) on
       the two cleanup scenarios, with these break tests, each reverted after it fails: always passing
       `coordinationLifecycleWait` to the deferred cleanup fails "Cancelled FIFO waiters use a fresh cleanup deadline"
@@ -396,7 +443,29 @@ Phases 1–4 ticked and Phase 5 open.
       verifiable FIFO ownership" with `failed-cleanup cancellation was not bounded`; restoring the context in the
       cleanup fails the _Cleanup test_. Proof: each scenario's status and each break test's failure recorded here, none
       `untested`, `unimplemented`, or `drifted`. `[AC-01]` `[AC-02]` `[AC-03]`
-- [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md): add to
+  - Result: (2026-10-06) frozen list: the two cleanup scenarios. (1) "Cancelled FIFO waiters use a fresh cleanup
+    deadline" is `implemented`: implementation `internal/guard/reservation.go` (the deferred cleanup in
+    `AcquireReservationWithOptions` with `removeReservationWaiterAfterCancellation`); tests
+    `tests/support/blockers_v04.go` `requireV04CancelledWaiterCleanup`, bound by `tests/support/steps.go` lines 154–156
+    and executed at the unit and integration adapters (`@e2e-exempt`, its `tests/contract/contract.go` entry unchanged),
+    plus `internal/guard/run_test.go` `TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent` for the free-lock
+    path. (2) "Failed cancelled-waiter cleanup retains verifiable FIFO ownership" is `implemented`: implementation
+    `retainReservationWaiterUntilCleanup` and the cleanup bound in `internal/guard/reservation.go`; test
+    `requireV04FailedCancelledWaiterCleanup` (`steps.go` lines 157–159), unchanged. Neither is `untested`,
+    `unimplemented`, or `drifted`; the feature file is unchanged. Break tests, each reverted after it failed (`cmp`
+    against a copy taken before the first mutation printed no difference, and the focused scenarios and _Cleanup test_
+    passed again afterwards). Break 1, the deferred cleanup always passed `coordinationLifecycleWait`: at both adapters
+    "Cancelled FIFO waiters use a fresh cleanup deadline" failed with
+    `cancelled waiter remained in FIFO accounting after fresh cleanup deadline` (`--- FAIL: TestUnitBehaviours/...`
+    0.22s, `--- FAIL: TestIntegrationBehaviours/...` 0.23s) and the failed-cleanup scenario passed. Break 2,
+    `CleanupWait` defaulting to `2 * time.Second`: at both adapters "Failed cancelled-waiter cleanup retains verifiable
+    FIFO ownership" failed after 2.02 s (unit) and 2.03 s (integration) with
+    `failed-cleanup cancellation was not bounded: context canceled`, and the other scenario passed. Break 3, the
+    `context.WithTimeout(context.Background(), wait)` context restored in the cleanup: the _Cleanup test_ failed,
+    `TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent` 20 of 20 with
+    `run_test.go:732: cleanup refused a free coordination lock: context deadline exceeded`, and the 5
+    `TestCoordinationLock` tests passed 20 of 20.
+- [x] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md): add to
       `CHANGELOG.md` a `Fixed` bullet saying that cancelling a queued run could leave its waiter in the shared FIFO
       queue, holding up the waiters behind it, when its cleanup started more than 100 ms after cancellation, even with
       the coordination lock free, and that the cleanup now takes a free lock however late it starts. Place it under the
@@ -405,11 +474,26 @@ Phases 1–4 ticked and Phase 5 open.
       the heading. `docs/explanation/failing-closed.md`, lines 65–66 ("a fresh bounded cleanup attempt") stays true and
       is not changed. Proof: `npm run format:check` exits `0` and `git grep -n 'however late it starts' CHANGELOG.md`
       prints one line. `[AC-06]`
-- [ ] `[AI]` Bounded checkpoint: run _Repeated scenarios_, recording `uptime` before and after; proof: exit `0` with 20
+  - Result: (2026-10-06) `CHANGELOG.md` gains `## [v0.8.5] — Unreleased` with a `### Fixed` bullet above `## [v0.8.4]`
+    (`origin/main`, as last fetched, holds no `v0.8.5` entry): cancelling a queued run could leave its waiter in the
+    shared FIFO queue, holding up the waiters behind it, when its cleanup started more than 100 ms after cancellation,
+    even with the lock free, and the cleanup now takes a free lock however late it starts, still refusing a held one
+    after 100 ms. A search of `specs/`, `docs/`, `README.md`, `CHANGELOG.md`, and `repo-governance/` for the old wording
+    (`fresh bounded`, `bounded context`, `cleanup deadline`, `waiter cleanup`, `removeReservationWaiter`,
+    `fresh cleanup`) found nothing else stale: `docs/explanation/failing-closed.md` line 66 is unchanged, as planned.
+    `npm run format:check` exits `0`; `git grep -n 'however late it starts' CHANGELOG.md` prints one line.
+- [x] `[AI]` Bounded checkpoint: run _Repeated scenarios_, recording `uptime` before and after; proof: exit `0` with 20
       `--- PASS` lines for each scenario. Fallback, decided now: one failure stops the plan before landing; its output
       is recorded here, the cause it shows replaces the matching hypothesis in [Root Cause](#root-cause), and no release
       carries this fix until a new RED proves that cause. `[AC-05]`
-- [ ] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-05]`
+  - Result: (2026-10-06) _Repeated scenarios_ exit `0` (`ok` in 1139 s): 20 `--- PASS` for "Cancelled FIFO waiters use a
+    fresh cleanup deadline" and 20 for "Failed cancelled-waiter cleanup retains verifiable FIFO ownership", no
+    `--- FAIL`; `uptime` load averages 9.76 / 15.60 / 15.73 before and 30.86 / 24.94 / 22.38 after. Fallback not
+    triggered.
+- [x] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-05]`
+  - Result: (2026-10-06) `GOFLAGS=-timeout=30m npm test` exit `0`, ending `No vulnerabilities found.`; selected
+    production line coverage 99.35% (911/917); integration `ok` in 678 s; load averages 17.72 / 27.42 / 28.73 at the
+    end.
 - [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
       `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
       `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
@@ -467,8 +551,21 @@ Phases 1–4 ticked and Phase 5 open.
 
 ## Learnings
 
-None yet. Entries are added as execution teaches something, and each is routed to a durable owner or discarded with a
-reason before archival.
+Entries are added as execution teaches something, and each is routed to a durable owner or discarded with a reason
+before archival.
+
+- (2026-10-06) Only the unit test guards mode 2. With the context restored in the cleanup (Phase 4's third break test),
+  both cleanup scenarios still pass at both adapters, because the step's 2 s `CleanupWait` and 500 ms hold leave the
+  context time to spare; `TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent` alone fails, 20 of 20. No scenario
+  can stall the cleanup's goroutine deterministically, so the test stays in package `guard`.
+- (2026-10-06) Phase 2's GREEN had to thread `wait` through `removeReservationWaiter` as well as
+  `removeReservationWaiterAfterCancellation`, which its item names alone, because the lock wait lives in the former
+  until Phase 3's GREEN folds it into the latter.
+- (2026-10-06) Execution ran at load averages of 6–11, a quarter of the 34–47 the bug report saw, so the REDs are the
+  two deterministic mutations (a 500 ms hold, a zero wait), never load. They prove both mechanisms; only AC-05's 20
+  repeated runs on a loaded host can show that load no longer flakes the scenarios.
+- (2026-10-06) `npm run test:quick` ran `tests/unit` for 434.775 s at a load average of 7, close to Go's default
+  10-minute package timeout, so the run used `GOFLAGS=-timeout=30m`, as the _Full gate_ already does.
 
 ## Directory Map
 
