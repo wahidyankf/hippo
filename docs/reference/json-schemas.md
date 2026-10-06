@@ -332,6 +332,11 @@ History rows are the queryable safe subset of lifetime summaries. Under the 128 
 archive is first aggregated by source, exact tags, class, tier, and outcome; `aggregateCount` then reports how many
 original runs the row represents. Aggregates never qualify for owner promotion.
 
+A row whose `outcome` or `budgetOutcome` this version does not know, such as one a later HIPPO wrote into the same state
+root, is listed with the word exactly as recorded, never refused and never replaced by a default. A row with an unknown
+`outcome` never qualifies for owner promotion, and `--outcome` cannot select it, because the filter takes only the
+[outcome values](#development-lifetime-summary) this version writes.
+
 ## Safety receipt
 
 ```json
