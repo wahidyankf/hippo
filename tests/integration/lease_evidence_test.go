@@ -406,7 +406,7 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 	writer.SetContext(policy.Resolution{
 		RequestedProfile: "balanced",
 		ResolvedProfile:  "minimal",
-		FallbackChain:    []string{"balanced", "minimal"},
+		FallbackChain:    []policy.ProfileName{"balanced", "minimal"},
 		Concurrency:      1,
 	}, "config-hash")
 

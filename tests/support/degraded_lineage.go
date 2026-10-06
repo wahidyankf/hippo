@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,9 @@ import (
 const (
 	degradedAdmissionLine = "HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1."
 	lineageSampleCount    = 20
+	// ownerShareLimit is the most owners one shared root admits, so the most
+	// shares an automatic reservation can be divided into.
+	ownerShareLimit = 20
 	// lineagePrefixPayload is the compressor payload the healthy prefix holds,
 	// so a stable warning reads as flat and the consumer's observed growth to
 	// 12.9 GB reads as growth past the warning threshold.
@@ -74,26 +78,55 @@ func (collector *advancingCollector) Collect(ctx context.Context, previous polic
 // derivedProfileConfiguration writes a schema-2 configuration whose default
 // profile is a local profile extending base, and selects it for the scenario.
 func (driver *Driver) derivedProfileConfiguration(base string) error {
+	return driver.writeDerivedProfile(base, "")
+}
+
+// derivedProfileWithoutFallback is derivedProfileConfiguration for a profile
+// that clears the fallback it would inherit, so nothing stands behind it.
+func (driver *Driver) derivedProfileWithoutFallback(base string) error {
+	return driver.writeDerivedProfile(base, `,"fallback":""`)
+}
+
+// derivedProfileFallingBackTo is derivedProfileConfiguration for a profile that
+// names a fallback of its own, so it does not end its chain.
+func (driver *Driver) derivedProfileFallingBackTo(base, fallback string) error {
+	return driver.writeDerivedProfile(base, fmt.Sprintf(`,"fallback":%q`, fallback))
+}
+
+// writeDerivedProfile writes the configuration for a local profile extending
+// base, with any further keys of that profile in extra.
+func (driver *Driver) writeDerivedProfile(base, extra string) error {
 	directory, err := driver.temporaryRoot()
 	if err != nil {
 		return err
 	}
 
 	driver.configPath = filepath.Join(directory, "hippo.json")
-	document := fmt.Sprintf(`{"schemaVersion":2,"defaultProfile":"local-%[1]s","profiles":{"local-%[1]s":{"extends":%[1]q}}}`, base)
+	driver.configDocument = fmt.Sprintf(
+		`{"schemaVersion":2,"defaultProfile":"local-%[1]s","profiles":{"local-%[1]s":{"extends":%[1]q%[2]s}}}`, base, extra,
+	)
 
-	return os.WriteFile(driver.configPath, []byte(document), 0o600)
+	return os.WriteFile(driver.configPath, []byte(driver.configDocument), 0o600)
+}
+
+// resolveProfile resolves the requested profile, or the default one when none is
+// requested, against the scenario's configuration the way the command line does:
+// through config.Load, which returns the built-in catalog when the scenario names
+// no configuration. Every scenario that depends on a profile resolves here, so
+// none resolves against a catalog the command line would not have built.
+func (driver *Driver) resolveProfile(requested policy.ProfileName, taskClass policy.TaskClass, sample policy.Sample) (policy.Resolution, error) {
+	loaded, err := config.Load(driver.configPath, driver.configPath != "")
+	if err != nil {
+		return policy.Resolution{}, err
+	}
+
+	return loaded.Catalog.Resolve(requested, taskClass, sample)
 }
 
 // resolveConfigured resolves the scenario configuration's default profile the
 // way the command line does for an ephemeral run.
 func (driver *Driver) resolveConfigured(taskClass policy.TaskClass, sample policy.Sample) (policy.Resolution, error) {
-	loaded, err := config.Load(driver.configPath, true)
-	if err != nil {
-		return policy.Resolution{}, err
-	}
-
-	return loaded.Catalog.Resolve("", taskClass, sample)
+	return driver.resolveProfile("", taskClass, sample)
 }
 
 // guardUnderConfiguration runs ephemeral work under the configured profile
@@ -103,12 +136,18 @@ func (driver *Driver) guardUnderConfiguration() error {
 		return errors.New("no host window was prepared")
 	}
 
-	last := driver.samples[len(driver.samples)-1]
-	resolution, err := driver.resolveConfigured(policy.TaskEphemeral, last)
+	resolution, err := driver.resolveConfigured(policy.TaskEphemeral, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		return err
 	}
 
+	return driver.guardUnder(resolution)
+}
+
+// guardUnder runs ephemeral work under the resolution while the host holds the
+// scenario's warning window, then keeps holding it.
+func (driver *Driver) guardUnder(resolution policy.Resolution) error {
+	last := driver.samples[len(driver.samples)-1]
 	root, err := driver.temporaryRoot()
 	if err != nil {
 		return err
@@ -182,12 +221,122 @@ func lineageStableWarning() policy.Sample {
 	return sample
 }
 
+// extendedBuiltin names the built-in profile a configured profile of the
+// scenario's outline extends, or none for the built-in balanced profile itself.
+func extendedBuiltin(profile string) (string, error) {
+	switch profile {
+	case "the built-in balanced profile":
+		return "", nil
+	case "a configured profile that extends balanced":
+		return profileBalanced, nil
+	case "a configured profile that extends constrained":
+		return profileConstrained, nil
+	case "a configured profile that extends minimal":
+		return profileMinimal, nil
+	default:
+		return "", fmt.Errorf("unknown profile %q", profile)
+	}
+}
+
+// hostWithProfileOfNoOwnerShare prepares healthy host capacity and the profile
+// the outline names, resolved through the configuration it writes, so the only
+// thing that can say how many owners share that capacity is the profile.
+func (driver *Driver) hostWithProfileOfNoOwnerShare(profile string) error {
+	base, err := extendedBuiltin(profile)
+	if err != nil {
+		return err
+	}
+	if base != "" {
+		if err = driver.derivedProfileConfiguration(base); err != nil {
+			return err
+		}
+	}
+
+	sample := v04ReservationSample()
+	driver.samples = []policy.Sample{sample}
+	driver.resolution, err = driver.resolveProfile("", policy.TaskEphemeral, sample)
+
+	return err
+}
+
+// planAutomaticReservation plans the reservation in the guard with an empty
+// owner share map, which is the case a profile's lineage has to answer.
+func (driver *Driver) planAutomaticReservation() error {
+	settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: ownerShareLimit, OwnerShares: map[policy.ProfileName]int{}}
+	driver.automaticPlan, driver.automaticPlanError = guard.PlanReservation(
+		driver.samples[0], driver.resolution, settings, 0, 0,
+	)
+
+	return nil
+}
+
+// requireOwnerShares holds the planned vector to the given number of owner
+// shares of the safe capacity, and names the number it was divided into.
+func (driver *Driver) requireOwnerShares(shares string) error {
+	want, err := strconv.Atoi(shares)
+	if err != nil {
+		return err
+	}
+	if driver.automaticPlanError != nil {
+		return driver.automaticPlanError
+	}
+
+	sample := driver.samples[0]
+	cpuCapacity := int64(max(guard.MinimumReservationCPU, sample.AvailableParallelism-1))
+	memoryCapacity := sample.EffectiveMemoryLimitBytes - driver.resolution.MemoryReserve
+	vector := func(owners int) guard.ReservationVector {
+		return guard.ReservationVector{
+			CPU:         int(max(int64(guard.MinimumReservationCPU), exactCeilingV04(cpuCapacity, int64(owners)))),
+			MemoryBytes: max(guard.MinimumReservationMemoryBytes, exactCeilingV04(memoryCapacity, int64(owners))),
+		}
+	}
+	if driver.automaticPlan.Requested == vector(want) {
+		return nil
+	}
+
+	for owners := 1; owners <= ownerShareLimit; owners++ {
+		if driver.automaticPlan.Requested == vector(owners) {
+			return fmt.Errorf("profile %q divided capacity into %d owner shares instead of %d",
+				driver.resolution.ResolvedProfile, owners, want)
+		}
+	}
+
+	return fmt.Errorf("profile %q planned %+v, want %d owner shares", driver.resolution.ResolvedProfile, driver.automaticPlan.Requested, want)
+}
+
 // balancedEphemeralChild admits an ephemeral child of the built-in balanced
 // profile on healthy evidence.
 func (driver *Driver) balancedEphemeralChild() error {
-	resolution, err := policy.BuiltinCatalog().Resolve(profileBalanced, policy.TaskEphemeral, lineageHealthySample())
+	resolution, err := driver.resolveProfile(profileBalanced, policy.TaskEphemeral, lineageHealthySample())
 	if err != nil {
 		return err
+	}
+
+	driver.lineage = lineageScenario{resolution: resolution, taskClass: policy.TaskEphemeral, spared: true}
+
+	return driver.prepareGuardedExecution(nil)
+}
+
+// balancedLineageChild admits an ephemeral child of the profile the outline
+// names, the built-in balanced profile or a configured one extending it, on
+// healthy evidence. Both resolve through config.Load.
+func (driver *Driver) balancedLineageChild(profile string) error {
+	base, err := extendedBuiltin(profile)
+	if err != nil {
+		return err
+	}
+	if base != "" {
+		if err = driver.derivedProfileConfiguration(base); err != nil {
+			return err
+		}
+	}
+
+	resolution, err := driver.resolveProfile("", policy.TaskEphemeral, lineageHealthySample())
+	if err != nil {
+		return err
+	}
+	if base != "" && resolution.ResolvedProfile != policy.ProfileName("local-"+base) {
+		return fmt.Errorf("the configuration resolved %q, want its profile extending %s", resolution.ResolvedProfile, base)
 	}
 
 	driver.lineage = lineageScenario{resolution: resolution, taskClass: policy.TaskEphemeral, spared: true}
@@ -210,7 +359,7 @@ func (driver *Driver) childOutsideExemption(child string) error {
 		}
 		driver.lineage = lineageScenario{resolution: resolution, taskClass: policy.TaskEphemeral}
 	case serviceOfBalanced:
-		resolution, err := policy.BuiltinCatalog().Resolve(profileBalanced, policy.TaskService, lineageHealthySample())
+		resolution, err := driver.resolveProfile(profileBalanced, policy.TaskService, lineageHealthySample())
 		if err != nil {
 			return err
 		}

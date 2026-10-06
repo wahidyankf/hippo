@@ -183,7 +183,10 @@ type Driver struct {
 	pushQuickGate            bool
 	coreCoverage             bool
 	resolution               policy.Resolution
-	requestedProfile         string
+	automaticPlan            guard.ReservationPlan
+	automaticPlanError       error
+	requestedProfile         policy.ProfileName
+	corruptionKind           string
 	taskClass                policy.TaskClass
 	effectiveMemory          int64
 	linuxMemInfo             string
@@ -192,6 +195,7 @@ type Driver struct {
 	linuxMemoryStat          string
 	availableMemory          int64
 	configPath               string
+	configDocument           string
 	privateArtifacts         bool
 	exampleTracked           bool
 	applicationLayout        bool
@@ -450,7 +454,7 @@ func (driver *Driver) assessAdmission() {
 		return
 	}
 
-	resolution, err := policy.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
+	resolution, err := driver.resolveProfile(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		driver.errorOutput = err.Error()
 		driver.reason = policy.ReasonReplanRequired
@@ -464,7 +468,7 @@ func (driver *Driver) assessAdmission() {
 	driver.admitted = resolution.Reason == policy.ReasonNone && policy.AdmissionReady(driver.samples, resolution.Policy)
 	if !driver.admitted &&
 		driver.taskClass == taskClassEphemeral &&
-		resolution.DegradedAdmission &&
+		resolution.Lineage.DegradedAdmission() &&
 		policy.WarningAdmissionReady(driver.samples, resolution.Policy) {
 		driver.resolution.Concurrency = 1
 		driver.admitted = true
@@ -478,7 +482,7 @@ func (driver *Driver) assessPressure() {
 		return
 	}
 
-	resolution, err := policy.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
+	resolution, err := driver.resolveProfile(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		driver.errorOutput = err.Error()
 
@@ -615,7 +619,7 @@ func (driver *Driver) admittedWithoutConcurrencyMappings() error {
 	driver.childResolution = policy.Resolution{
 		RequestedProfile: profileBalanced,
 		ResolvedProfile:  profileBalanced,
-		FallbackChain:    []string{profileBalanced},
+		FallbackChain:    []policy.ProfileName{profileBalanced},
 		Concurrency:      4,
 	}
 
@@ -1782,9 +1786,10 @@ func (driver *Driver) observeDegradedWarning() error {
 		Resolution: policy.Resolution{
 			RequestedProfile:  profileBalanced,
 			ResolvedProfile:   profileBalanced,
-			FallbackChain:     []string{profileBalanced},
+			FallbackChain:     []policy.ProfileName{profileBalanced},
 			Concurrency:       7,
 			DegradedAdmission: true,
+			Lineage:           policy.LineageBalanced,
 		},
 		Sleep:  func(time.Duration) {},
 		Now:    time.Now,
@@ -2604,7 +2609,7 @@ func (driver *Driver) releaseHost() {
 }
 
 func (driver *Driver) assessRelease() {
-	driver.resolution, _ = policy.BuiltinCatalog().Resolve(profileBalanced, "release", driver.samples[len(driver.samples)-1])
+	driver.resolution, _ = driver.resolveProfile(profileBalanced, "release", driver.samples[len(driver.samples)-1])
 	driver.reason = driver.resolution.Reason
 }
 
@@ -3423,6 +3428,62 @@ func (driver *Driver) requireConstrained() error {
 
 func (driver *Driver) tinyMachine() {
 	driver.samples = []policy.Sample{capacitySample(policy.GiB, 200*policy.MiB)}
+}
+
+// tinyMachineUnder is the tiny machine with the configuration the scenario's
+// outline names: none, a default profile extending minimal (alone, or with
+// minimal itself as its fallback), or a profile extending constrained with no
+// fallback behind it.
+func (driver *Driver) tinyMachineUnder(configuration string) error {
+	driver.tinyMachine()
+
+	switch configuration {
+	case "no configuration":
+		return nil
+	case "a default profile extending minimal":
+		return driver.derivedProfileConfiguration(profileMinimal)
+	case "a default profile extending minimal, falling back to minimal":
+		return driver.derivedProfileFallingBackTo(profileMinimal, profileMinimal)
+	case "a profile extending constrained, no fallback":
+		return driver.derivedProfileWithoutFallback(profileConstrained)
+	default:
+		return fmt.Errorf("unknown configuration %q", configuration)
+	}
+}
+
+// requireConfiguredMinimal holds the resolution to the configured profile that
+// extends minimal, selected at concurrency one by the last-resort floor.
+func (driver *Driver) requireConfiguredMinimal() error {
+	if driver.reason == policy.ReasonReplanRequired {
+		return fmt.Errorf(
+			"the configured profile was refused with exit %d naming %s: %s",
+			status.GuardFailed, status.CodePolicyReplanRequired, driver.errorOutput,
+		)
+	}
+	if driver.resolution.ResolvedProfile != "local-minimal" || driver.resolution.Concurrency != 1 ||
+		driver.reason != policy.ReasonNone || driver.exitCode != 0 {
+		return fmt.Errorf("got %+v exit %d reason %d", driver.resolution, driver.exitCode, driver.reason)
+	}
+
+	return nil
+}
+
+// requireNoUsableFallbackReplan holds a profile with nothing behind it to the
+// replan a caller reads at the boundary: exit 125 naming
+// hippo.policy.replan-required, under the scenario's own configuration.
+func (driver *Driver) requireNoUsableFallbackReplan() error {
+	if driver.reason != policy.ReasonReplanRequired || !strings.Contains(driver.errorOutput, "no usable fallback") {
+		return fmt.Errorf("got reason %d resolution %+v error %q", driver.reason, driver.resolution, driver.errorOutput)
+	}
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+
+	return requireReasonAtBoundary(
+		root, driver.configDocument, driver.samples, status.GuardFailed, status.CodePolicyReplanRequired,
+		taskClassFlag, taskClassEphemeral,
+	)
 }
 
 func (driver *Driver) requireMinimal() error {
