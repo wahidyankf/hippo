@@ -342,9 +342,12 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ### Phase 1: Plan
 
-- [ ] `[AI]` Land this file and its `plans/in-progress/README.md` entry alone with _Land_, from
+- [x] `[AI]` Land this file and its `plans/in-progress/README.md` entry alone with _Land_, from
       `worktree/fix-distinct-root-lock-test-flake`; proof: the merge commit on `origin/main` and _Reconcile_ reading
       `0 0`. `[AC-08]`
+  - Result: (2026-10-06) pull request #138 rebase-merged as `33ca271` after `Quality gate` `success` on head `8e6ba28`
+    and `leak-review` `success`; _Reconcile_ read `0 0`. The plan branch was then deleted locally; GitHub had already
+    deleted it remotely.
 - [x] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
       `git switch -c worktree/fix-distinct-root-lock-test-flake-fix origin/main`, then `npm ci`; proof:
       `git branch --show-current` prints the branch and `git status --porcelain` prints nothing. `[AC-05]`
@@ -360,13 +363,21 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ### Phase 2: The Test Reads Serialization From the Refusal
 
-- [ ] `[AI]` RED: in a _Scratch_, write the _Stall copy_ and the _Shared-gate copy_ with an overlay for each, and run
+- [x] `[AI]` RED: in a _Scratch_, write the _Stall copy_ and the _Shared-gate copy_ with an overlay for each, and run
       the _Lock test_ with each overlay, recording the output; proof: with the stall overlay it fails 3 runs of 3 at
       `run_test.go:690` with `distinct-root coordination was serialized:` and an elapsed time of at least 50 ms, past
       the error check at line 684, so the lock was taken; with the shared-gate overlay it fails 3 runs of 3 at
       `run_test.go:684` with `shared coordination deferred admission: another admission is updating the shared root` and
       never at line 690; `git status --porcelain` prints nothing; the _Scratch_ is removed. `[AC-01]` `[AC-02]`
-- [ ] `[AI]` GREEN: in `internal/guard/run_test.go`, `TestCoordinationLockAllowsDistinctRootsInParallel`, name the first
+  - Result: (2026-10-06) the _Lock test_ (`go test -overlay <scratch>/<name>.json -count=3 -timeout 30m -v -run`, the
+    plan's pattern, `./internal/guard`) exited `1` with each overlay. Stall overlay: 3 of 3 `--- FAIL` (0.10–0.11 s),
+    each at `run_test.go:690` with `distinct-root coordination was serialized:` and elapsed times of 52.184583 ms,
+    57.12425 ms, and 51.710542 ms, all past the line-684 error check, so the lock was taken. Shared-gate overlay: 3 of 3
+    `--- FAIL` (0.05 s), each at `run_test.go:684` with
+    `shared coordination deferred admission: another admission is updating the shared root`, none at line 690.
+    `git status --porcelain` printed nothing before this record; the _Scratch_ was removed (`test ! -e` exits `0`). Load
+    average 13.50 at the start.
+- [x] `[AI]` GREEN: in `internal/guard/run_test.go`, `TestCoordinationLockAllowsDistinctRootsInParallel`, name the first
       root `held := t.TempDir()`; delete `start` (line 681) and the elapsed assertion (lines 689–691); acquire the
       second root with `acquireCoordinationLock(context.Background(), t.TempDir(), 0)`, failing on an error with
       `t.Fatalf("distinct-root coordination was serialized: %v", err)`, and keep its release; then acquire `held` with a
@@ -374,43 +385,98 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
       and fail with `t.Fatalf("a zero wait did not refuse the held root: lock=%v error=%v", contended, err)`. In a
       _Scratch_, write the _Stall copy_ and its overlay; proof: the _Lock test_ passes 3 runs of 3 without an overlay
       and 3 of 3 with the stall overlay, the _Neighbour tests_ pass, and the _Scratch_ is removed. `[AC-01]`
-- [ ] `[AI]` REFACTOR: give the test a comment saying distinct roots must not contend, that a zero wait takes a free
+  - Result: (2026-10-06) the test body is rewritten as the item says (`held`, a zero-wait second root failing with
+    `distinct-root coordination was serialized: %v`, then the zero-wait `contended` control). The _Lock test_ passed 3
+    of 3 without an overlay (0.00 s each, exit `0`) and 3 of 3 with the stall overlay (0.16 s each, exit `0`, the three
+    50 ms stalls inside the test and no failure). The _Neighbour tests_ (`go test -race -count=3 -timeout 30m -v -run`
+    `'^TestCoordinationLock'`) exited `0` with 15 `--- PASS` lines, each of the 5 tests 3 of 3, and no `--- FAIL`. The
+    _Scratch_ was removed (`test ! -e` exits `0`). Load average 10.55 at the start.
+- [x] `[AI]` REFACTOR: give the test a comment saying distinct roots must not contend, that a zero wait takes a free
       lock at once and refuses a held one at once, and that the verdict therefore comes from the refusal and never from
       the runner's speed; proof:
       `awk '/^func TestCoordinationLockAllowsDistinctRootsInParallel/,/^}/' internal/guard/run_test.go` piped to
       `grep -cE 'time\.(Now|Since)'` prints `0`, `go tool golangci-lint run ./internal/guard/...` prints `0 issues.`,
       `gofmt -l internal/guard` prints nothing, and the _Lock test_ and _Neighbour tests_ still pass. `[AC-05]`
-- [ ] `[AI]` Commit `internal/guard/run_test.go` alone as
+  - Result: (2026-10-06) a four-line comment above the test says distinct roots must not contend, that a zero wait takes
+    a free lock and refuses a held one at once so the verdict comes from the refusal and never from the runner's speed,
+    and that the control keeps the first check honest. The `awk` and `grep -cE` pipeline prints `0`;
+    `go tool golangci-lint run ./internal/guard/...` prints `0 issues.` (with its usual warning that `nilaway` is an
+    unknown `//nolint` linter, which predates this change); `gofmt -l internal/guard` prints nothing; the _Lock test_
+    passed 3 of 3 and the _Neighbour tests_ 15 of 15 (5 tests, 3 passes each, `-race`), both exit `0`. Load average
+    10.50 at the start.
+- [x] `[AI]` Commit `internal/guard/run_test.go` alone as
       `test(guard): judge distinct-root coordination by refusal, not the clock`; proof:
       `git log --oneline origin/main..HEAD` lists it after the gate commit, and `git diff --name-only HEAD -- internal`
       prints nothing. `[AC-05]`
+  - Result: (2026-10-06) `946dd7f` `test(guard): judge distinct-root coordination by refusal, not the clock`, one file
+    changed (15 insertions, 6 deletions), through the pre-commit and `commit-msg` gates with no bypass.
+    `git log --oneline origin/main..HEAD` lists `946dd7f` above the gate commit `736c2f1`, and
+    `git diff --name-only HEAD -- internal` prints nothing.
 
 ### Phase 3: Review and Documentation
 
-- [ ] `[AI]` Break tests: in a _Scratch_, write the _Shared-gate copy_, the _Same-root copy_, and the _Zero-wait copy_
+- [x] `[AI]` Break tests: in a _Scratch_, write the _Shared-gate copy_, the _Same-root copy_, and the _Zero-wait copy_
       with an overlay for each, and run the _Lock test_ with each; proof, each recorded here: the shared-gate and
       same-root overlays each fail 3 runs of 3 with `distinct-root coordination was serialized:` followed by
       `shared coordination deferred admission: another admission is updating the shared root`; the zero-wait overlay
       fails 3 of 3 with `a zero wait did not refuse the held root: lock=<nil> error=<nil>`;
       `git diff --quiet -- internal` exits `0`; the _Scratch_ is removed. `[AC-02]` `[AC-03]` `[AC-04]`
-- [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
+  - Result: (2026-10-06) each overlay was built from the committed files, and each run was the _Lock test_ with
+    `-overlay <scratch>/<name>.json`, `-timeout 30m`, and exit `1`. Shared-gate overlay (`coordination.go` line 118
+    keying every root to one gate): 3 of 3 `--- FAIL` (0.00 s) at `run_test.go:688` with
+    `distinct-root coordination was serialized:` followed by
+    `shared coordination deferred admission: another admission is updating the shared root`. Same-root overlay
+    (`run_test.go` with `held` in place of the second `t.TempDir()`): 3 of 3 `--- FAIL` (0.00 s), the same line and
+    message. Zero-wait overlay (`if wait == 0 { return nil, nil }` first in `acquireCoordinationLock`): 3 of 3
+    `--- FAIL` (0.00 s) at `run_test.go:699` with `a zero wait did not refuse the held root: lock=<nil> error=<nil>`.
+    `git diff --quiet -- internal` exits `0`; the _Scratch_ was removed (`test ! -e` exits `0`). Load average 9.51 at
+    the start.
+- [x] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
       page describes this test and that, per [Release content](#solution), `CHANGELOG.md` gets no entry; proof:
       `git grep -n 'AllowsDistinctRoots' -- README.md docs specs CHANGELOG.md repo-governance` prints nothing, and
       `git diff --name-only origin/main...HEAD -- README.md docs specs CHANGELOG.md` prints nothing. `[AC-05]`
+  - Result: (2026-10-06) no page describes this test: `git grep -n 'AllowsDistinctRoots' -- README.md docs specs`
+    `CHANGELOG.md repo-governance` prints nothing (exit `1`), and neither does a wider
+    `git grep -n -iE 'distinct[- ]roots?|elapsed.*serializ'` over the same paths. `git diff --name-only`
+    `origin/main...HEAD -- README.md docs specs CHANGELOG.md` prints nothing. Per [Release content](#solution) the
+    test-only change is true to the shipped binary, so `CHANGELOG.md` gets no entry. Status `no-change`: nothing stale,
+    nothing removed, no command in an affected document to run.
 
 ### Phase 4: Verification
 
-- [ ] `[AI]` Bounded checkpoint: run both forms of the _Repeated test_, then the _Neighbour tests_, recording `uptime`
+- [x] `[AI]` Bounded checkpoint: run both forms of the _Repeated test_, then the _Neighbour tests_, recording `uptime`
       before and after each; proof: each exits `0`, with 500 `--- PASS` lines for the test in each _Repeated test_ form
       and no `--- FAIL`. Fallback, decided now: one failure stops the plan before landing; its output is recorded here,
       the cause it shows replaces the matching part of [Root Cause](#root-cause), and nothing lands until a new RED
       proves that cause. A failure of a neighbour test alone is recorded here and filed as its own bug-fix plan under
       the owner's standing request; this plan lands only after that fix merges and a rebase onto it reruns the
       _Neighbour tests_ clean. `[AC-06]`
-- [ ] `[AI]` In a _Scratch_, write the _Contention harness_ and its overlay as `contention.json`, and run the
+  - Result: (2026-10-06) at `946dd7f`, run directly, each exit `0`. _Repeated test_ with `GOMAXPROCS=1`
+    (`go test -race -count=500 -timeout 30m -v -run '^TestCoordinationLockAllowsDistinctRootsInParallel$'`
+    `./internal/guard`): 500 `--- PASS` lines, 0 `--- FAIL`, the slowest pass 0.01 s, `ok` in 1.696 s; `uptime` before
+    and after: load averages 11.36 15.43 19.25 and 14.45 16.00 19.43. _Repeated test_ at the default `GOMAXPROCS`: 500
+    `--- PASS`, 0 `--- FAIL`, the slowest pass 0.03 s, `ok` in 2.464 s; load averages 14.45 16.00 19.43 before and 14.49
+    15.98 19.40 after. _Neighbour tests_ (`-race -count=3`): 15 `--- PASS`, 3 of 3 for each of the 5
+    `TestCoordinationLock` tests, 0 `--- FAIL`, `ok` in 1.475 s; load averages 14.49 15.98 19.40 before and after (the
+    kernel's average had not moved within the run). The fallback did not fire.
+- [x] `[AI]` In a _Scratch_, write the _Contention harness_ and its overlay as `contention.json`, and run the
       _Contention check_, recording `uptime` before and after; proof: exit `0` and five log lines each reading
       `refused 0`, and the _Scratch_ is removed. Fallback, decided now: as for the checkpoint above. `[AC-06]`
-- [ ] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-06]`
+  - Result: (2026-10-06) the _Contention harness_ (eight goroutines, 25 rounds each, a 1 s first root, a timed second
+    root with wait `w`) was added to package `guard` by overlay, never to the worktree. The _Contention check_
+    (`GOMAXPROCS=1 go test -overlay <scratch>/contention.json -race -count=5 -timeout 30m -v -run`
+    `'^TestContentionScratchZeroWait$' ./internal/guard`) exited `0` with five lines, each
+    `wait 0s: over 40ms 0 of 200, refused 0`, with worst rounds of 1.482208 ms, 22.651042 ms, 235.917 µs, 183.125 µs,
+    and 37.660541 ms: 1,000 zero-wait acquisitions, none refused. `uptime` before: load averages 17.03 16.42 19.42;
+    after: 15.98 16.21 19.33. Controls, not required by the item: the same harness with the _Shared-gate copy_ counted
+    `refused 200` of 200 in one run, so the counter sees a refusal; `TestContentionScratchToday` (50 ms wait, bug-report
+    step 2, `-count=5`) counted `over 40ms` 0, 0, 1, 0, and 0 of 200 with no refusal, the one at 40.154583 ms. The
+    _Scratch_ was removed (`test ! -e` exits `0`) and `git status --porcelain` shows only this README.
+- [x] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-06]`
+  - Result: (2026-10-06) `GOFLAGS=-timeout=30m npm test` at `946dd7f`, the form the repository's loaded-host runner
+    uses, exit `0` (`uptime` load 13.07 before, 7.41 after): selected production line coverage 99.35% (911/917), race
+    detector clean, ending with "No vulnerabilities found."
+
 - [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
       `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
       `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
