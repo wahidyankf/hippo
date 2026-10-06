@@ -7,6 +7,16 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.8.5] — Unreleased
+
+### Fixed
+
+- Cancelling a queued run could leave its waiter in the shared FIFO queue, holding up the waiters behind it, when its
+  cleanup started more than 100 ms after the cancellation, even with the coordination lock free. The cleanup's 100 ms
+  budget was enforced by a second timer that could lapse before the cleanup tried the lock, so it refused a lock nobody
+  held and left the waiter for a background retry. The cleanup now takes a free lock however late it starts. A lock that
+  stays held is still refused after 100 ms, so the cancelled run still returns promptly.
+
 ## [v0.8.4] — 2026-10-03
 
 ### Fixed
