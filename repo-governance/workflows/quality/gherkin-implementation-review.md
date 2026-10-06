@@ -34,7 +34,8 @@ A test that executes the scenario's steps and asserts nothing that could disting
 not `implemented`. So is one whose only assertion is that the code ran without throwing.
 
 The check is mechanical: break the behaviour and see whether the test fails. If it still passes, it was never
-establishing anything.
+establishing anything. Where two layers refuse the same input, the scenario passes with either one broken alone, so
+break each alone and require a test that fails for each; a clause no test pins can vanish behind the other layer.
 
 Recording this as a failure matters more than it appears. Such a test is worse than no test: it occupies the place where
 a real one would go, it is counted in coverage, and it will be trusted by everyone who does not read it.
