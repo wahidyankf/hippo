@@ -2268,26 +2268,37 @@ func TestReservationIdentityPathCorruptionFailClosed(t *testing.T) { //nolint:cy
 				value := owner.Token
 				if record == "waiter" {
 					waiterContext, cancel := context.WithCancel(context.Background())
+					t.Cleanup(cancel)
 					waiterCancel = cancel
 					waiterDone = make(chan error, 1)
+					// The waiter parks in its retry pause, which it reaches only after
+					// releasing the coordination lock, so the competing admission below
+					// meets a free lock and is decided by the ledger alone.
+					parked := make(chan struct{})
+					options := ReservationAdmissionOptions{Pause: func(pauseContext context.Context, _ time.Duration) error {
+						close(parked)
+						<-pauseContext.Done()
+
+						return pauseContext.Err()
+					}}
 					go func() {
-						_, waiterError := AcquireReservation(
-							waiterContext, root, "", policy.TaskService, "minimal", "waiter", plan, 1, 3*time.Second,
+						_, waiterError := AcquireReservationWithOptions(
+							waiterContext, root, "", policy.TaskService, "minimal", "waiter", plan, 1, guardLivenessLimit, options,
 						)
 						waiterDone <- waiterError
 					}()
-					deadline := time.Now().Add(time.Second)
-					for {
-						ledger, readError := readReservationLedger(root)
-						if readError == nil && len(ledger.Waiters) == 1 {
-							value = ledger.Waiters[0].Token
-							break
-						}
-						if time.Now().After(deadline) {
-							t.Fatalf("waiter did not enqueue: %v", readError)
-						}
-						time.Sleep(time.Millisecond)
+					select {
+					case <-parked:
+					case waiterError := <-waiterDone:
+						t.Fatalf("waiter returned before parking: %v", waiterError)
+					case <-time.After(guardLivenessLimit):
+						t.Fatal("waiter did not park")
 					}
+					ledger, readError := readReservationLedger(root)
+					if readError != nil || len(ledger.Waiters) != 1 {
+						t.Fatalf("waiter did not enqueue: waiters=%d error=%v", len(ledger.Waiters), readError)
+					}
+					value = ledger.Waiters[0].Token
 				}
 				cleanupCorruptIdentity := mutateReservationIdentityPathForTest(t, root, value, fault)
 				defer cleanupCorruptIdentity()
