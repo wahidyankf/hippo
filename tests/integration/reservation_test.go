@@ -227,7 +227,7 @@ func TestConcurrentVictimSelectionAndReleaseKeepsLedgerConsistent(t *testing.T) 
 		var group sync.WaitGroup
 		group.Go(func() {
 			errorsFound <- retryDeferred(func() error {
-				_, _, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+				_, _, selectionError := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 
 				return selectionError
 			})
@@ -294,7 +294,7 @@ func TestConcurrentVictimSelectorsCannotCascadeBeforeOwnedRelease(t *testing.T) 
 				var selected bool
 
 				selectionError := retryDeferred(func() error {
-					candidate, chose, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+					candidate, chose, err := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 					victim, selected = candidate, chose
 
 					return err
@@ -321,13 +321,13 @@ func TestConcurrentVictimSelectorsCannotCascadeBeforeOwnedRelease(t *testing.T) 
 		if len(victims) != 1 || victims[0].Token != ephemeral.Token {
 			t.Fatalf("iteration %d selected victims %+v", iteration, victims)
 		}
-		if victim, selected, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); selectionError != nil || selected {
+		if victim, selected, selectionError := guard.SelectPressureVictim(root, guard.ShedCausePressure); selectionError != nil || selected {
 			t.Fatalf("iteration %d cascaded before release: victim=%+v selected=%v error=%v", iteration, victim, selected, selectionError)
 		}
 		if err = guard.ReleaseReservation(root, ephemeral); err != nil {
 			t.Fatal(err)
 		}
-		victim, selected, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+		victim, selected, selectionError := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 		if selectionError != nil || !selected || victim.Token != service.Token {
 			t.Fatalf("iteration %d did not select service after release: victim=%+v selected=%v error=%v", iteration, victim, selected, selectionError)
 		}
@@ -359,7 +359,7 @@ func TestRemoteObservationTreatsReleasedOwnerAsCompleteWithoutSignaling(t *testi
 	if err = guard.ActivateReservation(root, session, command.Process.Pid); err != nil {
 		t.Fatal(err)
 	}
-	victim, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected {
 		t.Fatalf("select victim: selected=%v error=%v", selected, err)
 	}
@@ -398,7 +398,7 @@ func TestRemoteSelectorNeverSignalsUnresponsiveOwner(t *testing.T) {
 	if err = guard.ActivateReservation(root, session, command.Process.Pid); err != nil {
 		t.Fatal(err)
 	}
-	victim, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected {
 		t.Fatalf("select victim: selected=%v error=%v", selected, err)
 	}
@@ -408,7 +408,7 @@ func TestRemoteSelectorNeverSignalsUnresponsiveOwner(t *testing.T) {
 	if err = syscall.Kill(command.Process.Pid, 0); err != nil {
 		t.Fatalf("remote selector signaled another owner's child: %v", err)
 	}
-	if next, nextSelected, nextError := guard.SelectPressureVictim(root, guard.StorageBlockedExitCode); nextError != nil || nextSelected {
+	if next, nextSelected, nextError := guard.SelectPressureVictim(root, guard.ShedCauseStorage); nextError != nil || nextSelected {
 		t.Fatalf("unresponsive selected owner did not remain barrier: victim=%+v selected=%v error=%v", next, nextSelected, nextError)
 	}
 }

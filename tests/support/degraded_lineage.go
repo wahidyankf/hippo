@@ -138,10 +138,9 @@ func (driver *Driver) guardUnderConfiguration() error {
 	})
 
 	driver.resolution = resolution
-	driver.exitCode = code
 	driver.errorOutput = stderr.String()
 
-	return runError
+	return driver.recordGuardResult(code, runError)
 }
 
 func (driver *Driver) requireConfiguredDegradedAdmission() error {
@@ -156,8 +155,8 @@ func (driver *Driver) requireConfiguredDegradedAdmission() error {
 // the one the command line reports as 124 naming hippo.limit.capacity-deferred,
 // as requireDeferred does for a held lease.
 func (driver *Driver) requireConfiguredDeferral() error {
-	if driver.exitCode != guard.CapacityDeferredExitCode || strings.Contains(driver.errorOutput, degradedAdmissionLine) {
-		return fmt.Errorf("profile %q: exit=%d stderr=%q", driver.resolution.ResolvedProfile, driver.exitCode, driver.errorOutput)
+	if driver.reason != policy.ReasonCapacityDeferred || strings.Contains(driver.errorOutput, degradedAdmissionLine) {
+		return fmt.Errorf("profile %q: reason=%d exit=%d stderr=%q", driver.resolution.ResolvedProfile, driver.reason, driver.exitCode, driver.errorOutput)
 	}
 
 	return nil
@@ -294,13 +293,12 @@ func (driver *Driver) superviseLineageChild(script string) error {
 		Stderr:                 stderr,
 	})
 
-	driver.exitCode = code
 	driver.errorOutput = stderr.String()
 	if _, completedError := os.Stat(completed); completedError == nil {
 		driver.childCompleted = true
 	}
 
-	return err
+	return driver.recordGuardResult(code, err)
 }
 
 func (driver *Driver) requireChildFinished() error {
@@ -322,8 +320,8 @@ func (driver *Driver) requireLineageShed(reason string) error {
 	case "hippo.limit.pressure-shed":
 		return driver.requireShed()
 	case "hippo.limit.storage-blocked":
-		if driver.exitCode != guard.StorageBlockedExitCode {
-			return fmt.Errorf("got exit %d stderr=%q", driver.exitCode, driver.errorOutput)
+		if driver.reason != policy.ReasonStorageBlocked {
+			return fmt.Errorf("got reason %d exit %d stderr=%q", driver.reason, driver.exitCode, driver.errorOutput)
 		}
 
 		return requireShedReasonsAtBoundary()

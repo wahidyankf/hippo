@@ -146,11 +146,14 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
-	mode                     string
-	samples                  []policy.Sample
-	assessment               policy.Assessment
-	admitted, accepted       bool
-	exitCode                 int
+	mode               string
+	samples            []policy.Sample
+	assessment         policy.Assessment
+	admitted, accepted bool
+	exitCode           int
+	// reason is why the work stopped, when the scenario saw HIPPO's own layers stop it: the reason of the stop a
+	// guarded run returned, or the one a scenario's setup implies.
+	reason                   policy.Reason
 	output, errorOutput      string
 	binary, summaryPath      string
 	temporaryPaths           []string
@@ -450,15 +453,15 @@ func (driver *Driver) assessAdmission() {
 	resolution, err := policy.BuiltinCatalog().Resolve(driver.requestedProfile, driver.taskClass, driver.samples[len(driver.samples)-1])
 	if err != nil {
 		driver.errorOutput = err.Error()
-		driver.exitCode = policy.ReplanRequiredExitCode
+		driver.reason = policy.ReasonReplanRequired
 
 		return
 	}
 
 	driver.resolution = resolution
-	driver.exitCode = resolution.ExitCode
+	driver.reason = resolution.Reason
 	driver.assessment = policy.ResourceAssessment(driver.samples, resolution.Policy)
-	driver.admitted = resolution.ExitCode == 0 && policy.AdmissionReady(driver.samples, resolution.Policy)
+	driver.admitted = resolution.Reason == policy.ReasonNone && policy.AdmissionReady(driver.samples, resolution.Policy)
 	if !driver.admitted &&
 		driver.taskClass == taskClassEphemeral &&
 		resolution.DegradedAdmission &&
@@ -511,8 +514,8 @@ func (driver *Driver) requireDegradedDeferred() error {
 // requireStorageBlocked observes the policy decision the command boundary
 // reports as 124 naming hippo.limit.storage-blocked.
 func (driver *Driver) requireStorageBlocked() error {
-	if !driver.assessment.StorageBlocked || driver.exitCode != guard.StorageBlockedExitCode {
-		return fmt.Errorf("got %+v and exit %d", driver.assessment, driver.exitCode)
+	if !driver.assessment.StorageBlocked || driver.reason != policy.ReasonStorageBlocked {
+		return fmt.Errorf("got %+v and reason %d", driver.assessment, driver.reason)
 	}
 
 	return driver.requireAdmissionReasonAtBoundary(status.LimitShed, status.CodeLimitStorageBlocked)
@@ -585,8 +588,23 @@ func (driver *Driver) runGuardedShellUnder(resourcePolicy policy.Policy, script 
 		Stderr:                 stderr,
 	})
 
-	driver.exitCode = code
 	driver.errorOutput = stderr.String()
+
+	return driver.recordGuardResult(code, err)
+}
+
+// recordGuardResult keeps what a guarded run returned: the status, and the
+// reason when it stopped. A stop that says only its reason is an outcome the
+// scenario goes on to check, so it is not an error here, as it was not when the
+// status alone said it.
+func (driver *Driver) recordGuardResult(code int, err error) error {
+	driver.exitCode, driver.reason = code, policy.ReasonNone
+	if stop, stopped := errors.AsType[*policy.Stop](err); stopped {
+		driver.reason = stop.Reason
+	}
+	if _, bare := policy.BareStop(err); bare {
+		return nil
+	}
 
 	return err
 }
@@ -846,7 +864,7 @@ func (driver *Driver) requestEveryCompatibilityClass() error {
 		}
 	}
 	if driver.coordinationDeferrals == driver.coordinationRequests {
-		driver.exitCode = policy.ProtocolMismatchExitCode
+		driver.reason = policy.ReasonProtocolMismatch
 	}
 
 	return nil
@@ -859,7 +877,7 @@ func (driver *Driver) requestEveryCompatibilityClassE2E(classes []policy.TaskCla
 		}
 	}
 	if driver.coordinationDeferrals == driver.coordinationRequests {
-		driver.exitCode = policy.ProtocolMismatchExitCode
+		driver.reason = policy.ReasonProtocolMismatch
 	}
 
 	return nil
@@ -923,13 +941,13 @@ func (driver *Driver) requestCompatibilityClassE2E(class policy.TaskClass) error
 }
 
 func (driver *Driver) requireEveryCoordinationOwnerDeferred() error {
-	if driver.exitCode != policy.ProtocolMismatchExitCode ||
+	if driver.reason != policy.ReasonProtocolMismatch ||
 		driver.coordinationRequests != 3 ||
 		driver.coordinationDeferrals != driver.coordinationRequests ||
 		driver.supervisionFailure == nil {
 		return fmt.Errorf(
-			"exit=%d requests=%d deferrals=%d error=%w",
-			driver.exitCode,
+			"reason=%d requests=%d deferrals=%d error=%w",
+			driver.reason,
 			driver.coordinationRequests,
 			driver.coordinationDeferrals,
 			driver.supervisionFailure,
@@ -985,7 +1003,7 @@ func (driver *Driver) waitLease() error {
 		return nil
 	}
 
-	driver.exitCode = guard.CapacityDeferredExitCode
+	driver.reason = policy.ReasonCapacityDeferred
 	driver.errorOutput = guard.DescribeHeavyLease(driver.leaseRoot)
 
 	return nil
@@ -994,8 +1012,8 @@ func (driver *Driver) waitLease() error {
 // requireDeferred observes the guard decision the command boundary reports as
 // 124 naming hippo.limit.capacity-deferred.
 func (driver *Driver) requireDeferred() error {
-	if driver.exitCode != guard.CapacityDeferredExitCode {
-		return fmt.Errorf("got exit %d", driver.exitCode)
+	if driver.reason != policy.ReasonCapacityDeferred {
+		return fmt.Errorf("got reason %d", driver.reason)
 	}
 	return nil
 }
@@ -1654,8 +1672,8 @@ func (driver *Driver) observeCritical() error {
 // requireShed observes the guard's non-storage shed decision, then holds the
 // command boundary to reporting it as 124 naming hippo.limit.pressure-shed.
 func (driver *Driver) requireShed() error {
-	if driver.exitCode != guard.PressureShedExitCode {
-		return fmt.Errorf("got exit %d", driver.exitCode)
+	if driver.reason != policy.ReasonPressureShed {
+		return fmt.Errorf("got reason %d with exit %d", driver.reason, driver.exitCode)
 	}
 	if driver.childCompleted {
 		return errors.New("child finished its work instead of being shed")
@@ -1773,17 +1791,16 @@ func (driver *Driver) observeDegradedWarning() error {
 		Stderr: stderr,
 	})
 
-	driver.exitCode = code
 	driver.errorOutput = stderr.String()
 
-	return runError
+	return driver.recordGuardResult(code, runError)
 }
 
 func (driver *Driver) requireDegradedShed() error {
-	if driver.exitCode != guard.PressureShedExitCode ||
+	if driver.reason != policy.ReasonPressureShed ||
 		!strings.Contains(driver.errorOutput, "admitting") ||
 		!strings.Contains(driver.errorOutput, "shedding") {
-		return fmt.Errorf("exit=%d stderr=%q", driver.exitCode, driver.errorOutput)
+		return fmt.Errorf("reason=%d exit=%d stderr=%q", driver.reason, driver.exitCode, driver.errorOutput)
 	}
 
 	return requirePressureShedAtBoundary()
@@ -2588,11 +2605,11 @@ func (driver *Driver) releaseHost() {
 
 func (driver *Driver) assessRelease() {
 	driver.resolution, _ = policy.BuiltinCatalog().Resolve(profileBalanced, "release", driver.samples[len(driver.samples)-1])
-	driver.exitCode = driver.resolution.ExitCode
+	driver.reason = driver.resolution.Reason
 }
 
 func (driver *Driver) requireReleaseCPU() error {
-	if driver.exitCode != policy.ReplanRequiredExitCode || driver.resolution.Decision != "replan" {
+	if driver.reason != policy.ReasonReplanRequired || driver.resolution.Decision != "replan" {
 		return fmt.Errorf("got %+v", driver.resolution)
 	}
 	return nil
@@ -3428,8 +3445,8 @@ func (driver *Driver) strictTransaction() {
 }
 
 func (driver *Driver) requireReplan() error {
-	if driver.exitCode != policy.ReplanRequiredExitCode || driver.resolution.Decision != "replan" {
-		return fmt.Errorf("got %+v exit %d", driver.resolution, driver.exitCode)
+	if driver.reason != policy.ReasonReplanRequired || driver.resolution.Decision != "replan" {
+		return fmt.Errorf("got %+v reason %d", driver.resolution, driver.reason)
 	}
 
 	return driver.requireAdmissionReasonAtBoundary(status.GuardFailed, status.CodePolicyReplanRequired)

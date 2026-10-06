@@ -354,7 +354,7 @@ func requireV04ActiveEpochCapacity(root string) error { //nolint:cyclop,gocognit
 func (driver *Driver) remoteSheddingOwnerV04() error { return driver.preparePendingV04() }
 
 func (driver *Driver) exerciseRemoteSheddingV04() error {
-	return driver.exerciseOwnerSideSheddingV04(guard.CapacityDeferredExitCode)
+	return driver.exerciseOwnerSideSheddingV04(guard.ShedCausePressure)
 }
 
 // awaitMarkerFile waits for a child-published mark within a bounded window.
@@ -392,13 +392,13 @@ func awaitMarkerFileContext(ctx context.Context, path string) bool {
 // awaitPressureVictim keeps asking until the root gives a definite answer. Selection
 // competes with the owning guard's own bounded coordination transactions on that same
 // root, so an error here is contention rather than a verdict about the candidate.
-func awaitPressureVictim(root string, selectedExit int, wait time.Duration) (guard.ReservationOwner, error) {
+func awaitPressureVictim(root string, cause guard.ShedCause, wait time.Duration) (guard.ReservationOwner, error) {
 	deadline := time.Now().Add(wait)
 
 	var lastError error
 
 	for {
-		candidate, selected, selectError := guard.SelectPressureVictim(root, selectedExit)
+		candidate, selected, selectError := guard.SelectPressureVictim(root, cause)
 		if selectError == nil && selected {
 			return candidate, nil
 		}
@@ -419,10 +419,10 @@ func awaitPressureVictim(root string, selectedExit int, wait time.Duration) (gua
 
 // awaitNoCascade needs a definite answer too: a contended read cannot prove that
 // nothing cascaded while the first victim remained owned.
-func awaitNoCascade(root string, selectedExit int, wait time.Duration) error {
+func awaitNoCascade(root string, cause guard.ShedCause, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 	for {
-		next, selected, selectError := guard.SelectPressureVictim(root, selectedExit)
+		next, selected, selectError := guard.SelectPressureVictim(root, cause)
 		if selectError == nil {
 			if selected {
 				return fmt.Errorf("additional victim cascaded while first remained owned: %+v", next)
@@ -457,7 +457,7 @@ func awaitVictimRelease(root string, victim guard.ReservationOwner, wait time.Du
 	}
 }
 
-func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
+func (driver *Driver) exerciseOwnerSideSheddingV04(cause guard.ShedCause) error {
 	root := driver.evidenceRoot
 	marker := filepath.Join(root, "owner-term")
 	ready := filepath.Join(root, "owner-ready")
@@ -505,13 +505,13 @@ func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
 
 		return nil
 	}
-	victim, selectError := awaitPressureVictim(root, selectedExit, 10*time.Second)
+	victim, selectError := awaitPressureVictim(root, cause, 10*time.Second)
 	if selectError != nil {
 		driver.v04Error = selectError
 
 		return nil
 	}
-	if cascadeError := awaitNoCascade(root, selectedExit, 10*time.Second); cascadeError != nil && driver.v04Error == nil {
+	if cascadeError := awaitNoCascade(root, cause, 10*time.Second); cascadeError != nil && driver.v04Error == nil {
 		driver.v04Error = cascadeError
 	}
 	if releaseError := awaitVictimRelease(root, victim, 30*time.Second); releaseError != nil && driver.v04Error == nil {
@@ -519,12 +519,10 @@ func (driver *Driver) exerciseOwnerSideSheddingV04(selectedExit int) error {
 	}
 	run := <-result
 	finished = true
-	want := selectedExit
-	if want == guard.CapacityDeferredExitCode {
-		want = guard.PressureShedExitCode // The ledger records the cause; the caller is told it was shed.
-	}
-	if (run.err != nil || run.code != want) && driver.v04Error == nil {
-		driver.v04Error = fmt.Errorf("owner-side shedding exit=%d want=%d error=%w", run.code, want, run.err)
+	// The ledger records the cause; the caller is told the reason it implies.
+	want := cause.Reason()
+	if stop, bare := policy.BareStop(run.err); (!bare || run.code != 0 || stop.Reason != want) && driver.v04Error == nil {
+		driver.v04Error = fmt.Errorf("owner-side shedding exit=%d want a stop for reason %d error=%w", run.code, want, run.err)
 	}
 	if _, statError := os.Stat(marker); statError != nil && driver.v04Error == nil {
 		driver.v04Error = fmt.Errorf("owning guard did not deliver TERM before bounded KILL: %w", statError)
@@ -542,7 +540,7 @@ func (driver *Driver) requireRemoteSheddingV04() error { return driver.v04Error 
 func (driver *Driver) storageSheddingOwnerV04() error { return driver.preparePendingV04() }
 
 func (driver *Driver) exerciseStorageOwnerSheddingV04() error {
-	return driver.exerciseOwnerSideSheddingV04(guard.StorageBlockedExitCode)
+	return driver.exerciseOwnerSideSheddingV04(guard.ShedCauseStorage)
 }
 
 func (driver *Driver) requireStorageOwnerSheddingV04() error { return driver.v04Error }
@@ -578,7 +576,7 @@ func (driver *Driver) exerciseReplacedRemoteOwnerV04() error {
 
 		return nil
 	}
-	victim, selected, selectError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, selectError := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if selectError != nil || !selected {
 		_ = guard.ReleaseReservation(root, session)
 		driver.v04Error = fmt.Errorf("select replaceable victim: selected=%v error=%w", selected, selectError)
@@ -642,7 +640,7 @@ func (driver *Driver) exerciseUnresponsiveRemoteOwnerV04() error {
 
 		return nil
 	}
-	victim, selected, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, selectionError := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if selectionError != nil || !selected {
 		driver.v04Error = fmt.Errorf("select unresponsive remote owner: selected=%v error=%w", selected, selectionError)
 
@@ -656,7 +654,7 @@ func (driver *Driver) exerciseUnresponsiveRemoteOwnerV04() error {
 		if waitError == nil {
 			driver.v04Error = errors.New("unresponsive owner did not produce a bounded observation error")
 		}
-		if next, nextSelected, nextError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); nextError != nil || nextSelected {
+		if next, nextSelected, nextError := guard.SelectPressureVictim(root, guard.ShedCausePressure); nextError != nil || nextSelected {
 			driver.v04Error = fmt.Errorf("unresponsive shedding owner did not remain global barrier: victim=%+v selected=%v error=%w", next, nextSelected, nextError)
 		}
 	}

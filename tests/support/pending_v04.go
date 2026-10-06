@@ -377,7 +377,7 @@ func requireV04ThresholdAuthority(root string) error {
 		ReservationPolicy: v04ReservationPolicy(), ReservationPlan: v04Plan(1, 256*policy.MiB),
 		ChildStdin: bytes.NewBuffer(nil), ChildStdout: &bytes.Buffer{}, ChildStderr: &bytes.Buffer{}, Stderr: &bytes.Buffer{},
 	})
-	if err != nil || exitCode != guard.CapacityDeferredExitCode {
+	if stop, bare := policy.BareStop(err); exitCode != 0 || !bare || stop.Reason != policy.ReasonCapacityDeferred {
 		return fmt.Errorf("threshold-blocked reservation did not defer: exit=%d error=%w", exitCode, err)
 	}
 	if _, statError := os.Stat(childMarker); !errors.Is(statError, os.ErrNotExist) {
@@ -427,7 +427,7 @@ func requireV04NewestEphemeral(root string) error {
 		return err
 	}
 	defer func() { _ = guard.ReleaseReservation(root, newer) }()
-	victim, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != newer.Token {
 		return fmt.Errorf("newest ephemeral was not selected first: victim=%+v selected=%v error=%w", victim, selected, err)
 	}
@@ -446,7 +446,7 @@ func requireV04NewestService(root string) error {
 		return err
 	}
 	defer func() { _ = guard.ReleaseReservation(root, newer) }()
-	victim, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != newer.Token {
 		return fmt.Errorf("newest service was not selected: victim=%+v selected=%v error=%w", victim, selected, err)
 	}
@@ -466,7 +466,7 @@ func requireV04TransactionalProtection(root string) error {
 	if err = guard.ActivateReservation(root, transactional, 23_001); err != nil {
 		return err
 	}
-	if _, selected, selectionError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); selectionError != nil || selected {
+	if _, selected, selectionError := guard.SelectPressureVictim(root, guard.ShedCausePressure); selectionError != nil || selected {
 		return fmt.Errorf("transactional owner was selected: selected=%v error=%w", selected, selectionError)
 	}
 	other, acquireError := guard.AcquireReservation(
