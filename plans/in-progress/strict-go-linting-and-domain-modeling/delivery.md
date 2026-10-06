@@ -2070,12 +2070,16 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
 
 - [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-24]`
   - Result: `worktree/release-v0.8.5` from `origin/main` at `2555fc1`.
-- [ ] `[AI]` Before cutting, confirm every bug-fix plan this release carries has merged:
+- [x] `[AI]` Before cutting, confirm every bug-fix plan this release carries has merged:
       `fix-cancelled-waiter-cleanup-flake`, `fix-degraded-lineage-scenario-flake`, and
       `fix-distinct-root-lock-test-flake`, plus any later one under `plans/in-progress/fix-*` (added 2026-10-06 at the
       owner's direction that every flake found is fixed); proof: each fix pull request reads `MERGED` and its merge
       commit is an ancestor of this branch's head. If one has not merged, wait for it rather than cut without it.
       `[AC-24]`
+  - Result: (2026-10-07) #141 `aa274ee` (`fix-cancelled-waiter-cleanup-flake`), #142 `c2a08ca`
+    (`fix-degraded-lineage-scenario-flake`), #143 `4e1e7d5` (`fix-distinct-root-lock-test-flake`), and #144 `6b28306`
+    (`fix-corrupt-waiter-identity-test-flake`, the one later fix plan) read `MERGED`, and `git merge-base --is-ancestor`
+    exits `0` for each against this branch's head and against the tag `v0.8.5`.
 - [x] `[AI]` Add the `v0.8.5` entry to `CHANGELOG.md`, or complete and date the `## [v0.8.5] — Unreleased` entry the
       cancelled-waiter fix added — `Fixed`: the `minimal`-lineage floor, naming the configured profiles whose exit `125`
       becomes an admission — and name `v0.8.5` as the current release in the five pages the file impact lists; proof:
@@ -2129,17 +2133,28 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
     `internal/host/collector.go`. Repairs committed as `91b3784` and the commit after it; formatter, linter, line
     length, word budget, and internal links pass, and `git status --porcelain` printed only this plan's record.
 
-- [ ] `[AI]` Land it: data-safety inspection and commit, push review and push, screened draft pull request, ready,
+- [x] `[AI]` Land it: data-safety inspection and commit, push review and push, screened draft pull request, ready,
       `Quality gate` on the head, the leak review for that head, rebase merge, and _Reconcile_; proof: the merge commit
       and `0 0` recorded. `[AC-24]`
-- [ ] `[AI]` Move this worktree onto the merge commit, because the rebase merge leaves it on `worktree/release-v0.8.5`
+  - Result: (2026-10-07) two pull requests. #146 (head `206f427`, `Quality gate` `success` in run 37530951853, `pass`
+    leak review on that head) merged as `02caddb`; reconcile `0 0`. The manual test below found F1, which blocked the
+    tag, so `worktree/release-v0.8.5-changelog` carried a `CHANGELOG.md`-only fix as #147 (head `ecf5591`,
+    `Quality gate` `success` in run 37535560635, `pass` leak review) merged as `456d24b`; reconcile `0 0`. Each branch
+    was deleted locally after its merge; `origin` had already removed it.
+- [x] `[AI]` Move this worktree onto the merge commit, because the rebase merge leaves it on `worktree/release-v0.8.5`
       at the pre-rebase commit and `scripts/build-release.sh` refuses unless its commit equals the checkout's `HEAD` and
       the checkout is clean, untracked files included: `git switch --detach <merge commit>`; proof: `git rev-parse HEAD`
       prints the merge commit recorded above and `git status --porcelain --untracked-files=all` prints nothing.
       `[AC-24]`
-- [ ] `[AI]` Run `scripts/test.sh` in this worktree, now a clean detached checkout of the merge commit; proof: exit `0`
+  - Result: (2026-10-07) `git switch --detach 02caddb`, then `git switch --detach 456d24b` after #147;
+    `git rev-parse HEAD` printed `456d24bc2a20ee23a7b81746c1789133cd5c3a97` and
+    `git status --porcelain --untracked-files=all` printed nothing.
+- [x] `[AI]` Run `scripts/test.sh` in this worktree, now a clean detached checkout of the merge commit; proof: exit `0`
       and `git status --porcelain --untracked-files=all` still printing nothing. `[AC-24]`
-- [ ] `[AI]` Manual exploratory test of the release candidate, added at the owner's direction on 2026-10-06 because
+  - Result: (2026-10-07) at `456d24b`: exit `0`, selected production line coverage 99.38% (955/961), and
+    `git status --porcelain --untracked-files=all` still printed nothing. A first run at `02caddb` was stopped once F1
+    superseded that commit.
+- [x] `[AI]` Manual exploratory test of the release candidate, added at the owner's direction on 2026-10-06 because
       every repository on the workstation runs HIPPO: build `hippo` from this clean detached checkout into
       `local-tmp/manual-v0.8.5/`, fetch the published `v0.8.4` binary beside it as the baseline, and run both under an
       isolated `HIPPO_ROOT` in `local-tmp/` through these charters: `run` of a passing, a failing, and a signalled child
@@ -2152,23 +2167,75 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
       charter with the observed status, code, and output against the baseline; every difference from `v0.8.4` is the
       intended floor and owner-share fix or a finding, and any finding blocks the tag until a new pull request fixes it.
       `[AC-24]`
-- [ ] `[AI]` Screen the tag name and the notes
+  - Result: (2026-10-07) session log `local-tmp/manual-v0.8.5/session.md`: the candidate built from `02caddb` against
+    the published `v0.8.4` binary, each charter in its own isolated `HIPPO_ROOT`, plus a go1.26.1 build of the candidate
+    to cross-check the toolchain and charter h for the two narrowings the `CHANGELOG.md` entry names. `456d24b` differs
+    from `02caddb` only in `CHANGELOG.md`, so the results hold for the tagged commit.
+
+    | Charter                                  | `v0.8.4`                      | `v0.8.5` candidate    | Verdict       |
+    | ---------------------------------------- | ----------------------------- | --------------------- | ------------- |
+    | a. `run` pass, fail, `exit 3`, SIGTERM   | `0`, `1`, `3`, `143`          | identical             | same          |
+    | b. `status --json`, six profiles         | `profile` objects             | byte-identical        | same          |
+    | c. `history` over unknown words          | listed; unknown filter `2`    | byte-identical        | same          |
+    | c. non-string history `outcome`          | `125`, `of type string`       | `125`, names the type | intended text |
+    | d. `minimal`-lineage misfit, four shapes | `125`, replan-required        | `0`, the floor        | intended      |
+    | d. with a `fallback`; transactional      | `0`; `125`                    | identical             | same          |
+    | e. owner shares, `balanced` lineage      | 3 CPU and 7 GiB, and variants | identical             | same          |
+    | f. unknown `coordination.mode`           | `125`, schema wording         | `125`, mode wording   | intended text |
+    | f. empty or omitted mode                 | `0`; schema 1 `125`           | identical             | same          |
+    | f. non-string `mode` or `extends`        | `125`, `of type string`       | `125`, names the type | intended text |
+    | g. nine invalid invocations              | `2`, `hippo.args.invalid`     | byte-identical        | same          |
+    | h. the two name-lineage narrowings       | `0`, floored as `minimal`     | `125` or falls back   | intended (D5) |
+    | h. `minimal`, no `extends` or `fallback` | `0`, the floor                | identical             | same          |
+
+    Every difference is the intended floor or diagnostic text; the owner-share charter shows none, as the `CHANGELOG.md`
+    entry records. Finding F1 (low, documentation): the entry quoted a `JSON value must be string type` suffix that only
+    a go1.27.1 build prints, while the release toolchain is go1.26.1 from `go.mod`. It blocked the tag until #147
+    corrected the entry.
+- [x] `[AI]` Screen the tag name and the notes
       `gh api repos/wahidyankf/hippo/releases/generate-notes -f tag_name=v0.8.5 --jq .body` returns with
       `scripts/public-safety/outbound-preflight.sh --surface release`; proof: exit `0`. `[AC-24]`
-- [ ] `[AI]` In this detached worktree, run `./scripts/build-release.sh v0.8.5 <merge commit> <output-dir>` and
+  - Result: (2026-10-07) the notes generated for `v0.8.5` at `456d24b` and the tag name:
+    `scripts/public-safety/outbound-preflight.sh --surface release` exits `0`, and so does the workstation's outbound
+    preflight.
+- [x] `[AI]` In this detached worktree, run `./scripts/build-release.sh v0.8.5 <merge commit> <output-dir>` and
       `./tests/artifacts/release-assets.sh <output-dir> v0.8.5 <merge commit>`, with `<output-dir>` the ignored
       `local-tmp/release-v0.8.5` so the checkout stays clean; proof: both exit `0`. `[AC-24]`
-- [ ] `[AI]` Create the annotated tag `v0.8.5` on the merge commit and push it; proof: `release.yml`'s run and the
+  - Result: (2026-10-07) at `456d24b`: `./scripts/build-release.sh v0.8.5 456d24b... local-tmp/release-v0.8.5` and
+    `./tests/artifacts/release-assets.sh local-tmp/release-v0.8.5 v0.8.5 456d24b...` both exit `0`.
+- [x] `[AI]` Create the annotated tag `v0.8.5` on the merge commit and push it; proof: `release.yml`'s run and the
       published release's `checksums.txt` recorded here. `[AC-24]`
-- [ ] `[AI]` Run the commands in `docs/how-to/install-a-pinned-release.md` for this platform in an empty directory;
+  - Result: (2026-10-07) annotated tag `v0.8.5` (`f24bba1`) on `456d24b`, pushed; `release.yml` run 37539705716
+    `success` on `456d24b`; published at <https://github.com/wahidyankf/hippo/releases/tag/v0.8.5>. `checksums.txt`:
+
+    ```text
+    70f6ea5475adf5b818ed1be46e18ce481493cfecae635b1fb0ca5f806c6aefba  hippo_v0.8.5_darwin_amd64.tar.gz
+    498beba385fc887ac75f41e92ae091854a92354570b2c2c48109877b5ad34862  hippo_v0.8.5_darwin_arm64.tar.gz
+    13aac6777ea838a80eb699bc00816ca7f59ae6e1be4bbefd007fa15666cb7c4c  hippo_v0.8.5_linux_amd64.tar.gz
+    1b3e60aa5f491228487f8994efe237d5c2cbbf42b32d69c46cdb5295b683b6f2  hippo_v0.8.5_linux_arm64.tar.gz
+    ```
+
+    The local build's digests differ because it used go1.27.1; `release.yml` builds with go1.26.1 from `go.mod`, and the
+    published binary reports go1.26.1.
+- [x] `[AI]` Run the commands in `docs/how-to/install-a-pinned-release.md` for this platform in an empty directory;
       proof: the checksum line reads `OK` and `version --json` names `v0.8.5`. `[AC-24]`
+  - Result: (2026-10-07) in an empty directory: `hippo_v0.8.5_darwin_arm64.tar.gz: OK`, and `version --json` names
+    `v0.8.5` with commit `456d24bc2a20ee23a7b81746c1789133cd5c3a97`.
 
 > **Pause Safety**: `v0.8.5` is published and never replaced. Consumer repins are coordinated outside this repository.
 
 ## Phase 8: Knowledge Capture and Execution Check
 
-- [ ] `[AI]` Route every `learnings.md` entry to one durable owner or discard it with a reason; proof: no unresolved
+- [x] `[AI]` Route every `learnings.md` entry to one durable owner or discard it with a reason; proof: no unresolved
       entry. `[AC-25]`
+  - Result: (2026-10-07) all 50 entries in `learnings.md` end with a dated **Resolution**: most are already owned
+    (governance pages, doc comments, tests, `specs/`, `CHANGELOG.md`, the four bug-fix plans), some are promoted
+    (comments in `tests/support/domain_literals.go`, `blockers_v04.go`, `release_v04.go`, and `pending_v04.go`; one
+    sentence each in `release-cut.md` Preconditions and `gherkin-implementation-review.md` Assertion Theater, through
+    Rules Propagation with no conflict), and the rest discarded with a reason. The Unit 6 diagnostic entry is corrected:
+    its suffix was a go1.27.1 measurement (F1, #147). The plan's `tech-docs/` are archived with it and so own nothing,
+    which supersedes the Unit 6 close note that left routing into `tech-docs/` to this item; the file impact additions
+    are discarded as recorded in each unit's results.
 - [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md) against AC-01 to
       AC-25; proof: its verdict line recorded here, permitting archival. `[AC-25]`
 
