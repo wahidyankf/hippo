@@ -72,7 +72,7 @@ repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-ga
 ```text
 internal/policy/reason.go              [N] Reason, Stop, Stopped, legacy integer codec
 internal/policy/profiles.go            [E] Resolution.Reason; constants 76 and 78 and bare 73 removed
-internal/guard/run.go                  [E] constants 73, 74, 75 and callerShedCode removed; Stop returns
+internal/guard/run.go                  [E] constants 73, 74, 75 and callerShedReason removed; Stop returns
 internal/guard/reservation.go          [E] ShedCause and its strict 73/75 codec
 internal/cli/status.go                 [E] reasonCode and reasonMessage switches; nolint removed
 internal/cli/status_test.go            [N] every reason to code and status
@@ -88,10 +88,11 @@ tests/support/blockers_v04.go          [E] typed expectations
 tests/support/degraded_lineage.go      [E] typed expectations
 tests/support/driver.go                [E] typed expectations
 tests/support/history_v05.go           [E] typed expectations
-tests/support/loaded_gate.go           [E] typed expectations
+tests/support/loaded_gate.go           [E] typed expectations; test-local near-miss deferral status 75
 tests/support/pending_v04.go           [E] typed expectations
 tests/support/review_v04.go            [E] typed expectations
-specs/architecture.md                  [E] only if the shedding-cause bullet no longer reads true
+specs/architecture.md                  [E] only if the shedding-cause bullet no longer reads true (it does)
+internal/cli/application.go            [E] a bare stop still returns a nil error (Unit 3)
 ```
 
 ## Unit 4 — Profile Lineage
