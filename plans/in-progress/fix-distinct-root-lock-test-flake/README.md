@@ -477,7 +477,7 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
     uses, exit `0` (`uptime` load 13.07 before, 7.41 after): selected production line coverage 99.35% (911/917), race
     detector clean, ending with "No vulnerabilities found."
 
-- [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
+- [x] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
       `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
       `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
       in-flight Unit 5 adds tests to `internal/guard/run_test.go`, and the cancelled-waiter fix adds one beside this
@@ -485,9 +485,17 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
       commits; proof: `git status --porcelain` prints nothing before the rebase, `git ls-remote --tags origin v0.8.5`
       prints nothing, and the reruns exit `0`. If the tag already exists, land anyway and the Recovery item in Phase 5
       fires. `[AC-06]` `[AC-07]` `[AC-08]`
-- [ ] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
+  - Result: (2026-10-07) the record so far was committed as `7a262ef` on a clean tree, and
+    `git ls-remote --tags origin v0.8.5` printed nothing. Main had gained the linting plan's Unit 5 (`e261965`), the
+    cancelled-waiter fix (`aa274ee`, adding its test beside this one), and the degraded-lineage fix (`c2a08ca`), so the
+    branch was rebased without conflict to `1221319`: the _Lock test_ passed 3 of 3, the _Neighbour tests_ passed under
+    `-race`, and the _Full gate_ exited `0` at load 6.5–14.3 with selected production line coverage 99.36% (928/934),
+    race detector clean, ending with "No vulnerabilities found."
+- [x] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-05]`
-- [ ] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
+  - Result: (2026-10-07) `git diff --name-only origin/main...HEAD` at `c2a08ca` prints `internal/guard/run_test.go` and
+    this README: exactly the File Impact paths.
+- [x] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
       results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
       `git status --porcelain` prints nothing. `[AC-08]`
 
