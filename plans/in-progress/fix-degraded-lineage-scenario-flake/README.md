@@ -488,22 +488,42 @@ Phases 1–4 ticked and Phase 5 open.
 
 ### Phase 5: Release Through v0.8.5
 
-- [ ] `[AI]` Land unit 2 with _Land_; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both
+- [x] `[AI]` Land unit 2 with _Land_; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both
       recorded here by unit 4, since the merged copy cannot hold its own merge. The fix must merge before the linting
       plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-05]`
-- [ ] `[AI]` Immediately after that merge, run
+  - Result: (2026-10-07) pull request #142, head `82906ac` on base `aa274ee`, merged by rebase as `c2a08ca` (fix commit
+    `6b9fd87`, with `bfb8325` and `945e177` before it), before `v0.8.5` was tagged. `Quality gate` passed on that head
+    in run `37505749317` (`PR Quality Gate`, every job passing); the earlier run `37505737306` on the same head was
+    cancelled when superseded, and its `Quality gate` job failed only on the six cancelled results it aggregates. The
+    leak review posted `pass` for head `82906ac` (all three counts `0`). _Reconcile_ read `0 0`.
+- [x] `[AI]` Immediately after that merge, run
       [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for this
       worktree, at the owner's direction: confirm nothing is unpushed or running, then remove the worktree with
       `git worktree remove` without `--force`, and delete `worktree/fix-degraded-lineage-scenario-flake` and `...-fix`
       locally and on `origin`; proof: `git worktree list` omits it,
       `git branch --list 'worktree/fix-degraded-lineage-*'` and
       `git ls-remote origin 'refs/heads/worktree/fix-degraded-lineage-*'` print nothing. `[AC-07]`
-- [ ] `[AI]` Provision `worktrees/fix-degraded-lineage-scenario-flake-record` from `origin/main` on branch
+  - Result: (2026-10-07) right after the merge, with nothing unpushed or running in it, the worktree was removed with
+    `git worktree remove` (no `--force`) and both local branches deleted; `origin` had already deleted the remote
+    branches on merge. Rerun from the record worktree: `git worktree list` omits
+    `worktrees/fix-degraded-lineage-scenario-flake`, and
+    `git ls-remote origin 'refs/heads/worktree/fix-degraded-lineage-*'` prints nothing. The local glob now prints only
+    the record branch provisioned below; naming the two branches,
+    `git branch --list worktree/fix-degraded-lineage-scenario-flake worktree/fix-degraded-lineage-scenario-flake-fix`
+    prints nothing.
+- [x] `[AI]` Provision `worktrees/fix-degraded-lineage-scenario-flake-record` from `origin/main` on branch
       `worktree/fix-degraded-lineage-scenario-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
       `git branch --show-current` prints the branch. `[AC-07]`
-- [ ] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
+  - Result: (2026-10-07) after `git fetch origin --prune`, provisioned from `origin/main` at `456d24b`, the commit
+    `v0.8.5` peels to; `npm ci` ran under the consumer workstation's guard. `git branch --show-current` prints
+    `worktree/fix-degraded-lineage-scenario-flake-record`.
+- [x] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
       `git merge-base --is-ancestor <unit 2 merge commit> v0.8.5` exits `0`, and the release URL and the tag's peeled
       commit are recorded here. `[AC-06]`
+  - Result: (2026-10-07) <https://github.com/wahidyankf/hippo/releases/tag/v0.8.5>, published by `release.yml` run
+    `37539705716`: the annotated tag (tag object `f24bba1`) peels to `456d24bc2a20ee23a7b81746c1789133cd5c3a97`, the
+    merge of #147. `git merge-base --is-ancestor c2a08ca v0.8.5` exits `0`, so the release's full gate ran with this
+    fix. As planned, `git show v0.8.5:CHANGELOG.md` carries no entry for it, and no consumer repins for it.
 - [ ] `[AI]` Recovery, dormant until triggered. Trigger: `v0.8.5` is published without unit 2's merge commit (the
       ancestry check above exits `1`). Then cut no patch release, because the binary is unchanged: record in the record
       worktree's copy of this plan that the fix is test-only with no release content and that `v0.8.5`'s full gate ran
@@ -511,11 +531,16 @@ Phases 1–4 ticked and Phase 5 open.
       `git merge-base --is-ancestor <unit 2 merge commit> origin/main` exits `0` and the `v0.8.5` check exits `1`, both
       recorded there, so the next release cut from `origin/main` carries the fix. Otherwise: a dated, evidenced
       `Not triggered`. `[AC-06]`
+  - Not triggered (2026-10-07): `git merge-base --is-ancestor c2a08ca v0.8.5` exits `0`; `v0.8.5` carries the fix.
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
+- [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-07]`
+  - Result: (2026-10-07) four entries, all discarded with reasons, none needing a new owner: the first is already owned
+    by `TestDegradedAdmissionIgnoresARunnerStall`; the `rtk` entry concerns the workstation, not this repository, and
+    the other two are specific to this execution. A search of `repo-governance/`, `docs/`, `specs/`, and `tests/` found
+    no page that should hold any of them.
 - [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
       verdict line recorded here. `[AC-07]`
 
@@ -538,18 +563,21 @@ before archival.
   `balanced` row of `TestDegradedAdmissionIgnoresARunnerStall`; both scenarios and the lineage test keep passing on an
   unloaded runner, since only that test slows the readings. That is the design (the scenarios stay load-independent
   specifications), but it makes the stall test the sole mutation guard of the clock. Route: none needed; discard, the
-  plan's break test 1 already pins it.
+  plan's break test 1 already pins it. **Discarded (2026-10-07):** already owned by the test it names, whose comment
+  says the window counts the guard's readings, so a slow runner admits balanced's lineage; nothing more to promote.
 - (2026-10-06) _A hoisted collector, not an inline one._ Setting `stall` inside the multi-line `advancingCollector`
   literal in `guard.RunConfig` made `gofmt` realign every neighbouring field of the struct literal. `guardUnder` builds
   the collector in a local `collector` instead, so the diff stays minimal; the plan's wording ("set `stall` in
-  `guardUnder`'s collector") holds.
+  `guardUnder`'s collector") holds. **Discarded (2026-10-07):** a one-off detail of this diff's shape; the code records
+  the result and no rule would change.
 - (2026-10-06) _`rtk` rewrites `go test` and hides `--- PASS` lines._ The pre-tool hook turns `go test -v` into a JSON
   summary, which cannot show the 50 `--- PASS` lines Phase 4's checkpoint counts. `rtk proxy go test …` prints Go's raw
-  output. Route: Phase 4 executor; no repository change.
+  output. Route: Phase 4 executor; no repository change. **Discarded (2026-10-07):** the hook is the executing
+  workstation's, not this repository's, and the plan's commands are correct as written.
 - (2026-10-06) _The deferral rows now cost 1.4 s._ With the window logical, `constrained` takes 101 stalled readings of
   10 ms each (1.40–1.48 s per run) where the old fixture ended at 100 ms of wall clock; the scenarios themselves fell
   from 0.12–0.17 s to 0.02–0.08 s. 50 repeats of the _Regression test_ add about a minute. Route: none; discard, the
-  cost is the stall the test asks for.
+  cost is the stall the test asks for. **Discarded (2026-10-07):** specific to this test, whose cost is its stall.
 
 ## Directory Map
 
