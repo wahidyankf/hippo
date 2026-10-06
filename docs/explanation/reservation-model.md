@@ -14,7 +14,7 @@ simple, and wasteful — a two-core test suite blocks an unrelated one-core buil
 fixed CPU-and-memory _vector_ from a shared ledger. Several owners run concurrently as long as their vectors fit
 together.
 
-The two cannot be mixed within one state root. A v1 client that meets a live incompatible epoch exits `125`, naming
+The two cannot be mixed within one state root. A client that meets a live incompatible epoch exits `125`, naming
 `hippo.coordination.protocol-mismatch`. It preserves the existing state and starts no child. This is what lets a host
 migrate: old sessions drain, and only then does the new mode take over. HIPPO never creates a mixed epoch and never
 describes protocol incompatibility as transient capacity.

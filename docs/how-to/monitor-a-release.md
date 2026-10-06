@@ -15,7 +15,8 @@ Silent success means the host has the headroom to proceed. A stable exit code me
 says why:
 
 - `125` naming `hippo.policy.replan-required` when the first reading does not fit the requested profile in memory, free
-  disk, or CPU. A release never falls back to a safer profile, so the profile or the host has to change.
+  disk, or, on macOS, CPU; on Linux the first reading has no CPU figure, so busy CPU there is the `124` below. A release
+  never falls back to a safer profile, so the profile or the host has to change.
 - `124` naming `hippo.limit.storage-blocked` when the deployment disk is below the immutable 256 MiB floor at the first
   reading, or falls below the release reserve after a first reading that fit, so free space first.
 - `124` naming `hippo.limit.capacity-deferred` when memory or CPU did not settle after a first reading that fit, so a
