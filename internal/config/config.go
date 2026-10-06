@@ -54,8 +54,42 @@ type Result struct {
 	Source       string
 }
 
+// coordinationMode is the mode a document names for its coordination. The type
+// is closed: a schema-2 or schema-3 document may name no mode, an empty one, or
+// reservation, so a document naming anything else is refused where it is
+// decoded, as an unreadable configuration, rather than carried as text until
+// some later comparison.
+type coordinationMode uint8
+
+const (
+	// coordinationModeDefault is no mode named: the key omitted, or the empty
+	// string. Either way the document gets reservation coordination.
+	coordinationModeDefault coordinationMode = iota
+	// coordinationModeReservation names reservation coordination.
+	coordinationModeReservation
+)
+
+// reservationModeName is the one mode a document may name, and the mode its
+// coordination reports.
+const reservationModeName = "reservation"
+
+// UnmarshalText accepts exactly the texts a document has always been able to
+// carry here, the empty string and reservation, and refuses every other.
+func (mode *coordinationMode) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "":
+		*mode = coordinationModeDefault
+	case reservationModeName:
+		*mode = coordinationModeReservation
+	default:
+		return fmt.Errorf("unsupported coordination mode %q", text)
+	}
+
+	return nil
+}
+
 type coordinationFile struct {
-	Mode                 string                     `json:"mode,omitempty"`
+	Mode                 coordinationMode           `json:"mode,omitempty"`
 	MaxCPU               int                        `json:"maxCpu,omitempty"`
 	MaxMemoryMiB         int64                      `json:"maxMemoryMiB,omitempty"`
 	MaxActiveOwners      int                        `json:"maxActiveOwners,omitempty"`
@@ -120,7 +154,7 @@ func reservationCoordination() Coordination {
 
 	return Coordination{
 		SchemaVersion:   schemaVersionReservation,
-		Mode:            "reservation",
+		Mode:            reservationModeName,
 		MaxActiveOwners: defaultMaxActiveOwners,
 		OwnerShares:     shares,
 	}
@@ -221,9 +255,6 @@ func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, erro
 	configured := decoded.Coordination
 	if configured == nil {
 		configured = &coordinationFile{}
-	}
-	if configured.Mode != "" && configured.Mode != "reservation" {
-		return Coordination{}, fmt.Errorf("unsupported schema %d coordination mode %q", decoded.SchemaVersion, configured.Mode)
 	}
 	if configured.MaxCPU < 0 || configured.MaxMemoryMiB < 0 || configured.MaxActiveOwners < 0 {
 		return Coordination{}, errors.New("reservation limits must be nonnegative")
