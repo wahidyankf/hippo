@@ -337,6 +337,9 @@ root, is listed with the word exactly as recorded, never refused and never repla
 `outcome` never qualifies for owner promotion, and `--outcome` cannot select it, because the filter takes only the
 [outcome values](#development-lifetime-summary) this version writes.
 
+A row whose `taskClass` this version does not know is listed the same way, as recorded, and `--class` cannot select it,
+because the filter takes only the four classes [`hippo history`](./cli.md#hippo-history) names.
+
 ## Safety receipt
 
 ```json
