@@ -588,11 +588,11 @@ func requireV04SummaryAndRetention(root string) error {
 		return err
 	}
 	writer.SetContext(policy.Resolution{RequestedProfile: profileBalanced, ResolvedProfile: profileBalanced, Concurrency: 2}, "")
-	writer.SetReservationContext(session, totals.ActiveOwners, "admitted")
+	writer.SetReservationContext(session, totals.ActiveOwners, evidence.BudgetOutcomeAdmitted)
 	if err = writer.Append(healthySample(time.Now())); err != nil {
 		return err
 	}
-	summary, err := writer.Finalize(policy.TaskEphemeral, "passed", 0)
+	summary, err := writer.Finalize(policy.TaskEphemeral, evidence.OutcomePassed, 0)
 	if err != nil || summary.SchemaVersion != 5 || summary.AllocatedCPU != 2 || summary.PeakOwnerCount != 1 {
 		return fmt.Errorf("schema 5 development summary: %+v: %w", summary, err)
 	}

@@ -116,7 +116,7 @@ func (driver *Driver) interruptedSummaries() (map[string]string, error) {
 	}
 	outcomes := map[string]string{}
 	for _, row := range rows {
-		outcomes[row.Source] = row.Outcome
+		outcomes[row.Source] = row.Outcome.String()
 	}
 
 	return outcomes, nil
@@ -163,8 +163,8 @@ func (driver *Driver) requireHistoryOutcomeV082(outcome string) error {
 		if decodeError := json.Unmarshal([]byte(line), &row); decodeError != nil {
 			return decodeError
 		}
-		if row.Outcome != outcome {
-			return fmt.Errorf("history --outcome %s listed a %s row", outcome, row.Outcome)
+		if row.Outcome.String() != outcome {
+			return fmt.Errorf("history --outcome %s listed a %s row", outcome, row.Outcome.String())
 		}
 		listed = append(listed, row.Source)
 	}
