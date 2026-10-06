@@ -32,7 +32,7 @@ func TestReadHistoryAcceptsLegacyMultilineArchive(t *testing.T) {
 	finished := now.Add(-48 * time.Hour)
 	summary := Summary{
 		SchemaVersion: 5, RunID: "legacy-pretty", Source: "hippo", ResourceTier: "standard",
-		TaskClass: "ephemeral", Outcome: "passed", FinishedAt: finished.Format(time.RFC3339Nano),
+		TaskClass: "ephemeral", Outcome: Recorded(OutcomePassed), FinishedAt: finished.Format(time.RFC3339Nano),
 	}
 	encoded, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
@@ -57,7 +57,7 @@ func TestCleanupCompactsRawAndPriorDaySummaries(t *testing.T) {
 	old := now.Add(-48 * time.Hour)
 	writeHistoryFixture(t, root, "run-one", Summary{
 		SchemaVersion: 5, RunID: "run-one", Source: "hippo", ResourceTier: "standard",
-		TaskClass: "ephemeral", Outcome: "passed", FinishedAt: old.Format(time.RFC3339Nano),
+		TaskClass: "ephemeral", Outcome: Recorded(OutcomePassed), FinishedAt: old.Format(time.RFC3339Nano),
 	}, old)
 	raw := filepath.Join(root, "run-one.jsonl")
 	if err := os.WriteFile(raw, []byte("{\"sample\":1}\n"), 0o600); err != nil {
@@ -129,7 +129,7 @@ func TestPromotionRequiresLastHealthyOverlapsAcrossThreeSources(t *testing.T) {
 		writeHistoryFixture(t, root, "run-"+time.Duration(index).String(), Summary{
 			SchemaVersion: 5, RunID: "run-" + time.Duration(index).String(),
 			Source: []string{"hippo", "rhino", "ose-public"}[index%3], ResourceTier: "standard",
-			TaskClass: "ephemeral", Outcome: "passed", FinishedAt: finished.Format(time.RFC3339Nano),
+			TaskClass: "ephemeral", Outcome: Recorded(OutcomePassed), FinishedAt: finished.Format(time.RFC3339Nano),
 			PeakOwnerCount: 2, AvailableNonCompressedEstimateMinBytes: &minimum,
 			MemoryPressureLevelMax: &pressure, CPUUtilizationP95Percent: 70,
 		}, finished)
@@ -146,7 +146,7 @@ func TestPromotionRequiresLastHealthyOverlapsAcrossThreeSources(t *testing.T) {
 	unsafe := now.Add(time.Minute)
 	writeHistoryFixture(t, root, "run-unsafe", Summary{
 		SchemaVersion: 5, RunID: "run-unsafe", Source: "hippo", ResourceTier: "heavy",
-		TaskClass: "ephemeral", Outcome: "pressure-shed", FinishedAt: unsafe.Format(time.RFC3339Nano),
+		TaskClass: "ephemeral", Outcome: Recorded(OutcomePressureShed), FinishedAt: unsafe.Format(time.RFC3339Nano),
 		PeakOwnerCount: 2, AvailableNonCompressedEstimateMinBytes: &minimum,
 		MemoryPressureLevelMax: &pressure, CPUUtilizationP95Percent: 70,
 	}, unsafe)
@@ -156,28 +156,95 @@ func TestPromotionRequiresLastHealthyOverlapsAcrossThreeSources(t *testing.T) {
 	}
 }
 
+func TestHistoryListsAnUnknownOutcomeAsRecordedAndNeverPromotesOnIt(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	finished := now.Add(-time.Minute)
+	minimum := int64(12 * 1024 * 1024 * 1024)
+	pressure := 1
+	healthy := Summary{
+		SchemaVersion: 5, RunID: "run-healthy", Source: "hippo", ResourceTier: "standard", TaskClass: "ephemeral",
+		Outcome: Recorded(OutcomePassed), BudgetOutcome: RecordedBudget(BudgetOutcomeAdmitted),
+		FinishedAt: finished.Format(time.RFC3339Nano), PeakOwnerCount: 2, AvailableNonCompressedEstimateMinBytes: &minimum,
+		MemoryPressureLevelMax: &pressure, CPUUtilizationP95Percent: 70,
+	}
+	criteria := PromotionCriteria{
+		CompletedRuns: 1, MinimumSources: 1, MinimumAvailableMemoryBytes: 10 * 1024 * 1024 * 1024,
+		MaximumCPUP95Percent: 75,
+	}
+
+	// The control: the same run, recorded as a run this version knows passed.
+	control := t.TempDir()
+	writeHistoryFixture(t, control, "run-healthy", healthy, finished)
+	evaluation, err := EvaluatePromotion(control, criteria, now)
+	if err != nil || !evaluation.Eligible {
+		t.Fatalf("a passed overlap is not eligible: evaluation=%+v error=%v", evaluation, err)
+	}
+
+	// The same bytes with the one word a later version might write instead.
+	encoded, err := json.Marshal(healthy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := bytes.Replace(encoded, []byte(`"outcome":"passed"`), []byte(`"outcome":"future-outcome"`), 1)
+	if bytes.Equal(future, encoded) {
+		t.Fatalf("the fixture does not record the outcome as passed: %s", encoded)
+	}
+	root := t.TempDir()
+	path := filepath.Join(root, "run-healthy.summary.json")
+	if err = os.WriteFile(path, append(future, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chtimes(path, finished, finished); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := ReadHistory(root, Query{Since: HistoryRetention, Now: now})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("history rows=%+v error=%v", rows, err)
+	}
+	if rows[0].Outcome.String() != "future-outcome" || rows[0].Outcome.Outcome() != OutcomeUnknown ||
+		rows[0].BudgetOutcome.String() != "admitted" || rows[0].BudgetOutcome.BudgetOutcome() != BudgetOutcomeAdmitted {
+		t.Fatalf("the row reads outcome=%q (%d) budget=%q, want the recorded words", rows[0].Outcome.String(),
+			rows[0].Outcome.Outcome(), rows[0].BudgetOutcome.String())
+	}
+	listed, err := json.Marshal(rows[0])
+	if err != nil || !bytes.Contains(listed, []byte(`"outcome":"future-outcome"`)) ||
+		!bytes.Contains(listed, []byte(`"budgetOutcome":"admitted"`)) {
+		t.Errorf("history lists the row as %s (%v), want the recorded words back", listed, err)
+	}
+	if rows, err = ReadHistory(root, Query{Since: HistoryRetention, Now: now, Outcome: OutcomePassed}); err != nil || len(rows) != 0 {
+		t.Errorf("the passed filter listed %+v (%v), want no row for an outcome it does not know", rows, err)
+	}
+	evaluation, err = EvaluatePromotion(root, criteria, now)
+	if err != nil || evaluation.Eligible || evaluation.Reason != "recent-overlap-unhealthy" {
+		t.Errorf("an unknown outcome counted toward promotion: evaluation=%+v error=%v", evaluation, err)
+	}
+}
+
 func TestAggregationKeepsACancelledRunApartFromADeferral(t *testing.T) {
 	// A cancellation, a failed admission, and a capacity deferral never
 	// started anything, but they are different events, and aggregating the
 	// oldest day must not merge them or the aggregate would report one as
 	// another.
 	rows := aggregateHistoryRows([]Summary{
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "admission-cancelled"},
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "admission-cancelled"},
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "capacity-deferred"},
-		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: "admission-failed"},
+		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionCancelled)},
+		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionCancelled)},
+		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeCapacityDeferred)},
+		{Source: "repo", TaskClass: "ephemeral", ResourceTier: "light", Outcome: Recorded(OutcomeAdmissionFailed)},
 	})
 	counts := map[string]int{}
 	for _, row := range rows {
-		counts[row.Outcome] += row.AggregateCount
+		counts[row.Outcome.String()] += row.AggregateCount
 	}
 	if len(rows) != 3 || counts["admission-cancelled"] != 2 || counts["capacity-deferred"] != 1 ||
 		counts["admission-failed"] != 1 {
 		t.Fatalf("aggregation merged or lost outcomes: %+v", counts)
 	}
-	if !matchesQuery(rows[0], Query{Outcome: rows[0].Outcome}) ||
-		matchesQuery(Summary{Outcome: "admission-cancelled"}, Query{Outcome: "capacity-deferred"}) ||
-		matchesQuery(Summary{Outcome: "admission-failed"}, Query{Outcome: "capacity-deferred"}) {
+	if !matchesQuery(rows[0], Query{Outcome: rows[0].Outcome.Outcome()}) ||
+		matchesQuery(Summary{Outcome: Recorded(OutcomeAdmissionCancelled)}, Query{Outcome: OutcomeCapacityDeferred}) ||
+		matchesQuery(Summary{Outcome: Recorded(OutcomeAdmissionFailed)}, Query{Outcome: OutcomeCapacityDeferred}) {
 		t.Fatal("the outcome filter does not separate a cancellation from a deferral")
 	}
 }

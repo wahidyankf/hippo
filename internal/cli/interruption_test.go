@@ -304,7 +304,7 @@ func summaryOutcomes(t *testing.T, root string) map[string]string {
 	}
 	outcomes := map[string]string{}
 	for _, row := range rows {
-		outcomes[row.Source] = row.Outcome
+		outcomes[row.Source] = row.Outcome.String()
 	}
 
 	return outcomes

@@ -15,10 +15,9 @@ linters:
   disable:
     # Stable sentinel identity is not part of this command-line tool's public contract.
     - err113
-    # Partial policy and evidence fixtures should remain resilient when structs gain fields.
+    # Partial policy and evidence fixtures should remain resilient when structs gain fields; its v5 successor is
+    # enabled below, scoped to the domain types that need complete literals.
     - exhaustruct
-    # The v5 successor imposes the same brittle complete-literal requirement.
-    - exhaustruct_v5
     # Method placement is organized by lifecycle flow, not export visibility.
     - funcorder
     # Immutable policies and command metadata are clearer as package-level declarations.
@@ -75,6 +74,14 @@ linters:
       check:
         - switch
         - map
+    exhaustruct_v5:
+      # Complete literals are required only for the closed domain types this module defines, never globally, so the
+      # fixture brittleness that disabled exhaustruct does not return. Explicit mode checks only what a pattern names;
+      # each unit that adds such a type adds its pattern, matched against the full import path and type name.
+      explicit-mode: true
+      enforce-patterns:
+        - ^github\.com/wahidyankf/hippo/internal/evidence\.RecordedOutcome$
+        - ^github\.com/wahidyankf/hippo/internal/evidence\.RecordedBudgetOutcome$
     goconst:
       # Scenario data should state its inputs instead of hiding them behind production constants.
       ignore-tests: true

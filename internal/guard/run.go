@@ -30,33 +30,8 @@ const (
 	// other than storage. Like the others it never leaves the process: the
 	// command-line boundary turns it into 124 naming hippo.limit.pressure-shed,
 	// so a shed is never mistaken for a deferral that started nothing.
-	PressureShedExitCode     = 74
-	outcomeTaskFailed        = "task-failed"
-	outcomeSupervisionFailed = "supervision-failed"
-	outcomeEmergencyStop     = "emergency-safety-stop"
-	outcomePressureShed      = "pressure-shed"
-	outcomeStorageShed       = "storage-shed"
-	// outcomeAdmissionCancelled is a run a signal or other cancellation
-	// stopped before its child started. It is the same word the run's
-	// never-started receipt carries as its reason, so the two records agree.
-	outcomeAdmissionCancelled = "admission-cancelled"
-	// outcomeAdmissionFailed is a run hippo itself stopped after host
-	// sampling began and before its child started: host evidence it could not
-	// read, an evidence write it was refused, or a launch that failed. The
-	// exit status names which; the outcome says no child ran and hippo, not
-	// the host's capacity, is why.
-	outcomeAdmissionFailed = "admission-failed"
+	PressureShedExitCode = 74
 )
-
-// RunOutcomes is every outcome a run's lifetime summary can record. history
-// uses it to tell a filter no run can match from a question with an empty
-// answer.
-func RunOutcomes() []string {
-	return []string{
-		"passed", outcomeTaskFailed, outcomeSupervisionFailed, outcomePressureShed, outcomeStorageShed,
-		outcomeEmergencyStop, "capacity-deferred", "storage-blocked", outcomeAdmissionCancelled, outcomeAdmissionFailed,
-	}
-}
 
 // RunConfig describes one guarded child process and its resource policy.
 type RunConfig struct {
@@ -507,6 +482,42 @@ func lostAfterLaunch(err error) error {
 	return err
 }
 
+// finalOutcome is the outcome a run's lifetime summary records. A run whose
+// lifetime ended with no outcome decided is a supervision failure, never a
+// deferral: the deferral was once the default every unlabelled path fell into,
+// and a summary that said capacity-deferred about a run that was not deferred is
+// what 41bda15 and 529b506 had to repair.
+func finalOutcome(outcome evidence.Outcome) (evidence.Outcome, error) {
+	if outcome != evidence.OutcomeUnset {
+		return outcome, nil
+	}
+
+	return evidence.OutcomeSupervisionFailed, status.Fail(
+		status.CodeSupervisionFailed, "the run ended without deciding its outcome; its summary records %s",
+		evidence.OutcomeSupervisionFailed,
+	)
+}
+
+// promoteFinalize decides what the caller sees once the lifetime summary has
+// been finalized. A run that already failed keeps its own failure, and so does a
+// run whose summary was written. Otherwise the summary's failure becomes the
+// run's, with exit status 1; before anything launched, a write the evidence root
+// refused is named as one.
+//
+// This is how the supervision failure finalOutcome returns for a run that ended
+// with its outcome unset reaches the caller: it is the finalize error here, so
+// the command-line boundary reports hippo.supervision.failed and exit 125.
+func promoteFinalize(exitCode int, returnError, finalizeError error, launched bool) (int, error) {
+	if returnError != nil || finalizeError == nil {
+		return exitCode, returnError
+	}
+	if !launched {
+		return 1, refusedEvidenceWrite("recording the lifetime summary", finalizeError)
+	}
+
+	return 1, finalizeError
+}
+
 // noteDeferralf reports why admission was deferred. The run returns after this
 // notice; callers use the recorded receipt to decide whether a later retry is
 // safe instead of blindly replaying a 124 naming hippo.limit.capacity-deferred.
@@ -805,9 +816,11 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		if statusError != nil {
 			return 1, statusError
 		}
-		writer.SetReservationContext(session, totals.ActiveOwners, "admitted")
+		writer.SetReservationContext(session, totals.ActiveOwners, evidence.BudgetOutcomeAdmitted)
 	}
-	outcome := "capacity-deferred"
+	// No outcome is decided yet: every way out of this lifetime names its own,
+	// and finalOutcome refuses to record one that never did.
+	var outcome evidence.Outcome
 	launched, finalized := false, false
 	finalize := func() error { //nolint:contextcheck // Evidence finalization deliberately uses the bounded ownership lifecycle, not caller cancellation.
 		if finalized {
@@ -825,21 +838,14 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				writer.ObserveReservationOwners(peakOwners)
 			}
 		}
-		_, finalizeError := writer.Finalize(config.TaskClass, outcome, 0)
+		recorded, outcomeError := finalOutcome(outcome)
+		_, finalizeError := writer.Finalize(config.TaskClass, recorded, 0)
 		cleanupError := evidence.Cleanup(config.EvidenceRoot, config.Now())
 
-		return errors.Join(finalizeError, cleanupError)
+		return errors.Join(outcomeError, finalizeError, cleanupError)
 	}
 
-	defer func() {
-		if finalizeError := finalize(); returnError == nil && finalizeError != nil {
-			returnError = finalizeError
-			if !launched {
-				returnError = refusedEvidenceWrite("recording the lifetime summary", finalizeError)
-			}
-			exitCode = 1
-		}
-	}()
+	defer func() { exitCode, returnError = promoteFinalize(exitCode, returnError, finalize(), launched) }()
 
 	deadline := config.Now().Add(config.Policy.AdmissionWindow)
 	var previous policy.CPUState
@@ -849,13 +855,14 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	// work that never started, exactly as one that cancels a queued waiter
 	// does, and leaves the same receipt so it may requeue once.
 	cancelledBeforeLaunch := func(cause error) (int, error) {
-		outcome = outcomeAdmissionCancelled
+		outcome = evidence.OutcomeAdmissionCancelled
+		// The receipt's reason is the outcome's own word, so the two records agree.
 		receiptError := writeSafetyReceipt(
-			config.EvidenceRoot, writer.summary.RunID, "never-started", outcomeAdmissionCancelled,
+			config.EvidenceRoot, writer.summary.RunID, "never-started", outcome.String(),
 			config.ReservationMetadata, config.TaskClass, config.Now(),
 		)
 		if receiptError != nil {
-			outcome = outcomeAdmissionFailed
+			outcome = evidence.OutcomeAdmissionFailed
 		}
 
 		return 1, errors.Join(cause, refusedEvidenceWrite("writing the never-started receipt", receiptError))
@@ -871,7 +878,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			if ctx.Err() != nil {
 				return cancelledBeforeLaunch(ctx.Err())
 			}
-			outcome = outcomeAdmissionFailed
+			outcome = evidence.OutcomeAdmissionFailed
 
 			return 1, collectError
 		}
@@ -879,14 +886,14 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		previous = reading.CPUState
 		samples = append(samples, reading.Sample)
 		if appendError := writer.Append(reading.Sample); appendError != nil {
-			outcome = outcomeAdmissionFailed
+			outcome = evidence.OutcomeAdmissionFailed
 
 			return 1, refusedEvidenceWrite("recording a host sample", appendError)
 		}
 
 		assessment := policy.ResourceAssessment(samples, config.Policy)
 		if assessment.StorageBlocked {
-			outcome = "storage-blocked"
+			outcome = evidence.OutcomeStorageBlocked
 			_, _ = fmt.Fprintf(config.Stderr, "HIPPO blocked task: %s; storage inspection or cleanup is required.\n", assessment.Reason)
 
 			return StorageBlockedExitCode, nil
@@ -921,12 +928,13 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 
 	if !admitted {
+		outcome = evidence.OutcomeCapacityDeferred
 		config.noteDeferralf("HIPPO deferred task: safe admission was not reached.\n")
 		if receiptError := writeSafetyReceipt(
 			config.EvidenceRoot, writer.summary.RunID, "never-started", "host-admission",
 			config.ReservationMetadata, config.TaskClass, config.Now(),
 		); receiptError != nil {
-			outcome = outcomeAdmissionFailed
+			outcome = evidence.OutcomeAdmissionFailed
 
 			return 1, refusedEvidenceWrite("writing the never-started receipt", receiptError)
 		}
@@ -936,7 +944,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 	lifetime, launchError := launchConfiguredLifetime(ctx, config, session, portLease)
 	if launchError != nil {
-		outcome = outcomeAdmissionFailed
+		outcome = evidence.OutcomeAdmissionFailed
 		if lifetime != nil {
 			ownershipRetired = false
 		}
@@ -953,7 +961,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 	if config.ReservationPolicy.Enabled {
 		if activationError := ActivateReservation(config.EvidenceRoot, session, lifetime.processGroup); activationError != nil { //nolint:contextcheck // Activation owns a bounded atomic coordination transaction.
-			outcome = outcomeTaskFailed
+			outcome = evidence.OutcomeTaskFailed
 
 			return resolveActivationFailure(config, writer.summary.RunID, activationError, stopLifetime)
 		}
@@ -968,16 +976,16 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		case waitError := <-lifetime.exited:
 			ownershipRetired = true
 			if waitError == nil {
-				outcome = "passed"
+				outcome = evidence.OutcomePassed
 			} else {
-				outcome = outcomeTaskFailed
+				outcome = evidence.OutcomeTaskFailed
 			}
 
 			return childStatus(config, waitError), nil
 
 		case <-ctx.Done():
 			waitError, stopError := stopLifetime()
-			outcome = outcomeTaskFailed
+			outcome = evidence.OutcomeTaskFailed
 			if stopError != nil {
 				return 1, stopError
 			}
@@ -990,22 +998,22 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				// A contended shared root defers this observation to the next
 				// sample instead of costing the caller a healthy child.
 				if selectionError != nil && !errors.Is(selectionError, errCoordinationDeferred) {
-					outcome = outcomeSupervisionFailed
+					outcome = evidence.OutcomeSupervisionFailed
 					_, stopError := stopLifetime()
 
 					return 1, errors.Join(selectionError, stopError)
 				}
 				if selectionError == nil && selected {
-					outcome = outcomePressureShed
+					outcome = evidence.OutcomePressureShed
 					if config.TaskClass == policy.TaskTransactional {
-						outcome = outcomeEmergencyStop
+						outcome = evidence.OutcomeEmergencySafetyStop
 					}
 					if selectedExit == StorageBlockedExitCode {
-						outcome = outcomeStorageShed
+						outcome = evidence.OutcomeStorageShed
 					}
 					_, _ = fmt.Fprintln(config.Stderr, "HIPPO shedding this selected child from its owning guard.")
 					_, stopError := stopLifetime()
-					if outcome == outcomeEmergencyStop {
+					if outcome == evidence.OutcomeEmergencySafetyStop {
 						stopError = errors.Join(stopError, writeSafetyReceipt(
 							config.EvidenceRoot, session.Token, "started-safety-stop", "emergency-pressure",
 							config.ReservationMetadata, config.TaskClass, config.Now(),
@@ -1019,7 +1027,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			if collectError != nil {
 				if ctx.Err() != nil {
 					waitError, stopError := stopLifetime()
-					outcome = outcomeTaskFailed
+					outcome = evidence.OutcomeTaskFailed
 					if stopError != nil {
 						return 1, stopError
 					}
@@ -1027,7 +1035,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					return childStatus(config, waitError), nil
 				}
 
-				outcome = outcomeSupervisionFailed
+				outcome = evidence.OutcomeSupervisionFailed
 				_, stopError := stopLifetime()
 
 				return 1, errors.Join(lostAfterLaunch(collectError), stopError)
@@ -1041,7 +1049,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			}
 
 			if appendError := writer.Append(reading.Sample); appendError != nil {
-				outcome = outcomeSupervisionFailed
+				outcome = evidence.OutcomeSupervisionFailed
 				_, stopError := stopLifetime()
 
 				return 1, errors.Join(appendError, stopError)
@@ -1052,7 +1060,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 				// or a caller cancelling mid-observation, costs this sample its
 				// observation: never the child, and never the caller's exit.
 				if statusError != nil && !errors.Is(statusError, errCoordinationDeferred) && ctx.Err() == nil {
-					outcome = outcomeSupervisionFailed
+					outcome = evidence.OutcomeSupervisionFailed
 					_, stopError := stopLifetime()
 
 					return 1, errors.Join(statusError, stopError)
@@ -1088,9 +1096,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			if assessment.State == policy.StateCritical || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) { //nolint:nestif // Pressure outcome, atomic victim election, and owned reaping remain one lifecycle branch.
 				shedCode := CapacityDeferredExitCode
 				if assessment.StorageBlocked {
-					shedCode, outcome = StorageBlockedExitCode, outcomeStorageShed
+					shedCode, outcome = StorageBlockedExitCode, evidence.OutcomeStorageShed
 				} else {
-					outcome = outcomePressureShed
+					outcome = evidence.OutcomePressureShed
 				}
 
 				if config.ReservationPolicy.Enabled {
@@ -1131,7 +1139,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					}
 					_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding selected %s child after %s.\n", victim.Class, assessment.Reason)
 					if victim.Class == policy.TaskTransactional {
-						outcome = outcomeEmergencyStop
+						outcome = evidence.OutcomeEmergencySafetyStop
 						_, _ = fmt.Fprintln(config.Stderr, "HIPPO emergency safety stop selected transactional work; it will not retry automatically.")
 					}
 					if victim.Token != session.Token {
@@ -1148,7 +1156,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					_, _ = fmt.Fprintf(config.Stderr, "HIPPO shedding %s child after %s.\n", config.TaskClass, assessment.Reason)
 				}
 				_, stopError := stopLifetime()
-				if outcome == outcomeEmergencyStop {
+				if outcome == evidence.OutcomeEmergencySafetyStop {
 					stopError = errors.Join(stopError, writeSafetyReceipt(
 						config.EvidenceRoot, session.Token, "started-safety-stop", "emergency-pressure",
 						config.ReservationMetadata, config.TaskClass, config.Now(),

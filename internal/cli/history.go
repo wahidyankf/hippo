@@ -38,6 +38,19 @@ var historyTaskClasses = []string{
 	string(policy.TaskEphemeral), string(policy.TaskService), string(policy.TaskTransactional), string(policy.TaskRelease),
 }
 
+// outcomeNames lists every outcome a run's lifetime summary can record, as the
+// --outcome filter names them. history uses it to tell a filter no run can
+// match from a question with an empty answer.
+func outcomeNames() []string {
+	outcomes := evidence.Outcomes()
+	names := make([]string, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		names = append(names, outcome.String())
+	}
+
+	return names
+}
+
 // historyFilterMistake refuses a filter value no recorded run can carry. An
 // empty answer to it would read as "nothing matched" when the question could
 // never have matched anything, which hides a typo behind a valid result.
@@ -51,11 +64,25 @@ func historyFilterMistake(options historyOptions) error {
 	if _, known := guard.DefaultResourceTiers()[options.resourceTier]; options.resourceTier != "" && !known {
 		return status.Fail(status.CodeArgsInvalid, "--resource-tier must be light, standard, or heavy")
 	}
-	if outcomes := guard.RunOutcomes(); options.outcome != "" && !slices.Contains(outcomes, options.outcome) {
-		return status.Fail(status.CodeArgsInvalid, "--outcome must be one of %s", strings.Join(outcomes, ", "))
-	}
 
 	return nil
+}
+
+// outcomeFilter reads the --outcome flag: the outcome it names, or
+// OutcomeUnset for no filter. A word no run records is a usage mistake, for the
+// reason historyFilterMistake gives.
+func outcomeFilter(flag string) (evidence.Outcome, error) {
+	if flag == "" {
+		return evidence.OutcomeUnset, nil
+	}
+	outcome, err := evidence.ParseOutcome(flag)
+	if err != nil {
+		return evidence.OutcomeUnset, status.Fail(
+			status.CodeArgsInvalid, "--outcome must be one of %s", strings.Join(outcomeNames(), ", "),
+		)
+	}
+
+	return outcome, nil
 }
 
 func (application Application) history(options historyOptions) (int, error) {
@@ -63,6 +90,10 @@ func (application Application) history(options historyOptions) (int, error) {
 		return 0, status.Fail(status.CodeArgsInvalid, "--json and --jsonl are mutually exclusive")
 	}
 	if err := historyFilterMistake(options); err != nil {
+		return 0, err
+	}
+	outcome, err := outcomeFilter(options.outcomeFlag)
+	if err != nil {
 		return 0, err
 	}
 	since, err := parseRollingDuration(options.since)
@@ -76,7 +107,7 @@ func (application Application) history(options historyOptions) (int, error) {
 	root := host.DefaultEvidenceRoot(environmentMap(application.Environment))
 	rows, err := evidence.ReadHistory(root, evidence.Query{
 		Since: since, Now: application.Now(), Source: options.source, Tags: tags,
-		Class: options.taskClass, Tier: options.resourceTier, Outcome: options.outcome,
+		Class: options.taskClass, Tier: options.resourceTier, Outcome: outcome,
 	})
 	if err != nil {
 		return 0, status.Fail(status.CodeEvidenceUnreadable, "reading run history: %v", err)

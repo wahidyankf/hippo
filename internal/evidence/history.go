@@ -28,25 +28,26 @@ const (
 
 // Summary is the queryable, privacy-safe subset shared by current and archived evidence.
 type Summary struct {
-	SchemaVersion                          int               `json:"schemaVersion"`
-	RunID                                  string            `json:"runId,omitempty"`
-	StartedAt                              string            `json:"startedAt,omitempty"`
-	FinishedAt                             string            `json:"finishedAt,omitempty"`
-	Source                                 string            `json:"source,omitempty"`
-	Tags                                   map[string]string `json:"tags,omitempty"`
-	ResourceTier                           string            `json:"resourceTier,omitempty"`
-	TaskClass                              string            `json:"taskClass,omitempty"`
-	Outcome                                string            `json:"outcome,omitempty"`
-	AvailableNonCompressedEstimateMinBytes *int64            `json:"availableNonCompressedEstimateMinBytes,omitempty"`
-	MemoryPressureLevelMax                 *int              `json:"memoryPressureLevelMax,omitempty"`
-	CPUUtilizationP95Percent               float64           `json:"cpuUtilizationP95Percent,omitempty"`
-	SwapOutsDelta                          int64             `json:"swapOutsDelta,omitempty"`
-	PeakOwnerCount                         int               `json:"peakOwnerCount,omitempty"`
-	BudgetOutcome                          string            `json:"budgetOutcome,omitempty"`
-	AggregateCount                         int               `json:"aggregateCount,omitempty"`
+	SchemaVersion                          int                   `json:"schemaVersion"`
+	RunID                                  string                `json:"runId,omitempty"`
+	StartedAt                              string                `json:"startedAt,omitempty"`
+	FinishedAt                             string                `json:"finishedAt,omitempty"`
+	Source                                 string                `json:"source,omitempty"`
+	Tags                                   map[string]string     `json:"tags,omitempty"`
+	ResourceTier                           string                `json:"resourceTier,omitempty"`
+	TaskClass                              string                `json:"taskClass,omitempty"`
+	Outcome                                RecordedOutcome       `json:"outcome,omitzero"`
+	AvailableNonCompressedEstimateMinBytes *int64                `json:"availableNonCompressedEstimateMinBytes,omitempty"`
+	MemoryPressureLevelMax                 *int                  `json:"memoryPressureLevelMax,omitempty"`
+	CPUUtilizationP95Percent               float64               `json:"cpuUtilizationP95Percent,omitempty"`
+	SwapOutsDelta                          int64                 `json:"swapOutsDelta,omitempty"`
+	PeakOwnerCount                         int                   `json:"peakOwnerCount,omitempty"`
+	BudgetOutcome                          RecordedBudgetOutcome `json:"budgetOutcome,omitzero"`
+	AggregateCount                         int                   `json:"aggregateCount,omitempty"`
 }
 
 // Query selects history rows without exposing commands, arguments, or paths.
+// An Outcome of OutcomeUnset selects every outcome.
 type Query struct {
 	Since   time.Duration
 	Now     time.Time
@@ -54,7 +55,7 @@ type Query struct {
 	Tags    map[string]string
 	Class   string
 	Tier    string
-	Outcome string
+	Outcome Outcome
 }
 
 // PromotionCriteria defines the evidence required to open the optional owner slot.
@@ -134,7 +135,8 @@ func archiveFallback(name string) time.Time {
 
 func matchesQuery(summary Summary, query Query) bool {
 	if query.Source != "" && summary.Source != query.Source || query.Class != "" && summary.TaskClass != query.Class ||
-		query.Tier != "" && summary.ResourceTier != query.Tier || query.Outcome != "" && summary.Outcome != query.Outcome {
+		query.Tier != "" && summary.ResourceTier != query.Tier ||
+		query.Outcome != OutcomeUnset && summary.Outcome.Outcome() != query.Outcome {
 		return false
 	}
 	for key, value := range query.Tags {
@@ -208,13 +210,19 @@ func ReadHistory(root string, query Query) ([]Summary, error) {
 	return rows, nil
 }
 
+// healthyPromotionSummary reports whether one run counts toward opening the
+// optional owner slot. Only a recorded OutcomePassed does: a run that was shed,
+// deferred, or recorded under a word this version does not know never counts,
+// whatever its budget outcome says, so the budget outcome is not consulted.
 func healthyPromotionSummary(summary Summary, criteria PromotionCriteria) bool {
-	return summary.Outcome == "passed" && summary.AggregateCount == 0 &&
-		summary.AvailableNonCompressedEstimateMinBytes != nil &&
-		*summary.AvailableNonCompressedEstimateMinBytes >= criteria.MinimumAvailableMemoryBytes &&
+	if summary.Outcome.Outcome() != OutcomePassed || summary.AggregateCount != 0 {
+		return false
+	}
+	minimum := summary.AvailableNonCompressedEstimateMinBytes
+
+	return minimum != nil && *minimum >= criteria.MinimumAvailableMemoryBytes &&
 		(summary.MemoryPressureLevelMax == nil || *summary.MemoryPressureLevelMax <= 1) &&
-		summary.CPUUtilizationP95Percent <= criteria.MaximumCPUP95Percent && summary.SwapOutsDelta == 0 &&
-		summary.BudgetOutcome != "pressure-shed" && summary.BudgetOutcome != "storage-shed"
+		summary.CPUUtilizationP95Percent <= criteria.MaximumCPUP95Percent && summary.SwapOutsDelta == 0
 }
 
 // EvaluatePromotion checks the newest overlapping runs; one unhealthy run closes the gate.
@@ -548,7 +556,7 @@ func aggregateHistoryRows(rows []Summary) []Summary {
 		}
 		sort.Strings(tagKeys)
 		parts := make([]string, 0, 4+2*len(tagKeys))
-		parts = append(parts, row.Source, row.TaskClass, row.ResourceTier, row.Outcome)
+		parts = append(parts, row.Source, row.TaskClass, row.ResourceTier, row.Outcome.String())
 		for _, tagKey := range tagKeys {
 			parts = append(parts, tagKey, row.Tags[tagKey])
 		}

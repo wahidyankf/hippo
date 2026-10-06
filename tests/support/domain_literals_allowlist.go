@@ -1,17 +1,15 @@
 package support
 
-// Files and a symbol the entries below name more than once.
+// Files the entries below name more than once.
 const (
 	cliCommands      = "internal/cli/commands.go"
 	evidenceHistory  = "internal/evidence/history.go"
 	guardEvidence    = "internal/guard/evidence.go"
 	guardReservation = "internal/guard/reservation.go"
-	promotionSummary = "healthyPromotionSummary"
 )
 
 // Units that remove the entries below, named in the Unit field.
 const (
-	removedByOutcome  = "Unit 2: typed run outcome"
 	removedByLineage  = "Unit 4: profile lineage"
 	removedByDecoding = "Unit 6: strict decoding"
 )
@@ -22,20 +20,6 @@ const (
 // per unit. The list can only shrink: an entry whose violation is gone fails
 // the analysis until the entry is deleted.
 var domainLiteralAllowlist = []domainAllowance{
-	// Unit 2 types the run outcome and the budget outcome: the evidence writer and summary, the history reader, and
-	// the history command's outcome option.
-	{Path: cliCommands, Symbol: "historyOptions.outcome", Rule: ruleRawField, Unit: removedByOutcome},
-	{Path: evidenceHistory, Symbol: "Summary.Outcome", Rule: ruleRawField, Unit: removedByOutcome},
-	{Path: evidenceHistory, Symbol: "Summary.BudgetOutcome", Rule: ruleRawField, Unit: removedByOutcome},
-	{Path: evidenceHistory, Symbol: "Query.Outcome", Rule: ruleRawField, Unit: removedByOutcome},
-	{Path: evidenceHistory, Symbol: promotionSummary, Rule: ruleLiteralComparison, Unit: removedByOutcome},
-	{Path: evidenceHistory, Symbol: promotionSummary, Rule: ruleLiteralComparison, Unit: removedByOutcome},
-	{Path: evidenceHistory, Symbol: promotionSummary, Rule: ruleLiteralComparison, Unit: removedByOutcome},
-	{Path: guardEvidence, Symbol: "EvidenceWriter.SetReservationContext.outcome", Rule: ruleRawField, Unit: removedByOutcome},
-	{Path: guardEvidence, Symbol: "EvidenceSummary.Outcome", Rule: ruleRawField, Unit: removedByOutcome},
-	{Path: guardEvidence, Symbol: "EvidenceSummary.BudgetOutcome", Rule: ruleRawField, Unit: removedByOutcome},
-	{Path: guardEvidence, Symbol: "EvidenceWriter.Finalize.outcome", Rule: ruleRawField, Unit: removedByOutcome},
-
 	// Unit 4 keys profile rules on lineage and types every profile name, including the owner-share switch.
 	{Path: cliCommands, Symbol: "configOptions.requestedProfile", Rule: ruleRawField, Unit: removedByLineage},
 	{Path: "internal/cli/development.go", Symbol: "writeMonitorTransition.Profile", Rule: ruleRawField, Unit: removedByLineage},
