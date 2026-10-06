@@ -246,8 +246,8 @@ while a `release monitor` that reaches its own duration exits `0`.
   subtraction-based vector checks so aggregate arithmetic cannot wrap.
 - A missing reservation ledger is an empty epoch only when mode and identity evidence positively prove it; unknown
   identity errors retain accounting. Lifecycle lock waits are bounded, failed release retains owner identity evidence,
-  cancelled waiter cleanup receives a fresh bounded context, and exhausted FIFO sequences reset only after a positively
-  empty epoch.
+  cancelled waiter cleanup receives a fresh bounded lock wait and takes a free lock however late it starts, and
+  exhausted FIFO sequences reset only after a positively empty epoch.
 - Per-token advisory identities carry device and inode metadata plus a same-inode recovery anchor, rather than trusting
   diagnostic PID equality. A private capability-authenticated HIPPO launcher exclusively holds both reservation and port
   identities while supervising the complete command group; arbitrary payloads and descendants cannot inherit or forge
