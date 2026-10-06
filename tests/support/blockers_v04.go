@@ -748,7 +748,10 @@ func requireV04CancelledWaiterCleanup(root string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
 	go func() {
-		session, acquireError := guard.AcquireReservation(ctx, root, "", policy.TaskEphemeral, profileMinimal, "", ownerPlan, 20, time.Second)
+		session, acquireError := guard.AcquireReservationWithOptions(
+			ctx, root, "", policy.TaskEphemeral, profileMinimal, "", ownerPlan, 20, time.Second,
+			guard.ReservationAdmissionOptions{CleanupWait: 2 * time.Second},
+		)
 		if session != nil {
 			_ = guard.ReleaseReservation(root, session) //nolint:contextcheck // Test cleanup must outlive the canceled contender context.
 		}
@@ -776,7 +779,7 @@ func requireV04CancelledWaiterCleanup(root string) error {
 	}
 	cancel()
 	go func() {
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		_ = releaseHeldCoordination(lock)
 	}()
 	if acquireError := <-result; !errors.Is(acquireError, context.Canceled) {
