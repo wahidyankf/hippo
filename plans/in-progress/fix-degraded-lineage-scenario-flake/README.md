@@ -462,7 +462,7 @@ Phases 1–4 ticked and Phase 5 open.
   - Result: (2026-10-06) `GOFLAGS=-timeout=30m npm test` at `c764eae`, the form the repository's loaded-host runner
     uses, exit `0` at load 22–32 (`uptime` 31.77 before, 24.71 after): selected production line coverage 99.35%
     (911/917), race detector clean, ending with "No vulnerabilities found."
-- [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
+- [x] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
       `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
       `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
       units edit `tests/support/degraded_lineage.go` and `tests/support/driver.go`), and rerun the _Regression test_,
@@ -470,9 +470,19 @@ Phases 1–4 ticked and Phase 5 open.
       `git status --porcelain` prints nothing before the rebase, `git ls-remote --tags origin v0.8.5` prints nothing,
       and the reruns exit `0`. If the tag already exists, land anyway and the Recovery item in Phase 5 fires. `[AC-05]`
       `[AC-06]` `[AC-07]`
-- [ ] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
+  - Result: (2026-10-07) the record so far was committed as `3fff2ac` on a clean tree, and
+    `git ls-remote --tags origin v0.8.5` printed nothing before each rebase. Main gained the linting plan's Unit 5
+    (`e261965`, which edits `tests/support/driver.go`), so the branch was rebased without conflict; the _Regression
+    test_ passed 3 of 3 and the _Focused scenarios_ passed at both adapters. Main then gained the cancelled-waiter fix
+    (`aa274ee`), so the branch was rebased again without conflict to `86b06f4`: the _Regression test_ passed 3 of 3, the
+    _Focused scenarios_ passed 2 of 2 at each adapter, and the _Full gate_ exited `0` at load 5.5–12.7 with selected
+    production line coverage 99.36% (928/934), race detector clean, ending with "No vulnerabilities found."
+- [x] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-04]`
-- [ ] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
+  - Result: (2026-10-07) `git diff --name-only origin/main...HEAD` at `aa274ee` prints this README,
+    `tests/support/degraded_lineage.go`, `tests/support/degraded_lineage_internal_test.go`, and
+    `tests/support/driver.go`: exactly the File Impact paths.
+- [x] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
       results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
       `git status --porcelain` prints nothing. `[AC-07]`
 
