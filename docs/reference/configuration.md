@@ -175,11 +175,12 @@ naming `hippo.limit.capacity-deferred`, and a running ephemeral child of it is s
 grace. No field turns the path on or off. `status --json` reports whether the resolved profile may use it as
 `profile.degradedAdmission`.
 
-Lineage decides two more rules the same way. A profile whose lineage reaches `minimal` is a
-[last-resort floor](./resource-policy.md#derived-thresholds): when it does not fit, ordinary work still runs on it at
-relaxed memory and disk thresholds instead of failing for want of a fallback. And a profile that `automaticOwnerShares`
-does not name takes the share of the profile it extends, so it divides capacity as its lineage's built-in does: four
-owners for `balanced`, two for `constrained`, and one for `minimal`.
+Lineage decides two more rules the same way. A profile whose lineage reaches `minimal` and that has no `fallback`, set
+or inherited, is a [last-resort floor](./resource-policy.md#derived-thresholds): when it does not fit, ordinary work
+still runs on it at relaxed memory and disk thresholds instead of failing for want of a fallback. And a profile that
+`automaticOwnerShares` does not name takes the share of the profile it extends, so unless a profile in its lineage is
+named it divides capacity as its lineage's built-in does: four owners for `balanced`, two for `constrained`, and one for
+`minimal`.
 
 | Field                        | Type    | Meaning                                                          |
 | ---------------------------- | ------- | ---------------------------------------------------------------- |
