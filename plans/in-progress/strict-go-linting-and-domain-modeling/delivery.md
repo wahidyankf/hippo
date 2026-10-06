@@ -1187,13 +1187,20 @@ code, and run unchanged as regressions.
 
 ### Unit 3 landing
 
-- [ ] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-13]`
-- [ ] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
+- [x] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-13]`
+  - Result: (2026-10-06) data-safety scan of the diff found no candidate; thematic commits, every hook passed:
+    `3d2b4f3`, `849ed20`, `699be68`.
+- [x] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
       recorded. `[AC-13]`
-- [ ] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-13]`
-- [ ] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-13]`
-- [ ] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
+  - Result: push review clean, every `pre-push` gate passed; title and body screened (exit `0`); draft pull request
+    #134.
+- [x] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-13]`
+  - Result: `Quality gate` `success` on head `699be68` (run 37425821386).
+- [x] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-13]`
+  - Result: `pass` review posted on `699be68`; `leak-review` reads `success`.
+- [x] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
       `[AC-13]`
+  - Result: merged as `a0e7819`; reconcile count `0 0`.
 
 > **Pause Safety**: Unit 3 is on `main`. Safe to stop. To resume: the starting commands for Unit 4.
 
@@ -1201,7 +1208,8 @@ code, and run unchanged as regressions.
 
 Branch `worktree/profile-lineage-rules`.
 
-- [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-17]`
+- [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-17]`
+  - Result: `worktree/profile-lineage-rules` from `origin/main` at `a0e7819`.
 - [ ] `[AI]` Replace every `policy.BuiltinCatalog()` call in `tests/support` with a helper resolving the scenario's
       configuration through `config.Load` (`swe-developer`); run the unit adapter and
       `git grep -n 'BuiltinCatalog()' -- tests/support`; acceptance: the adapter exits `0` and the grep prints nothing.
