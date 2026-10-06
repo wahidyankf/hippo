@@ -57,7 +57,7 @@ func ExclusiveStatus(ctx context.Context, root string) (ReservationTotals, error
 	if !sessionTokenPattern.MatchString(runID) {
 		runID = "legacy-heavy"
 	}
-	appendExclusiveOwner(&totals, runID, *heavy)
+	appendExclusiveOwner(&totals, runID, *heavy) //nolint:nilaway // liveExclusiveHeavyOwner returns a nil owner only with live false or an error, and both return above; NilAway does not correlate the three results.
 
 	return totals, nil
 }

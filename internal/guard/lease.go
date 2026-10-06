@@ -312,6 +312,7 @@ func DescribeHeavyLease(root string) string {
 	if errors.Is(err, os.ErrNotExist) {
 		return "the heavy-work lease reports no live owner"
 	}
+	//nolint:nilaway // readLeaseOwner returns a nil owner only with an error, which this condition tests first; NilAway loses that once err is reassigned above.
 	if err != nil || owner.SchemaVersion != 1 {
 		return "the heavy-work lease owner cannot be verified; inspect the shared HIPPO state before retrying"
 	}

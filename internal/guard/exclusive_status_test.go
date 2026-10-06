@@ -92,3 +92,45 @@ func TestExclusiveStatusClassifiesSessionStateWithoutMutation(t *testing.T) {
 		})
 	}
 }
+
+func TestExclusiveStatusWithoutHeavyOwnerCountsSessionsOnly(t *testing.T) {
+	root := t.TempDir()
+	session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
+	if err != nil || session == nil {
+		t.Fatalf("acquire service session: session=%v error=%v", session != nil, err)
+	}
+	defer func() { _ = guard.ReleaseSession(root, session) }()
+	if _, statError := os.Stat(filepath.Join(root, "heavy.lock")); !os.IsNotExist(statError) {
+		t.Fatalf("a service session must not hold the heavy lock: %v", statError)
+	}
+
+	totals, err := guard.ExclusiveStatus(context.Background(), root)
+	if err != nil || totals.ActiveOwners != 1 || totals.Service != 1 || len(totals.Owners) != 1 {
+		t.Fatalf("exclusive totals=%+v error=%v", totals, err)
+	}
+}
+
+func TestExclusiveStatusRefusesNullHeavyOwnerDocument(t *testing.T) {
+	root := t.TempDir()
+	session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
+	if err != nil || session == nil {
+		t.Fatalf("acquire service session: session=%v error=%v", session != nil, err)
+	}
+	defer func() { _ = guard.ReleaseSession(root, session) }()
+	heavyOwner := filepath.Join(root, "heavy.lock", "owner.json")
+	if err = os.MkdirAll(filepath.Dir(heavyOwner), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(heavyOwner, []byte("null\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, statusError := guard.ExclusiveStatus(context.Background(), root)
+	if statusError == nil || guard.IsCoordinationProtocolMismatch(statusError) {
+		t.Fatalf("a null heavy owner document must be refused as unreadable state: %v", statusError)
+	}
+	after, readError := os.ReadFile(heavyOwner)
+	if readError != nil || string(after) != "null\n" {
+		t.Fatalf("status changed the heavy owner document: %q error=%v", after, readError)
+	}
+}

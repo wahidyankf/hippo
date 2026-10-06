@@ -116,7 +116,8 @@ func TestIsolationProbe(t *testing.T) {
 		}
 	}
 	info, err := os.Stat(os.Getenv("HIPPO_ROOT")) //nolint:gosec // The probe reports on the root RunIsolated chose; it reads nothing inside it.
-	lines = append(lines, rootExistsKey+"="+strconv.FormatBool(err == nil && info.IsDir()))
+	rootExists := err == nil && info != nil && info.IsDir()
+	lines = append(lines, rootExistsKey+"="+strconv.FormatBool(rootExists))
 	slices.Sort(lines)
 
 	if err := os.WriteFile(output, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil { //nolint:gosec // The parent test chose this path inside its own temporary directory.

@@ -1906,6 +1906,9 @@ func TestSchemaOneEmbeddedOwnershipRetiresAfterHolder(t *testing.T) {
 	if competitor != nil {
 		_ = ReleaseSession(root, competitor)
 	}
+	if holder == nil || holder.Process == nil {
+		t.Fatal("embedded run signalled its lifetime start without starting the holder")
+	}
 	killError := holder.Process.Kill()
 	waitError := holder.Wait()
 	if killError != nil && !errors.Is(killError, os.ErrProcessDone) {
