@@ -230,6 +230,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Stable lifecycle wiring is complete", Boundary: repositoryConfigBoundary, Reason: "gate script and workflow text are outside the compiled binary boundary"},
 		{Scenario: "Gate scripts clear the redirecting Git environment", Boundary: repositoryConfigBoundary, Reason: "gate script text is outside the compiled binary boundary"},
 		{Scenario: "Every package with tests runs in a gate", Boundary: repositoryConfigBoundary, Reason: "gate script text and the package tree are outside the compiled binary boundary"},
+		{Scenario: "Production code compares no domain value with a literal", Boundary: repositoryConfigBoundary, Reason: "the analysis reads production source, which is outside the compiled binary boundary"},
 		{Scenario: "The end-to-end adapter runs a test-stamped build", Boundary: testHarnessBoundary, Reason: "choosing the binary the end-to-end adapter runs is owned by the harness outside the compiled binary boundary"},
 		{Scenario: "The loaded gate declares saturation only when every core is busy", Boundary: repositoryConfigBoundary, Reason: "gate script and product source text are outside the compiled binary boundary"},
 		{Scenario: "A saturated host deferral is accepted only as documented", Boundary: testHarnessBoundary, Reason: saturatedDeferralReason},
