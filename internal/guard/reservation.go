@@ -50,6 +50,9 @@ type ReservationAdmissionOptions struct {
 	Now       func() time.Time
 	Pause     func(context.Context, time.Duration) error
 	Heartbeat func(ReservationWaitStatus)
+	// CleanupWait bounds the coordination-lock wait of the cleanup that removes a queued waiter when its acquisition
+	// returns. Zero means coordinationLifecycleWait; only deterministic fixtures set it.
+	CleanupWait time.Duration
 }
 
 // ReservationPolicy configures shared vector admission without naming a consumer repository.
@@ -1158,6 +1161,10 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 	if now == nil {
 		now = time.Now
 	}
+	cleanupWait := options.CleanupWait
+	if cleanupWait == 0 {
+		cleanupWait = coordinationLifecycleWait
+	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
@@ -1187,9 +1194,9 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 	}
 	var identity *os.File
 	queued := false
-	defer func() { //nolint:contextcheck // Waiter cleanup runs after caller cancellation and deliberately uses its own bounded context.
+	defer func() { //nolint:contextcheck // Waiter cleanup runs after caller cancellation and deliberately uses its own bounded wait.
 		if queued {
-			if cleanupError := removeReservationWaiterAfterCancellation(root, value); cleanupError != nil && identity != nil {
+			if cleanupError := removeReservationWaiterAfterCancellation(root, value, cleanupWait); cleanupError != nil && identity != nil {
 				retainReservationWaiterUntilCleanup(root, value, identity)
 				identity = nil
 			}
@@ -1391,7 +1398,7 @@ func retainReservationWaiterUntilCleanup(root, value string, identity *os.File) 
 
 				continue
 			}
-			if err := removeReservationWaiterAfterCancellation(root, value); err == nil {
+			if err := removeReservationWaiterAfterCancellation(root, value, coordinationLifecycleWait); err == nil {
 				_ = identity.Close()
 				_ = removeReservationIdentity(root, value)
 
@@ -1402,15 +1409,8 @@ func retainReservationWaiterUntilCleanup(root, value string, identity *os.File) 
 	}()
 }
 
-func removeReservationWaiterAfterCancellation(root, value string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), coordinationLifecycleWait)
-	defer cancel()
-
-	return removeReservationWaiter(ctx, root, value)
-}
-
-func removeReservationWaiter(ctx context.Context, root, value string) (returnError error) {
-	lock, err := acquireCoordinationLock(ctx, root, coordinationLifecycleWait)
+func removeReservationWaiterAfterCancellation(root, value string, wait time.Duration) (returnError error) {
+	lock, err := acquireCoordinationLock(context.Background(), root, wait)
 	if err != nil {
 		return err
 	}

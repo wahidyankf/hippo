@@ -822,6 +822,43 @@ func TestCoordinationLockRejectsPreCanceledContext(t *testing.T) {
 	}
 }
 
+// A cancelled waiter's cleanup may start late, with its whole wait already spent
+// by a stalled goroutine. It must still take a lock nobody holds: only a lock
+// found held may be refused.
+func TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureReservationCoordination(root); err != nil {
+		t.Fatal(err)
+	}
+	value, err := token()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oneOwner := ReservationVector{CPU: MinimumReservationCPU, MemoryBytes: MinimumReservationMemoryBytes}
+	if err = writeReservationLedger(root, reservationLedger{
+		SchemaVersion: reservationLedgerSchemaVersion,
+		Capacity:      oneOwner,
+		NextSequence:  1,
+		Waiters: []reservationWaiter{{
+			Token: value, PID: os.Getpid(), Class: policy.TaskEphemeral, Profile: "minimal",
+			Requested: oneOwner, Sequence: 1, MaxOwners: 20,
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = removeReservationWaiterAfterCancellation(root, value, 0); err != nil {
+		t.Fatalf("cleanup refused a free coordination lock: %v", err)
+	}
+	ledger, err := readReservationLedger(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ledger.Waiters) != 0 {
+		t.Fatalf("cleanup left %d waiter(s) in the ledger", len(ledger.Waiters))
+	}
+}
+
 func TestCoordinationLockUsesOneBoundedWaitBudget(t *testing.T) {
 	root := t.TempDir()
 	first, err := acquireCoordinationLock(context.Background(), root, time.Second)
