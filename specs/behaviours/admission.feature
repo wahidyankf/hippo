@@ -46,10 +46,17 @@ Feature: Resource-aware admission
     Then the constrained profile is selected
 
   @e2e-exempt
-  Scenario: Minimal work still runs on a tiny machine
-    Given a healthy 1 GiB machine without swap
+  Scenario Outline: The last-resort floor follows the minimal lineage
+    Given a healthy 1 GiB machine without swap and <configuration>
     When development admission is assessed
-    Then the minimal profile is selected with concurrency one
+    Then <result>
+
+    Examples:
+      | configuration                                                | result                                                  |
+      | no configuration                                             | the minimal profile is selected with concurrency one    |
+      | a default profile extending minimal                          | the configured profile is selected with concurrency one |
+      | a default profile extending minimal, falling back to minimal | the minimal profile is selected with concurrency one    |
+      | a profile extending constrained, no fallback                 | exit 125 names hippo.policy.replan-required             |
 
   @e2e-exempt
   Scenario: Exhausted storage requires cleanup

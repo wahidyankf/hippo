@@ -8,6 +8,19 @@ Feature: Shared vector reservations
     Then balanced constrained and minimal use four two and one owner shares
 
   @e2e-exempt
+  Scenario Outline: Automatic owner shares follow the profile lineage
+    Given healthy host capacity and <profile> with no automatic owner share of its own
+    When an automatic reservation is planned in the guard
+    Then capacity is divided into <shares> owner shares
+
+    Examples:
+      | profile                                       | shares |
+      | the built-in balanced profile                 | 4      |
+      | a configured profile that extends balanced    | 4      |
+      | a configured profile that extends constrained | 2      |
+      | a configured profile that extends minimal     | 1      |
+
+  @e2e-exempt
   Scenario: Maximum-width automatic shares do not overflow ceiling division
     Given maximum representable CPU and memory capacity for balanced and constrained profiles
     When automatic fair-share reservations are calculated

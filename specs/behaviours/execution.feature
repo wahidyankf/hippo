@@ -133,10 +133,15 @@ Feature: Guarded process execution
     Then the degraded child starts and is terminated with exit 124 naming hippo.limit.pressure-shed
 
   @e2e-exempt
-  Scenario: Stable warning spares a balanced ephemeral child admitted under normal pressure
-    Given an ephemeral child of the built-in balanced profile admitted under normal pressure
-    When the host then holds a stable macOS warning past the class grace
+  Scenario Outline: Stable warning spares an ephemeral child of the balanced lineage
+    Given an ephemeral child of <profile> admitted on healthy Darwin samples
+    When the host then holds a stable macOS warning past the ephemeral grace
     Then the child finishes with its own exit code
+
+    Examples:
+      | profile                                    |
+      | the built-in balanced profile              |
+      | a configured profile that extends balanced |
 
   @e2e-exempt
   Scenario Outline: Unsafe pressure still sheds a balanced ephemeral child admitted under normal pressure
