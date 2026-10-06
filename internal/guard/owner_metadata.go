@@ -37,21 +37,21 @@ type reservationMetadataFile struct {
 
 // ReservationEntry is one privacy-safe live queue or owner row.
 type ReservationEntry struct {
-	RunID        string            `json:"runId"`
-	State        string            `json:"state"`
-	Position     int               `json:"position,omitempty"`
-	Class        policy.TaskClass  `json:"class"`
-	Profile      string            `json:"profile"`
-	Source       string            `json:"source,omitempty"`
-	Tags         map[string]string `json:"tags,omitempty"`
-	Tier         string            `json:"tier,omitempty"`
-	Requested    ReservationVector `json:"requested"`
-	Allocated    ReservationVector `json:"allocated,omitzero"`
-	Minimum      ReservationVector `json:"minimum,omitzero"`
-	Maximum      ReservationVector `json:"maximum,omitzero"`
-	RegisteredAt string            `json:"registeredAt,omitempty"`
-	Deadline     string            `json:"deadline,omitempty"`
-	Legacy       bool              `json:"legacy,omitempty"`
+	RunID        string             `json:"runId"`
+	State        string             `json:"state"`
+	Position     int                `json:"position,omitempty"`
+	Class        policy.TaskClass   `json:"class"`
+	Profile      policy.ProfileName `json:"profile"`
+	Source       string             `json:"source,omitempty"`
+	Tags         map[string]string  `json:"tags,omitempty"`
+	Tier         string             `json:"tier,omitempty"`
+	Requested    ReservationVector  `json:"requested"`
+	Allocated    ReservationVector  `json:"allocated,omitzero"`
+	Minimum      ReservationVector  `json:"minimum,omitzero"`
+	Maximum      ReservationVector  `json:"maximum,omitzero"`
+	RegisteredAt string             `json:"registeredAt,omitempty"`
+	Deadline     string             `json:"deadline,omitempty"`
+	Legacy       bool               `json:"legacy,omitempty"`
 }
 
 func reservationMetadataPath(root, token string) (string, error) {
@@ -189,7 +189,7 @@ func reservationEntry(
 	root, token, state string,
 	position int,
 	class policy.TaskClass,
-	profile string,
+	profile policy.ProfileName,
 	requested, allocated ReservationVector,
 ) (ReservationEntry, error) {
 	entry := ReservationEntry{

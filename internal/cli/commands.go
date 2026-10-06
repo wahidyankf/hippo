@@ -7,12 +7,21 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
 
 type configOptions struct {
-	configPath       string
-	requestedProfile string
+	configPath string
+	// requestedProfileFlag is the text of --profile, which names no profile
+	// until requestedProfile reads it as one.
+	requestedProfileFlag string
+}
+
+// requestedProfile is the profile --profile names, or none when it is absent,
+// which asks for the catalog's default.
+func (options configOptions) requestedProfile() policy.ProfileName {
+	return policy.ProfileName(options.requestedProfileFlag)
 }
 
 type versionOptions struct {
@@ -234,7 +243,7 @@ func requireSubcommands(root *cobra.Command, execution *commandExecution) {
 
 func addConfigFlags(command *cobra.Command, options *configOptions) {
 	command.Flags().StringVar(&options.configPath, "config", "", "strict local JSON configuration")
-	command.Flags().StringVar(&options.requestedProfile, "profile", "", "requested resource profile")
+	command.Flags().StringVar(&options.requestedProfileFlag, "profile", "", "requested resource profile")
 }
 
 func (application Application) versionCommand(execution *commandExecution) *cobra.Command {

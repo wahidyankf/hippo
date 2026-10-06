@@ -24,7 +24,7 @@ func (application Application) releaseCheck(ctx context.Context, options release
 		return 1, collectError
 	}
 
-	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskRelease, probe.Sample)
+	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile(), policy.TaskRelease, probe.Sample)
 	if resolveError != nil {
 		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}

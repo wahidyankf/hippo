@@ -206,9 +206,9 @@ type EvidenceSummary struct {
 	HealthFailures                         int                    `json:"healthFailures"`
 	Platform                               string                 `json:"platform,omitempty"`
 	Capabilities                           []string               `json:"capabilities,omitempty"`
-	RequestedProfile                       string                 `json:"requestedProfile,omitempty"`
-	ResolvedProfile                        string                 `json:"resolvedProfile,omitempty"`
-	FallbackChain                          []string               `json:"fallbackChain,omitempty"`
+	RequestedProfile                       policy.ProfileName     `json:"requestedProfile,omitempty"`
+	ResolvedProfile                        policy.ProfileName     `json:"resolvedProfile,omitempty"`
+	FallbackChain                          []policy.ProfileName   `json:"fallbackChain,omitempty"`
 	Concurrency                            int                    `json:"concurrency,omitempty"`
 	ConfigHash                             string                 `json:"configHash,omitempty"`
 	RequestedCPU                           int                    `json:"requestedCpu,omitempty"`
@@ -244,7 +244,7 @@ func (writer *EvidenceWriter) Finalize(taskClass policy.TaskClass, outcome evide
 	writer.summary.HealthFailures = healthFailures
 	writer.summary.RequestedProfile = writer.resolution.RequestedProfile
 	writer.summary.ResolvedProfile = writer.resolution.ResolvedProfile
-	writer.summary.FallbackChain = append([]string(nil), writer.resolution.FallbackChain...)
+	writer.summary.FallbackChain = append([]policy.ProfileName(nil), writer.resolution.FallbackChain...)
 	writer.summary.Concurrency = writer.resolution.Concurrency
 	writer.summary.ConfigHash = writer.configHash
 

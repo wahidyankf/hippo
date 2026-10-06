@@ -350,7 +350,7 @@ func TestNoSwapPSIAndOOMAssessment(t *testing.T) {
 		assessment.Reason != "memory-oom" {
 		t.Fatalf("OOM delta missed: %+v", assessment)
 	}
-	if strings.TrimSpace(resolution.ResolvedProfile) == "" {
+	if strings.TrimSpace(string(resolution.ResolvedProfile)) == "" {
 		t.Fatal("resolution profile is empty")
 	}
 }
@@ -371,7 +371,7 @@ func TestConfiguredProfilesInheritDegradedAdmission(t *testing.T) {
 	}
 
 	roomy := adaptiveSample(32*policy.GiB, 20*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active")
-	for profile, want := range map[string]bool{
+	for profile, want := range map[policy.ProfileName]bool{
 		"balanced":             true,
 		"local-balanced":       true,
 		"local-balanced-child": true,
@@ -389,5 +389,108 @@ func TestConfiguredProfilesInheritDegradedAdmission(t *testing.T) {
 	fallback, err := policy.BuiltinCatalog().Resolve("balanced", "ephemeral", small)
 	if err != nil || fallback.ResolvedProfile != "constrained" || fallback.DegradedAdmission {
 		t.Fatalf("a balanced request that fell back kept degraded admission: %+v error=%v", fallback, err)
+	}
+}
+
+// TestConfiguredProfilesInheritTheirLineageAndOwnerShares proves a configured
+// profile takes its lineage through any depth of extends, and with it the owner
+// shares its parent has, and that a profile named for a built-in one keeps that
+// built-in's lineage only while it starts from it.
+func TestConfiguredProfilesInheritTheirLineageAndOwnerShares(t *testing.T) {
+	loaded, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":2,"profiles":{
+  "local-minimal":{"extends":"minimal"},
+  "local-minimal-child":{"extends":"local-minimal","maxConcurrency":1},
+  "local-balanced":{"extends":"balanced"},
+  "local-constrained":{"extends":"constrained"},
+  "balanced":{"maxConcurrency":3}
+}}`), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, want := range map[policy.ProfileName]struct {
+		lineage policy.Lineage
+		shares  int
+	}{
+		"balanced":            {policy.LineageBalanced, 4},
+		"constrained":         {policy.LineageConstrained, 2},
+		"minimal":             {policy.LineageMinimal, 1},
+		"local-balanced":      {policy.LineageBalanced, 4},
+		"local-constrained":   {policy.LineageConstrained, 2},
+		"local-minimal":       {policy.LineageMinimal, 1},
+		"local-minimal-child": {policy.LineageMinimal, 1},
+	} {
+		if got := loaded.Catalog.Profiles[name].Lineage; got != want.lineage {
+			t.Errorf("profile %q has lineage %d, want %d", name, got, want.lineage)
+		}
+		if got := loaded.Coordination.OwnerShares[name]; got != want.shares {
+			t.Errorf("profile %q has %d owner shares, want %d", name, got, want.shares)
+		}
+	}
+
+	// A profile named minimal that extends balanced is balanced's lineage, so it no
+	// longer ends the fallback chain: its inherited fallback reaches it again.
+	if _, err = resourceconfig.Load(writeConfig(t, `{"schemaVersion":2,"profiles":{"minimal":{"extends":"balanced"}}}`), true); err == nil ||
+		!strings.Contains(err.Error(), "cycle") {
+		t.Errorf("a minimal profile that extends balanced loaded with error %v, want a fallback cycle", err)
+	}
+}
+
+// TestTheFloorEndsOnlyAChainThatEnds proves the last-resort floor is for the
+// profile no fallback stands behind: a profile of the minimal lineage that names
+// a fallback still falls back to it, at that profile's normal thresholds, as
+// v0.8.4 did for any profile that was not itself named minimal.
+func TestTheFloorEndsOnlyAChainThatEnds(t *testing.T) {
+	loaded, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":2,"profiles":{
+  "tight":{"extends":"minimal","memoryReservePercent":60,"memoryReserveMaxMiB":6144,"fallback":"minimal"},
+  "tight-alone":{"extends":"minimal","memoryReservePercent":60,"memoryReserveMaxMiB":6144}
+}}`), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Neither tight profile fits 3 GiB of an 8 GiB host once it reserves 60 percent, but minimal does.
+	host := adaptiveSample(8*policy.GiB, 3*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active")
+
+	fallback, err := loaded.Catalog.Resolve("tight", "ephemeral", host)
+	if err != nil || fallback.ResolvedProfile != "minimal" || fallback.Lineage != policy.LineageMinimal ||
+		len(fallback.FallbackChain) != 2 || fallback.FallbackChain[0] != "tight" ||
+		fallback.Policy.AdmissionMemoryBytes != fallback.MemoryReserve {
+		t.Errorf("a minimal-lineage profile with a fallback resolved to %+v error=%v, want minimal at its normal thresholds", fallback, err)
+	}
+
+	alone, err := loaded.Catalog.Resolve("tight-alone", "ephemeral", host)
+	if err != nil || alone.ResolvedProfile != "tight-alone" ||
+		alone.Policy.AdmissionMemoryBytes != alone.Policy.CriticalMemoryBytes ||
+		alone.Policy.DiskWarningBytes != policy.HardDiskFloorBytes {
+		t.Errorf("a minimal-lineage profile with no fallback resolved to %+v error=%v, want itself on the relaxed floor", alone, err)
+	}
+}
+
+// TestOverridingABuiltinNameFollowsTheLineageItNowStartsFrom pins what a
+// configuration that reuses a built-in profile's name gets, since lineage and not
+// the name decides: a profile named minimal that starts from constrained has no
+// floor, and one named balanced that starts from minimal has it.
+func TestOverridingABuiltinNameFollowsTheLineageItNowStartsFrom(t *testing.T) {
+	tiny := adaptiveSample(policy.GiB, 200*policy.MiB, 20*policy.GiB, 40*policy.GiB, "unavailable")
+
+	noFloor, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":2,"profiles":{"minimal":{"extends":"constrained","fallback":""}}}`), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, requested := range []policy.ProfileName{"minimal", "balanced"} {
+		if resolution, resolveError := noFloor.Catalog.Resolve(requested, "ephemeral", tiny); resolveError == nil {
+			t.Errorf("%q on a tiny machine resolved to %+v with a minimal profile that has no floor, want no usable fallback", requested, resolution)
+		}
+	}
+
+	floor, err := resourceconfig.Load(writeConfig(t, `{"schemaVersion":2,"profiles":{"balanced":{"extends":"minimal"}}}`), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution, err := floor.Catalog.Resolve("balanced", "ephemeral", tiny)
+	if err != nil || resolution.ResolvedProfile != "balanced" || resolution.Lineage != policy.LineageMinimal ||
+		resolution.Concurrency != 1 || resolution.Policy.AdmissionMemoryBytes != resolution.Policy.CriticalMemoryBytes {
+		t.Errorf("a balanced profile that starts from minimal resolved to %+v error=%v, want the floor", resolution, err)
 	}
 }

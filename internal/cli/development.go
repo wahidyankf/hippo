@@ -208,7 +208,7 @@ func (application Application) status(ctx context.Context, options statusOptions
 		return 1, err
 	}
 
-	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskEphemeral, second.Sample)
+	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile(), policy.TaskEphemeral, second.Sample)
 	if resolveError != nil {
 		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
@@ -342,12 +342,12 @@ func writeMonitorTransition(
 	}
 
 	encoded, err := json.Marshal(struct {
-		SchemaVersion int          `json:"schemaVersion"`
-		MeasuredAt    string       `json:"measuredAt"`
-		State         policy.State `json:"state"`
-		Reason        string       `json:"reason"`
-		Profile       string       `json:"profile"`
-		SwapState     string       `json:"swapState"`
+		SchemaVersion int                `json:"schemaVersion"`
+		MeasuredAt    string             `json:"measuredAt"`
+		State         policy.State       `json:"state"`
+		Reason        string             `json:"reason"`
+		Profile       policy.ProfileName `json:"profile"`
+		SwapState     string             `json:"swapState"`
 	}{1, sample.MeasuredAt, assessment.State, assessment.Reason, resolution.ResolvedProfile, sample.SwapState})
 	if err != nil {
 		return fmt.Errorf("encode monitor transition JSON: %w", err)
@@ -385,13 +385,13 @@ func (application Application) monitor(ctx context.Context, options monitorOptio
 			samples = samples[len(samples)-17:]
 		}
 
-		resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskEphemeral, reading.Sample)
+		resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile(), policy.TaskEphemeral, reading.Sample)
 		if resolveError != nil {
 			return resolveError
 		}
 
 		assessment := policy.ResourceAssessment(samples, resolution.Policy)
-		state := string(assessment.State) + ":" + assessment.Reason + ":" + resolution.ResolvedProfile
+		state := string(assessment.State) + ":" + assessment.Reason + ":" + string(resolution.ResolvedProfile)
 
 		if state != prior {
 			if err := writeMonitorTransition(application.Stdout, options.jsonOutput, reading.Sample, assessment, resolution); err != nil {
@@ -582,7 +582,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	}
 
 	taskClass := policy.TaskClass(options.class)
-	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, taskClass, probe.Sample)
+	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile(), taskClass, probe.Sample)
 	if resolveError != nil {
 		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}

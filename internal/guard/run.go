@@ -152,7 +152,7 @@ func resolvedEnvironment(environment []string, resolution policy.Resolution, for
 	}
 
 	concurrency := strconv.Itoa(resolution.Concurrency)
-	environment = withEnvironment(environment, "HIPPO_PROFILE", resolution.ResolvedProfile)
+	environment = withEnvironment(environment, "HIPPO_PROFILE", string(resolution.ResolvedProfile))
 	environment = withEnvironment(environment, "HIPPO_CONCURRENCY", concurrency)
 	for _, name := range names {
 		if forceConcurrency {
@@ -177,7 +177,7 @@ func ReservationEnvironment(
 	}
 
 	concurrency := strconv.Itoa(allocation.CPU)
-	environment = withEnvironment(environment, "HIPPO_PROFILE", resolution.ResolvedProfile)
+	environment = withEnvironment(environment, "HIPPO_PROFILE", string(resolution.ResolvedProfile))
 	environment = withEnvironment(environment, "HIPPO_CONCURRENCY", concurrency)
 	environment = withEnvironment(environment, "HIPPO_RESERVED_MEMORY_BYTES", strconv.FormatInt(allocation.MemoryBytes, 10))
 	for _, name := range names {
@@ -907,7 +907,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		}
 
 		if config.TaskClass == policy.TaskEphemeral &&
-			config.Resolution.DegradedAdmission &&
+			config.Resolution.Lineage.DegradedAdmission() &&
 			policy.WarningAdmissionReady(samples, config.Policy) {
 			admitted = true
 			if !config.ReservationPolicy.Enabled {
@@ -1077,7 +1077,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			// ephemeral child whose profile may use degraded admission, however
 			// that child was admitted: the same warning would admit it now.
 			stableWarning := config.TaskClass == policy.TaskEphemeral &&
-				config.Resolution.DegradedAdmission &&
+				config.Resolution.Lineage.DegradedAdmission() &&
 				policy.WarningAdmissionReady(samples, config.Policy)
 			if assessment.State == policy.StateNormal || stableWarning {
 				warningSince = nil
