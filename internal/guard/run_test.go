@@ -790,23 +790,32 @@ func TestCoordinationLockGrantsFreeRootWhenBudgetIsNearlySpent(t *testing.T) {
 	}
 }
 
+// Distinct roots must not contend. A zero wait takes a free lock at once and
+// refuses a held one at once, so the verdict comes from the refusal and never
+// from the runner's speed. The control at the end keeps the first check honest:
+// it means "no contention" only while a zero wait refuses a held lock.
 func TestCoordinationLockAllowsDistinctRootsInParallel(t *testing.T) {
-	first, err := acquireCoordinationLock(context.Background(), t.TempDir(), time.Second)
+	held := t.TempDir()
+	first, err := acquireCoordinationLock(context.Background(), held, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = releaseCoordinationLock(first) }()
 
-	start := time.Now()
-	second, err := acquireCoordinationLock(context.Background(), t.TempDir(), 50*time.Millisecond)
+	second, err := acquireCoordinationLock(context.Background(), t.TempDir(), 0)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("distinct-root coordination was serialized: %v", err)
 	}
 	if err = releaseCoordinationLock(second); err != nil {
 		t.Fatal(err)
 	}
-	if elapsed := time.Since(start); elapsed >= 40*time.Millisecond {
-		t.Fatalf("distinct-root coordination was serialized: %s", elapsed)
+
+	contended, err := acquireCoordinationLock(context.Background(), held, 0)
+	if contended != nil || !IsCoordinationDeferred(err) {
+		if contended != nil {
+			_ = releaseCoordinationLock(contended)
+		}
+		t.Fatalf("a zero wait did not refuse the held root: lock=%v error=%v", contended, err)
 	}
 }
 
