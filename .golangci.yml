@@ -70,6 +70,11 @@ linters:
             - github.com/cucumber/godog
             - github.com/cucumber/messages/go/v34
             - github.com/wahidyankf/hippo
+    exhaustive:
+      # A map keyed by an enumerated type must name every member, as a switch over it must.
+      check:
+        - switch
+        - map
     goconst:
       # Scenario data should state its inputs instead of hiding them behind production constants.
       ignore-tests: true
@@ -87,6 +92,10 @@ linters:
       statements: 80
     gocognit:
       min-complexity: 30
+    govet:
+      enable:
+        # A pointer dereferenced where it is known to be nil, or compared with nil twice, is a defect.
+        - nilness
     nolintlint:
       allow-unused: false
       require-explanation: true
