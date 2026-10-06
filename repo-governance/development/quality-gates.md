@@ -42,6 +42,11 @@ discover.
 `./cmd/...` and `./internal/...` package, `tests/support`, and the unit and integration corpora, and `govulncheck`. It
 is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
 
+Both gates keep Go's default ten-minute per-package test timeout, sized for an idle machine. On a loaded workstation
+`tests/unit` alone has run for over seven minutes, so a local run there raises it, for example with
+`GOFLAGS=-timeout=30m`; `scripts/test-loaded.sh` sets its own, `HIPPO_LOAD_TEST_TIMEOUT` defaulting to 60 minutes. No
+gate checks this: it depends on whoever runs the gate.
+
 ## In CI
 
 [`pr-quality-gate.yml`](../../.github/workflows/pr-quality-gate.yml) mirrors every hook contract and absorbs everything
