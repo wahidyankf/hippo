@@ -147,3 +147,53 @@ one durable owner or discard it with a reason. -->
   load.** At load averages of 27 to 44 the integration package exceeded Go's default 10 minutes on the first Unit 3 run
   and passed with `-timeout 45m`; the unit adapter took 524 s. The failure was the timeout, not a test. Routing
   candidate: the Unit 2 learning on the race step's timeout; `scripts/test.sh`.
+- (2026-10-06, Unit 4) **A type that flows through a struct cannot be introduced in two steps, so the GREEN and REFACTOR
+  of the profile items collapse.** The RED tests read `Resolution.ResolvedProfile` as a `ProfileName`; that forces
+  `Resolution`, `Catalog`, and `Profile` to carry it, and from there every guard type and parameter a resolution's names
+  are copied into (`EvidenceSummary`, `ReservationOwner`, `reservationWaiter`, `ReservationEntry`, both
+  `AcquireReservation` parameters), the configuration file's names, and the monitor's JSON. The module compiles only
+  when all of them are typed, so the item that adds `ProfileName` also removed all 14 Unit 4 allowlist entries (the
+  analysis reported each as stale), `Profile.DegradedAdmission`, and the hand-written share table, and the REFACTOR item
+  had nothing left but its acceptance runs. Routing candidate: `delivery.md`, Unit 4, as a note that its GREEN carries
+  the REFACTOR's edits; the same holds for any later unit that types a field the tests read.
+- (2026-10-06, Unit 4) **`go test -run DomainLiteral ./tests/support` does not run the ratchet; the unit adapter does.**
+  Those tests exercise the analysis against fixtures and pass whatever the allowlist holds. The scenario "Production
+  code compares no domain value with a literal" runs the analysis over the module and is what reported
+  `domain literal analysis found 14 problems` after the profile types landed. A unit that deletes allowlist entries, or
+  adds a violation, needs `go test -count=1 -run 'TestUnitBehaviours/Production_code_compares' ./tests/unit` (about
+  three seconds) beside the finishing gates the coordinator lists. Routing candidate:
+  `tech-docs/002-gates-and-analysis.md` and the finishing-gate list in each unit's task.
+- (2026-10-06, Unit 4) **Decisions the plan left open.** An unset lineage answers `false`, `false`, and `1` (no degraded
+  admission, no floor, and the one share v0.8.4 gave a name it did not know), and `Resolve` refuses a profile that
+  carries it, so only a hand-built `Resolution` in a test can reach the `1`. The third row of the floor outline needs a
+  profile with no fallback, which the configuration already allows as `"fallback":""`; the driver's
+  `derivedProfileWithoutFallback` writes it in this unit, ahead of Unit 5's note that the configuration writer gains the
+  `fallback` override. The built-in row of "Stable warning spares an ephemeral child of the balanced lineage" has its
+  own step text ("admitted on healthy Darwin samples"), so the unchanged "Unsafe pressure still sheds..." outline keeps
+  its step. Routing candidate: `tech-docs/001-domain-types.md`, Profile Identity and Lineage, and
+  `tech-docs/003-specification-changes.md`.
+- (2026-10-06, Unit 4) **File impact additions.** Beyond `tech-docs/004-file-impact.md`'s Unit 4 list, the unit also
+  touched `tests/integration/lease_evidence_test.go` and `tests/integration/run_test.go` (their `FallbackChain` literals
+  are `[]policy.ProfileName`), `tests/support/blockers_v04.go` and `tests/support/pending_v04.go` (share maps keyed by
+  `ProfileName`), and `tests/support/review_v04.go`, whose corrupt-ledger scenario kept its corruption kind in the
+  driver's `requestedProfile` and now has a `corruptionKind` field. The no-fallback row hands the public command line
+  the configuration text the driver wrote (`Driver.configDocument`) instead of reading the file back, because `gosec`
+  G703 flags the write in `runGuardedAtBoundary` once its content comes from a file read. Routing candidate:
+  `tech-docs/004-file-impact.md`, Unit 4. **Routed** (2026-10-06, Unit 4 close) to `tech-docs/004-file-impact.md`,
+  Unit 4.
+- (2026-10-06, Unit 4) **The degraded-admission scenarios use a 100 ms real-time window and fail under heavy host
+  load.** At load averages near 45 they failed twice and passed on rerun; the fixture predates this plan. Routing
+  candidate: an idea brief to make the fixture's clock injectable, since a flaky gate on a tool every repository on the
+  workstation runs is a release risk.
+- (2026-10-06, Unit 4) **"Cancelled FIFO waiters use a fresh cleanup deadline" flakes under race and load; the cause
+  predates this plan.** The step frees the coordination lock 20 ms after cancelling, and the production cleanup gives
+  itself a fresh 100 ms (`coordinationLifecycleWait`) to take that lock. When the scheduler delays either side, the
+  cleanup falls back to removing the waiter in the background after the step has already read the ledger. A repro of the
+  step under `-race` with CPU burners failed 17 and 21 of 300 trials on both `892c462` (pre-plan) and this unit's tree,
+  and `coordination.go` is byte-identical to `892c462`. The lock wait also has a hazard of its own: after a stall,
+  `select` may pick `ctx.Done()` over a ready poll and refuse a free lock, which the process gate at `coordination.go`
+  already guards against. Not fixed here because it is outside the plan's contract. Routing candidate: an idea brief for
+  an injectable cleanup wait on `ReservationAdmissionOptions` (default unchanged; the scenario sets about 2 s and keeps
+  its strict assertion) and a lock-wait check of the lock before honouring the deadline. **Routed** (2026-10-06, at the
+  owner's direction) to the bug-fix plan `fix-cancelled-waiter-cleanup-flake`; the degraded-admission flake gets its own
+  bug-fix plan.
