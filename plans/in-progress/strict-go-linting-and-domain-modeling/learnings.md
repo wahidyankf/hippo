@@ -109,6 +109,8 @@ one durable owner or discard it with a reason. -->
   gate; the same step alone took 359 s, and a rerun at lower load took 534 s, against 275 s during Unit 1. The non-race
   integration run moved from 213 s to 220 s at comparable load, so the code did not slow it. Routing candidate:
   `scripts/test.sh` (an explicit `-timeout` on the race step) or the quality-gates page, as a separate change.
+  **Discarded** (2026-10-06): `scripts/test-loaded.sh` already raises the timeout through `GOFLAGS`, keeping the shared
+  gate as CI runs it; see Phase 4a.
 - (2026-10-06, Unit 3) **The plan's items could not run in their written order.** The delivery items put the
   `Resolution.Reason` and constant-deletion REFACTOR (item 10) before the `ShedCause` and `Resolution` items it depends
   on: the constants `run.go`, `reservation.go`, `development.go`, and the `tests/support` readers still use are deleted
@@ -146,7 +148,9 @@ one durable owner or discard it with a reason. -->
 - (2026-10-06, Unit 3) **A fixed `go test` default timeout of 10 minutes fails the integration adapter under host
   load.** At load averages of 27 to 44 the integration package exceeded Go's default 10 minutes on the first Unit 3 run
   and passed with `-timeout 45m`; the unit adapter took 524 s. The failure was the timeout, not a test. Routing
-  candidate: the Unit 2 learning on the race step's timeout; `scripts/test.sh`.
+  candidate: the Unit 2 learning on the race step's timeout; `scripts/test.sh`. **Discarded** (2026-10-06):
+  `scripts/test-loaded.sh` already raises the timeout through `GOFLAGS`, keeping the shared gate as CI runs it; see
+  Phase 4a.
 - (2026-10-06, Unit 4) **A type that flows through a struct cannot be introduced in two steps, so the GREEN and REFACTOR
   of the profile items collapse.** The RED tests read `Resolution.ResolvedProfile` as a `ProfileName`; that forces
   `Resolution`, `Catalog`, and `Profile` to carry it, and from there every guard type and parameter a resolution's names
