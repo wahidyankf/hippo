@@ -351,6 +351,9 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 - [x] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
       `git switch -c worktree/fix-distinct-root-lock-test-flake-fix origin/main`, then `npm ci`; proof:
       `git branch --show-current` prints the branch and `git status --porcelain` prints nothing. `[AC-05]`
+  - Result: (2026-10-07, recorded at the execution check) `worktree/fix-distinct-root-lock-test-flake-fix` from
+    `origin/main` at `33ca271`, with `npm ci`: the gate commit `736c2f1`, the branch's first, has `33ca271` as its
+    parent and was made on a clean tree.
 - [x] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
       in mode `normal`, at most three cycles, and commit its repairs and its verdict line as the fix branch's first
       commit, a `docs(plans)` commit; proof: one terminal `plan-quality-gate:` verdict line recorded here and
@@ -493,11 +496,13 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
     race detector clean, ending with "No vulnerabilities found."
 - [x] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-05]`
-  - Result: (2026-10-07) `git diff --name-only origin/main...HEAD` at `c2a08ca` prints `internal/guard/run_test.go` and
-    this README: exactly the File Impact paths.
+  - Result: (2026-10-07) `git diff --name-only origin/main...HEAD`, against `origin/main` at `c2a08ca` with head
+    `1221319`, prints `internal/guard/run_test.go` and this README: exactly the File Impact paths.
 - [x] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
       results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
       `git status --porcelain` prints nothing. `[AC-08]`
+  - Result: (2026-10-07, recorded at the execution check) committed as `0876fa6`, #143's head and last commit, on a
+    clean tree; it landed as `4e1e7d5`. Recorded here because the commit cannot hold its own hash.
 
 ### Phase 5: Release Through v0.8.5
 
@@ -552,10 +557,15 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 - [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-08]`
-  - Result: (2026-10-07) [Learnings](#learnings) holds no entry, so nothing is routed or discarded; the section records
-    that terminal state.
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
+  - Result: (2026-10-07) [Learnings](#learnings) held no entry when first routed; the execution check's F2 then added
+    one, the `npm ci` deviation, discarded with its reason.
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
       verdict line recorded here. `[AC-08]`
+  - Result: (2026-10-07) `plan-execution-check: PASS_WITH_FINDINGS (1 run, 5 LOW, 3 repaired, 1 closed by archival)`, at
+    `589a190`. F1 (LOW: Phase 1's fix-branch item and the last Phase 4 item had no result line), F2 (LOW: `npm ci` under
+    `./hippo` unrecorded as a deviation), and F5 (LOW: the boundary result's commit read ambiguously) are repaired in
+    this commit; F3 (LOW: the leak review was posted before `Quality gate` finished, with every merge precondition
+    holding at the merge) needs no repair; F4 closes with the archival items.
 
 ### Archival
 
@@ -569,9 +579,12 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ## Learnings
 
-No entries. Execution followed the plan as written: every RED, GREEN, break, repeated, and contention proof came out as
-[Root Cause](#root-cause) predicted, and the rebase, landing, clean-up, and release raised nothing this plan did not
-already record. **Resolved (2026-10-07):** nothing to route.
+- (2026-10-07) Every RED, GREEN, break, repeated, and contention proof came out as [Root Cause](#root-cause) predicted.
+  One deviation: `npm ci`, a dependency install rather than a HIPPO gate, ran under `./hippo` twice (the Phase 1 gate
+  result and the Phase 5 provision result), against the Delivery rule that every command runs directly, because the
+  workstation's outer guard wraps dependency installs. **Resolved (2026-10-07):** discarded; the rule concerns HIPPO's
+  own gates, which all ran directly, and the same observation was discarded in
+  [the configured-profiles fix](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md).
 
 ## Directory Map
 
