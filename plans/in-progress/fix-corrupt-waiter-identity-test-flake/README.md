@@ -435,32 +435,65 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ### Phase 2: The Waiter Parks Outside the Lock
 
-- [ ] `[AI]` RED: in a _Scratch_, write the _Stall copy_ and its overlay as `stall.json`, and run the _Corruption test_
+- [x] `[AI]` RED: in a _Scratch_, write the _Stall copy_ and its overlay as `stall.json`, and run the _Corruption test_
       and the _Focused scenarios_ with it, recording the output; proof: the _Corruption test_ fails `waiter/missing` and
       `waiter/replaced` 3 runs of 3 each with `competing admission bypassed corrupt live identity: session=false error=`
       followed by `shared coordination deferred admission: another admission is updating the shared root`, and passes
       both owner rows 3 of 3; at each adapter rows `#02` and `#03` fail and the first two pass; `git status --porcelain`
       prints nothing; the _Scratch_ is removed. `[AC-01]`
-- [ ] `[AI]` GREEN: in `internal/guard/run_test.go`, `TestReservationIdentityPathCorruptionFailClosed`, replace the body
+  - Result: (2026-10-06) the _Stall copy_ added `time.Sleep(50 * time.Millisecond)` after the lock-refusal block in the
+    admission loop (`reservation.go` line 1213 of the copy) and after `ReservationStatus`'s lock check (line 1577), and
+    nothing else (`diff` against the worktree file showed those two insertions). The _Corruption test_ with
+    `-overlay <scratch>/stall.json -count=3 -timeout 30m -v` exited `1`: `waiter/missing` and `waiter/replaced` each
+    failed 3 of 3 (0.16–0.18 s), 6 failures in all, each at `run_test.go:2144` with
+    `competing admission bypassed corrupt live identity: session=false error=` followed by
+    `shared coordination deferred admission: another admission is updating the shared root`; `owner/missing` and
+    `owner/replaced` each passed 3 of 3 (0.23–0.25 s). _Focused scenarios_ with `GOFLAGS=-overlay=<scratch>/stall.json`
+    exited `1` at both adapters: unit `#02` (0.64 s) and `#03` (0.57 s) failed and the first two rows passed (0.63 s and
+    0.62 s); integration `#02` (0.62 s) and `#03` (0.60 s) failed and the first two passed (0.62 s and 0.64 s); each
+    failed row carried the same message at `run_test.go:2144`. `git status --porcelain` printed nothing; the _Scratch_
+    was removed (`test ! -e` exits `0`). Load average 14.34 at the start.
+- [x] `[AI]` GREEN: in `internal/guard/run_test.go`, `TestReservationIdentityPathCorruptionFailClosed`, replace the body
       of the `if record == "waiter"` block (lines 2105–2125) with the block under [Solution](#solution), changing
       nothing else. In a _Scratch_, write the _Stall copy_ and `stall.json`; proof: the _Corruption test_ passes every
       row 3 runs of 3 without an overlay and 3 of 3 with `stall.json`, the _Focused scenarios_ pass all four rows at
       both adapters with `stall.json`, and the _Scratch_ is removed. `[AC-01]`
-- [ ] `[AI]` REFACTOR: confirm the waiter block reads no clock but its liveness bound and states why it parks; proof:
+  - Result: (2026-10-06) the `if record == "waiter"` block (lines 2105–2125) is replaced by the [Solution](#solution)
+    block, with the `Pause` seam, the `parked` channel, the `select` bounded by `guardLivenessLimit`, and
+    `t.Cleanup(cancel)`; nothing else in the file changed (`gofmt -l internal/guard` prints nothing, `go vet` exits
+    `0`). The _Corruption test_ (`-count=3 -timeout 30m -v`) exited `0` without an overlay with 12 of 12 row passes (3
+    per row, the waiter rows at 0.03–0.05 s) and no `--- FAIL`, and exited `0` with `stall.json` with 12 of 12 (waiter
+    rows 0.29–0.30 s, owner rows 0.23–0.25 s) and no `--- FAIL`. _Focused scenarios_ with
+    `GOFLAGS=-overlay=<scratch>/stall.json` exited `0` at both adapters, all four rows passing: unit 0.78 s, 0.86 s,
+    0.65 s, and 0.79 s; integration 1.36 s, 0.67 s, 0.77 s, and 0.78 s. The _Scratch_ was removed (`test ! -e` exits
+    `0`). Load average 8.51 at the start.
+- [x] `[AI]` REFACTOR: confirm the waiter block reads no clock but its liveness bound and states why it parks; proof:
       `awk '/^func TestReservationIdentityPathCorruptionFailClosed/,/^}/' internal/guard/run_test.go` piped to
       `grep -cE 'time\.(Now|Sleep)|time\.Second'` prints `2` (the owner's and the replacement's 1 s admission waits),
       `go tool golangci-lint run ./internal/guard/...` prints `0 issues.`, `gofmt -l internal/guard` prints nothing, and
       the _Corruption test_ still passes. If lint reports a length or complexity finding on the test, move the waiter's
       start and park into a helper `startParkedReservationWaiter(t, root, plan)` returning the token, the cancel
       function, and the done channel, and rerun this proof. `[AC-06]`
-- [ ] `[AI]` Commit `internal/guard/run_test.go` alone as
+  - Result: (2026-10-06) the waiter block reads no clock but its liveness bound, and the three-line comment above the
+    `parked` channel states why the waiter parks: it reaches its pause only after releasing the coordination lock, so
+    the competing admission meets a free lock and is decided by the ledger alone. The `awk` and `grep -cE` pipeline
+    prints `2`, the owner's wait at line 11 of the function and the replacement's at line 82, each `time.Second`;
+    `go tool golangci-lint run ./internal/guard/...` prints `0 issues.` (with its usual warning that `nilaway` is an
+    unknown `//nolint` linter, which predates this change); `gofmt -l internal/guard` prints nothing; the _Corruption
+    test_ (`-count=3`) passed 12 of 12 rows with no `--- FAIL`. Lint reported no length or complexity finding, so the
+    helper was not extracted. Load average 11.39 at the end.
+- [x] `[AI]` Commit `internal/guard/run_test.go` alone as
       `test(guard): park the corrupt-identity waiter outside the coordination lock`; proof:
       `git log --oneline origin/main..HEAD` lists it after the gate commit, and `git diff --name-only HEAD -- internal`
       prints nothing. `[AC-06]`
+  - Result: (2026-10-06) committed as `6e72952` through the pre-commit and commit-msg gates;
+    `git log --oneline origin/main..HEAD` lists it above the gate commit `ce40fdb`, and
+    `git diff --name-only HEAD -- internal` prints nothing. The later Phase 3 and 4 items ran on the staged change
+    before this commit, with identical content.
 
 ### Phase 3: Review and Documentation
 
-- [ ] `[AI]` Break tests: in a _Scratch_, write the _Held-lock copy_, the _Stale copy_, and the _No-pause copy_ with an
+- [x] `[AI]` Break tests: in a _Scratch_, write the _Held-lock copy_, the _Stale copy_, and the _No-pause copy_ with an
       overlay for each (the _Stale_ and _No-pause_ overlays list only `reservation.go`), and run the _Corruption test_
       with each, using `-count=1` for the no-pause overlay, whose waiter rows each take the 30 s liveness limit; proof,
       each recorded here: the held-lock overlay fails all four rows 3 of 3 with
@@ -470,27 +503,90 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
       `corrupt live identity was treated stale:`; the no-pause overlay fails both waiter rows with `waiter did not park`
       or `waiter returned before parking:` and passes both owner rows; `git diff --quiet -- internal` exits `0`; the
       _Scratch_ is removed. `[AC-02]` `[AC-03]` `[AC-04]` `[AC-05]`
-- [ ] `[AI]` Run the
+  - Result: (2026-10-06) each copy was written from the worktree's current files and diffed against them: the _Held-lock
+    copy_ adds the lock acquisition and failure check before, and the release after, the competing admission; the _Stale
+    copy_ changes only line 487 (`[]string{path, anchor}[:1]`) and line 527 (`return false, nil`); the _No-pause copy_
+    deletes only lines 1104–1106. Each run was the _Corruption test_ with
+    `-overlay <scratch>/<name>.json -timeout 30m -v`, exit `1`. Held-lock (`-count=3`): all four rows failed 3 of 3, 12
+    `--- FAIL` rows (0.01–0.02 s), each at `run_test.go:2160` of the copy with
+    `competing admission bypassed corrupt live identity: session=false error=shared coordination deferred admission:`
+    `another admission is updating the shared root`. Stale (`-count=3`): `owner/missing` and `owner/replaced` failed 3
+    of 3 each (0.02 s) with `run_test.go:2155: competing admission bypassed corrupt live identity: session=true`
+    `error=<nil>`, and `waiter/missing` and `waiter/replaced` failed 3 of 3 each (0.04–0.05 s) with
+    `run_test.go:2174: corrupt live identity was treated stale:`. No-pause (`-count=1`): `waiter/missing` (30.03 s) and
+    `waiter/replaced` (30.01 s) failed at `run_test.go:2130` with `waiter did not park`, and `owner/missing` (0.05 s)
+    and `owner/replaced` (0.06 s) passed. Each failed waiter row also logged
+    `TempDir RemoveAll cleanup: ... directory not empty`, because the still-running waiter writes the root as
+    `t.Cleanup(cancel)` fires; it appears only on this failure path. `git diff --quiet -- internal` exits `0` (the test
+    file is staged for its commit; the working tree matches the index). The _Scratch_ was removed (`test ! -e` exits
+    `0`). Load average 12.93 at the start and 10.07 at the end.
+- [x] `[AI]` Run the
       [Gherkin implementation review](../../../repo-governance/workflows/quality/gherkin-implementation-review.md) on
       "Reservation identity path corruption remains fail closed", whose binding runs this test: with the _Stale copy_
       overlay through `GOFLAGS`, run the _Focused scenarios_; proof: all four rows fail at both adapters, the review
       records each row's status, none `untested`, `unimplemented`, or `drifted`, and the _Scratch_ is removed. `[AC-03]`
       `[AC-04]`
-- [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
+  - Result: (2026-10-06) frozen list: the four rows of the outline (`specs/behaviours/reservations.feature` lines
+    356–367, unchanged by this work): owner/missing, owner/replaced, waiter/missing, waiter/replaced. Implementation for
+    all four: `reservationIdentityAlive` in `internal/guard/reservation.go` (lines 476–543), reached by the ledger
+    reconciliation at lines 876 and 890 and the admission and status paths that call it. Test for all four:
+    `TestReservationIdentityPathCorruptionFailClosed` in `internal/guard/run_test.go`, bound by `tests/support/steps.go`
+    lines 213–219 and `tests/support/blockers_v04.go` lines 1109–1111 (`runInternalGuardRegressionV04` runs
+    `go test ./internal/guard -run` with that test's name and the row's `<record>/<fault>`), executed at the unit and
+    integration adapters (`@e2e-exempt`, its `tests/contract/contract.go` entry at line 290 unchanged). With the _Stale
+    copy_ overlay (lines 487 and 527 only, as in the break tests) through `GOFLAGS=-overlay=<scratch>/stale.json`, the
+    _Focused scenarios_ exited `1` at both adapters with all four rows failing: unit 0.59 s, 0.66 s, 0.81 s, and 2.19 s;
+    integration 1.16 s, 0.48 s, 0.59 s, and 1.79 s. The owner rows carried
+    `run_test.go:2155: competing admission bypassed corrupt live identity: session=true error=<nil>` and the waiter rows
+    `run_test.go:2174: corrupt live identity was treated stale:`, each printed in the suite output and again in its
+    failed-steps summary (4 lines per adapter per message). Statuses: owner/missing `implemented`, owner/replaced
+    `implemented`, waiter/missing `implemented`, waiter/replaced `implemented`; none `untested`, `unimplemented`, or
+    `drifted`, and the feature file is unchanged. The _Scratch_ was removed (`test ! -e` exits `0`). Load average 16.74
+    at the start.
+- [x] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
       page describes this test and that, per [Release content](#solution), `CHANGELOG.md` gets no entry; proof:
       `git grep -n 'IdentityPathCorruption' -- README.md docs specs CHANGELOG.md repo-governance` prints nothing, and
       `git diff --name-only origin/main...HEAD -- README.md docs specs tests CHANGELOG.md` prints nothing. `[AC-06]`
+  - Result: (2026-10-06) no page describes this test: `git grep -n 'IdentityPathCorruption' -- README.md docs specs`
+    `CHANGELOG.md repo-governance` prints nothing (exit `1`), and a wider case-insensitive `git grep -n -iE` over the
+    same paths for `identity.path.corruption`, `corrupt.waiter`, `waiter.*corrupt`, and `competing admission` finds only
+    the scenario outline's own title and `When` step in `specs/behaviours/reservations.feature` (lines 357 and 359),
+    which this change leaves word for word and true. `git diff --name-only origin/main...HEAD -- README.md docs specs`
+    `tests CHANGELOG.md` prints nothing (exit `0`). Per [Release content](#solution) the test-only change is true to the
+    shipped binary, so `CHANGELOG.md` gets no entry. Status `no-change`: nothing stale, nothing removed, no command in
+    an affected document to run. This record's own formatting was checked with `prettier --check` and
+    `markdownlint-cli2` on this file.
 
 ### Phase 4: Verification
 
-- [ ] `[AI]` Bounded checkpoint: run both forms of the _Repeated test_, then the _Focused scenarios_, recording `uptime`
+- [x] `[AI]` Bounded checkpoint: run both forms of the _Repeated test_, then the _Focused scenarios_, recording `uptime`
       before and after each; proof: each exits `0`, with 500 `--- PASS` lines for every row in each _Repeated test_
       form, four passing rows at each adapter, and no `--- FAIL`. Fallback, decided now: one failure stops the plan
       before landing; its output is recorded here, the cause it shows replaces the matching part of
       [Root Cause](#root-cause), and nothing lands until a new RED proves that cause. `[AC-07]`
-- [ ] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` A failure
+  - Result: (2026-10-06) run directly, not under `./hippo`, with only in-process contention (`-race`, `-count`,
+    `GOMAXPROCS`) and no load process of its own, on the tree with the fix staged and not yet committed (the test file
+    is what the commit will hold), each exit `0`. _Repeated test_ with `GOMAXPROCS=2`
+    (`go test -race -count=500 -timeout 30m -v -run`
+    `'^TestReservationIdentityPathCorruptionFailClosed$' ./internal/guard`): 500 `--- PASS` lines for each of the four
+    rows (2,000 in all), 0 `--- FAIL`, the slowest row 0.33 s, `ok` in 76.979 s; `uptime` before and after: load
+    averages 15.54 16.65 18.96 and 10.08 15.05 18.18. _Repeated test_ at the default `GOMAXPROCS`: 500 `--- PASS` for
+    each of the four rows (2,000), 0 `--- FAIL`, the slowest row 0.11 s, `ok` in 86.675 s; load averages 9.67 14.89
+    18.10 before and 9.08 13.44 17.22 after. _Focused scenarios_ (no overlay): unit four of four rows passed (0.54 s,
+    0.47 s, 0.38 s, 0.92 s; `ok` in 5.463 s), integration four of four (0.41 s, 0.42 s, 0.50 s, 0.44 s; `ok` in 4.762
+    s), 0 `--- FAIL` at either; load averages 8.59 13.26 17.14 before and 8.11 13.01 17.00 after. This plan names no
+    separate contention check, so bug-report step 2 was also run as written
+    (`GOMAXPROCS=2 go test -race -count=150 -timeout 30m -v -run`
+    `'TestReservationIdentityPathCorruptionFailClosed/waiter' ./internal/guard`): exit `0`, 150 `--- PASS` for each
+    waiter row (300), 0 `--- FAIL`, `ok` in 12.556 s, load averages 6.90 12.33 16.64 before and 6.77 12.12 16.52 after.
+    The fallback did not fire.
+- [x] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` A failure
       in another test is recorded here and filed as its own bug-fix plan under the owner's standing request; this plan
       lands only after that fix merges and a rebase onto it reruns the _Full gate_ clean. `[AC-07]`
+  - Result: (2026-10-06) `GOFLAGS=-timeout=30m npm test` at `6e72952`, the form the repository's loaded-host runner
+    uses, exit `0` (`uptime` load 6.19 before, 15.86 after): selected production line coverage 99.35% (911/917), race
+    detector clean, ending with "No vulnerabilities found."
+
 - [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
       `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
       `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
