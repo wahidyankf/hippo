@@ -120,7 +120,7 @@ $ echo $?
 2
 ```
 
-Use a POSIX identifier that is not one of HIPPO's own `HIPPO_*` protocol variables.
+Use a POSIX identifier that does not begin with `HIPPO_`; HIPPO reserves every such name.
 
 **Exit `125`, `hippo.policy.replan-required` — the inherited value is wrong.** Reservation mode only; exclusive mode
 does not inspect the value.

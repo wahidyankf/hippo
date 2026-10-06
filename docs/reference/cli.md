@@ -285,9 +285,11 @@ Silent gate. Exits `0` when a release may proceed, and reports a stable exit cod
 
 A failed check writes one diagnostic line naming its reason. The first host reading must fit the requested profile, and
 `release` is a strict task class, so the check never falls back to a safer profile. A reading that does not fit in
-memory, free disk, or CPU exits `125` naming `hippo.policy.replan-required`; the profile or the host has to change. Free
-disk below the immutable 256 MiB floor is the exception: it exits `124` naming `hippo.limit.storage-blocked`; free space
-first. Host evidence that cannot be collected exits `125` naming `hippo.host.unreadable`.
+memory, free disk, or, on macOS, CPU exits `125` naming `hippo.policy.replan-required`; the profile or the host has to
+change. On Linux the first reading has no CPU figure, because utilization needs two readings, so CPU above the ceiling
+there surfaces later, as `124` naming `hippo.limit.capacity-deferred`. Free disk below the immutable 256 MiB floor is
+the exception: it exits `124` naming `hippo.limit.storage-blocked`; free space first. Host evidence that cannot be
+collected exits `125` naming `hippo.host.unreadable`.
 
 Once the first reading has fit, a later reading can still degrade. A disk that falls below the release reserve exits
 `124` naming `hippo.limit.storage-blocked`; free space first. Memory pressure or CPU use that does not settle defers the

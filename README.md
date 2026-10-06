@@ -151,7 +151,7 @@ or fix the configuration. [Exit codes and error codes](./docs/reference/exit-cod
 | 2 — reservation          | Concurrent owners against a shared vector budget. Opt in per repository.              |
 | 3 — adaptive reservation | Tiered FIFO admission, labeled status/history, and evidence-gated burst capacity.     |
 
-The protocols never mix within one state root. A v1 client meeting the other live protocol exits `125` naming
+The protocols never mix within one state root. A client meeting the other live protocol exits `125` naming
 `hippo.coordination.protocol-mismatch` without changing state; drain the old epoch before retrying.
 
 ## 📚 Documentation
