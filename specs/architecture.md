@@ -113,7 +113,8 @@ Every component above sits inside the `Go CLI process` container.
 - **Host collector** normalizes macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence into portable
   samples.
 - **Policy engine and profiles** classify evidence, choose an adaptive development profile, key every profile rule on
-  the built-in lineage a profile inherits through `extends`, and preserve strict transaction and release envelopes.
+  the built-in lineage a profile inherits through `extends`, decide the admission path once for `run`, `status`, and the
+  behaviour driver, and preserve strict transaction and release envelopes.
 - **Execution guard** owns coordination mode, atomic vector and FIFO mutations, liveness identities, compatibility and
   port leases, controlling-terminal ownership, child-process lifecycle and streams, fixed generic concurrency mapping,
   targeted pressure shedding, and bounded evidence retention.
