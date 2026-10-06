@@ -494,7 +494,7 @@ Phases 1–4 ticked and Phase 5 open.
   - Result: (2026-10-06) `GOFLAGS=-timeout=30m npm test` exit `0`, ending `No vulnerabilities found.`; selected
     production line coverage 99.35% (911/917); integration `ok` in 678 s; load averages 17.72 / 27.42 / 28.73 at the
     end.
-- [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
+- [x] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
       `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
       `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
       units edit `internal/guard/reservation.go`, `tests/support/blockers_v04.go`, and `specs/architecture.md`), and
@@ -502,9 +502,23 @@ Phases 1–4 ticked and Phase 5 open.
       `git status --porcelain` prints nothing before the rebase, `git ls-remote --tags origin v0.8.5` prints nothing,
       and the reruns exit `0`. If the tag already exists, land anyway and the recovery item in Phase 5 fires. `[AC-05]`
       `[AC-06]` `[AC-07]`
-- [ ] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
+  - Result: (2026-10-06) the record so far was committed as `69e196b` on a clean tree, and
+    `git ls-remote --tags origin v0.8.5` printed nothing before each rebase. First rebase onto `4cd530a` (plans-only
+    commits): the _Full gate_ rerun failed twice on pre-existing flakes outside this fix, each now with its own bug-fix
+    plan — run 1 on `TestCoordinationLockAllowsDistinctRootsInParallel` (97 ms against its 40 ms bound;
+    `fix-distinct-root-lock-test-flake`), run 2 on `TestReservationIdentityPathCorruptionFailClosed/waiter/replaced`
+    (`fix-corrupt-waiter-identity-test-flake`, which failed 4 of 150 on trunk and 2 of 150 here at `GOMAXPROCS=2` with
+    `-race`); run 3 exited `0` (99.35%, 911/917). Main then gained the linting plan's Unit 5 (`e261965`, editing
+    `internal/guard/run.go`, `internal/guard/run_test.go`, and `specs/architecture.md`), so the branch was rebased again
+    without conflict to `10d9e5d`: _Focused scenarios_ passed at both adapters (2 of 2 each), and the _Full gate_ exited
+    `0` at load 6.8–14.8 with selected production line coverage 99.36% (928/934), race detector clean, ending with "No
+    vulnerabilities found."
+- [x] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-04]`
-- [ ] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
+  - Result: (2026-10-06) `git diff --name-only origin/main...HEAD` at `e261965` prints `CHANGELOG.md`,
+    `internal/guard/reservation.go`, `internal/guard/run_test.go`, this README, `specs/architecture.md`, and
+    `tests/support/blockers_v04.go`: exactly the File Impact paths.
+- [x] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
       results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
       `git status --porcelain` prints nothing. `[AC-07]`
 
