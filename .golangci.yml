@@ -82,6 +82,7 @@ linters:
       enforce-patterns:
         - ^github\.com/wahidyankf/hippo/internal/evidence\.RecordedOutcome$
         - ^github\.com/wahidyankf/hippo/internal/evidence\.RecordedBudgetOutcome$
+        - ^github\.com/wahidyankf/hippo/internal/policy\.AdmissionInput$
     goconst:
       # Scenario data should state its inputs instead of hiding them behind production constants.
       ignore-tests: true

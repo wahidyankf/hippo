@@ -197,6 +197,125 @@ func TestADeferralWhoseSummaryCannotBeWrittenReportsTheFailedWrite(t *testing.T)
 	}
 }
 
+// stableWarningStart is when stableWarningRunCollector's first sample was
+// taken, by the collector's own clock rather than the test's.
+var stableWarningStart = time.Date(2026, 10, 6, 8, 0, 0, 0, time.UTC)
+
+// stableWarningRunCollector samples a host that admits the run at once and then
+// holds a macOS memory warning steady, one second apart by its own clock, so
+// a one-second trend window is full from the first warning sample, with no
+// waiting. Its child exits on the sample numbered finishAfter.
+type stableWarningRunCollector struct {
+	calls       int
+	finishAfter int
+	exited      chan error
+}
+
+func (collector *stableWarningRunCollector) Collect(
+	ctx context.Context, previous policy.CPUState, diskPath string,
+) (policy.Reading, error) {
+	reading, err := (&controlledRunCollector{}).Collect(ctx, previous, diskPath)
+	reading.Sample.MeasuredAt = stableWarningStart.Add(time.Duration(collector.calls) * time.Second).Format(time.RFC3339Nano)
+	if collector.calls > 0 {
+		reading.Sample.MemoryPressureLevel = new(2)
+	}
+	collector.calls++
+	if collector.calls == collector.finishAfter {
+		collector.exited <- nil
+	}
+
+	return reading, err
+}
+
+// TestARunSparesAStableWarningByThePolicyItAdmitsAgainst holds the supervision
+// loop's exemption to RunConfig.Policy, the policy Run admits against and the
+// caller sets apart from Resolution.Policy: under a stable warning that this
+// policy admits but the resolution's own policy would not, the balanced child
+// runs to its own exit instead of being shed once the warning outlasts its grace.
+func TestARunSparesAStableWarningByThePolicyItAdmitsAgainst(t *testing.T) {
+	root := t.TempDir()
+	settings := policy.DefaultPolicy()
+	settings.AdmissionWindow = evidenceDecidesAdmission
+	settings.SampleInterval = time.Millisecond
+	settings.TrendWindow = time.Second
+	settings.EphemeralWarningGrace = time.Nanosecond
+	settings.ConsecutiveCPUSamples = 1
+	unsparing := settings
+	unsparing.WarningAdmissionMemoryBytes = 64 * policy.GiB
+	collector := &stableWarningRunCollector{finishAfter: 20, exited: make(chan error, 1)}
+	code, err := Run(context.Background(), RunConfig{
+		Command: "true", TaskClass: policy.TaskEphemeral, EvidenceRoot: root,
+		Collector: collector, Policy: settings,
+		Resolution: policy.Resolution{
+			RequestedProfile: "balanced", ResolvedProfile: "balanced", Concurrency: 1,
+			Lineage: policy.LineageBalanced, Policy: unsparing,
+		},
+		EvidenceLimits: evidence.DefaultLimits(), Now: time.Now, Stderr: &bytes.Buffer{},
+		startLifetime: func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error) {
+			return &supervisedLifetime{processGroup: syscall.Getpgrp(), exited: collector.exited}, nil
+		},
+		//nolint:nilnil // Two nil results explicitly model a successfully reaped child and supervisor.
+		stopLifetime: func(*supervisedLifetime, time.Duration) (error, error) { return nil, nil },
+	})
+	if code != 0 || err != nil {
+		t.Fatalf("a stable warning shed the child it spares: code=%d error=%v after %d samples", code, err, collector.calls)
+	}
+	requireSummaryOutcome(t, root, evidence.OutcomePassed)
+}
+
+// TestARunWhoseResolutionAlreadyStopsNeverLaunches holds Run to the admission
+// path DecideAdmission names for a resolution already at replan or cleanup, as
+// the command line never hands Run one: nothing launches whatever the host
+// evidence would admit, the stop carries the resolution's own reason, the
+// summary records the word that path names, and what the run says about the
+// stop is that reason, never the healthy host's assessment of "normal".
+func TestARunWhoseResolutionAlreadyStopsNeverLaunches(t *testing.T) {
+	for _, row := range []struct {
+		decision policy.Decision
+		reason   policy.Reason
+		outcome  evidence.Outcome
+		stderr   string
+	}{
+		{policy.DecisionReplan, policy.ReasonReplanRequired, evidence.OutcomeAdmissionFailed, ""},
+		{
+			policy.DecisionCleanup, policy.ReasonStorageBlocked, evidence.OutcomeStorageBlocked,
+			"HIPPO blocked task: storage blocked; storage inspection or cleanup is required.\n",
+		},
+	} {
+		t.Run(string(row.decision), func(t *testing.T) {
+			root := t.TempDir()
+			settings := policy.DefaultPolicy()
+			settings.AdmissionWindow = evidenceDecidesAdmission
+			settings.SampleInterval = time.Millisecond
+			settings.ConsecutiveCPUSamples = 1
+			starts := 0
+			stderr := &bytes.Buffer{}
+			code, err := Run(context.Background(), RunConfig{
+				Command: "true", TaskClass: policy.TaskEphemeral, EvidenceRoot: root,
+				Collector: &controlledRunCollector{}, Policy: settings,
+				Resolution: policy.Resolution{
+					RequestedProfile: "balanced", ResolvedProfile: "balanced", Concurrency: 1,
+					Decision: row.decision, Reason: row.reason, Lineage: policy.LineageBalanced,
+				},
+				EvidenceLimits: evidence.DefaultLimits(), Now: time.Now, Stderr: stderr,
+				startLifetime: func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error) {
+					starts++
+
+					return nil, errors.New("payload must not start")
+				},
+			})
+			requireStop(t, code, err, row.reason)
+			if starts != 0 {
+				t.Errorf("a run whose resolution is at %s started %d payloads, want none", row.decision, starts)
+			}
+			if stderr.String() != row.stderr {
+				t.Errorf("a run whose resolution is at %s said %q, want %q", row.decision, stderr.String(), row.stderr)
+			}
+			requireSummaryOutcome(t, root, row.outcome)
+		})
+	}
+}
+
 // requireSummaryOutcome holds the one summary a run left in root to the outcome
 // the run decided: the member, and the wire word recorded for it.
 func requireSummaryOutcome(t *testing.T, root string, want evidence.Outcome) {
