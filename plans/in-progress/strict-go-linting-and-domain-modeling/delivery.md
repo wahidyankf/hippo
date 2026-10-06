@@ -1691,67 +1691,356 @@ Branch `worktree/strict-enum-decoding`.
 
 - [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-21]`
   - Result: `worktree/strict-enum-decoding` from `origin/main` at `e261965`.
-- [ ] `[AI]` **RED** (`swe-developer`): add "History lists a task class this version does not know as recorded" to
+- [x] `[AI]` **RED** (`swe-developer`): add "History lists a task class this version does not know as recorded" to
       `specs/behaviours/public-cli.feature`; run the unit adapter; acceptance: undefined, then bound and passing as the
       outcome scenario did, the mutation below proving it can fail. `[AC-22]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `tests/unit/reservation_test.go` a ledger owner with class `batch`
+  - Result: (2026-10-06) the scenario is added after the outcome one, with the specification-changes wording ("a current
+    summary whose task class is batch", "that row's task class reads batch"). RED observed with
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd`: exit `1`,
+    `undefined behavior step "a current summary whose task class is batch"` and
+    `undefined behavior step "it exits 0 and that row's task class reads batch"`. Bound in `tests/support/steps.go` and
+    `tests/support/history_v05.go` (`summaryRecordingTaskClass` writes the summary as plain JSON through a helper shared
+    with the outcome step, so the typed summary never has to hold `batch`; `requireHistoryRowTaskClass` reads the one
+    listed row through a helper shared with the outcome check). The structural form exits `0`, and
+    `go test -count=1 -run 'TestUnitBehaviours/History_lists_a_task_class' ./tests/unit` passes (1 of 347 scenarios
+    selected, 3 steps), as does the same scenario at the compiled end-to-end adapter
+    (`HIPPO_BIN=<built binary> go test -count=1 -run 'TestE2EBehaviours/History_lists_a_task_class...' ./tests/e2e`), on
+    code that still holds the class as a string; the mutation item below proves it can fail.
+- [x] `[AI]` **RED** (`swe-developer`): add to `tests/unit/reservation_test.go` a ledger owner with class `batch`
       asserting the error comes from decoding, not validation; run `go test -count=1 ./tests/unit`; acceptance: it fails
       with the validation error `reservation ledger owner class is invalid`. `[AC-21]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `TaskClass.UnmarshalText` to `internal/policy/profiles.go`; run the same
+  - Result: (2026-10-06) `TestReservationLedgerClassIsRefusedWhereItIsDecoded` holds four rows through
+    `guard.ReservationStatus`: an owner and a waiter whose class is `batch`, which must fail with an error that contains
+    `decode reservation ledger` and `"batch"` and not `class is invalid`, and an owner and a waiter whose class is
+    `release`, a known member no ledger holds, which must still fail with `owner|waiter class is invalid` and not at
+    decode. Every row also checks the ledger bytes stay unchanged. RED observed with
+    `go test -count=1 -run TestReservationLedgerClassIsRefusedWhereItIsDecoded ./tests/unit` (the focused form of the
+    plan's command; the whole package runs in the next item): the two `batch` rows fail with
+    `error "reservation ledger owner class is invalid" does not contain "decode reservation ledger"` (and the waiter's
+    twin), and the two `release` rows pass before and after.
+- [x] `[AI]` **GREEN** (`swe-developer`): add `TaskClass.UnmarshalText` to `internal/policy/profiles.go`; run the same
       command and the unit adapter; acceptance: both pass, "Reservation ledger classes are validated before mutation"
       included. `[AC-21]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): derive the accepted set from one member list shared with
+  - Result: (2026-10-06) `TaskClass.UnmarshalText` accepts `ephemeral`, `service`, `transactional`, and `release` in one
+    exhaustive `switch` and refuses any other text, the empty one included, with `unknown task class "<text>"`; the
+    ledger's owner and waiter classes decode through it with no change to `reservation.go`. The four new rows pass
+    (`go test -count=1 -run TestReservationLedgerClassIsRefusedWhereItIsDecoded ./tests/unit`: `ok`).
+    `go test -count=1 -timeout 30m -coverpkg=./internal/policy ./tests/unit` exits `0` (`ok ... 246.279s`,
+    `coverage: 100.0% of statements in ./internal/policy`), which runs the unit adapter's 347 scenarios, "Reservation
+    ledger classes are validated before mutation" among them (also run alone, `PASS`), and
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` exits `0`. Host load averages 7 to 13.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): derive the accepted set from one member list shared with
       `validReservationClass`; run the same command and _Lint_; acceptance: both exit `0`. `[AC-21]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `internal/evidence/history_test.go` a `batch` class row listed as
+  - Result: (2026-10-06) `policy.TaskClasses()` is the one member list (`ephemeral`, `service`, `transactional`,
+    `release`, the order the history filter lists them); `TaskClass.UnmarshalText` accepts exactly its members, and
+    `validReservationClass` is "any class but release" over the same list. A defined string has no `iota` to derive a
+    list from, so the new `tests/unit/task_class_test.go` holds the list to the constants (it parses
+    `internal/policy/profiles.go` and compares every `TaskClass` constant with `TaskClasses()`) and pins the strict
+    decode over seven refused texts; planting `TaskBatch TaskClass = "batch"` failed it with
+    `TaskClasses lists [ephemeral service transactional release]` and
+    `internal/policy declares [ephemeral service transactional release batch]`, then the file was restored byte for byte
+    (`cmp`). `go test -count=1 -timeout 30m -coverpkg=./internal/policy ./tests/unit` exits `0` (`ok ... 251.345s`,
+    `coverage: 100.0% of statements in ./internal/policy`) and `go tool golangci-lint run` exits `0` with `0 issues`.
+- [x] `[AI]` **RED** (`swe-developer`): add to `internal/evidence/history_test.go` a `batch` class row listed as
       recorded, and to `tests/integration/lease_evidence_test.go` a lease record with class `batch` that stays an
       invalid session record; run `go test -count=1 ./internal/evidence ./tests/integration`; acceptance: compilation
       fails on `policy.RecordedTaskClass`. `[AC-22]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `RecordedTaskClass` and type `evidence.Summary.TaskClass`, `Query.Class`,
+  - Result: (2026-10-06) `internal/evidence/history_test.go` gains
+    `TestHistoryListsAClassThisVersionHasNoMemberForAsRecorded` (three plain-JSON summaries with the classes `batch`,
+    `ephemeral`, and none: all three listed, `batch` reading as the recorded text with no member and marshalling back as
+    `"taskClass":"batch"`, an unrecorded class omitted, and the class filter selecting only a known class) and an
+    aggregation test that keeps `batch` apart from `ephemeral` as recorded. `tests/integration/lease_evidence_test.go`
+    gains `TestExclusiveStatusKeepsRefusingASessionRecordWhoseClassHasNoMember` (a service session record rewritten with
+    class `batch`, empty, or absent stays `exclusive compatibility session record is invalid`, bytes unchanged) and
+    `TestHeavyLeaseDescriptionKeepsTheClassTheOwnerRecorded` (`(class batch)`, `(class unknown)` for an empty or absent
+    class), and `internal/cli/history_test.go` gains a table pinning the text, `--json`, `--jsonl`, and `--class`
+    outputs for an unknown class; these three regression tests pass on the unchanged code, run alone, because only the
+    evidence package can name the new type. RED observed with
+    `go test -count=1 -timeout 30m ./internal/evidence ./tests/integration`: exit `1`,
+    `internal/evidence/history_test.go:256:58: undefined: policy.RecordedTaskClass` and
+    `batch.String undefined (type string has no field or method String)` (`FAIL ... internal/evidence [build failed]`),
+    while `ok ... tests/integration 413.743s` (host load averages 11 to 22).
+- [x] `[AI]` **GREEN** (`swe-developer`): add `RecordedTaskClass` and type `evidence.Summary.TaskClass`, `Query.Class`,
       `leaseOwner.Class`, and `EvidenceSummary.TaskClass`, renaming the CLI fields to `classFlag`; in this same item
       delete the Unit 6 entries, the last the allowlist holds, from `tests/support/domain_literals_allowlist.go`; run
       the same command and the unit adapter; acceptance: both pass. `[AC-22]` `[AC-08]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): share one parsing path between the strict and tolerant forms; run
+  - Result: (2026-10-06) `policy.RecordedTaskClass` (`internal/policy/profiles.go`) holds the member the text names and
+    the text: `RecordedClass` builds one (a value that is no member keeps its text), `TaskClass()` returns the member
+    and whether there is one, `String`, `IsZero`, and `MarshalText` give the text back, and `UnmarshalText` never fails.
+    `evidence.Summary.TaskClass` is a `RecordedTaskClass` (`omitzero`, so an unrecorded class stays omitted),
+    `evidence.Query.Class` a `policy.TaskClass` (empty for no filter; a class with no member matches no filter),
+    `leaseOwner.Class` a `RecordedTaskClass` (the lease message still reads `unknown` for an empty class, and
+    `validSessionRecord` still refuses a class with no member), and `EvidenceSummary.TaskClass` a `policy.TaskClass`.
+    The CLI fields are `historyOptions.classFlag` and `runOptions.classFlag`; `runClass` reads `run`'s flag once at the
+    boundary into `runOptions.class` (an empty flag meaning `ephemeral`, as the guard's default always did, and
+    `release` refused with the same message), and `readHistoryFilters` reads `--class` and `--outcome` in the order the
+    checks always ran (source, class, resource tier, outcome). The six Unit 6 entries are deleted from
+    `tests/support/domain_literals_allowlist.go` in this item, which now holds `[]domainAllowance{}`; the scenario
+    "Production code compares no domain value with a literal" passes with the list empty
+    (`go test -count=1 -run 'TestUnitBehaviours/Production_code_compares' ./tests/unit`: 1 passed, 2 steps).
+    `go test -count=1 -timeout 30m ./internal/evidence ./tests/integration` exits `0` (`ok ... 0.193s`,
+    `ok ... 389.142s`), `go test -count=1 -timeout 30m -coverpkg=./internal/policy ./tests/unit` exits `0`
+    (`ok ... 314.472s`, `coverage: 100.0% of statements in ./internal/policy`), which runs all 347 unit scenarios, the
+    new history one and "Reservation ledger classes are validated before mutation" included,
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` exits `0`, `go test -count=1 ./internal/...` exits `0`, and
+    `go tool golangci-lint run` exits `0` with `0 issues` (after splitting the new evidence test, which `cyclop`,
+    `exhaustive`, and `prealloc` flagged). Host load averages 7 to 22.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): share one parsing path between the strict and tolerant forms; run
       `go test -count=1 ./internal/... ./tests/unit`; acceptance: exit `0`. `[AC-22]`
-- [ ] `[AI]` Mutation: make `RecordedTaskClass` refuse unknown text, run the unit adapter, record the output, restore
+  - Result: (2026-10-06) `policy.ParseTaskClass(text)` is the one place text becomes a class: `TaskClass.UnmarshalText`,
+    `RecordedClass` (so the tolerant `RecordedTaskClass.UnmarshalText`), `runClass`, and the history `--class` filter
+    (`classFilter`) all ask it. Its tests came first and failed to compile on `policy.ParseTaskClass`
+    (`tests/unit/task_class_test.go:98:32: undefined: policy.ParseTaskClass`): over nine texts, members and not, the
+    strict parse accepts exactly the texts the tolerant reader reads with a member, the tolerant reader never refuses
+    and keeps every text, and the JSON round trip keeps the text and omits an empty one.
+    `go test -count=1 -timeout 30m ./internal/... ./tests/unit` exits `0` (`ok ... internal/guard 16.270s`,
+    `ok ... tests/unit 214.586s`) and `go tool golangci-lint run` exits `0` with `0 issues`.
+- [x] `[AI]` Mutation: make `RecordedTaskClass` refuse unknown text, run the unit adapter, record the output, restore
       it; acceptance: the unknown-class history scenario fails, and passes once restored. `[AC-22]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `tests/unit/config_schema2_errors_test.go` a configuration whose
+  - Result: (2026-10-06) with `RecordedTaskClass.UnmarshalText` returning `ParseTaskClass`'s refusal for any non-empty
+    text that is no member, `go test -count=1 -timeout 30m -run TestUnitBehaviours ./tests/unit` exits `1`
+    (`347 scenarios (345 passed, 2 failed)`, 354.862 s) with exactly two failures: "History lists a task class this
+    version does not know as recorded" at `When JSON history is requested for thirty days`, with
+    `hippo: [hippo.evidence.unreadable] reading run history: unknown task class "batch"`, and "Legacy schema-one
+    PID-only ownership remains conservative" (heavy row), whose seeded legacy heavy lock records the class `heavy` and
+    now fails with `exclusive compatibility heavy owner cannot be decoded`, so that scenario also pins the lease
+    record's tolerant read. The file was restored byte for byte (`cmp` against the pre-mutation copy), and both
+    scenarios pass again
+    (`go test -count=1 -run 'TestUnitBehaviours/(History_lists_a_task_class...|Legacy_schema-one...)' ./tests/unit`: 3
+    scenarios, 9 steps, `PASS`).
+- [x] `[AI]` **RED** (`swe-developer`): add to `tests/unit/config_schema2_errors_test.go` a configuration whose
       coordination mode is `exclusive`, asserting the error comes from decoding, and a configuration with `"mode": ""`,
       asserting it still loads with the default mode, as today's decoder accepts it; run
       `go test -count=1 ./tests/unit`; acceptance: the `exclusive` case fails, because today's refusal comes after
       decoding, and the empty-mode case passes before and after. `[AC-23]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): close `coordination.mode` in `internal/config/config.go`; run the same
+  - Result: (2026-10-07) `TestCoordinationModeIsRefusedWhereTheDocumentIsDecoded` loads five documents naming the mode
+    `exclusive`, `batch`, `Reservation`, ` reservation`, and `reservation `, each beside a profile that extends a
+    missing one: the catalog build refuses that after decoding, so the error names the mode only when the mode is
+    refused first, at decode. `TestAnEmptyOrAbsentCoordinationModeLoadsAsTheDefault` loads `"mode": ""`, `"mode": null`,
+    no mode, no `coordination` object, and `"mode": "reservation"`, each as schema 2 with reservation coordination.
+    `internal/cli/development_test.go` gains `TestStatusRefusesAnUnknownCoordinationModeAsAnUnreadableConfiguration`,
+    which runs `status --json --config` over the adaptive fixture with each mode: three refused with exit `125` naming
+    `hippo.config.unreadable` and the mode, and the empty and `reservation` modes loading with exit `0`. RED observed
+    with `go test -count=1 -run 'TestCoordinationModeIsRefused|TestAnEmptyOrAbsentCoordinationMode' ./tests/unit` (the
+    focused form of the plan's command): exit `1`, the five mode rows fail with
+    `a document naming the coordination mode "exclusive" was refused as unknown profile "missing"`, want a refusal that
+    names the mode (and the four others alike), and the empty-mode test passes; the CLI test passes before and after
+    (`ok ... internal/cli`), which is the "still exits `125`" the next item keeps.
+- [x] `[AI]` **GREEN** (`swe-developer`): close `coordination.mode` in `internal/config/config.go`; run the same
       command; acceptance: it passes, and `status --config` on that file still exits `125` naming
       `hippo.config.unreadable`. `[AC-23]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): delete the post-decode mode comparison the type now makes redundant; run
+  - Result: (2026-10-07) `internal/config/config.go` declares the unexported `coordinationMode` (`uint8`:
+    `coordinationModeDefault`, the zero value, and `coordinationModeReservation`) with an `UnmarshalText` that accepts
+    the empty string and `reservation` and refuses every other text with `unsupported coordination mode "<text>"`;
+    `coordinationFile.Mode` has that type, and the reported mode keeps its string through one constant,
+    `reservationModeName`. The comparison after decoding stays for the next item, rewritten for the type so the package
+    compiles. The five RED rows pass (`go test -count=1 -run '...' ./tests/unit`: `ok`), and
+    `go test -count=1 -timeout 30m ./tests/unit ./internal/cli ./internal/guard` exits `0` (`ok ... 202.497s`, `4.702s`,
+    `15.672s`). Through a binary built from the tree, `status --json --config` over
+    `{"schemaVersion":2,"coordination": {"mode":"exclusive"}}` exits `125` printing
+    `hippo: [hippo.config.unreadable] resource configuration: unsupported coordination mode "exclusive"`, and over
+    `"mode": ""` exits `0`.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): delete the post-decode mode comparison the type now makes redundant; run
       the same command and _Lint_; acceptance: both exit `0`. `[AC-23]`
-- [ ] `[AI]` Add `policy.RecordedTaskClass` to `exhaustruct_v5`'s enforce patterns and run _Lint_; proof: exit `0`.
+  - Result: (2026-10-07) the comparison in `buildCoordination` (`configured.Mode != ...`, with its
+    `unsupported schema %d coordination mode` error) is deleted: the type admits nothing it refused, so no value of
+    `coordinationFile.Mode` reaches it that it would refuse. `go test -count=1 -timeout 30m ./tests/unit ./internal/cli`
+    exits `0` (`ok ... 199.971s`, `4.488s`; the five decode rows, the default-mode rows, and the status rows included)
+    and `go tool golangci-lint run` exits `0` with `0 issues`.
+- [x] `[AI]` Add `policy.RecordedTaskClass` to `exhaustruct_v5`'s enforce patterns and run _Lint_; proof: exit `0`.
       `[AC-22]`
-- [ ] `[AI]` Confirm the allowlist is empty: `tests/support/domain_literals_allowlist.go` still declares
+  - Result: (2026-10-07) `.golangci.yml` now lists `^github\.com/wahidyankf/hippo/internal/policy\.RecordedTaskClass$`
+    after `AdmissionInput`, so the four patterns are `RecordedOutcome`, `RecordedBudgetOutcome`, `AdmissionInput`, and
+    `RecordedTaskClass`. `go tool golangci-lint run` exits `0` with `0 issues`. To show the pattern bites, an incomplete
+    literal (`RecordedTaskClass{class: member}`, the text dropped) planted in `internal/policy/profiles.go` exits `1`
+    with `policy.RecordedTaskClass is missing field text (exhaustruct_v5)`; the file was restored byte-for-byte (`cmp`)
+    and lint exits `0` again.
+- [x] `[AI]` Confirm the allowlist is empty: `tests/support/domain_literals_allowlist.go` still declares
       `domainLiteralAllowlist` but holds no entry, every entry having been deleted in the item that removed its
       violation; run the unit adapter; acceptance: exit `0`. `[AC-08]`
-- [ ] `[AI]` **RED** (`swe-developer`): change the analysis scenario's `Then` to "Then it reports no finding" and rebind
+  - Result: (2026-10-07) the file declares `var domainLiteralAllowlist = []domainAllowance{}`: the six Unit 6 entries
+    were deleted in the items that removed their violations (the `removedByDecoding` group and its constant went with
+    the last of them), so the 31 at introduction are all gone.
+    `go test -count=1 -timeout 30m -run TestUnitBehaviours ./tests/unit` exits `0` (`ok ... 200.691s`), the analysis
+    scenario passing with nothing on the allowlist.
+- [x] `[AI]` **RED** (`swe-developer`): change the analysis scenario's `Then` to "Then it reports no finding" and rebind
       its step in `tests/support/steps.go`; run the unit adapter, then
       `git grep -n domainLiteralAllowlist -- tests internal`; acceptance: the adapter exits `0`, because the allowlist
       is already empty, and the grep prints the declaration and the code that reads it, which is the failing state of
       AC-08. `[AC-08]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): delete `tests/support/domain_literals_allowlist.go` and the code that reads
+  - Result: (2026-10-07) `specs/behaviours/quality-gates.feature` reads `Then it reports no finding` under "Production
+    code compares no domain value with a literal", and `tests/support/steps.go` binds `^it reports no finding$` to the
+    new `requireNoDomainLiteralFinding`, which fails on any finding and names each.
+    `go test -count=1 -timeout 30m -run TestUnitBehaviours ./tests/unit` exits `0` (`ok ... 219.678s`), as the plan
+    expects: the allowlist is empty, so the scenario passes either way.
+    `git grep -n domainLiteralAllowlist -- tests internal` prints `tests/support/domain_literals.go:597` (the reading
+    code in `requireDomainLiteralRatchet`) and `tests/support/domain_literals_allowlist.go:3` and `:7` (the
+    declaration), the failing state of AC-08.
+- [x] `[AI]` **GREEN** (`swe-developer`): delete `tests/support/domain_literals_allowlist.go` and the code that reads
       it; run the unit and integration adapters; acceptance: both exit `0`. `[AC-08]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): remove the stale-entry fixture from
+  - Result: (2026-10-07) `tests/support/domain_literals_allowlist.go` is deleted, with `domainAllowance`,
+    `domainAllowanceKey`, `reconcileDomainFindings`, and `requireDomainLiteralRatchet` from
+    `tests/support/domain_literals.go`. `go test -count=1 -timeout 30m -run TestUnitBehaviours ./tests/unit` exits `0`
+    (`ok ... 284.975s`), `-run TestIntegrationBehaviours ./tests/integration` exits `0` (`ok ... 350.537s`), and
+    `HIPPO_BDD_ADAPTER=unit|integration go test ./tests/bdd` exits `0` for both (`0.323s`, `0.389s`). A first unit run
+    with the file deleted on disk and still tracked failed 24 release scenarios with
+    `copy fixture entry: lstat .../tests/support/domain_literals_allowlist.go: no such file or directory`, because the
+    release fixtures copy `git ls-files --cached --others`, which lists a tracked file that is gone. The deletion is
+    therefore staged in the index (`git rm --cached`, nothing committed), after which the adapter passes; the landing
+    commit carries it. `tests/support`'s own test package does not compile until the next item, which removes the
+    fixture that names the deleted types, as the plan orders.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): remove the stale-entry fixture from
       `tests/support/domain_literals_internal_test.go`; run _Analysis fixtures_ and
       `git grep -n domainLiteralAllowlist -- tests internal`; acceptance: the fixtures pass and the grep prints nothing.
       `[AC-08]`
+  - Result: (2026-10-07) `TestDomainLiteralReportsFindingsOffTheAllowlistAndStaleEntries` is removed, and a smaller
+    `TestDomainLiteralStepReportsEveryFindingAndNothingElse` takes its place, holding the new step to accepting no
+    finding and refusing any with the count and each finding named. With the allowlist gone, the `Symbol` an entry was
+    keyed on served nothing, so the `Symbol` field, `symbol()`, `functionSymbol`, the walker's node stack, and the
+    `owner` and `symbol` parameters of `checkRawNames` and `add` are deleted as well (a deviation from the plan's
+    wording, in the item's spirit). `go test -count=1 -run DomainLiteral ./tests/support` exits `0` (`ok ... 0.360s`),
+    the whole `./tests/support` package exits `0` (`ok ... 1.578s`),
+    `git grep -n domainLiteralAllowlist -- tests internal` prints nothing (exit `1`), neither does a grep for `ratchet`
+    or `allowlist` in `tests`, `internal`, `cmd`, or `specs`, and `go tool golangci-lint run` exits `0` with `0 issues`.
+    AC-07 (an allowlist entry whose violation is gone fails the analysis) was proven in Unit 1, by the stale-entry
+    fixture's RED and GREEN items and again when the analysis reported Unit 4's 14 entries as stale the moment their
+    violations went, and it retires with the mechanism: with no allowlist there is no entry to go stale, so removing the
+    fixture leaves nothing for AC-07 to test, and AC-08's grep and scenario hold the closed state instead.
 
 ### Unit 6 close
 
-- [ ] `[AI]` Apply rules propagation to the closed ratchet and the final `exhaustruct_v5` scope in the adapter's [Go
+- [x] `[AI]` Apply rules propagation to the closed ratchet and the final `exhaustruct_v5` scope in the adapter's [Go
       analysis gates][go-gates] module; proof: status recorded. `[AC-08]`
-- [ ] `[AI]` Run docs propagation: `docs/reference/json-schemas.md` says history lists an unknown class as recorded;
+  - Result: (2026-10-07) status `landed`, two rows, both `resolved`. R1, the closed ratchet: the module's "ratchet" and
+    "counting" bullets (31 entries by unit, per-symbol counting, "the last removal deletes the file") described a file
+    that no longer exists, so they are replaced by one `findings` bullet (none are allowed, the scenario fails on any, a
+    violation is fixed where it stands and never listed, and no waiver or exemption mechanism replaces the list); the
+    module's `description` and `when_to_use` and the `repository-adapter/README.md` entry drop the "ratchet" and
+    "allowlist" wording. The rule keeps one canonical home, with no copy elsewhere
+    (`git grep -n -i "ratchet\|domain_literals_allowlist"` outside `plans/` and `CHANGELOG.md` prints only that new
+    bullet). R2, the final `exhaustruct_v5` scope: verified no-op, as in Unit 5, since the module states the rule ("one
+    `enforce-patterns` regex per closed domain struct", explicit mode) without enumerating targets and the final four
+    patterns, `RecordedOutcome`, `RecordedBudgetOutcome`, `AdmissionInput`, and `RecordedTaskClass`, sit inside it.
+    Disposition for both: covered, by the analysis scenario failing on any finding and by _Lint_ failing on an
+    incomplete `RecordedTaskClass` literal (shown in the pattern item above). The module is 675 words (budget 750);
+    `./rhino governance word-budget validate` and `directory-map validate` exit `0`.
+- [x] `[AI]` Run docs propagation: `docs/reference/json-schemas.md` says history lists an unknown class as recorded;
       proof: status recorded. `[AC-22]`
-- [ ] `[AI]` Run the Gherkin implementation review over the new and changed scenarios; proof: statuses recorded.
+  - Result: (2026-10-07) status `landed`. Updated: `docs/reference/json-schemas.md` (`history --json`: a row whose
+    `taskClass` this version does not know is listed as recorded, and `--class` cannot select it, because the filter
+    takes only the four classes `hippo history` names; the paragraph on an unknown outcome and the outcome list that
+    `tests/unit/outcome_vocabulary_test.go` reads are unchanged), `docs/reference/cli.md` (the `history` filter note
+    says an outcome or class a later version recorded is listed as recorded and selected by no `--outcome` or `--class`
+    value), and `specs/architecture.md` (the `history` sentence lists an outcome or task class this version does not
+    know as recorded, and an unknown outcome is never counted toward promotion). The class list in `cli.md`'s filter
+    sentence and its `hippo run` usage-mistake sentence are unchanged: the strict decode changes no value either accepts
+    (D7). Unchanged, checked: `README.md`, `docs/how-to/inspect-evidence-and-abandoned-groups.md`, and `CHANGELOG.md`
+    (the `v0.8.5` entry is Unit 7's). Removed: none. Not run: none. `npm run format:check`,
+    `./rhino md internal-link validate`, and `./rhino governance word-budget validate` exit `0`.
+- [x] `[AI]` Run the Gherkin implementation review over the new and changed scenarios; proof: statuses recorded.
       `[AC-08]` `[AC-22]`
-- [ ] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-21]`
-- [ ] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-08]` `[AC-21]` `[AC-22]`
+  - Result: (2026-10-07) frozen before the breaks: the two scenarios this unit adds or changes, `public-cli.feature:46`
+    "History lists a task class this version does not know as recorded" (new) and `quality-gates.feature:56` "Production
+    code compares no domain value with a literal" (its `Then` changed), and the six unchanged scenarios whose paths the
+    decode changes reach: `reservations.feature:463` "Reservation ledger classes are validated before mutation", `:399`
+    "Legacy schema-one PID-only ownership remains conservative" (2 rows), `public-cli.feature:182` "A flag value a
+    command cannot accept is a usage mistake", `public-cli.feature:14` and `:19` the exclusive status scenarios (3
+    rows), and `execution.feature:11` "Reservation coordination rejects every compatibility class as a protocol
+    mismatch". Runs select the frozen rows with `-run` at `TestUnitBehaviours`, `TestIntegrationBehaviours` (nine rows
+    each) and `TestE2EBehaviours` (five rows, a binary built from the tree); all three exit `0` before the breaks and
+    after, and each break below was reverted byte for byte (`cmp`). **Breaks** (the first record numbered them B1 and B3
+    to B7, with no B2 anywhere in the plan or its learnings, so they are renumbered here in order, and the release break
+    the reviewer found missing is B7): (B1) `RecordedTaskClass.UnmarshalText` refuses an unknown non-empty class; (B2)
+    `TaskClass.UnmarshalText` accepts any text; (B3) `validReservationClass` drops its member check; (B2+B3) both; (B4)
+    `validSessionRecord` accepts any class; (B5a) `runClass` accepts any text but `release`; (B5b) `classFilter` takes
+    any text; (B6a) a planted `class == "service"` in `internal/policy`; (B6b) a planted `Outcome string` field there;
+    (B7) `runClass` drops its `release` refusal, run after the review (see its item below). **implemented**:
+    `public-cli.feature:46` (`RecordedTaskClass.UnmarshalText` and `internal/policy/profiles.go`, read by `ReadHistory`
+    in `internal/evidence/history.go` and printed by `internal/cli/history.go`; steps in `tests/support/steps.go` and
+    `history_v05.go`; under B1 it fails at all three adapters with
+    `hippo: [hippo.evidence.unreadable] reading run history: unknown task class "batch"`; Go tests
+    `TestHistoryListsAClassThisVersionHasNoMemberForAsRecorded...` in `internal/evidence` and `internal/cli`);
+    `quality-gates.feature:56` (`analyzeDomainLiterals` and the new `requireNoDomainLiteralFinding`; B6a fails it at the
+    unit and integration adapters with `internal/policy/profiles.go:460: literal-comparison: class`, B6b with
+    `raw-field: Outcome`; it is `@e2e-exempt`, so the e2e adapter passes under both; with no allowlist there is no entry
+    that can excuse a finding); `reservations.feature:399` (the tolerant lease read: under B1 the `heavy` row fails at
+    the unit and integration adapters, because the seeded lock records the class `heavy`, which has no member, and the
+    `service` row passes, its class being one); `public-cli.feature:182` (B5a fails its `run --class` row and B5b its
+    `history --class` row, the D7 regression of AC-12, and B5a fails at the unit and end-to-end adapters alike, so the
+    scenario is not end-to-end only, as this record first said; B7, which removes the `release` refusal, passed every
+    test here and at `HEAD` until the review added its `run --class release` row, below); and
+    `reservations.feature:463`, which has a decision: B2 alone and B3 alone each leave it passing at both adapters,
+    because decoding and validation both refuse a class with no member, and only B2+B3 fails it, at both adapters. Each
+    layer is pinned by a Go test instead: B2 fails `TestReservationLedgerClassIsRefusedWhereItIsDecoded` (the `batch`
+    rows, owner and waiter) and `TestTaskClassDecodesOnlyItsMembers`, while B3 first failed nothing. This record first
+    explained that as decoding always supplying a member, which is wrong: an owner or waiter whose `class` key is absent
+    or null never reaches `UnmarshalText`, so it arrives at validation as the empty class, and only the member half
+    refuses it (exit `125`, `reservation ledger owner class is invalid`). The member half was **untested**, not
+    unreachable, and the four absent-class and null-class rows (owner and waiter) the review added to
+    `TestReservationLedgerClassIsRefusedWhereItIsDecoded` now fail under B3, the ledger being accepted. Decision: pin
+    it, not the scenario, whose `Then` states the fail-closed contract and not which layer refuses;
+    `TestAReservationHoldsExactlyTheClassesThatReserve` (`internal/guard/reservation_class_test.go`) holds the set to
+    ephemeral, service, and transactional, and fails under B3 on every class with no member, the empty one included (it
+    replaced the first version of this test when the review made the check an exhaustive switch). **Examined, not
+    reached by any break**: `public-cli.feature:14` and `:19` (their documents are malformed or from the future, not
+    classed) and `execution.feature:11` (the marker, not a class) pass under B1 to B6b, so they are outside this
+    review's subject; the class half of session validity, which B4 removes, is pinned by
+    `TestExclusiveStatusKeepsRefusingASessionRecordWhoseClassHasNoMember` (the `batch`, empty, and absent rows fail
+    under B4). AC-23 has no scenario, as `tech-docs/003-specification-changes.md` records; its three Go tests and the
+    RED above pin it. None unimplemented or drifted.
+- [x] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-21]`
+  - Result: (2026-10-07) no CRITICAL or HIGH finding; no blocking finding remains. The three MEDIUM and three LOW
+    findings were each re-validated against the code and applied by `swe-developer` at the coordinator's direction,
+    test-first, every mutation reverted byte for byte (`cmp`):
+    - MEDIUM-1, `runClass`'s `release` refusal pinned by no test: confirmed. With the clause deleted,
+      `hippo run --class release` exits `125` naming `hippo.supervision.failed` (the guard refuses the class in the same
+      words) instead of exit `2` naming `hippo.args.invalid`, and every test passed, here and at `HEAD`. Fixed: the row
+      `run --class release` joins `invalidFlagValues` (`tests/support/usage_v082.go`, with `taskClassRelease` in
+      `driver.go`) and `TestRunClassAcceptsOnlyTheClassesRunMayGuard` (`internal/cli/development_test.go`) holds
+      `runClass` to an empty flag meaning ephemeral, the three classes it guards accepted, and `release`, `batch`,
+      `Ephemeral`, and ` service` refused as `hippo.args.invalid` with no class. Both pass on the code. Under the
+      mutation (B7, the `|| class == policy.TaskRelease` clause deleted) the Go test fails
+      (`runClass("release") = "release" (<nil>)`) and the scenario "A flag value a command cannot accept is a usage
+      mistake" fails at the unit and end-to-end adapters
+      (`"run --class release -- ..." was not refused as a usage mistake: exit=125`, `[hippo.supervision.failed]`);
+      restored, all three pass. The Gherkin review's break list is renumbered (the first record skipped B2) and B7
+      recorded there, and its "e2e only" remark for `public-cli.feature:182` is corrected: B5a fails the scenario at the
+      unit adapter as well as the end-to-end one.
+    - MEDIUM-2, the member half of `validReservationClass` is not unreachable through bytes: confirmed. An owner or
+      waiter whose `class` key is absent or null never reaches `UnmarshalText`, arrives as the empty class, and only the
+      member half refuses it (exit `125`, `reservation ledger owner class is invalid`). Fixed: the guard test's comment,
+      the learnings bullet "two refusing layers", and the Gherkin Result for `reservations.feature:463` are corrected,
+      and four rows (owner and waiter, class absent and null) join
+      `TestReservationLedgerClassIsRefusedWhereItIsDecoded`, expecting `owner|waiter class is invalid`, no decode
+      failure, and unchanged ledger bytes. They pass on the code and fail under B3 (the member half dropped):
+      `a ledger holding a class no reservation may hold was accepted`, four rows.
+    - MEDIUM-3, `validReservationClass` was "any member but release", fail-open for a future class: confirmed. RED: with
+      `TaskBatch` planted in the constants and in `TaskClasses()`, the old code returned `true` for it and _Lint_
+      reported nothing at that function (only the other switches and the test's map). Fixed: an exhaustive `switch` over
+      `TaskClass` (ephemeral, service, and transactional true; release false; default false), so the `exhaustive` linter
+      forces a decision for any new member. `TaskClasses()` stays the one list for the decoder and the history filter,
+      as the REFACTOR item prescribed, so nothing conflicts there; only the ledger check stopped reading it, a deviation
+      from that item's wording recorded in learnings, with `TaskClasses`'s doc comment corrected. The test became
+      `TestAReservationHoldsExactlyTheClassesThatReserve` (an explicit set over every member, itself checked by
+      `exhaustive`, and the no-member rows). Mutation: with the same plant, _Lint_ exits `1` with
+      `reservation.go:626: missing cases in switch of type policy.TaskClass: policy.TaskBatch (exhaustive)` and the test
+      reports the class undecided and refused; with the member check dropped (B3) the test fails on all five classes
+      with no member. Restored, `0 issues`.
+    - LOW-1, the diagnostic text of already-refused inputs changed: recorded in `learnings.md` (2026-10-07) with the
+      before and after of each, measured by running a binary built from `HEAD` and one from the tree over the same
+      documents, and marked as a candidate for the `v0.8.5` `CHANGELOG.md` wording in Unit 7. Exit statuses and
+      `hippo.*` codes are unchanged.
+    - LOW-2, the module's history-narrating sentence: replaced by a rule, "findings: none — the scenario fails on any; a
+      violation is fixed where it stands, and no allowlist, waiver, or exemption exists", and "its empty findings" in
+      the module's `description` and the adapter `README.md` entry now reads "its no-finding rule".
+    - LOW-3, AC-07: the stale-entry fixture's item above now states that AC-07 was proven in Unit 1 and retires with the
+      mechanism. The routing of Unit 6 learnings into `tech-docs/` is left for the final knowledge-capture item; each
+      candidate, the new ones included, is listed in `learnings.md` with its routing line.
+- [x] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-08]` `[AC-21]` `[AC-22]`
       `[AC-23]`
+  - Result: (2026-10-07) `GOFLAGS=-timeout=30m npm test` exit `0` at host load 8–19, after the reviewer's findings were
+    fixed: selected production line coverage 99.38% (955/961), race detector clean, `govulncheck` "No vulnerabilities
+    found."
 
 ### Unit 6 landing
 

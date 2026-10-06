@@ -264,3 +264,104 @@ one durable owner or discard it with a reason. -->
   once, or the correct code, never notices; only a mutation that withholds admission does, and it also hides every
   scenario behind it. Routing candidate: an idea brief to bound such fixtures (a sample budget or a test sleep that
   advances the injected clock, so a window the evidence never decides closes in a few iterations).
+
+- (2026-10-07, Unit 6) **A defined string has no member list, so `policy.TaskClasses()` is hand-kept and a test holds
+  it.** `Outcome` derives its list from an `iota` range (Unit 2); `TaskClass` is `type TaskClass string`, so a class
+  declared and not listed would be refused at decode and absent from the `history --class` message with nothing failing.
+  `tests/unit/task_class_test.go` parses `internal/policy/profiles.go` and compares every `TaskClass` constant with
+  `TaskClasses()` (planting `TaskBatch TaskClass = "batch"` failed it naming both lists, then was reverted). Routing
+  candidate: `tech-docs/001-domain-types.md`, the Unit 6 strict paragraph (one sentence: the list is hand-kept and
+  pinned by the AST test).
+- (2026-10-07, Unit 6) **As built, `RecordedTaskClass` reports an unknown class as "no member", not as a fifth value.**
+  A struct of the member and the recorded text, as the plan says: `RecordedClass(class)`,
+  `TaskClass() (TaskClass, bool)`, `String()`, `IsZero()` (with `omitzero`, so an unset class is omitted as before),
+  `MarshalText`, and an `UnmarshalText` that never fails and keeps the text of any class, member or not. The strict and
+  tolerant readers share `ParseTaskClass`, and `TestStrictAndTolerantReadersAgreeOnWhatIsAMember` holds them to one
+  membership rule. `Query.Class` is a plain `policy.TaskClass` parsed strictly from `--class`, and `matchesClass` never
+  selects a row whose class has no member. Routing candidate: `tech-docs/001-domain-types.md`, the Unit 6 tolerant
+  paragraph (the as-built API in one sentence).
+- (2026-10-07, Unit 6) **The strict `TaskClass.UnmarshalText` guards every decoded `TaskClass` field, not only the
+  ledger's.** `ReservationEntry`, `SafetyReceipt`, and the writer's `EvidenceSummary` also decode through it. None is
+  read from a file a later version wrote (the summary and receipt are decoded only in tests, with known classes, and the
+  full suites pass), but a future reader of `EvidenceSummary` from disk must use `RecordedTaskClass` or it will refuse a
+  later version's evidence. Routing candidate: `tech-docs/001-domain-types.md`, the D6 note ("recorded evidence is read
+  by the `Recorded*` types"), as the Unit 2 reviewer's F4 already asked for the outcome codec.
+- (2026-10-07, Unit 6) **Release scenarios copy `git ls-files --cached --others`, so a deleted tracked file fails 24
+  scenarios until the deletion is staged.** With `domain_literals_allowlist.go` removed on disk and still in the index,
+  the unit adapter failed 24 release scenarios with
+  `copy fixture entry: lstat .../domain_literals_allowlist.go: no such file or directory`; after `git rm --cached` it
+  passed. Any unit that deletes a tracked file and runs an adapter before committing has the same failure. Routing
+  candidate: the starting commands or the GREEN item of a deleting unit (stage the deletion before the adapter runs),
+  and the coordinator's task template.
+- (2026-10-07, Unit 6) **A scenario with two refusing layers passes under either break alone.** "Reservation ledger
+  classes are validated before mutation" passes with decoding broken alone (validation still refuses `batch`) and with
+  validation broken alone (decoding still refuses it), and fails only with both. The member half of
+  `validReservationClass` is reachable through bytes, as the first form of this entry wrongly said it was not: an owner
+  or waiter whose `class` key is absent or null never reaches `UnmarshalText`, arrives at validation as the empty class,
+  and only that half refuses it (exit `125`, `reservation ledger owner class is invalid`). The review (MEDIUM-2) added
+  the absent-class and null-class rows, owner and waiter, to `TestReservationLedgerClassIsRefusedWhereItIsDecoded`; they
+  fail when the member half is dropped (the ledger is accepted). Routing candidate: none; the Gherkin review records the
+  decision (the scenario states the contract, the Go tests pin each layer).
+- (2026-10-07, Unit 6) **`validReservationClass` names every member in a switch, so the member list is not the whole of
+  the plan's REFACTOR.** The REFACTOR item derived the accepted set from one list shared with `validReservationClass`,
+  which made the check "any member but release": a class added to the constants and the list would have been admitted to
+  every ledger silently. The review (MEDIUM-3) replaced it with an exhaustive `switch` over `TaskClass` (ephemeral,
+  service, and transactional reserve; release and any other class do not), so the `exhaustive` linter reports a class
+  added without a decision here (planting `TaskBatch` failed `exhaustive` at the switch, and the test, which names every
+  member in a map the linter also checks, failed with the class refused). The decoder and the history filter keep
+  `TaskClasses()`, so the shared list is unchanged for them and only the ledger check stopped reading it, a deliberate
+  deviation from the item's wording. `TestAReservationHoldsExactlyTheClassesThatReserve` replaced
+  `TestReservationClassIsEveryMemberButReleaseAndNothingElse`. Routing candidate: `tech-docs/001-domain-types.md`, the
+  Unit 6 strict paragraph (one sentence: the ledger check is a closed switch, not a derivation from the list).
+- (2026-10-07, Unit 6) **A refusal clause pinned by no test can hide behind a second layer that says the same words.**
+  `runClass`'s `release` refusal was removed in the review's mutation and every test still passed, because the guard
+  refuses the class with the same message (`class must be ephemeral, service, or transactional`) under a different code,
+  `hippo.supervision.failed` and exit `125`, where the caller's mistake is `hippo.args.invalid` and exit `2`; only a
+  test that reads the code and status sees the difference, and none did, at `HEAD` either. The review (MEDIUM-1) added
+  the `run --class release` row to the usage-mistake scenario's `invalidFlagValues` (which fails at the unit and
+  end-to-end adapters without the clause) and `TestRunClassAcceptsOnlyTheClassesRunMayGuard`. Routing candidate: none.
+- (2026-10-07, Unit 6) **The strict decodes changed the text of diagnostics for inputs that were already refused.** No
+  exit status and no `hippo.*` code changed, and the messages are not a contract, but a reader comparing v0.8.4 with
+  v0.8.5 output sees these (measured by running a binary built from `HEAD` and one from the tree over the same
+  documents): a schema 2 document with `"mode": "exclusive"` read `unsupported schema 2 coordination mode "exclusive"`
+  and reads `unsupported coordination mode "exclusive"` (`internal/config/config.go:85`); a schema 1 document with an
+  unknown mode read `schema 1 does not support reservation coordination` and now reports the mode error (with
+  `"mode": "reservation"` it reads as before); a document with an unknown mode and another error, such as a profile that
+  extends a missing one, read the other error and now reads the mode error, because decoding runs first; and a
+  non-string value names the Go type, `of type config.coordinationMode` where it read `of type string`, and likewise
+  `Summary.taskClass of type policy.RecordedTaskClass` in `history`, each now followed by
+  `JSON value must be string type` (`hippo.config.unreadable` and `hippo.evidence.unreadable`, both exit `125`, as
+  before). Routing candidate: a candidate for the `v0.8.5` `CHANGELOG.md` wording in Unit 7, as one line under `Changed`
+  or `Fixed` (the text of an unsupported coordination mode and of a non-string `taskClass` changed; exit statuses and
+  codes did not).
+- (2026-10-07, Unit 6) **"Legacy schema-one PID-only ownership remains conservative" is the one scenario that pins the
+  tolerant lease read.** Its seeded lock records the class `heavy`, which `TaskClass` has no member for, so a lease
+  owner that refused unknown classes fails its `heavy` row at both executing adapters (the `service` row passes). The
+  same break is what the mutation item observed. Routing candidate: none.
+- (2026-10-07, Unit 6) **A decode-time proof needs a second, later failure.** The coordination-mode RED pairs a bad mode
+  with a profile that extends a missing one: only a refusal at decode can name the mode, because the profile error would
+  fire first after decoding. Without the pairing, the old post-decode comparison also passes the test. Routing
+  candidate: `tech-docs/001-domain-types.md`, the Unit 6 tests paragraph.
+- (2026-10-07, Unit 6) **The plan's whole-package RED commands were run in focused form.** Each RED item names a package
+  (`./tests/unit`, `./internal/evidence`), but the failing test is one function and a whole `./tests/unit` run is about
+  4 to 6 minutes at a load of 15 to 30; the Results record the focused `-run` form, and the whole package ran at each
+  GREEN and REFACTOR. The ratchet-end RED (change the `Then`, rebind) exits `0` by design: the allowlist is already
+  empty, and the grep that prints the declaration and the reading code is the failing state. Routing candidate: none.
+- (2026-10-07, Unit 6) **The allowlist's `Symbol` keying served only the allowlist.** With the list gone, the `Symbol`
+  field, `symbol()`, `functionSymbol`, the walker's node stack, and the `owner` and `symbol` parameters are dead, so
+  they are deleted with the stale-entry fixture, which the plan's REFACTOR item does not name; a smaller
+  `TestDomainLiteralStepReportsEveryFindingAndNothingElse` replaces the fixture. Routing candidate:
+  `tech-docs/002-gates-and-analysis.md`, the ratchet section (no allowlist and no symbol at the end).
+- (2026-10-07, Unit 6) **The GREEN of the strict-class item could not stop at one line.** Typing `leaseOwner.Class`,
+  `Summary.TaskClass`, and the two flags changed every comparison on them, so the item that adds the type also rewrote
+  the call sites that compared a class with a string (`runOptions.class`, `runClass`, `classFilter`); the Results of
+  those items record it, and the REFACTOR items that follow are the cleanups. The `...Flag` suffix on
+  `historyOptions.classFlag` and `runOptions.classFlag` is what keeps raw CLI text outside the domain name list, as the
+  analysis's header says. Routing candidate: none.
+- (2026-10-07, Unit 6) **File impact additions.** Beyond `tech-docs/004-file-impact.md`'s Unit 6 list the unit also
+  touched `internal/cli/development.go` (`runClass`), `internal/guard/exclusive_status.go` (publishes a legacy owner's
+  class as recorded), `internal/guard/run_test.go`, `internal/cli/history_test.go`, `internal/cli/development_test.go`
+  (the unreadable coordination mode through the command), `tests/integration/lease_evidence_test.go` (the lease owner's
+  class), `tests/support/domain_literals_internal_test.go`, `docs/reference/cli.md`, `specs/architecture.md`, and
+  `repository-adapter/README.md`, and added `tests/unit/task_class_test.go` and
+  `internal/guard/reservation_class_test.go`. Routing candidate: `tech-docs/004-file-impact.md`, Unit 6.
