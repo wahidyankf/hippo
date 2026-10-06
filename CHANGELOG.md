@@ -39,10 +39,9 @@ Entries are reconstructed from the repository's own history. For the complete co
   `decode reservation ledger: unknown task class "batch"` where it read `reservation ledger owner class is invalid`, and
   a `sheddingExitCode` other than `73` or `75` is refused as the ledger is decoded, naming the value. A non-string value
   for a configuration or history field that HIPPO now decodes as a type of its own names that type where it named
-  `string`: `policy.ProfileName` for `extends`, `fallback`, or `defaultProfile`, and, followed by
-  `JSON value must be string type`, `config.coordinationMode` for `mode` and `evidence.RecordedOutcome`,
-  `evidence.RecordedBudgetOutcome`, or `policy.RecordedTaskClass` for a history row's `outcome`, `budgetOutcome`, or
-  `taskClass`.
+  `string`: `policy.ProfileName` for `extends`, `fallback`, or `defaultProfile`, `config.coordinationMode` for `mode`,
+  and `evidence.RecordedOutcome`, `evidence.RecordedBudgetOutcome`, or `policy.RecordedTaskClass` for a history row's
+  `outcome`, `budgetOutcome`, or `taskClass`.
 
 ## [v0.8.4] — 2026-10-03
 
