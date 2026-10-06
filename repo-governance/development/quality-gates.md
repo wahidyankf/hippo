@@ -22,10 +22,12 @@ Install them with `npm ci`. A worktree whose hooks never ran pushes unverified w
 
 ## The Quick Gate
 
-`scripts/test-quick.sh`, in order: the worktree layout check, formatting, whole-module compilation, strict lint, the
-tests of every package under `./cmd/...` and `./internal/...` plus `tests/support`, the `tests/unit` corpus once under
-deterministic core coverage at 99%, the three behaviour adapters serially, and artifact policy. Documentation hygiene is
-not in it; it runs as its own gates on the same surfaces.
+`scripts/test-quick.sh`, in order: the worktree layout check, formatting, whole-module compilation, strict lint,
+NilAway, the tests of every package under `./cmd/...` and `./internal/...` plus `tests/support`, the `tests/unit` corpus
+once under deterministic core coverage at 99%, the three behaviour adapters serially, and artifact policy. The domain
+literal analysis runs as a behaviour scenario in the corpus and the adapters. The
+[repository adapter](quality/stacks/repository-adapter/001-go-analysis-gates.md) records these analysis gates.
+Documentation hygiene is not in it; it runs as its own gates on the same surfaces.
 
 Every package holding a `_test.go` file must be run by a `go test` pattern in `scripts/test-quick.sh`,
 `scripts/test.sh`, or `tests/e2e/run.sh`; the compile-only `-run '^$'` line does not count. The scenario "Every package
