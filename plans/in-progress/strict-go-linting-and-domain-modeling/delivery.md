@@ -621,12 +621,28 @@ Branch `worktree/typed-run-outcome`.
 
 - [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-09]`
   - Result: `worktree/typed-run-outcome` from `origin/main` at `341cb75`.
-- [ ] `[AI]` **RED** (`swe-developer`): add "History lists an outcome this version does not know as recorded" to
+- [x] `[AI]` **RED** (`swe-developer`): add "History lists an outcome this version does not know as recorded" to
       `specs/behaviours/public-cli.feature`; run the unit adapter; acceptance: its steps are undefined. Bind them in
       `tests/support/steps.go` and `tests/support/history_v05.go`; acceptance: it passes, because `v0.8.4` reads the
       outcome as a plain string — this scenario pins tolerance through the change, and the mutation below proves it can
       fail. `[AC-11]`
-- [ ] `[AI]` Prove PW-4's condition, that no released HIPPO version ever wrote `pressure-shed` or `storage-shed` into
+  - Result: (2026-10-06) The scenario is added to `specs/behaviours/public-cli.feature` (after "History filters current
+    labeled summaries", no `@e2e-exempt` tag, so it runs at all three boundaries). RED:
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` and
+    `go test -count=1 -run 'TestUnitBehaviours/<scenario>' ./tests/unit`, scenario
+    `History_lists_an_outcome_this_version_does_not_know_as_recorded`, both exited `1` with
+    `undefined behavior step "a current summary whose outcome is future-outcome"`,
+    `"JSON history is requested for thirty days"`, and `"it exits 0 and that row's outcome reads future-outcome"`. Bound
+    in `tests/support/steps.go` (three steps, the outcome word captured) and `tests/support/history_v05.go`
+    (`summaryRecordingOutcome` writes the bytes as plain JSON, not an `evidence.Summary`, because the typed summary
+    cannot hold a word this version does not know; `requestJSONHistory` runs in process at the unit and integration
+    boundaries and through `runBinaryInRoot` against the compiled binary at the end-to-end one;
+    `requireHistoryRowOutcome`). GREEN as the item predicts, since `v0.8.4` reads the outcome as a plain string: the
+    unit adapter exits `0` (`3 steps (3 passed)`), the structural `./tests/bdd` form exits `0` for the unit,
+    integration, and e2e adapters, and the integration and end-to-end adapters
+    (`-run 'TestIntegrationBehaviours/...' ./tests/integration`, `-run 'TestE2EBehaviours/...' ./tests/e2e`) exit `0`
+    for the scenario. The mutation item below proves it can fail.
+- [x] `[AI]` Prove PW-4's condition, that no released HIPPO version ever wrote `pressure-shed` or `storage-shed` into
       `budgetOutcome`, before `BudgetOutcome` is typed: `git tag --list 'v*'` lists `v0.8.4`, then run the PW-4 proof
       from _Commands the items name_; proof: the output recorded here. Empty output means every release tag writes the
       field only through `SetReservationContext`, called only with `"admitted"`: the condition holds, `BudgetOutcome`
@@ -634,44 +650,161 @@ Branch `worktree/typed-run-outcome`.
       printed names a tag and another writer: the condition fails, the comparisons stay, typed, `BudgetOutcome` gains a
       member for each value printed, and the next RED, the next GREEN, and the history GREEN follow that branch. Record
       which branch applies. `[AC-11]`
-- [ ] `[AI]` **RED** (`swe-developer`): add `internal/evidence/outcome_test.go` (each member's wire string, `Unset` and
+  - Result: (2026-10-06) `git tag --list 'v*'` lists 19 tags, `v0.1.0` to `v0.8.4`, and `v0.8.4` is among them. The PW-4
+    proof from _Commands the items name_ printed **nothing** (empty output after the three filters). Checked that the
+    emptiness is not vacuous: before the filters the loop printed 60 lines, exactly four per tag for the 15 tags
+    `v0.4.0` to `v0.8.4` (the `SetReservationContext` declaration, the one `summary.BudgetOutcome = outcome` assignment,
+    and two calls, `internal/guard/run.go` and `tests/support/pending_v04.go`, each passing the literal `"admitted"`),
+    and none for the four tags `v0.1.0` to `v0.3.1`, which predate the field. The only places the words `pressure-shed`
+    and `storage-shed` meet `BudgetOutcome` in any tag are the reader's two comparisons in
+    `internal/evidence/history.go` (from `v0.6.0`), never a write. **Branch applied: the condition holds.** No released
+    version wrote either value, so `BudgetOutcome` keeps the members `Unset` and `Admitted` only, the history GREEN
+    deletes the two `budgetOutcome` comparisons, and the RED, GREEN, and REFACTOR items follow that branch.
+- [x] `[AI]` **RED** (`swe-developer`): add `internal/evidence/outcome_test.go` (each member's wire string, `Unset` and
       `Unknown` refused by the encoder, strict `ParseOutcome`, tolerant `RecordedOutcome` round trip) and
       `tests/unit/outcome_vocabulary_test.go` (the list in `docs/reference/json-schemas.md` equals
       `evidence.Outcomes()`); run `go test -count=1 ./internal/evidence ./tests/unit`; acceptance: compilation fails on
       the missing type. `[AC-09]` `[AC-11]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `internal/evidence/outcome.go` as
+  - Result: (2026-10-06) Added `internal/evidence/outcome_test.go` (external `evidence_test` package: each member's wire
+    string and `String`, `Outcomes()` listing the ten in order, the encoder refusing `OutcomeUnset`, `OutcomeUnknown`,
+    and a non-member, strict `ParseOutcome` and strict `Outcome` decoding, the tolerant `RecordedOutcome` round trip
+    with `omitzero`, and the same for `BudgetOutcome` and its reader form `RecordedBudgetOutcome`) and
+    `tests/unit/outcome_vocabulary_test.go` (the bullets under "`outcome` is one of these values, and no other" in
+    `docs/reference/json-schemas.md` equal `evidence.Outcomes()` as sets, in both directions). RED:
+    `go test -count=1 ./internal/evidence ./tests/unit` exited `1`, both packages `[build failed]`:
+    `internal/evidence/outcome_test.go:15:19: undefined: evidence.Outcome` (and every `evidence.Outcome*` member) and
+    `tests/unit/outcome_vocabulary_test.go:35:35: undefined: evidence.Outcomes`. **Design choices the plan left open,
+    recorded for the GREEN:** the tolerant types keep unexported fields behind `Recorded(Outcome)` and
+    `RecordedBudget(BudgetOutcome)` constructors and `Outcome()`/`String()` accessors; `Outcome` and `BudgetOutcome`
+    also decode strictly through `UnmarshalText`, because the typed writer summary (`guard.EvidenceSummary`) is decoded
+    by tests and a `uint8` cannot read a string without one; `Outcome.String` derives from `MarshalText`, so the wire
+    table stays in one place.
+- [x] `[AI]` **GREEN** (`swe-developer`): add `internal/evidence/outcome.go` as
       [the design](tech-docs/001-domain-types.md#run-outcome-unit-2) specifies; run the same command; acceptance: it
       passes. `[AC-09]` `[AC-11]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): keep one wire table in `MarshalText` and derive `ParseOutcome` from
+  - Result: (2026-10-06) Added `internal/evidence/outcome.go`: `Outcome` (`uint8`, `OutcomeUnset` zero through
+    `OutcomeAdmissionFailed`, then the reader-only `OutcomeUnknown`), `Outcomes()`, `MarshalText` as one exhaustive
+    `switch` (`OutcomeUnset`, `OutcomeUnknown`, and a non-member are refused), `String`, strict `ParseOutcome` and
+    `UnmarshalText`, and `RecordedOutcome` (unexported member and text, `Recorded`, `Outcome()`, `String`, `IsZero`,
+    `MarshalText`, never-failing `UnmarshalText`). The budget side follows the PW-4 branch: `BudgetOutcome` with
+    `BudgetOutcomeUnset` and `BudgetOutcomeAdmitted` and, **beyond the two members the design names**, the reader-only
+    `BudgetOutcomeUnknown`, because D6 asks the tolerant reader for an explicit unknown member carrying the raw text;
+    `RecordedBudgetOutcome` mirrors `RecordedOutcome`, and one private `parseBudgetOutcome` derives the word from
+    `MarshalText`. `go test -count=1 ./internal/evidence ./tests/unit` exits `0`: `ok internal/evidence 0.402s`,
+    `ok tests/unit 195.264s`.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): keep one wire table in `MarshalText` and derive `ParseOutcome` from
       `Outcomes()`; run the same command and _Lint_; acceptance: both exit `0`. `[AC-09]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `internal/guard/run_test.go` a `finalOutcome` test (unset gives
+  - Result: (2026-10-06) `ParseOutcome` now asks each outcome in `Outcomes()` for its `String()`, so `MarshalText` is
+    the one table of wire words. `go test -count=1 ./internal/evidence ./tests/unit` exits `0`
+    (`ok internal/evidence 0.176s`, `ok tests/unit 192.641s`) and _Lint_ exits `0` (`0 issues.`). **Surprises:** (1) the
+    first _Lint_ run of this unit failed `6 issues` on code written in the earlier items, because those items do not run
+    it: `goconst` (`"30d"` now three times in `tests/support/history_v05.go`, fixed with a `historyWindow` constant),
+    `musttag` (three anonymous structs in `outcome_test.go` without `json` tags), and `prealloc` (two slices in
+    `tests/unit/outcome_vocabulary_test.go`); fixed here, tests only. (2) The unit adapter's scenarios "internal guard
+    regression ..." run `go test` over `internal/guard`, so a RED that stops that package compiling fails about a dozen
+    unit-adapter scenarios; the unit adapter can be run only while `internal/guard` compiles, which is why this item's
+    final run was made with the next item's RED test file held aside. See [learnings](learnings.md).
+- [x] `[AI]` **RED** (`swe-developer`): add to `internal/guard/run_test.go` a `finalOutcome` test (unset gives
       `supervision-failed` and `hippo.supervision.failed`) and a test that a deadline deferral's summary records
       `capacity-deferred`; run `go test -count=1 -run 'FinalOutcome|DeadlineDeferral' ./internal/guard`; acceptance:
       compilation fails on `finalOutcome`. `[AC-10]` `[AC-09]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): type the writer in `internal/guard/run.go` and `internal/guard/evidence.go`,
+  - Result: (2026-10-06) `internal/guard/run_test.go` gains `TestFinalOutcomeFailsAnUnsetOutcomeAsASupervisionFailure`
+    (every member of `evidence.Outcomes()` passes through `finalOutcome` unchanged; `OutcomeUnset` gives
+    `OutcomeSupervisionFailed` and a `status.Failure` naming `hippo.supervision.failed`, which `status.Status` maps to
+    `125`) and `TestDeadlineDeferralSummaryRecordsCapacityDeferred` (the summary a deadline deferral writes carries
+    `"outcome": "capacity-deferred"`, decoded as a plain string so the test compiles before and after the type). The
+    existing `TestRunHostAdmissionDeferralWritesNeverStartedReceipt` fixture is extracted into `deferAtTheDeadline` and
+    shared by it and the new deferral test, which keeps its assertions. RED:
+    `go test -count=1 -run 'FinalOutcome|DeadlineDeferral' ./internal/guard` exited `1`:
+    `internal/guard/run_test.go:163:20: undefined: finalOutcome` and `:167:16: undefined: finalOutcome`,
+    `FAIL ... [build failed]`.
+- [x] `[AI]` **GREEN** (`swe-developer`): type the writer in `internal/guard/run.go` and `internal/guard/evidence.go`,
       start the outcome unset, assign `OutcomeCapacityDeferred` at the deadline deferral, and add `finalOutcome`; in
       this same item delete the Unit 2 entries for `internal/guard/evidence.go` from
       `tests/support/domain_literals_allowlist.go`, because the analysis fails on an entry whose violation is gone; run
       the same command and the unit adapter; acceptance: both pass. `[AC-09]` `[AC-10]` `[AC-08]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `internal/guard/run_test.go` a table test of
+  - Result: (2026-10-06) `internal/guard/run.go`: the ten `outcome...` string constants are gone;
+    `var outcome evidence.Outcome` starts `OutcomeUnset`; every assignment names a member (the 22 existing ones, and the
+    deadline deferral now assigns `OutcomeCapacityDeferred` before it writes its receipt); the `finalize` closure
+    records `finalOutcome(outcome)` and joins the failure it returns with the write and cleanup errors; `finalOutcome`
+    is a pure function returning `OutcomeSupervisionFailed` and a `status.Failure` naming `hippo.supervision.failed` for
+    `OutcomeUnset`. `RunOutcomes()` stays for now, derived from `evidence.Outcomes()`, until its REFACTOR item deletes
+    it. `internal/guard/evidence.go`: `EvidenceSummary.Outcome` is `evidence.Outcome`, `EvidenceSummary.BudgetOutcome`
+    is `evidence.BudgetOutcome` (`omitempty` still omits the unset value), `Finalize` and `SetReservationContext` take
+    the types. **File impact additions:** `internal/guard/reservation.go` (the cancelled-receipt reason used the deleted
+    constant; now `evidence.OutcomeAdmissionCancelled.String()`), `tests/support/driver.go`,
+    `tests/support/pending_v04.go`, and `tests/integration/lease_evidence_test.go` (their `Finalize` and
+    `SetReservationContext` calls pass members). The four Unit 2 allowlist entries for `internal/guard/evidence.go`
+    (`SetReservationContext.outcome`, `EvidenceSummary.Outcome`, `EvidenceSummary.BudgetOutcome`, `Finalize.outcome`)
+    are deleted in this item. Proof: `go test -count=1 -run 'FinalOutcome|DeadlineDeferral' ./internal/guard` exits `0`;
+    the executing unit adapter (`go test -count=1 -run TestUnitBehaviours ./tests/unit`) exits `0` (`ok ... 239.158s`),
+    including "Production code compares no domain value with a literal", and
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` exits `0`. Check that the deferral test can fail: with the new
+    assignment removed it fails with `code=1 error=hippo: [hippo.supervision.failed]` and the message
+    `the run ended without deciding its outcome; its summary records supervision-failed`, the unset default doing what
+    D14 says; restored, it passes.
+- [x] `[AI]` **RED** (`swe-developer`): add to `internal/guard/run_test.go` a table test of
       `promoteFinalize(exitCode, returnError, finalizeError, launched)`: no finalize error leaves the exit code and
       error as they are; an error the run already returned stands over a finalize error; with no run error, a finalize
       error becomes the run's error with exit code `1`, naming a refused write when nothing launched; and the failure
       `finalOutcome` returns for an unset outcome comes back with code `hippo.supervision.failed`, which `status.Status`
       maps to `125`; run `go test -count=1 -run PromoteFinalize ./internal/guard`; acceptance: compilation fails on
       `promoteFinalize`. `[AC-10]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): extract the deferred promotion in `internal/guard/run.go` into the pure
+  - Result: (2026-10-06) `internal/guard/run_test.go` gains `TestPromoteFinalizeDecidesWhatTheCallerSees`, a 12-row
+    table over `promoteFinalize(exitCode, returnError, finalizeError, launched)`: no finalize error leaves a clean
+    result, a deferral status, and the run's own failure as they are; an error the run returned stands over a finalize
+    error, after launch and over a refused write before it; with no run error a finalize error becomes the run's error
+    with exit code `1`, over exit `0` and over a deferral status, keeping its own shape before launch unless the root
+    refused a write, and named as `hippo.evidence.unwritable` ("recording the lifetime summary") when one did before
+    launch; and the failure `finalOutcome` returns for an unset outcome comes back, before and after launch, with code
+    `hippo.supervision.failed`, which `status.Status` maps to `125`. RED:
+    `go test -count=1 -run PromoteFinalize ./internal/guard` exited `1`:
+    `internal/guard/run_test.go:262:17: undefined: promoteFinalize`, `FAIL ... [build failed]`.
+- [x] `[AI]` **GREEN** (`swe-developer`): extract the deferred promotion in `internal/guard/run.go` into the pure
       function `promoteFinalize`, with no hook added to `RunConfig`, and have the deferred closure call it; run the same
       command and `go test -count=1 ./internal/guard`; acceptance: both pass. `[AC-10]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): leave the deferred closure holding only the call, and give
+  - Result: (2026-10-06) `internal/guard/run.go` gains the pure function
+    `promoteFinalize(exitCode, returnError, finalizeError, launched)`; the deferred closure now calls `finalize()` and
+    hands its result to it, with no hook added to `RunConfig`. `go test -count=1 -run PromoteFinalize ./internal/guard`
+    exits `0` (12 subtests pass) and `go test -count=1 ./internal/guard` exits `0` (`ok ... 15.098s`). Check that the
+    table can fail: with the `returnError != nil` clause dropped from the first condition, the rows "an error the run
+    returned stands over a finalize error" and "... over a refused write before launch" fail; restored, the table
+    passes.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): leave the deferred closure holding only the call, and give
       `promoteFinalize` a comment stating that the unset outcome's supervision failure reaches the caller through it;
       run `go test -count=1 ./internal/guard` and _Lint_; acceptance: both exit `0`. `[AC-10]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): delete `guard.RunOutcomes` and have `internal/cli/history.go` list
+  - Result: (2026-10-06) The deferred closure in `Run` is now the one line
+    `defer func() { exitCode, returnError = promoteFinalize(exitCode, returnError, finalize(), launched) }()`, and
+    `promoteFinalize`'s comment states that the supervision failure `finalOutcome` returns for an unset outcome reaches
+    the caller as its finalize error, so the boundary reports `hippo.supervision.failed` and exit `125`.
+    `go test -count=1 ./internal/guard` exits `0` (`ok ... 15.403s`) and _Lint_ exits `0` (`0 issues.`). Surprise: the
+    first _Lint_ run reported 4 `errorlint` findings in the item-8 table's helpers (`fmt.Errorf` formatting an error
+    with `%v`); the `check` functions now return a message string, the empty string meaning nothing is wrong, in the
+    same item. NilAway also exits `0` at this point.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): delete `guard.RunOutcomes` and have `internal/cli/history.go` list
       `evidence.Outcomes()`; run `go test -count=1 ./internal/... ./tests/unit`; acceptance: exit `0`. `[AC-12]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `internal/evidence/history_test.go` a row with outcome `future-outcome`
+  - Result: (2026-10-06) `guard.RunOutcomes` is deleted from `internal/guard/run.go` (the `git grep -n RunOutcomes` over
+    `*.go` and the non-plan Markdown prints nothing), and `internal/cli/history.go` lists the outcomes from
+    `evidence.Outcomes()` through a new private `outcomeNames`, which builds the same ten words in the same order, so
+    the `--outcome must be one of ...` message is byte for byte what `v0.8.4` prints.
+    `go test -count=1 ./internal/... ./tests/unit` exits `0` (`internal/cli 4.539s`, `internal/evidence 1.281s`,
+    `internal/guard 16.403s`, `tests/unit 203.204s`).
+- [x] `[AI]` **RED** (`swe-developer`): add to `internal/evidence/history_test.go` a row with outcome `future-outcome`
       and `budgetOutcome` `admitted`, asserting it is listed as recorded and never counts toward owner promotion; run
       `go test -count=1 ./internal/evidence`; acceptance: compilation fails on the typed fields. `[AC-11]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): type `Summary`, `Query`, and `healthyPromotionSummary` in
+  - Result: (2026-10-06) `internal/evidence/history_test.go` gains
+    `TestHistoryListsAnUnknownOutcomeAsRecordedAndNeverPromotesOnIt`: a control run recorded as `passed` with budget
+    outcome `admitted` is eligible for owner promotion; the same marshalled bytes with `"outcome":"future-outcome"`
+    swapped in (the word a later version might write) is listed by `ReadHistory` as `future-outcome` (member
+    `OutcomeUnknown`) with `admitted` (member `BudgetOutcomeAdmitted`), is re-encoded with both words intact, is not
+    matched by an `OutcomePassed` filter, and makes `EvaluatePromotion` answer `recent-overlap-unhealthy`, never
+    eligible. RED: `go test -count=1 ./internal/evidence` exited `1`, `[build failed]`:
+    `history_test.go:168:12: cannot use Recorded(OutcomePassed) (value of struct type RecordedOutcome)`
+    `as string value in struct literal`,
+    `:168:52: cannot use RecordedBudget(BudgetOutcomeAdmitted) ... as string value`,
+    `:207:21: rows[0].Outcome.String undefined (type string has no field or method String)`, and
+    `:217:85: cannot use OutcomePassed (constant 1 of uint8 type Outcome) as string value in struct literal`.
+- [x] `[AI]` **GREEN** (`swe-developer`): type `Summary`, `Query`, and `healthyPromotionSummary` in
       `internal/evidence/history.go` and rename the history flag field to `outcomeFlag` in `internal/cli/commands.go`,
       parsed with `ParseOutcome`. Typing `Summary.BudgetOutcome` makes its two string comparisons stop compiling, so
       this same item applies the branch the PW-4 proof item recorded: when the condition holds, delete the two
@@ -679,29 +812,128 @@ Branch `worktree/typed-run-outcome`.
       this same item delete the Unit 2 entries for `internal/evidence/history.go` and `internal/cli/commands.go` from
       `tests/support/domain_literals_allowlist.go`; run the same command and the unit adapter; acceptance: both pass.
       `[AC-11]` `[AC-12]` `[AC-08]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): simplify `healthyPromotionSummary` now that it reads only typed members;
+  - Result: (2026-10-06) `internal/evidence/history.go`: `Summary.Outcome` is a `RecordedOutcome` and
+    `Summary.BudgetOutcome` a `RecordedBudgetOutcome`, both with `omitzero` (a summary with neither still omits the
+    keys), `Query.Outcome` is an `Outcome` with `OutcomeUnset` meaning no filter, `matchesQuery` compares members, and
+    `healthyPromotionSummary` asks for `OutcomePassed`, which an unknown recording never is. **PW-4 branch applied (the
+    condition holds): the two `budgetOutcome` comparisons are deleted**, not retyped. `aggregateHistoryRows` keys on the
+    recorded text. `internal/cli/commands.go`: the history flag field is `outcomeFlag`; `internal/cli/history.go` parses
+    it through a new `outcomeFilter` with `evidence.ParseOutcome`, so `--outcome future-outcome` still exits `2` naming
+    `hippo.args.invalid` and the ten outcomes (the error check order is unchanged: source, class, tier, outcome). The
+    seven Unit 2 allowlist entries that remained after the writer item (`historyOptions.outcome`, `Summary.Outcome`,
+    `Summary.BudgetOutcome`, `Query.Outcome`, and three `healthyPromotionSummary` comparisons) are deleted, and with
+    them the now-unused `promotionSummary` and `removedByOutcome` constants and the empty Unit 2 group comment, which
+    `unused` would otherwise fail on. **File impact additions:** `internal/cli/interruption_test.go`,
+    `tests/support/interruption_v082.go` (typed reads), and the existing fixtures in
+    `internal/evidence/history_test.go`, `internal/cli/history_test.go`, `tests/support/history_v05.go`, and
+    `internal/guard/run_test.go` now use `Recorded(...)`. Proof: `go test -count=1 ./internal/evidence` exits `0` (the
+    item-12 test passes); `go test -count=1 -run DomainLiteral ./tests/support` exits `0`; the executing unit adapter
+    exits `0` (`ok ... 199.450s`, including the analysis scenario with the seven entries gone) and
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` exits `0`.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): simplify `healthyPromotionSummary` now that it reads only typed members;
       run `git grep -nE '"(pressure|storage)-shed"' -- internal/evidence/history.go` and
       `go test -count=1 ./internal/evidence ./tests/unit`; acceptance: the grep prints nothing and the tests exit `0`.
       `[AC-11]`
-- [ ] `[AI]` Mutation: make `RecordedOutcome.UnmarshalText` refuse unknown text, run the unit adapter, record the
+  - Result: (2026-10-06) `healthyPromotionSummary` now returns early for anything but a recorded `OutcomePassed` with
+    `AggregateCount` `0`, names the minimum-memory pointer once, and carries a comment saying why the budget outcome is
+    not consulted (only `passed` counts, so a shed, deferred, or unknown run never does).
+    `git grep -nE '"(pressure|storage)-shed"' -- internal/evidence/history.go` prints nothing (exit `1`), and
+    `go test -count=1 ./internal/evidence ./tests/unit` exits `0` (`ok internal/evidence 0.418s`,
+    `ok tests/unit 202.821s`).
+- [x] `[AI]` Mutation: make `RecordedOutcome.UnmarshalText` refuse unknown text, run the unit adapter, record the
       output, restore it; acceptance: the unknown-outcome history scenario fails, and passes once restored. `[AC-11]`
-- [ ] `[AI]` Enable `exhaustruct_v5` in `.golangci.yml` with an enforce pattern for `evidence.RecordedOutcome`, then
+  - Result: (2026-10-06) Mutation: `RecordedOutcome.UnmarshalText` returned the `ParseOutcome` error for a word it does
+    not know instead of keeping it. The full executing unit adapter
+    (`go test -count=1 -run TestUnitBehaviours ./tests/unit`) exited `1` with exactly one failure,
+    `338 scenarios (337 passed, 1 failed)`, `1042 steps (1040 passed, 1 failed, 1 skipped)`:
+    `Scenario: History lists an outcome this version does not know as recorded`,
+    `When JSON history is requested for thirty days`,
+    `Error: hippo: [hippo.evidence.unreadable] reading run history: unknown outcome "future-outcome"`. The same scenario
+    also failed at the integration and end-to-end adapters (`-run 'TestIntegrationBehaviours/...'` and
+    `-run 'TestE2EBehaviours/...'`, both exit `1`), so the tolerance is pinned at all three boundaries. The file was
+    restored byte for byte (`diff` against the saved copy is empty) and the scenario passes again at all three (exit
+    `0`).
+- [x] `[AI]` Enable `exhaustruct_v5` in `.golangci.yml` with an enforce pattern for `evidence.RecordedOutcome`, then
       plant a literal omitting a field, run _Lint_, record the output, and remove it; acceptance: the planted literal
       fails naming `exhaustruct`, which confirms the pattern syntax, and lint exits `0` once removed. `[AC-09]`
-- [ ] `[AI]` Confirm Unit 2's entries are gone from `tests/support/domain_literals_allowlist.go`, each deleted in the
+  - Result: (2026-10-06) `.golangci.yml`: `exhaustruct_v5` leaves the `disable` list (its reason comment goes with it;
+    `exhaustruct` stays disabled with its reason, now noting that the v5 successor is enabled below, scoped) and gains
+    settings: `explicit-mode: true`, so only a type a pattern names is checked, and `enforce-patterns` with the regexes
+    `^github\.com/wahidyankf/hippo/internal/evidence\.RecordedOutcome$` and
+    `^github\.com/wahidyankf/hippo/internal/evidence\.RecordedBudgetOutcome$` (the second added beyond the plan's single
+    pattern, because `RecordedBudgetOutcome` is the other struct this unit creates), each comment-explained. **Pattern
+    syntax confirmed from `dev.gaijin.team/go/exhaustruct/v5@v5.0.3`:** a regex matched against the full path
+    `package/import/path.TypeName`, not the package-qualified short name; in the default implicit mode every literal is
+    checked, so `explicit-mode` is what makes the scope narrow (the plan's text names only `enforce-patterns`). With the
+    setting on and nothing planted, _Lint_ exits `0` (`0 issues.`), so no existing literal, and no fixture elsewhere in
+    the module, is caught. Planted `internal/evidence/exhaustruct_mutation.go` with
+    `var _ = RecordedOutcome{outcome: OutcomePassed}` and `var _ = RecordedBudgetOutcome{text: "admitted"}`: _Lint_
+    exited `1`:
+    `internal/evidence/exhaustruct_mutation.go:4:9: evidence.RecordedOutcome is missing field text (exhaustruct_v5)` and
+    `:7:9: evidence.RecordedBudgetOutcome is missing field budget (exhaustruct_v5)` (`2 issues: exhaustruct_v5: 2`). The
+    file was deleted (`git status --short` shows no trace) and _Lint_ exits `0` again (`0 issues.`).
+- [x] `[AI]` Confirm Unit 2's entries are gone from `tests/support/domain_literals_allowlist.go`, each deleted in the
       item that removed its violation; run the unit adapter; acceptance: the allowlist holds no entry tagged Unit 2 and
       the adapter exits `0`. `[AC-08]`
+  - Result: (2026-10-06) `grep -c "Unit 2\|removedByOutcome" tests/support/domain_literals_allowlist.go` prints `0`: no
+    entry, no unit constant, and no group comment is tagged Unit 2 any more. The 11 Unit 2 entries were deleted in the
+    items that removed their violations (4 for `internal/guard/evidence.go` in the writer GREEN, 7 for
+    `internal/evidence/history.go` and `internal/cli/commands.go` in the history GREEN). Remaining: 20, Unit 4: 14
+    (`removedByLineage`), Unit 6: 6 (`removedByDecoding`), the 31 at introduction less 11. The executing unit adapter
+    (`go test -count=1 -run TestUnitBehaviours ./tests/unit`) exits `0` (`ok ... 215.629s`), including "Production code
+    compares no domain value with a literal" (so no stale entry and no new finding) and "Lint gate wiring is exhaustive
+    and module scoped" (so the `.golangci.yml` edit left that wiring intact), and
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` exits `0`.
 
 ### Unit 2 close
 
-- [ ] `[AI]` Apply rules propagation to the `exhaustruct_v5` change (`.golangci.yml` reason and the adapter's [Go
+- [x] `[AI]` Apply rules propagation to the `exhaustruct_v5` change (`.golangci.yml` reason and the adapter's [Go
       analysis gates][go-gates] module); proof: its status recorded here. `[AC-09]`
-- [ ] `[AI]` Run docs propagation: `docs/reference/json-schemas.md` says history lists an unknown outcome as recorded;
+  - Result: (2026-10-06) status `landed`, two rows, both `resolved`. R1, the `.golangci.yml` reason: the
+    `exhaustruct_v5` settings comment already says complete literals are required only for the closed domain types,
+    never globally, that explicit mode checks only what a pattern names, and that patterns match the full import path
+    and type name; the `exhaustruct` disable reason notes its scoped successor. Checked and left as written. R2, the
+    adapter: the [Go analysis gates][go-gates] module gains an `exhaustruct_v5` entry (`explicit-mode: true`, one
+    full-path regex per closed domain struct, and why: without explicit mode every literal is checked and the fixture
+    brittleness returns), and its description and index entry name it. Disposition: covered by _Lint_, shown failing on
+    the planted literals in the item above. The as-built pattern syntax and `explicit-mode` also go into
+    `tech-docs/002-gates-and-analysis.md`'s scope paragraph, routing the second Unit 2 learning.
+    `./rhino governance word-budget validate` and `directory-map validate` exit `0`.
+- [x] `[AI]` Run docs propagation: `docs/reference/json-schemas.md` says history lists an unknown outcome as recorded;
       proof: its status recorded and `npm run format:check` exits `0`. `[AC-11]`
-- [ ] `[AI]` Run the Gherkin implementation review over the new history scenario; proof: its status recorded. `[AC-11]`
-- [ ] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-09]`
-- [ ] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-09]` `[AC-10]` `[AC-11]`
+  - Result: (2026-10-06) status `landed`. Updated: `docs/reference/json-schemas.md` (`history --json`: a row whose
+    `outcome` or `budgetOutcome` this version does not know is listed as recorded, never refused or defaulted; an
+    unknown `outcome` never qualifies for owner promotion and no `--outcome` value selects it; the outcome list that
+    `tests/unit/outcome_vocabulary_test.go` reads is unchanged), `docs/reference/cli.md` (the `--outcome` filter note
+    says the same), `specs/architecture.md` (the `history` sentence lists an unknown outcome as recorded, never counted
+    toward promotion), and `tech-docs/004-file-impact.md` (Unit 2 gains the two pages above and the six files the third
+    Unit 2 learning names, now routed). Unchanged, checked: `README.md` (names no outcome),
+    `docs/how-to/inspect-evidence-and-abandoned-groups.md` (links the outcome list), and `CHANGELOG.md` (no `Unreleased`
+    section; the `v0.8.5` entry is Unit 7's). Removed: none. Not run: none; the pages' `hippo history` examples are
+    unchanged. `npm run format:check` exits `0`.
+- [x] `[AI]` Run the Gherkin implementation review over the new history scenario; proof: its status recorded. `[AC-11]`
+  - Result: (2026-10-06) "History lists an outcome this version does not know as recorded": `implemented`.
+    Implementation: `RecordedOutcome.UnmarshalText` in `internal/evidence/outcome.go`, which keeps an unknown word as
+    `OutcomeUnknown` with its text, read by `ReadHistory` in `internal/evidence/history.go` and printed by
+    `internal/cli/history.go`. Bound in `tests/support/steps.go` and `tests/support/history_v05.go`: the summary is
+    written as plain JSON, and the `Then` step requires exit `0` and exactly one row with that run ID whose outcome
+    reads `future-outcome`. Tests: the scenario at all three boundaries (`TestUnitBehaviours`,
+    `TestIntegrationBehaviours`, `TestE2EBehaviours`, each `--- PASS` on this rerun) and
+    `TestHistoryListsAnUnknownOutcomeAsRecordedAndNeverPromotesOnIt` in `internal/evidence/history_test.go`. The
+    mutation item above made the decoder refuse unknown text, and the scenario failed at all three boundaries.
+- [x] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-09]`
+  - Result: (2026-10-06) no blocking finding. F1 MEDIUM (five outcome words unasserted at the summary) fixed:
+    `requireSummaryOutcome` pins all six shed/stop/block/supervision words in `internal/guard/run_test.go` and
+    `tests/integration/run_test.go`, plus a new `TestRunLosingSupervisionAfterLaunchRecordsSupervisionFailed`; each of
+    six member swaps in `run.go` failed its test. F2 MEDIUM (`Outcomes()` hand-kept) fixed: derived from the member
+    range, pinned by `TestOutcomesListsEveryMemberBetweenUnsetAndUnknown` under three mutations. F3 LOW:
+    `reservation.go` derives the retry-wait reason from `OutcomeAdmissionCancelled`. F4 LOW: the strict `UnmarshalText`
+    methods document that recorded-evidence readers use the `Recorded*` types (D6). F5 LOW accepted under PW-6.
+- [x] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-09]` `[AC-10]` `[AC-11]`
       `[AC-12]`
+  - Result: (2026-10-06) `npm test` exit `0`: coverage 99.30% (846/852), race clean, `govulncheck` "No vulnerabilities
+    found." The first run timed out in the race step (`tests/integration` past Go's 10-minute package default) at host
+    load 15–18; alone it passed in 359 s, and the rerun passed with the race step at 534 s.
 
 ### Unit 2 landing
 
