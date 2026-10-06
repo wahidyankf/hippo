@@ -17,6 +17,10 @@ then verifies the archive rather than assuming it.
 ## Completed Plans
 
 - 2026-10-07 —
+  [Fix: Corrupt-Waiter Identity Test Flakes Under Load](2026-10-07__fix-corrupt-waiter-identity-test-flake/README.md):
+  the corrupt-identity test parks its waiter outside the coordination lock, so its competing admission always reaches
+  the ledger; test-only, carried by v0.8.5.
+- 2026-10-07 —
   [Fix: Degraded-Lineage Admission Scenario Flakes Under Load](2026-10-07__fix-degraded-lineage-scenario-flake/README.md):
   the degraded-lineage scenarios time their admission window on a logical clock, so a loaded runner no longer defers
   them; test-only, carried by v0.8.5.
@@ -40,6 +44,8 @@ then verifies the archive rather than assuming it.
 
 - [Fix: Configured profiles starve under macOS warning](2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md)
   is the delivery record for the v0.8.4 degraded-admission lineage fix.
+- [Fix: Corrupt-Waiter Identity Test Flakes Under Load](2026-10-07__fix-corrupt-waiter-identity-test-flake/README.md) is
+  the delivery record for the corrupt-waiter identity test flake fix.
 - [Fix: Degraded-Lineage Admission Scenario Flakes Under Load](2026-10-07__fix-degraded-lineage-scenario-flake/README.md)
   is the delivery record for the degraded-lineage scenario flake fix.
 - [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md) is
