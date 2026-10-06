@@ -472,11 +472,12 @@ Phases 1–4 ticked and Phase 5 open.
       `[AC-06]` `[AC-07]`
   - Result: (2026-10-07) the record so far was committed as `3fff2ac` on a clean tree, and
     `git ls-remote --tags origin v0.8.5` printed nothing before each rebase. Main gained the linting plan's Unit 5
-    (`e261965`, which edits `tests/support/driver.go`), so the branch was rebased without conflict; the _Regression
-    test_ passed 3 of 3 and the _Focused scenarios_ passed at both adapters. Main then gained the cancelled-waiter fix
-    (`aa274ee`), so the branch was rebased again without conflict to `86b06f4`: the _Regression test_ passed 3 of 3, the
-    _Focused scenarios_ passed 2 of 2 at each adapter, and the _Full gate_ exited `0` at load 5.5–12.7 with selected
-    production line coverage 99.36% (928/934), race detector clean, ending with "No vulnerabilities found."
+    (landed as `e261965`; its commit `2a0db40` edits `tests/support/driver.go`), so the branch was rebased without
+    conflict; the _Regression test_ passed 3 of 3 and the _Focused scenarios_ passed at both adapters. Main then gained
+    the cancelled-waiter fix (`aa274ee`), so the branch was rebased again without conflict to `86b06f4`: the _Regression
+    test_ passed 3 of 3, the _Focused scenarios_ passed 2 of 2 at each adapter, and the _Full gate_ exited `0` at load
+    5.5–12.7 with selected production line coverage 99.36% (928/934), race detector clean, ending with "No
+    vulnerabilities found."
 - [x] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-04]`
   - Result: (2026-10-07) `git diff --name-only origin/main...HEAD` at `aa274ee` prints this README,
@@ -485,14 +486,17 @@ Phases 1–4 ticked and Phase 5 open.
 - [x] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
       results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
       `git status --porcelain` prints nothing. `[AC-07]`
+  - Result: (2026-10-07) committed as `82906ac`, the last commit of #142, landed by rebase as `c2a08ca` with the same
+    tree (`a0e5df7`); `git status --porcelain` printed nothing. Recorded here because the commit cannot hold its own
+    hash.
 
 ### Phase 5: Release Through v0.8.5
 
 - [x] `[AI]` Land unit 2 with _Land_; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both
       recorded here by unit 4, since the merged copy cannot hold its own merge. The fix must merge before the linting
       plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-05]`
-  - Result: (2026-10-07) pull request #142, head `82906ac` on base `aa274ee`, merged by rebase as `c2a08ca` (fix commit
-    `6b9fd87`, with `bfb8325` and `945e177` before it), before `v0.8.5` was tagged. `Quality gate` passed on that head
+  - Result: (2026-10-07) pull request #142, head `82906ac` on base `aa274ee`, merged by rebase as `bfb8325`, `6b9fd87`
+    (the fix), `945e177`, and `c2a08ca`, in that order), before `v0.8.5` was tagged. `Quality gate` passed on that head
     in run `37505749317` (`PR Quality Gate`, every job passing); the earlier run `37505737306` on the same head was
     cancelled when superseded, and its `Quality gate` job failed only on the six cancelled results it aggregates. The
     leak review posted `pass` for head `82906ac` (all three counts `0`). _Reconcile_ read `0 0`.
@@ -541,8 +545,14 @@ Phases 1–4 ticked and Phase 5 open.
     by `TestDegradedAdmissionIgnoresARunnerStall`; the `rtk` entry concerns the workstation, not this repository, and
     the other two are specific to this execution. A search of `repo-governance/`, `docs/`, `specs/`, and `tests/` found
     no page that should hold any of them.
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
       verdict line recorded here. `[AC-07]`
+  - Result: (2026-10-07)
+    `plan-execution-check: PASS_WITH_FINDINGS (1 run, 2 LOW, 0 blocking, AC-07 closed by archival)`, at `f45cf5f`. EC-01
+    (LOW: the last Phase 4 item had no result line) and EC-02 (LOW: the Unit 5 rebase result named `e261965` for the
+    `driver.go` edit, and the Land result's commit order read ambiguously) are repaired in this commit; EC-03
+    (informational: the leak review was posted before `Quality gate` finished, with every merge precondition holding at
+    the merge) needs no repair.
 
 ### Archival
 
