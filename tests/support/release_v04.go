@@ -86,6 +86,9 @@ func cleanReleaseFixtureV04(root string) (string, string, error) {
 	if err = os.MkdirAll(fixtureRoot, 0o700); err != nil {
 		return "", "", err
 	}
+	// The index lists a tracked file deleted from disk until the deletion is
+	// staged, and copying it then fails every scenario that builds this fixture,
+	// so a change that deletes a tracked file stages the deletion first.
 	listed, err := runGitV04(sourceRoot, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
 	if err != nil {
 		return "", "", err
