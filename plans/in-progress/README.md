@@ -15,5 +15,7 @@ that already exists, with both stage indexes updated in that one change.
 
 ## Directory Map
 
+- [Fix: Cancelled waiter cleanup flakes under load](fix-cancelled-waiter-cleanup-flake/README.md) — the cancelled
+  waiter's cleanup never refuses a free coordination lock, and its scenario tolerates a loaded host.
 - [Strict Go linting and domain modeling](strict-go-linting-and-domain-modeling/README.md) — carry outcomes, internal
   reasons, profile lineage, and the admission decision as Go types, and gate the result.
