@@ -49,6 +49,15 @@ type lineageScenario struct {
 	spared bool
 }
 
+// logicalClock is the clock the admission guard reads: time passes only when
+// the guard pauses, so the admission window counts the guard's own readings and
+// no runner, however slow, can exhaust it before the readings decide admission.
+type logicalClock struct{ now time.Time }
+
+func (clock *logicalClock) Now() time.Time { return clock.now }
+
+func (clock *logicalClock) Sleep(duration time.Duration) { clock.now = clock.now.Add(duration) }
+
 // advancingCollector returns its samples in order and then repeats its final
 // sample forever, stamping every reading one step after the last so a trend
 // window keeps advancing instead of collapsing onto one timestamp.
@@ -58,12 +67,15 @@ type advancingCollector struct {
 	base    time.Time
 	step    time.Duration
 	index   int
+	stall   time.Duration
 }
 
 func (collector *advancingCollector) Collect(ctx context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
 	if err := ctx.Err(); err != nil {
 		return policy.Reading{}, err
 	}
+
+	time.Sleep(collector.stall)
 
 	sample := collector.then
 	if collector.index < len(collector.samples) {
@@ -145,7 +157,9 @@ func (driver *Driver) guardUnderConfiguration() error {
 }
 
 // guardUnder runs ephemeral work under the resolution while the host holds the
-// scenario's warning window, then keeps holding it.
+// scenario's warning window, then keeps holding it. Its hundred-millisecond
+// admission window is logical, so it admits at the sixteenth reading and defers
+// after the hundred and first, whatever the host's speed.
 func (driver *Driver) guardUnder(resolution policy.Resolution) error {
 	last := driver.samples[len(driver.samples)-1]
 	root, err := driver.temporaryRoot()
@@ -159,6 +173,10 @@ func (driver *Driver) guardUnder(resolution policy.Resolution) error {
 	resourcePolicy.TerminationGrace = time.Millisecond
 	resourcePolicy.LeaseWait = time.Second
 	stderr := &bytes.Buffer{}
+	clock := &logicalClock{now: time.Now()}
+	collector := &advancingCollector{
+		samples: driver.samples, then: last, base: time.Unix(0, 0), step: time.Second, stall: driver.readingStall,
+	}
 
 	code, runError := guard.Run(context.Background(), guard.RunConfig{
 		Command:                shellPath,
@@ -167,12 +185,12 @@ func (driver *Driver) guardUnder(resolution policy.Resolution) error {
 		Environment:            os.Environ(),
 		EvidenceRoot:           root,
 		DiskPath:               ".",
-		Collector:              &advancingCollector{samples: driver.samples, then: last, base: time.Unix(0, 0), step: time.Second},
+		Collector:              collector,
 		Policy:                 resourcePolicy,
 		Resolution:             resolution,
 		RetirementConfirmation: fixtureLivenessWait,
-		Sleep:                  time.Sleep,
-		Now:                    time.Now,
+		Sleep:                  clock.Sleep,
+		Now:                    clock.Now,
 		Stderr:                 stderr,
 	})
 

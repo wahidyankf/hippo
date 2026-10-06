@@ -268,6 +268,10 @@ type Driver struct {
 	ungatedPackages          []string
 	domainFindings           []domainFinding
 	lineage                  lineageScenario
+	// readingStall is real time the degraded-lineage admission collector takes
+	// over each reading, standing in for a runner the scheduler starves. It is
+	// zero in every scenario.
+	readingStall time.Duration
 }
 
 type failingStream struct {
