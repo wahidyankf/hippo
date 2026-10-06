@@ -501,23 +501,43 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ### Phase 5: Release Through v0.8.5
 
-- [ ] `[AI]` Land unit 2 with _Land_, its pull-request body carrying the RED and GREEN captures per
+- [x] `[AI]` Land unit 2 with _Land_, its pull-request body carrying the RED and GREEN captures per
       [red-green-refactor](../../../repo-governance/workflows/quality/red-green-refactor.md); proof: the merge commit on
       `origin/main` and _Reconcile_ reading `0 0`, both recorded here by unit 4, since the merged copy cannot hold its
       own merge. The fix must merge before the linting plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]`
       `[AC-04]` `[AC-05]` `[AC-06]`
-- [ ] `[AI]` Immediately after that merge, run
+  - Result: (2026-10-07) pull request #143, its body carrying the RED and GREEN captures under "How it was proved",
+    rebase-merged as `4e1e7d5` (2026-10-06T18:46:09Z), the fix commit landing as `23b21ed`, after `Quality gate`
+    `success` on head `0876fa6` in `PR Quality Gate` run 37511082174 (an earlier run on the same head, 37511069618, was
+    cancelled and superseded) and the leak review's pass for that exact head, with `leak-review` `success`. The fix
+    merged before `v0.8.5` was tagged. _Reconcile_ read `0 0`.
+- [x] `[AI]` Immediately after that merge, run
       [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for this
       worktree, at the owner's direction: confirm nothing is unpushed or running, then remove the worktree with
       `git worktree remove` without `--force`, and delete `worktree/fix-distinct-root-lock-test-flake` and `...-fix`
       locally and on `origin`; proof: `git worktree list` omits it, `git branch --list 'worktree/fix-distinct-root-*'`
       and `git ls-remote origin 'refs/heads/worktree/fix-distinct-root-*'` print nothing. `[AC-08]`
-- [ ] `[AI]` Provision `worktrees/fix-distinct-root-lock-test-flake-record` from `origin/main` on branch
+  - Result: (2026-10-07) right after the merge, with nothing unpushed and nothing running in it, the worktree was
+    removed with `git worktree remove` without `--force`, and both branches were deleted locally; GitHub had already
+    deleted them on `origin`. Rerun from the record worktree: `git worktree list` omits it,
+    `git ls-remote origin 'refs/heads/worktree/fix-distinct-root-*'` prints nothing, and
+    `git branch --list 'worktree/fix-distinct-root-*'` lists only `worktree/fix-distinct-root-lock-test-flake-record`,
+    which the next item provisioned afterwards; `git branch --list` naming the two deleted branches prints nothing.
+- [x] `[AI]` Provision `worktrees/fix-distinct-root-lock-test-flake-record` from `origin/main` on branch
       `worktree/fix-distinct-root-lock-test-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
       `git branch --show-current` prints the branch. `[AC-08]`
-- [ ] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
+  - Result: (2026-10-07) after `git fetch origin --prune`, `git worktree add -b` created the branch and worktree from
+    `origin/main` at `456d24b`, and `npm ci` ran under `./hippo run --class ephemeral --resource-tier light`, exit `0`.
+    `git branch --show-current` prints `worktree/fix-distinct-root-lock-test-flake-record`.
+- [x] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
       `git merge-base --is-ancestor <unit 2 merge commit> v0.8.5` exits `0`, and the release URL and the tag's peeled
       commit are recorded here. `[AC-07]`
+  - Result: (2026-10-07) `v0.8.5` is published at <https://github.com/wahidyankf/hippo/releases/tag/v0.8.5>
+    (2026-10-06T22:19:10Z, neither draft nor prerelease, four archives and `checksums.txt`), built by `release.yml` run
+    37539705716, `success`. The annotated tag object `f24bba1` peels (`git rev-parse v0.8.5^{commit}`) to
+    `456d24bc2a20ee23a7b81746c1789133cd5c3a97`, the merge of #147. `git merge-base --is-ancestor 4e1e7d5 v0.8.5` exits
+    `0`, so the release's full gate ran with the fix. Per [Release content](#solution), it carries no `CHANGELOG.md`
+    entry.
 - [ ] `[AI]` Recovery, dormant until triggered. Trigger: `v0.8.5` is published without unit 2's merge commit (the
       ancestry check above exits `1`). Then cut no patch release, because the binary is unchanged: record in the record
       worktree's copy of this plan that the fix is test-only with no release content and that `v0.8.5`'s full gate ran
@@ -525,11 +545,15 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
       `git merge-base --is-ancestor <unit 2 merge commit> origin/main` exits `0` and the `v0.8.5` check exits `1`, both
       recorded there, so the next release cut from `origin/main` carries the fix. Otherwise: a dated, evidenced
       `Not triggered`. `[AC-07]`
+  - Not triggered (2026-10-07): `git merge-base --is-ancestor 4e1e7d5 v0.8.5` exits `0`, as does the same check against
+    `origin/main`, so `v0.8.5` carries unit 2 and there is nothing to recover.
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
+- [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-08]`
+  - Result: (2026-10-07) [Learnings](#learnings) holds no entry, so nothing is routed or discarded; the section records
+    that terminal state.
 - [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
       verdict line recorded here. `[AC-08]`
 
@@ -545,8 +569,9 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ## Learnings
 
-None yet. Entries are added as execution teaches something, and each is routed to a durable owner or discarded with a
-reason before archival.
+No entries. Execution followed the plan as written: every RED, GREEN, break, repeated, and contention proof came out as
+[Root Cause](#root-cause) predicted, and the rebase, landing, clean-up, and release raised nothing this plan did not
+already record. **Resolved (2026-10-07):** nothing to route.
 
 ## Directory Map
 
