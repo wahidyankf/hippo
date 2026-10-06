@@ -2131,7 +2131,8 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
     reading has no CPU figure on Linux), D-009, and D-010 (LOW: a "v1 client" label; the `HIPPO_` prefix rule) open and
     non-blocking; all three were then fixed here, verified against `internal/cli/release.go` and
     `internal/host/collector.go`. Repairs committed as `91b3784` and the commit after it; formatter, linter, line
-    length, word budget, and internal links pass, and `git status --porcelain` printed only this plan's record.
+    length, word budget, and internal links pass, and `git status --porcelain` printed only this plan's record, which
+    landed with #146; the tagged checkout was then proven clean.
 
 - [x] `[AI]` Land it: data-safety inspection and commit, push review and push, screened draft pull request, ready,
       `Quality gate` on the head, the leak review for that head, rebase merge, and _Reconcile_; proof: the merge commit
@@ -2236,8 +2237,17 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
     its suffix was a go1.27.1 measurement (F1, #147). The plan's `tech-docs/` are archived with it and so own nothing,
     which supersedes the Unit 6 close note that left routing into `tech-docs/` to this item; the file impact additions
     are discarded as recorded in each unit's results.
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md) against AC-01 to
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md) against AC-01 to
       AC-25; proof: its verdict line recorded here, permitting archival. `[AC-25]`
+  - Result: (2026-10-07)
+    `plan-execution-check: PASS_WITH_FINDINGS (1 run, 1 MEDIUM, 3 LOW, 0 blocking; AC-25 closed by archival)`, at
+    `454ea1a`, permitting archival. F1 (MEDIUM: D15 and AC-25 call the archival pull request docs-only, yet knowledge
+    capture added comment-only Go edits in four `tests/support` files) is accepted as a recorded deviation: a code
+    comment is a durable owner under the knowledge-capture convention, and no behaviour changes; the archival pull
+    request body says so. F2 (LOW: no automated test reads the ten-outcome list in `history --outcome`'s refusal;
+    established by the manual charter and the check's own rerun) is left as a known gap. F3 (LOW: the uncommitted plan
+    quality-gate ledger lacks a closing block; the terminal line is recorded under Post-Write Gate) goes with the
+    worktree. F4 (LOW: the Unit 7 docs-gate result's proof wording) is repaired in this commit.
 
 > **Pause Safety**: the verdict is recorded. To resume: the Plan Archival section.
 
