@@ -450,7 +450,7 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	summary, err := writer.Finalize("ephemeral", "passed", 1)
+	summary, err := writer.Finalize("ephemeral", evidence.OutcomePassed, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +465,7 @@ func TestEvidenceLifecycleSummaryAndCleanup(t *testing.T) {
 		t.Fatalf("unexpected summary %+v", summary)
 	}
 
-	if _, err := writer.Finalize("ephemeral", "passed", 0); err == nil {
+	if _, err := writer.Finalize("ephemeral", evidence.OutcomePassed, 0); err == nil {
 		t.Fatal("second finalize accepted")
 	}
 }

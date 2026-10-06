@@ -38,6 +38,11 @@ Feature: Public HIPPO CLI
     When JSON history is filtered to one source for thirty days
     Then only the matching privacy-safe summary is returned
 
+  Scenario: History lists an outcome this version does not know as recorded
+    Given a current summary whose outcome is future-outcome
+    When JSON history is requested for thirty days
+    Then it exits 0 and that row's outcome reads future-outcome
+
   @e2e-exempt
   Scenario: An unreadable history archive is not reported as a refused write
     Given a history archive that is not valid gzip

@@ -1468,7 +1468,7 @@ func (driver *Driver) overflowEvidenceChunks() error {
 		}
 	}
 
-	_, err = writer.Finalize(policy.TaskEphemeral, "passed", 0)
+	_, err = writer.Finalize(policy.TaskEphemeral, evidence.OutcomePassed, 0)
 
 	return err
 }

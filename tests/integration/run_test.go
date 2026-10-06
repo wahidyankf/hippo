@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
@@ -64,6 +66,31 @@ const evidenceDecidesAdmission = time.Hour
 // It only detects a wait that never ends, and a healthy run never spends it.
 const livenessLimit = 30 * time.Second
 
+// requireSummaryOutcome holds the one summary a run left in root to the outcome
+// the run decided: the member, and the wire word recorded for it.
+func requireSummaryOutcome(t *testing.T, root string, want evidence.Outcome) {
+	t.Helper()
+
+	summaryPaths, err := filepath.Glob(filepath.Join(root, "*.summary.json"))
+	if err != nil || len(summaryPaths) != 1 {
+		t.Fatalf("summary paths=%v error=%v, want one summary", summaryPaths, err)
+	}
+
+	data, err := os.ReadFile(summaryPaths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var summary evidence.Summary
+	if err = json.Unmarshal(data, &summary); err != nil {
+		t.Fatal(err)
+	}
+
+	if summary.Outcome != evidence.Recorded(want) {
+		t.Fatalf("summary outcome=%q, want %q", summary.Outcome, want)
+	}
+}
+
 func fastPolicy() policy.Policy {
 	policy := policy.DefaultPolicy()
 	policy.SampleInterval = time.Millisecond
@@ -102,6 +129,7 @@ func TestGuardPreservesChildExitAndWritesEvidence(t *testing.T) {
 }
 
 func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
+	root := t.TempDir()
 	sample := integrationSample(time.Now())
 	disk := 29 * policy.GiB
 	sample.DiskFreeBytes = &disk
@@ -111,7 +139,7 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 		Arguments:    []string{"-c", "exit 99"},
 		TaskClass:    "ephemeral",
 		Environment:  os.Environ(),
-		EvidenceRoot: t.TempDir(),
+		EvidenceRoot: root,
 		DiskPath:     ".",
 		Collector:    &integrationCollector{samples: []policy.Sample{sample}},
 		Policy:       fastPolicy(),
@@ -123,6 +151,8 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 	if err != nil || code != guard.StorageBlockedExitCode {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
+
+	requireSummaryOutcome(t, root, evidence.OutcomeStorageBlocked)
 }
 
 func TestReservationCoordinationReturnsProtocolMismatchBeforeChildExecution(t *testing.T) {
@@ -200,6 +230,7 @@ func TestInheritedGuardRunsDirectlyAndKeepsPortLease(t *testing.T) {
 }
 
 func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
+	root := t.TempDir()
 	base := time.Now()
 	healthy := integrationSample(base)
 	critical := integrationSample(base.Add(3 * time.Millisecond))
@@ -212,7 +243,7 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 		Arguments:    []string{"-c", "sleep 5"},
 		TaskClass:    "ephemeral",
 		Environment:  os.Environ(),
-		EvidenceRoot: t.TempDir(),
+		EvidenceRoot: root,
 		DiskPath:     ".",
 		Collector:    collector,
 		Policy:       fastPolicy(),
@@ -227,6 +258,8 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 	if err != nil || code != guard.PressureShedExitCode {
 		t.Fatalf("exit=%d error=%v", code, err)
 	}
+
+	requireSummaryOutcome(t, root, evidence.OutcomePressureShed)
 }
 
 func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {

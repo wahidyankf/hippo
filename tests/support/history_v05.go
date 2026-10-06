@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -20,6 +21,8 @@ import (
 )
 
 const (
+	// historyWindow is the thirty days of history the history scenarios ask for.
+	historyWindow    = "30d"
 	hippoFixtureName = "hippo"
 	standardTierName = "standard"
 	worktreeTagValue = "worktree"
@@ -105,7 +108,7 @@ func (driver *Driver) labeledHistoryV05() error {
 	for _, source := range []string{hippoFixtureName, "rhino"} {
 		row := evidence.Summary{
 			SchemaVersion: 5, RunID: source, Source: source, Tags: map[string]string{"checkout": worktreeTagValue},
-			TaskClass: "ephemeral", ResourceTier: standardTierName, Outcome: "passed",
+			TaskClass: "ephemeral", ResourceTier: standardTierName, Outcome: evidence.Recorded(evidence.OutcomePassed),
 			FinishedAt: now.Format(time.RFC3339Nano),
 		}
 		encoded, encodeError := json.Marshal(row)
@@ -124,7 +127,7 @@ func (driver *Driver) filteredHistoryV05() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code, err := (cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
-	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, "30d", "--source", hippoFixtureName, jsonFlag})
+	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, historyWindow, "--source", hippoFixtureName, jsonFlag})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
 	return err
@@ -257,7 +260,7 @@ func (driver *Driver) queryHistory() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code, _ := (cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
-	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, "30d"})
+	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, historyWindow})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
 	return nil
@@ -274,6 +277,86 @@ func (driver *Driver) requireUnreadableHistory() error {
 	data, err := os.ReadFile(archives[0])
 	if err != nil || string(data) != corruptHistoryArchiveBytes {
 		return fmt.Errorf("the query changed the corrupt archive: %q error=%w", data, err)
+	}
+
+	return nil
+}
+
+// recordedOutcomeRun names the one summary the recorded-outcome scenario writes.
+const recordedOutcomeRun = "recorded-outcome"
+
+// summaryRecordingOutcome leaves, in a root of its own, the bytes a run wrote
+// with the given outcome. It writes plain JSON rather than an evidence.Summary,
+// because the point is a word another HIPPO version recorded and this one has
+// no name for: the typed summary could not even hold it.
+func (driver *Driver) summaryRecordingOutcome(outcome string) error {
+	root, err := driver.temporaryRoot()
+	if err != nil {
+		return err
+	}
+	driver.leaseRoot = root
+	encoded, err := json.Marshal(map[string]any{
+		"schemaVersion": 5, "runId": recordedOutcomeRun, "source": hippoFixtureName,
+		"taskClass": "ephemeral", "resourceTier": standardTierName, "outcome": outcome,
+		"finishedAt": time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filepath.Join(root, recordedOutcomeRun+".summary.json"), append(encoded, '\n'), 0o600)
+}
+
+// requestJSONHistory asks for thirty days of history as JSON from the root the
+// scenario staged: in process at the unit and integration boundaries, through
+// the compiled binary at the end-to-end one.
+func (driver *Driver) requestJSONHistory() error {
+	arguments := []string{historyCommandName, sinceFlagName, historyWindow, jsonFlag}
+	if driver.mode == e2eMode {
+		return driver.runBinaryInRoot(driver.leaseRoot, arguments...)
+	}
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	code, err := (cli.Application{
+		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + driver.leaseRoot},
+	}).Run(context.Background(), arguments)
+	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
+
+	return err
+}
+
+// runBinaryInRoot runs the compiled binary with root as its shared evidence
+// root, and records its exit status and both streams.
+func (driver *Driver) runBinaryInRoot(root string, arguments ...string) error {
+	command := exec.Command(driver.binary, arguments...)
+	command.Env = environmentWith(map[string]string{hippoRootEnvironment: root})
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	command.Stdout, command.Stderr = stdout, stderr
+	err := command.Run()
+	driver.exitCode, driver.output, driver.errorOutput = 0, stdout.String(), stderr.String()
+	if exitError, failed := errors.AsType[*exec.ExitError](err); failed {
+		driver.exitCode = exitError.ExitCode()
+
+		return nil
+	}
+
+	return err
+}
+
+func (driver *Driver) requireHistoryRowOutcome(outcome string) error {
+	if driver.exitCode != 0 {
+		return fmt.Errorf("history exit=%d stderr=%s", driver.exitCode, driver.errorOutput)
+	}
+	var payload struct {
+		Rows []struct {
+			RunID   string `json:"runId"`
+			Outcome string `json:"outcome"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
+		return err
+	}
+	if len(payload.Rows) != 1 || payload.Rows[0].RunID != recordedOutcomeRun || payload.Rows[0].Outcome != outcome {
+		return fmt.Errorf("history rows %+v, want one %s row whose outcome reads %s", payload.Rows, recordedOutcomeRun, outcome)
 	}
 
 	return nil
