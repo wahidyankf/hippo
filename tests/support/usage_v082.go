@@ -72,6 +72,8 @@ func invalidFlagValues() [][]string {
 
 	invocations := [][]string{
 		append([]string{runCommandName, taskClassFlag, unknownSubcommand}, payload...),
+		// release is a known class, but only the release commands guard release work, so run refuses it too.
+		append([]string{runCommandName, taskClassFlag, taskClassRelease}, payload...),
 		append([]string{runCommandName, leasePortFlagName, "-1", leaseOwnerFlagName, leaseOwnerName}, payload...),
 		append([]string{runCommandName, leasePortFlagName, "8080", leaseOwnerFlagName, leaseOwnerName}, payload...),
 		append([]string{

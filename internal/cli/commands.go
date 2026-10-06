@@ -49,7 +49,7 @@ type historyOptions struct {
 	since        string
 	source       string
 	tags         []string
-	taskClass    string
+	classFlag    string
 	resourceTier string
 	outcomeFlag  string
 }
@@ -68,9 +68,12 @@ type runOptions struct {
 	// observeChild is called with a started child's status, and only then. It
 	// is what lets the boundary pass that status through untouched rather than
 	// treating it as one hippo chose.
-	observeChild           func(int)
-	command                []string
-	class                  string
+	observeChild func(int)
+	command      []string
+	// classFlag is the --class text. class is what it names, read once at the
+	// command-line boundary before anything else runs on it.
+	classFlag              string
+	class                  policy.TaskClass
 	workingDir             string
 	diskPath               string
 	leasePort              int
@@ -321,7 +324,7 @@ func (application Application) historyCommand(execution *commandExecution) *cobr
 	command.Flags().StringVar(&options.since, "since", "30d", "rolling duration such as 12h or 30d")
 	command.Flags().StringVar(&options.source, "source", "", "filter by source")
 	command.Flags().StringArrayVar(&options.tags, "tag", nil, "filter by key=value; repeatable")
-	command.Flags().StringVar(&options.taskClass, "class", "", "filter by task class")
+	command.Flags().StringVar(&options.classFlag, "class", "", "filter by task class")
 	command.Flags().StringVar(&options.resourceTier, "resource-tier", "", "filter by resource tier")
 	command.Flags().StringVar(&options.outcomeFlag, "outcome", "", "filter by outcome")
 	command.Flags().BoolVar(&options.jsonOutput, "json", false, "emit one JSON document")
@@ -373,7 +376,12 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 			options.observeChild = func(childStatus int) { execution.childStatus = &childStatus }
 
 			return executeHandler(command, execution, func() (int, error) {
-				if mistake := runArgumentMistake(options); mistake != nil {
+				class, mistake := runClass(options.classFlag)
+				if mistake != nil {
+					return 0, mistake
+				}
+				options.class = class
+				if mistake = runArgumentMistake(options); mistake != nil {
 					return 0, mistake
 				}
 
@@ -381,7 +389,7 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 			})
 		},
 	}
-	command.Flags().StringVar(&options.class, "class", "ephemeral", "task class")
+	command.Flags().StringVar(&options.classFlag, "class", "ephemeral", "task class")
 	command.Flags().StringVar(&options.workingDir, "cwd", "", "child working directory")
 	command.Flags().StringVar(&options.diskPath, "disk-path", "", "path whose free space is measured")
 	command.Flags().IntVar(&options.leasePort, "lease-port", 0, "service port to lease")

@@ -619,8 +619,21 @@ func consumeUniqueReservationJSON(decoder *json.Decoder) error {
 	return err
 }
 
+// validReservationClass reports whether a ledger may hold the class: ephemeral,
+// service, and transactional work reserves, release work is guarded by the
+// release commands and never does, and a class with no member, the empty one a
+// ledger owner or waiter without a class decodes to included, is not one a
+// ledger holds. The switch names every member so that a class added later must
+// be decided here, and one nobody decided is refused.
 func validReservationClass(class policy.TaskClass) bool {
-	return class == policy.TaskEphemeral || class == policy.TaskService || class == policy.TaskTransactional
+	switch class {
+	case policy.TaskEphemeral, policy.TaskService, policy.TaskTransactional:
+		return true
+	case policy.TaskRelease:
+		return false
+	default:
+		return false
+	}
 }
 
 func validateReservationVector(name string, vector, capacity ReservationVector) error {

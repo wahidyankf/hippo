@@ -246,30 +246,29 @@ func TestDomainLiteralRefusesPackagesThatDoNotTypeCheck(t *testing.T) {
 	}
 }
 
-func TestDomainLiteralReportsFindingsOffTheAllowlistAndStaleEntries(t *testing.T) {
-	findings := []domainFinding{
-		{Path: "internal/a/a.go", Line: 12, Rule: ruleRawField, Identifier: "Outcome", Symbol: "Summary.Outcome"},
-		{Path: "internal/a/a.go", Line: 30, Rule: ruleLiteralComparison, Identifier: "profile", Symbol: "choose"},
-		{Path: "internal/a/a.go", Line: 31, Rule: ruleLiteralComparison, Identifier: "profile", Symbol: "choose"},
-	}
-	allowlist := []domainAllowance{
-		{Path: "internal/a/a.go", Symbol: "Summary.Outcome", Rule: ruleRawField, Unit: "Unit 2"},
-		{Path: "internal/a/a.go", Symbol: "choose", Rule: ruleLiteralComparison, Unit: "Unit 4"},
-		{Path: "internal/a/gone.go", Symbol: "removed", Rule: ruleLiteralComparison, Unit: "Unit 4"},
+func TestDomainLiteralStepReportsEveryFindingAndNothingElse(t *testing.T) {
+	driver := &Driver{}
+	if err := driver.requireNoDomainLiteralFinding(); err != nil {
+		t.Fatalf("no finding was refused: %v", err)
 	}
 
-	// Which of two findings in one symbol is the new one cannot be told from the list, so the report names every
-	// finding of the symbol and the developer sees the line they just wrote among them.
-	got := reconcileDomainFindings(findings, allowlist)
-	want := []string{
+	driver.domainFindings = []domainFinding{
+		{Path: "internal/a/a.go", Line: 12, Rule: ruleRawField, Identifier: "Outcome"},
+		{Path: "internal/a/a.go", Line: 30, Rule: ruleLiteralComparison, Identifier: "profile"},
+	}
+	err := driver.requireNoDomainLiteralFinding()
+	if err == nil {
+		t.Fatal("findings were accepted")
+	}
+
+	for _, line := range []string{
+		"found 2 violations",
+		"internal/a/a.go:12: raw-field: Outcome",
 		"internal/a/a.go:30: literal-comparison: profile",
-		"internal/a/a.go:31: literal-comparison: profile",
-		"stale allowlist entry: internal/a/gone.go removed literal-comparison (Unit 4) holds no finding",
-	}
-	requireFindings(t, got, want)
-
-	if problems := reconcileDomainFindings(findings[:1], allowlist[:1]); len(problems) != 0 {
-		t.Fatalf("a finding with its entry was reported: %v", problems)
+	} {
+		if !strings.Contains(err.Error(), line) {
+			t.Errorf("the refusal does not name %q: %v", line, err)
+		}
 	}
 }
 

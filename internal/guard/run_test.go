@@ -1418,7 +1418,7 @@ func TestLegacySchemaOnePIDOnlyOwnershipCompatibility(t *testing.T) { //nolint:c
 			t.Fatal(err)
 		}
 		owner := leaseOwner{
-			SchemaVersion: 1, PID: pid, Token: legacyToken, Class: class,
+			SchemaVersion: 1, PID: pid, Token: legacyToken, Class: policy.RecordedClass(policy.TaskClass(class)),
 		}
 		if class == "heavy" {
 			path := filepath.Join(root, "heavy.lock")

@@ -112,6 +112,67 @@ func TestReservationLedgerCorruptionFailsClosedWithoutMutation(t *testing.T) {
 	}
 }
 
+// TestReservationLedgerClassIsRefusedWhereItIsDecoded pins where a class is refused. A class this version has no
+// member for fails at decode, naming it, because the decoder knows the closed set; one it does have a member for but a
+// ledger never holds, release, decodes and is refused afterwards by validation, which only calls it invalid. A class
+// that is absent or null never reaches the decoder, which only reads text that is present, so it arrives at validation
+// as the empty class and only validation refuses it.
+func TestReservationLedgerClassIsRefusedWhereItIsDecoded(t *testing.T) {
+	const (
+		decodeFailure     = "decode reservation ledger"
+		validationFailure = "class is invalid"
+	)
+	owner := `{"token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pid":1,"class":"batch","profile":"balanced","requested":{"cpu":1,"memoryBytes":268435456},"allocated":{"cpu":1,"memoryBytes":268435456},"sequence":1,"maxActiveOwners":20}`
+	waiter := `{"token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pid":1,"class":"batch","profile":"balanced","requested":{"cpu":1,"memoryBytes":268435456},"sequence":1,"maxActiveOwners":20}`
+	ledger := func(owners, waiters string) string {
+		return `{"schemaVersion":2,"capacity":{"cpu":4,"memoryBytes":1073741824},"nextSequence":1,"owners":[` + owners +
+			`],"waiters":[` + waiters + `]}`
+	}
+	for name, test := range map[string]struct {
+		document string
+		wants    []string
+		refuses  string
+	}{
+		"owner":                    {ledger(owner, ""), []string{decodeFailure, `"batch"`}, validationFailure},
+		"waiter":                   {ledger("", waiter), []string{decodeFailure, `"batch"`}, validationFailure},
+		"release owner":            {ledger(strings.Replace(owner, `"batch"`, `"release"`, 1), ""), []string{"owner " + validationFailure}, decodeFailure},
+		"release waiter":           {ledger("", strings.Replace(waiter, `"batch"`, `"release"`, 1)), []string{"waiter " + validationFailure}, decodeFailure},
+		"owner without a class":    {ledger(strings.Replace(owner, `"class":"batch",`, "", 1), ""), []string{"owner " + validationFailure}, decodeFailure},
+		"waiter without a class":   {ledger("", strings.Replace(waiter, `"class":"batch",`, "", 1)), []string{"waiter " + validationFailure}, decodeFailure},
+		"owner with a null class":  {ledger(strings.Replace(owner, `"batch"`, "null", 1), ""), []string{"owner " + validationFailure}, decodeFailure},
+		"waiter with a null class": {ledger("", strings.Replace(waiter, `"batch"`, "null", 1)), []string{"waiter " + validationFailure}, decodeFailure},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, "coordination-mode.json"), []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, "reservations.json")
+			state := []byte(test.document + "\n")
+			if err := os.WriteFile(path, state, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := guard.ReservationStatus(context.Background(), root)
+			if err == nil {
+				t.Fatal("a ledger holding a class no reservation may hold was accepted")
+			}
+			for _, want := range test.wants {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), test.refuses) {
+				t.Errorf("error %q contains %q, so the class was refused at the other stage", err, test.refuses)
+			}
+			after, readError := os.ReadFile(path)
+			if readError != nil || !bytes.Equal(after, state) {
+				t.Errorf("refused ledger changed: %q error=%v", after, readError)
+			}
+		})
+	}
+}
+
 func reservationSample() policy.Sample {
 	return policy.Sample{
 		EffectiveMemoryLimitBytes: 32 * policy.GiB,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -409,6 +410,44 @@ func TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode(t *testing.T) {
 	}
 }
 
+// A coordination mode the configuration does not accept is an unreadable configuration, wherever the document is
+// refused: exit 125 naming hippo.config.unreadable. An empty mode is accepted, as it always was.
+func TestStatusRefusesAnUnknownCoordinationModeAsAnUnreadableConfiguration(t *testing.T) {
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		mode    string
+		refused bool
+	}{
+		{"exclusive", true}, {"batch", true}, {"Reservation", true}, {"", false}, {"reservation", false},
+	} {
+		t.Run(test.mode, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "hippo.machine.json")
+			document := strings.Replace(adaptiveConfigFixture, `"mode": "reservation"`, `"mode": "`+test.mode+`"`, 1)
+			if err := os.WriteFile(configPath, []byte(document), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			application := Application{
+				Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, Environment: []string{"HIPPO_ROOT=" + t.TempDir()},
+				Collector: stableCollector{sample: stableDevelopmentSample(now)}, Now: func() time.Time { return now },
+				Sleep: func(time.Duration) {},
+			}
+			code, err := application.Run(context.Background(), []string{"status", "--json", "--config", configPath})
+			if !test.refused {
+				if code != 0 || err != nil {
+					t.Fatalf("mode %q: status code=%d error=%v, want the configuration to load", test.mode, code, err)
+				}
+
+				return
+			}
+			var failure status.Failure
+			if code != status.GuardFailed || !errors.As(err, &failure) || failure.Code != status.CodeConfigUnreadable ||
+				!strings.Contains(err.Error(), strconv.Quote(test.mode)) {
+				t.Fatalf("mode %q: status code=%d error=%v, want %d naming %s and the mode", test.mode, code, err, status.GuardFailed, status.CodeConfigUnreadable)
+			}
+		})
+	}
+}
+
 func TestAResolutionPublishesTheIntegerV084CarriedForItsReason(t *testing.T) {
 	for _, row := range []struct {
 		reason policy.Reason
@@ -462,5 +501,32 @@ func TestStatusRefusesAnUnsetAdmissionPathInsteadOfDefaulting(t *testing.T) {
 	decided, err := withAssessmentDecision(resolution, policy.AdmissionUnset)
 	if err == nil || decided.Decision != resolution.Decision || decided.Reason != policy.ReasonNone || decided.Retryable {
 		t.Errorf("an unset path decided %+v (%v), want a refusal that leaves the resolution as it was", decided, err)
+	}
+}
+
+// TestRunClassAcceptsOnlyTheClassesRunMayGuard pins what run's --class flag may name: an empty flag means ephemeral,
+// the three classes run guards pass through, and release, which only the release commands guard, is the caller's
+// mistake, as is any text that names no class.
+func TestRunClassAcceptsOnlyTheClassesRunMayGuard(t *testing.T) {
+	for _, test := range []struct {
+		flag string
+		want policy.TaskClass
+	}{
+		{"", policy.TaskEphemeral},
+		{string(policy.TaskEphemeral), policy.TaskEphemeral},
+		{string(policy.TaskService), policy.TaskService},
+		{string(policy.TaskTransactional), policy.TaskTransactional},
+	} {
+		class, err := runClass(test.flag)
+		if err != nil || class != test.want {
+			t.Errorf("runClass(%q) = %q (%v), want %q", test.flag, class, err, test.want)
+		}
+	}
+	for _, flag := range []string{string(policy.TaskRelease), "batch", "Ephemeral", " service"} {
+		class, err := runClass(flag)
+		var failure status.Failure
+		if !errors.As(err, &failure) || failure.Code != status.CodeArgsInvalid || class != "" {
+			t.Errorf("runClass(%q) = %q (%v), want a %s refusal and no class", flag, class, err, status.CodeArgsInvalid)
+		}
 	}
 }

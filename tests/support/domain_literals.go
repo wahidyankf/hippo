@@ -63,14 +63,12 @@ func isDomainName(name string) bool {
 	return slices.ContainsFunc(domainNames, func(domain string) bool { return strings.EqualFold(domain, name) })
 }
 
-// domainFinding is one violation. Symbol names the enclosing declaration, which
-// the ratchet allowlist keys on in place of a line number.
+// domainFinding is one violation.
 type domainFinding struct {
 	Path       string
 	Line       int
 	Rule       string
 	Identifier string
-	Symbol     string
 }
 
 func (finding domainFinding) String() string {
@@ -84,58 +82,6 @@ func compareDomainFindings(left, right domainFinding) int {
 		cmp.Compare(left.Rule, right.Rule),
 		cmp.Compare(left.Identifier, right.Identifier),
 	)
-}
-
-// domainAllowance is one entry of the ratchet allowlist: a violation that
-// exists today, and the unit that removes it.
-type domainAllowance struct {
-	Path   string
-	Symbol string
-	Rule   string
-	Unit   string
-}
-
-type domainAllowanceKey struct{ path, symbol, rule string }
-
-// reconcileDomainFindings returns one problem line for each finding the
-// allowlist does not cover and for each allowlist entry with no finding, so the
-// list can only shrink. Entries are counted, not just matched: two findings of
-// one rule in one symbol need two entries. When a symbol holds more findings
-// than entries, the list cannot say which one is new, so every finding of that
-// symbol and rule is reported and the developer finds the line they just wrote
-// among them.
-func reconcileDomainFindings(findings []domainFinding, allowlist []domainAllowance) []string {
-	entries := make(map[domainAllowanceKey]int, len(allowlist))
-	for _, allowance := range allowlist {
-		entries[domainAllowanceKey{allowance.Path, allowance.Symbol, allowance.Rule}]++
-	}
-
-	found := make(map[domainAllowanceKey]int, len(findings))
-	for _, finding := range findings {
-		found[domainAllowanceKey{finding.Path, finding.Symbol, finding.Rule}]++
-	}
-
-	var problems []string
-
-	for _, finding := range findings {
-		key := domainAllowanceKey{finding.Path, finding.Symbol, finding.Rule}
-		if found[key] > entries[key] {
-			problems = append(problems, finding.String())
-		}
-	}
-
-	for _, allowance := range allowlist {
-		key := domainAllowanceKey{allowance.Path, allowance.Symbol, allowance.Rule}
-		if entries[key] > found[key] {
-			entries[key]--
-
-			problems = append(problems, fmt.Sprintf(
-				"stale allowlist entry: %s %s %s (%s) holds no finding", allowance.Path, allowance.Symbol, allowance.Rule, allowance.Unit,
-			))
-		}
-	}
-
-	return problems
 }
 
 // domainPackage is one package's production sources, keyed by module-relative
@@ -200,19 +146,13 @@ type domainWalker struct {
 	info       *types.Info
 	modulePath string
 	findings   []domainFinding
-	stack      []ast.Node
 }
 
 func (walker *domainWalker) walk(file *ast.File) {
 	ast.Inspect(file, func(node ast.Node) bool {
-		if node == nil {
-			walker.stack = walker.stack[:len(walker.stack)-1]
-
-			return false
+		if node != nil {
+			walker.visit(node)
 		}
-
-		walker.stack = append(walker.stack, node)
-		walker.visit(node)
 
 		return true
 	})
@@ -221,9 +161,9 @@ func (walker *domainWalker) walk(file *ast.File) {
 func (walker *domainWalker) visit(node ast.Node) {
 	switch typed := node.(type) {
 	case *ast.StructType:
-		walker.checkRawNames(typed.Fields, walker.symbol())
+		walker.checkRawNames(typed.Fields)
 	case *ast.FuncType:
-		walker.checkRawNames(typed.Params, walker.symbol())
+		walker.checkRawNames(typed.Params)
 	case *ast.BinaryExpr:
 		walker.checkComparison(typed)
 	case *ast.SwitchStmt:
@@ -231,47 +171,9 @@ func (walker *domainWalker) visit(node ast.Node) {
 	}
 }
 
-// symbol names the innermost declaration around the node being visited.
-func (walker *domainWalker) symbol() string {
-	for _, node := range slices.Backward(walker.stack) {
-		switch typed := node.(type) {
-		case *ast.FuncDecl:
-			return functionSymbol(typed)
-		case *ast.TypeSpec:
-			return typed.Name.Name
-		case *ast.ValueSpec:
-			return typed.Names[0].Name
-		}
-	}
-
-	return "package"
-}
-
-func functionSymbol(declaration *ast.FuncDecl) string {
-	if declaration.Recv == nil || len(declaration.Recv.List) == 0 {
-		return declaration.Name.Name
-	}
-
-	receiver := declaration.Recv.List[0].Type
-	for {
-		switch typed := receiver.(type) {
-		case *ast.StarExpr:
-			receiver = typed.X
-		case *ast.IndexExpr:
-			receiver = typed.X
-		case *ast.IndexListExpr:
-			receiver = typed.X
-		case *ast.Ident:
-			return typed.Name + "." + declaration.Name.Name
-		default:
-			return declaration.Name.Name
-		}
-	}
-}
-
 // checkRawNames reports each field or parameter that carries a domain name as a
 // raw string, int, or bool, whichever list it is in.
-func (walker *domainWalker) checkRawNames(list *ast.FieldList, owner string) {
+func (walker *domainWalker) checkRawNames(list *ast.FieldList) {
 	if list == nil {
 		return
 	}
@@ -283,7 +185,7 @@ func (walker *domainWalker) checkRawNames(list *ast.FieldList, owner string) {
 
 		for _, name := range field.Names {
 			if isDomainName(name.Name) {
-				walker.add(name.Pos(), ruleRawField, name.Name, owner+"."+name.Name)
+				walker.add(name.Pos(), ruleRawField, name.Name)
 			}
 		}
 	}
@@ -316,7 +218,7 @@ func (walker *domainWalker) checkComparison(comparison *ast.BinaryExpr) {
 
 func (walker *domainWalker) checkDomainOperand(position token.Pos, operand ast.Expr) {
 	if name, ok := walker.domainValue(operand); ok {
-		walker.add(position, ruleLiteralComparison, name, walker.symbol())
+		walker.add(position, ruleLiteralComparison, name)
 	}
 }
 
@@ -338,7 +240,7 @@ func (walker *domainWalker) checkSwitch(statement *ast.SwitchStmt) {
 
 		for _, value := range cases.List {
 			if identityLiteral(value) {
-				walker.add(value.Pos(), ruleLiteralComparison, name, walker.symbol())
+				walker.add(value.Pos(), ruleLiteralComparison, name)
 			}
 		}
 	}
@@ -427,10 +329,10 @@ func (walker *domainWalker) moduleScalar(candidate types.Type) bool {
 	return isBasic && basic.Info()&(types.IsString|types.IsInteger) != 0
 }
 
-func (walker *domainWalker) add(position token.Pos, rule, identifier, symbol string) {
+func (walker *domainWalker) add(position token.Pos, rule, identifier string) {
 	location := walker.fset.Position(position)
 	walker.findings = append(walker.findings, domainFinding{
-		Path: location.Filename, Line: location.Line, Rule: rule, Identifier: identifier, Symbol: symbol,
+		Path: location.Filename, Line: location.Line, Rule: rule, Identifier: identifier,
 	})
 }
 
@@ -593,11 +495,16 @@ func (driver *Driver) runDomainLiteralAnalysis() error {
 	return nil
 }
 
-func (driver *Driver) requireDomainLiteralRatchet() error {
-	problems := reconcileDomainFindings(driver.domainFindings, domainLiteralAllowlist)
-	if len(problems) > 0 {
-		return fmt.Errorf("domain literal analysis found %d problems:\n%s", len(problems), strings.Join(problems, "\n"))
+// requireNoDomainLiteralFinding fails on any finding: production code holds none.
+func (driver *Driver) requireNoDomainLiteralFinding() error {
+	if len(driver.domainFindings) == 0 {
+		return nil
 	}
 
-	return nil
+	lines := make([]string, 0, len(driver.domainFindings))
+	for _, finding := range driver.domainFindings {
+		lines = append(lines, finding.String())
+	}
+
+	return fmt.Errorf("domain literal analysis found %d violations:\n%s", len(lines), strings.Join(lines, "\n"))
 }

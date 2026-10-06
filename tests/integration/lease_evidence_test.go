@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -639,5 +640,71 @@ func TestDescribeHeavyLeaseReportsEmptyOwnerDocumentAsUnverifiable(t *testing.T)
 	description := guard.DescribeHeavyLease(root)
 	if !strings.Contains(description, "cannot be verified") {
 		t.Fatalf("an empty owner document was described as %q", description)
+	}
+}
+
+// A lease record whose class this version has no member for is read, not refused, so that a record a later version
+// wrote can still be described; whether the record is acceptable is decided afterwards and stays decided.
+func TestExclusiveStatusKeepsRefusingASessionRecordWhoseClassHasNoMember(t *testing.T) {
+	for name, class := range map[string]any{"batch": "batch", "empty": "", "absent": nil} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
+			if err != nil || session == nil {
+				t.Fatalf("acquire service session: session=%v error=%v", session != nil, err)
+			}
+			defer func() { _ = guard.ReleaseSession(root, session) }()
+			record := readOwnerDocument(t, session.RecordPath)
+			if class == nil {
+				delete(record, "class")
+			} else {
+				record["class"] = class
+			}
+			forged := append(marshalJSON(t, record), '\n')
+			if err = os.WriteFile(session.RecordPath, forged, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			_, statusError := guard.ExclusiveStatus(context.Background(), root)
+			if statusError == nil || guard.IsCoordinationProtocolMismatch(statusError) ||
+				!strings.Contains(statusError.Error(), "session record is invalid") {
+				t.Fatalf("a session record of class %q was not refused as invalid: %v", name, statusError)
+			}
+			after, readError := os.ReadFile(session.RecordPath)
+			if readError != nil || !bytes.Equal(after, forged) {
+				t.Fatalf("status changed the refused record: %q error=%v", after, readError)
+			}
+		})
+	}
+}
+
+func TestHeavyLeaseDescriptionKeepsTheClassTheOwnerRecorded(t *testing.T) {
+	for name, test := range map[string]struct {
+		class any
+		want  string
+	}{
+		"a class with no member": {"batch", "(class batch)"},
+		"a class that is absent": {nil, "(class unknown)"},
+		"a class that is empty":  {"", "(class unknown)"},
+		"a member":               {"service", "(class service)"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			owner := map[string]any{"schemaVersion": 1, "pid": os.Getpid()}
+			if test.class != nil {
+				owner["class"] = test.class
+			}
+			path := filepath.Join(root, "heavy.lock", "owner.json")
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, append(marshalJSON(t, owner), '\n'), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			if description := guard.DescribeHeavyLease(root); !strings.Contains(description, test.want) {
+				t.Fatalf("the lease was described as %q, want it to say %s", description, test.want)
+			}
+		})
 	}
 }
