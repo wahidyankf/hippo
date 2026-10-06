@@ -25,6 +25,9 @@ It must merge before the in-flight plan
 [strict Go linting and domain modeling](../strict-go-linting-and-domain-modeling/README.md) cuts `v0.8.5` in its Unit 7,
 so that cut's full gate runs with it (see [Phase 5](#phase-5-release-through-v085)).
 
+Line numbers in this plan are at `4cd530a`, the trunk commit that landed it and the one it executes from, unless a
+sentence names another commit or tag. The files they cite are identical at `c109c4d`, where the defect was diagnosed.
+
 ## Bug Report
 
 **Description.** Under host load, the guard in "A configured profile derived from balanced admits degraded work" defers
@@ -107,8 +110,6 @@ No duplicate exists.
 
 ## Root Cause
 
-Line numbers are at `c109c4d`.
-
 **Two clocks.** The step "the guard runs ephemeral work under that configuration" (`tests/support/steps.go`, line 513)
 calls `guardUnderConfiguration`, which resolves the profile and calls `guardUnder` (`tests/support/degraded_lineage.go`,
 lines 134–183). `guardUnder` sets a 1 ms `SampleInterval` and a 100 ms `AdmissionWindow` (lines 157–158) and runs
@@ -162,9 +163,10 @@ stays.
 Why it removes the cause: the deadline and the pauses now share one clock, which only the guard's own pauses advance, so
 the window counts readings. The guard admits at the sixteenth reading, after 15 logical milliseconds, and the deferral
 paths end after the 101st reading, at 100 logical milliseconds, with no wall-clock wait. However slowly a runner takes
-its readings, the outcome is the one the readings decide. `Run` calls `Now` and `Sleep` only on its own goroutine (lines
-604, 799, 845, 852, 864, 923, 927, 937, 1021, 1085, 1098, and 1164), so the clock needs no lock; the race-enabled
-repeats below confirm that.
+its readings, the outcome is the one the readings decide. On the paths this fixture takes, `Run` calls `Now` and `Sleep`
+only on its own goroutine (lines 604, 799, 845, 852, 864, 923, 927, 937, 1085, 1098, and 1164), so the clock needs no
+lock; the race-enabled repeats below confirm that. The other calls (lines 434, 612–615, 631, and 1021) sit behind
+`ReservationPolicy.Enabled`, which `guardUnder` never sets.
 
 **A stall seam, for the regression test.** `Driver` gains `readingStall time.Duration`, zero in every scenario, and
 `advancingCollector` gains `stall`, which `Collect` sleeps in real time before each reading; `guardUnder` passes the
@@ -244,7 +246,9 @@ plans/in-progress/fix-degraded-lineage-scenario-flake/README.md   execution reco
 - **AC-05** Given the host's load at execution, recorded with `uptime`, then the regression and lineage tests pass 50
   consecutive race-enabled runs at `GOMAXPROCS=1`, the two scenarios pass 10 at the integration adapter, the contention
   reproduction defers none of 200 runs, and the full gate passes on the fix branch's head.
-- **AC-06** Given the fix merges, then the published `v0.8.5` contains its merge commit.
+- **AC-06** Given the fix merges, then either the published `v0.8.5` contains its merge commit, or, when `v0.8.5`
+  shipped without it, the record shows that `origin/main` contains the merge commit and `v0.8.5` does not, and that the
+  fix is test-only with no release content, so no patch release follows.
 - **AC-07** Given execution finishes, then this plan is gated, reconciled, and archived under `plans/done/`, and its
   worktrees and branches are gone.
 
@@ -299,8 +303,11 @@ removes it after its own merge.
 1. _Plan_ — this file and the in-progress index entry alone. Rollback: revert its merge.
 2. _Fix_ — the logical clock, the stall seam, the regression test, and this plan's execution record. Rollback: revert
    its merge; no release depends on it.
-3. _Release_ — `v0.8.5`, cut by the linting plan's Unit 7 after unit 2 merges; this plan only records it. A published
-   tag is never replaced.
+3. _Release_ — `v0.8.5`, cut by the linting plan's Unit 7 after unit 2 merges; this plan only records it. That plan's
+   Unit 7 holds the cut until this fix has merged, in its item "Before cutting, confirm both bug-fix plans this release
+   carries have merged: `fix-cancelled-waiter-cleanup-flake` and `fix-degraded-lineage-scenario-flake` … wait for it
+   rather than cut without it", which lands with that plan's Unit 5. If it does not land, or the tag is cut anyway,
+   Phase 4's tag check and Phase 5's Recovery item cover it. A published tag is never replaced.
 4. _Record_ — the release record, the execution check, and the move to `plans/done/`. Rollback: revert its merge.
 
 **Out of scope: repinning consumers.** The binary is unchanged, so no consumer repins for this plan; the linting plan
@@ -314,16 +321,25 @@ Phases 1–4 ticked and Phase 5 open.
 
 ### Phase 1: Plan
 
-- [ ] `[AI]` Land this file and its `plans/in-progress/README.md` entry alone with _Land_, from
+- [x] `[AI]` Land this file and its `plans/in-progress/README.md` entry alone with _Land_, from
       `worktree/fix-degraded-lineage-scenario-flake`; proof: the merge commit on `origin/main` and _Reconcile_ reading
       `0 0`. `[AC-07]`
-- [ ] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
+  - Result: (2026-10-06) pull request #137, rebased once onto `db9632a` (index conflict with the sibling plan, both
+    entries kept), merged as `4cd530a`; _Reconcile_ `0 0`.
+- [x] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
       `git switch -c worktree/fix-degraded-lineage-scenario-flake-fix origin/main`, then `npm ci`; proof:
       `git branch --show-current` prints the branch and `git status --porcelain` prints nothing. `[AC-04]`
-- [ ] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
+  - Result: `worktree/fix-degraded-lineage-scenario-flake-fix` from `origin/main` at `4cd530a`, `node_modules` already
+    installed; the merged plan branch was deleted at once; tree clean.
+- [x] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
       in mode `normal`, at most three cycles, and commit its repairs and its verdict line as the fix branch's first
       commit, a `docs(plans)` commit; proof: one terminal `plan-quality-gate:` verdict line recorded here and
       `git status --porcelain` printing nothing. `[AC-07]`
+  - Result: `plan-quality-gate: PASS (2 cycles, 8 rows fixed: 1 HIGH, 3 MEDIUM, 4 LOW; 0 open)`. Entry checks: prettier,
+    `markdownlint-cli2` 0 issues, `./rhino md internal-link validate` and `./rhino governance directory-map validate` no
+    findings, line-length check clean. Cycle 1: PQG-01 (HIGH, record-worktree provisioning after the items writing into
+    it) and PQG-02..07 fixed. Cycle 2: all seven held; PQG-08 (LOW, a line listed on the fixture's path) found and
+    fixed.
 
 ### Phase 2: The Admission Window Counts Readings
 
@@ -358,14 +374,15 @@ Phases 1–4 ticked and Phase 5 open.
 
 - [ ] `[AI]` Run the
       [Gherkin implementation review](../../../repo-governance/workflows/quality/gherkin-implementation-review.md) on
-      the two scenarios, with these break tests, each reverted after it fails and checked with `git diff --quiet`:
-      restoring `time.Sleep` and `time.Now` in `guardUnder` fails the `balanced` row of the _Regression test_ with the
-      reported message; making `LineageBalanced.DegradedAdmission()` (`internal/policy/profiles.go`) return `false`
-      fails "A configured profile derived from balanced admits degraded work" at the unit adapter and the `balanced` row
-      with the reported message; moving `LineageConstrained` into the `true` case fails "A configured profile outside
-      balanced's lineage never uses degraded admission" and the `constrained` row with
-      `profile "local-constrained": reason=0 exit=0` followed by the degraded-admission line. Proof: each scenario's
-      status and each break test's failure recorded here, none `untested`, `unimplemented`, or `drifted`. `[AC-03]`
+      the two scenarios, with these break tests, each reverted after it fails and checked with
+      `git diff --quiet -- internal tests`: restoring `time.Sleep` and `time.Now` in `guardUnder` fails the `balanced`
+      row of the _Regression test_ with the reported message; making `LineageBalanced.DegradedAdmission()`
+      (`internal/policy/profiles.go`) return `false` fails "A configured profile derived from balanced admits degraded
+      work" at the unit adapter and the `balanced` row with the reported message; moving `LineageConstrained` into the
+      `true` case fails "A configured profile outside balanced's lineage never uses degraded admission" and the
+      `constrained` row with `profile "local-constrained": reason=0 exit=0` followed by the degraded-admission line.
+      Proof: each scenario's status and each break test's failure recorded here, none `untested`, `unimplemented`, or
+      `drifted`. `[AC-03]`
 - [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
       page describes the fixture's clock and that, per [Release content](#solution), `CHANGELOG.md` gets no entry;
       proof: `git diff --name-only origin/main...HEAD -- README.md docs specs CHANGELOG.md` prints nothing. `[AC-04]`
@@ -381,19 +398,22 @@ Phases 1–4 ticked and Phase 5 open.
       `deferred 0 of 200`, and `test ! -e tests/support/zz_contention_scratch_test.go` exits `0` once it is deleted.
       Fallback, decided now: as for the checkpoint above. `[AC-05]`
 - [ ] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-05]`
+- [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
+      `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
+      `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
+      units edit `tests/support/degraded_lineage.go` and `tests/support/driver.go`), and rerun the _Regression test_,
+      _Focused scenarios_ at both adapters, and the _Full gate_ if the rebase brought commits; proof:
+      `git status --porcelain` prints nothing before the rebase, `git ls-remote --tags origin v0.8.5` prints nothing,
+      and the reruns exit `0`. If the tag already exists, land anyway and the Recovery item in Phase 5 fires. `[AC-05]`
+      `[AC-06]` `[AC-07]`
 - [ ] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-04]`
-- [ ] `[AI]` Commit this plan's execution record (Phases 1–4 ticked with results, and the first item of Phase 5) as a
-      `docs(plans)` commit on the fix branch, as the last commit before landing; proof: `git status --porcelain` prints
-      nothing. `[AC-07]`
+- [ ] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
+      results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
+      `git status --porcelain` prints nothing. `[AC-07]`
 
 ### Phase 5: Release Through v0.8.5
 
-- [ ] `[AI]` Before landing, `git fetch origin --tags` and confirm `v0.8.5` does not yet exist; then rebase onto
-      `origin/main`, reading the whole incoming diff (the linting plan's units edit `tests/support/degraded_lineage.go`
-      and `tests/support/driver.go`), and rerun the _Regression test_, _Focused scenarios_ at both adapters, and the
-      _Full gate_ if the rebase brought commits; proof: `git ls-remote --tags origin v0.8.5` prints nothing, and the
-      reruns exit `0`. If the tag already exists, land anyway and the recovery item below fires. `[AC-05]` `[AC-06]`
 - [ ] `[AI]` Land unit 2 with _Land_; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both
       recorded here by unit 4, since the merged copy cannot hold its own merge. The fix must merge before the linting
       plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-05]`
@@ -404,21 +424,22 @@ Phases 1–4 ticked and Phase 5 open.
       locally and on `origin`; proof: `git worktree list` omits it,
       `git branch --list 'worktree/fix-degraded-lineage-*'` and
       `git ls-remote origin 'refs/heads/worktree/fix-degraded-lineage-*'` print nothing. `[AC-07]`
+- [ ] `[AI]` Provision `worktrees/fix-degraded-lineage-scenario-flake-record` from `origin/main` on branch
+      `worktree/fix-degraded-lineage-scenario-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
+      `git branch --show-current` prints the branch. `[AC-07]`
 - [ ] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
       `git merge-base --is-ancestor <unit 2 merge commit> v0.8.5` exits `0`, and the release URL and the tag's peeled
       commit are recorded here. `[AC-06]`
 - [ ] `[AI]` Recovery, dormant until triggered. Trigger: `v0.8.5` is published without unit 2's merge commit (the
-      ancestry check above exits `1`). Then cut no patch release, because the binary is unchanged: record here that
-      `v0.8.5`'s full gate ran without this fix, with the result the linting plan's Unit 7 recorded for it; proof:
+      ancestry check above exits `1`). Then cut no patch release, because the binary is unchanged: record in the record
+      worktree's copy of this plan that the fix is test-only with no release content and that `v0.8.5`'s full gate ran
+      without it, with the result the linting plan's Unit 7 recorded for it; proof:
       `git merge-base --is-ancestor <unit 2 merge commit> origin/main` exits `0` and the `v0.8.5` check exits `1`, both
-      recorded here, so the next release cut from `origin/main` carries the fix. Otherwise: a dated, evidenced
+      recorded there, so the next release cut from `origin/main` carries the fix. Otherwise: a dated, evidenced
       `Not triggered`. `[AC-06]`
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Provision `worktrees/fix-degraded-lineage-scenario-flake-record` from `origin/main` on branch
-      `worktree/fix-degraded-lineage-scenario-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
-      `git branch --show-current` prints the branch. `[AC-07]`
 - [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-07]`
 - [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
