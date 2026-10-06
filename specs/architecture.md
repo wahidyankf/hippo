@@ -288,10 +288,11 @@ while a `release monitor` that reaches its own duration exits `0`.
 - Status and development summaries use schema 5. Status includes privacy-safe owner/waiter rows, tier, deadline, legacy
   count, and promotion decision; schema-1 sessions appear as legacy active owners, with the heavy record deduplicated
   from its matching session. Exclusive observation holds the shared lock without pruning or rewriting compatibility
-  state. `watch` streams changed status snapshots; `history` queries current and compacted summaries; an unreadable
-  archive fails `125` naming `hippo.evidence.unreadable` and is left untouched. Status surfaces coordination corruption
-  instead of fabricating zero totals, and every admission event atomically raises the owning development session's peak
-  count even between host-sampling ticks. Raw host samples retain their existing schema.
+  state. `watch` streams changed status snapshots; `history` queries current and compacted summaries, listing an outcome
+  this version does not know as recorded and never counting it toward promotion; an unreadable archive fails `125`
+  naming `hippo.evidence.unreadable` and is left untouched. Status surfaces coordination corruption instead of
+  fabricating zero totals, and every admission event atomically raises the owning development session's peak count even
+  between host-sampling ticks. Raw host samples retain their existing schema.
 - The optional four-consumer conformance runner receives all checkout paths, names, commands, shared state, and pinned
   binary identity through one strict manifest. It freezes canonical absolute/symlink paths plus checkout and created
   shared-root filesystem identities, rejects checkout/shared-root ancestry overlap, revalidates those objects around
