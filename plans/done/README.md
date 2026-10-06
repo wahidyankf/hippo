@@ -17,6 +17,10 @@ then verifies the archive rather than assuming it.
 ## Completed Plans
 
 - 2026-10-07 —
+  [Fix: Distinct-Root Coordination Lock Test Flakes Under Load](2026-10-07__fix-distinct-root-lock-test-flake/README.md):
+  the distinct-root lock test judges serialization by a zero-wait refusal, not the wall clock, so a slow runner no
+  longer fails it; test-only, carried by v0.8.5.
+- 2026-10-07 —
   [Fix: Corrupt-Waiter Identity Test Flakes Under Load](2026-10-07__fix-corrupt-waiter-identity-test-flake/README.md):
   the corrupt-identity test parks its waiter outside the coordination lock, so its competing admission always reaches
   the ledger; test-only, carried by v0.8.5.
@@ -48,6 +52,8 @@ then verifies the archive rather than assuming it.
   the delivery record for the corrupt-waiter identity test flake fix.
 - [Fix: Degraded-Lineage Admission Scenario Flakes Under Load](2026-10-07__fix-degraded-lineage-scenario-flake/README.md)
   is the delivery record for the degraded-lineage scenario flake fix.
+- [Fix: Distinct-Root Coordination Lock Test Flakes Under Load](2026-10-07__fix-distinct-root-lock-test-flake/README.md)
+  is the delivery record for the distinct-root coordination lock test flake fix.
 - [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md) is
   the delivery record for the v0.8.3 page-cache fix.
 - [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the
