@@ -66,6 +66,17 @@ const evidenceDecidesAdmission = time.Hour
 // It only detects a wait that never ends, and a healthy run never spends it.
 const livenessLimit = 30 * time.Second
 
+// requireStop holds a run's result to a stop that says only its reason: status
+// 0 beside it, since a stop carries what the status once did, and no error of
+// its own.
+func requireStop(t *testing.T, code int, err error, want policy.Reason) {
+	t.Helper()
+
+	if stop, bare := policy.BareStop(err); code != 0 || !bare || stop.Reason != want {
+		t.Fatalf("result code=%d error=%v, want status 0 and a stop for reason %d", code, err, want)
+	}
+}
+
 // requireSummaryOutcome holds the one summary a run left in root to the outcome
 // the run decided: the member, and the wire word recorded for it.
 func requireSummaryOutcome(t *testing.T, root string, want evidence.Outcome) {
@@ -148,9 +159,7 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 		Stderr:       &bytes.Buffer{},
 	})
 
-	if err != nil || code != guard.StorageBlockedExitCode {
-		t.Fatalf("exit=%d error=%v", code, err)
-	}
+	requireStop(t, code, err, policy.ReasonStorageBlocked)
 
 	requireSummaryOutcome(t, root, evidence.OutcomeStorageBlocked)
 }
@@ -178,9 +187,7 @@ func TestReservationCoordinationReturnsProtocolMismatchBeforeChildExecution(t *t
 		Stderr:       stderr,
 	})
 
-	if err != nil || code != policy.ProtocolMismatchExitCode {
-		t.Fatalf("exit=%d error=%v", code, err)
-	}
+	requireStop(t, code, err, policy.ReasonProtocolMismatch)
 	if !strings.Contains(stderr.String(), "reservation mode is active") {
 		t.Fatalf("missing actionable coordination diagnostic: %q", stderr.String())
 	}
@@ -255,9 +262,7 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 		Stderr:                 &bytes.Buffer{},
 	})
 
-	if err != nil || code != guard.PressureShedExitCode {
-		t.Fatalf("exit=%d error=%v", code, err)
-	}
+	requireStop(t, code, err, policy.ReasonPressureShed)
 
 	requireSummaryOutcome(t, root, evidence.OutcomePressureShed)
 }

@@ -210,24 +210,24 @@ func requireEmergencyPressureV05(root string) error {
 	}
 	defer func() { _ = guard.ReleaseReservation(root, ephemeral) }()
 
-	victim, selected, err := guard.SelectEmergencyPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectEmergencyPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != ephemeral.Token {
 		return fmt.Errorf("emergency ephemeral victim=%+v selected=%v error=%w", victim, selected, err)
 	}
 	if err = guard.ReleaseReservation(root, ephemeral); err != nil {
 		return err
 	}
-	victim, selected, err = guard.SelectEmergencyPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err = guard.SelectEmergencyPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != service.Token {
 		return fmt.Errorf("emergency service victim=%+v selected=%v error=%w", victim, selected, err)
 	}
 	if err = guard.ReleaseReservation(root, service); err != nil {
 		return err
 	}
-	if _, selected, err = guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); err != nil || selected {
+	if _, selected, err = guard.SelectPressureVictim(root, guard.ShedCausePressure); err != nil || selected {
 		return fmt.Errorf("ordinary pressure selected transaction: selected=%v error=%w", selected, err)
 	}
-	victim, selected, err = guard.SelectEmergencyPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err = guard.SelectEmergencyPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != transactional.Token {
 		return fmt.Errorf("emergency transaction victim=%+v selected=%v error=%w", victim, selected, err)
 	}

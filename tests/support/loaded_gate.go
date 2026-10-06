@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/status"
 )
 
@@ -132,6 +131,11 @@ func (driver *Driver) markGuardedChildStarted() {
 const capacityDeferralOutput = capacityDeferralMessage + "\n" + capacityDeferralReason +
 	" capacity deferred this work; retry when the host is quieter\n"
 
+// internalDeferralStatus is the integer v0.8.4 passed among its layers for a
+// capacity deferral. It was never an exit status, so a deferral that exits with
+// it is one the documented contract refuses.
+const internalDeferralStatus = 75
+
 func (driver *Driver) documentedCapacityDeferral() {
 	driver.deferralAccepted = acceptsSaturatedDeferralV04(
 		driver.loadSaturationDeclared, status.LimitShed,
@@ -149,7 +153,7 @@ func (driver *Driver) otherRefusals() {
 		neverStartedReceipt bool
 	}{
 		{exitCode: 1, output: capacityDeferralOutput, neverStartedReceipt: true},
-		{exitCode: guard.CapacityDeferredExitCode, output: capacityDeferralOutput, neverStartedReceipt: true},
+		{exitCode: internalDeferralStatus, output: capacityDeferralOutput, neverStartedReceipt: true},
 		{exitCode: status.GuardFailed, output: capacityDeferralOutput, neverStartedReceipt: true},
 		{exitCode: status.LimitShed, output: "HIPPO stayed deferred across 4 attempts in 1m0s.", neverStartedReceipt: true},
 		{exitCode: status.LimitShed, output: capacityDeferralMessage, neverStartedReceipt: true},

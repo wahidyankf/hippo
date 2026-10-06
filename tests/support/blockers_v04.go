@@ -549,7 +549,7 @@ func requireV04BoundedRemoteObservation(root string) error {
 	if err = guard.ActivateReservation(root, owner, 91_001); err != nil {
 		return err
 	}
-	victim, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected {
 		return fmt.Errorf("select bounded-observation victim: selected=%v error=%w", selected, err)
 	}
@@ -582,7 +582,7 @@ func requireV04BoundedRemoteObservation(root string) error {
 	if err = releaseHeldCoordination(lock); err != nil {
 		return err
 	}
-	if next, nextSelected, nextError := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); nextError != nil || nextSelected {
+	if next, nextSelected, nextError := guard.SelectPressureVictim(root, guard.ShedCausePressure); nextError != nil || nextSelected {
 		return fmt.Errorf("bounded observation lost the shedding barrier: victim=%+v selected=%v error=%w", next, nextSelected, nextError)
 	}
 
@@ -1703,7 +1703,8 @@ func requireV04ReservedHIPPOEnvironmentMappings(root string) error {
 			ReservationPolicy:      v04ReservationPolicy(), ReservationPlan: v04Plan(2, 512*policy.MiB),
 			ChildStdin: bytes.NewBuffer(nil), ChildStdout: &bytes.Buffer{}, ChildStderr: &bytes.Buffer{}, Stderr: &bytes.Buffer{},
 		})
-		if code != policy.ReplanRequiredExitCode || runError == nil {
+		if stop, stopped := errors.AsType[*policy.Stop](runError); code != 0 || !stopped ||
+			stop.Reason != policy.ReasonReplanRequired || stop.Cause == nil {
 			//nolint:errorlint // The diagnostic intentionally reports the stable exit and runtime error together.
 			return fmt.Errorf("reserved mapping %s returned exit=%d error=%v", name, code, runError)
 		}
