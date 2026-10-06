@@ -1041,6 +1041,11 @@ func requireV04SupervisorDeathOwnership(root string) error {
 	}
 }
 
+// runInternalGuardRegressionV04 and runGoRegressionV10 run another package's
+// test in a child go test, so every scenario bound to one fails while that
+// package does not compile, as it does between a RED that names a missing
+// symbol and its GREEN, and an edit to that package during an adapter run
+// changes what the run measures.
 func runInternalGuardRegressionV04(name string) error {
 	moduleRoot, err := moduleRootV04()
 	if err != nil {

@@ -57,7 +57,9 @@ func v04ReservationSample() policy.Sample {
 // short window also timed the runner: one too slow to take those samples inside
 // it deferred the run with "safe admission was not reached" before the
 // behaviour under test began. A fixture that asserts a deferral sets its own
-// tight window instead.
+// tight window instead. Under a break that never admits, a fixture whose Sleep
+// does nothing samples at full speed until the hour ends, so a mutation that
+// withholds admission hangs its scenario rather than failing it.
 const evidenceDecidesAdmission = time.Hour
 
 func v04FastPolicy() policy.Policy {

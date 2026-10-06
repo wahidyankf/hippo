@@ -35,7 +35,10 @@ import (
 //     list, declared as string, int, or bool.
 //
 // Files a build constraint excludes on the running platform are not analysed;
-// internal/host holds the only such files and no domain name.
+// internal/host holds the only such files and no domain name. Outside both
+// rules, and so not refused: a negative literal such as -1, a rune literal, a
+// comparison through a conversion such as string(x), and a domain name declared
+// as a named result.
 const (
 	ruleLiteralComparison = "literal-comparison"
 	ruleRawField          = "raw-field"
@@ -421,6 +424,10 @@ func analyzeDomainLiterals(root string) ([]domainFinding, error) {
 	return findings, nil
 }
 
+// listDomainPackages lists the packages to analyse with their dependencies. The
+// gc importer resolves every import, the standard library included, through an
+// export file, and -export without -deps lists none for the dependencies. A
+// pattern that matches no directory is an error, not a warning.
 func listDomainPackages(root string) ([]listedPackage, error) {
 	command := exec.Command("go", "list", "-export", "-deps", "-json", "./cmd/...", "./internal/...")
 	command.Dir = root
