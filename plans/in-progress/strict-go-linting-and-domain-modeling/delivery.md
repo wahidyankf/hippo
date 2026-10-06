@@ -1667,13 +1667,21 @@ Branch `worktree/single-admission-decision`.
 
 ### Unit 5 landing
 
-- [ ] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-20]`
-- [ ] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
+- [x] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-20]`
+  - Result: (2026-10-06) data-safety scan of the diff found no candidate; thematic commits, every hook passed:
+    `6adb665`..`c5bc6b6` (refactor, test, docs(plans)); a line-length push refusal was fixed by amending the record
+    commit, and the branch was rebased twice over plans-only commits.
+- [x] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
       recorded. `[AC-20]`
-- [ ] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-20]`
-- [ ] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-20]`
-- [ ] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
+  - Result: push review clean, every `pre-push` gate passed; title and body screened (exit `0`); draft pull request
+    #140.
+- [x] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-20]`
+  - Result: `Quality gate` `success` on head `c5bc6b6` (run 37491455117).
+- [x] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-20]`
+  - Result: `pass` review posted on `c5bc6b6`; `leak-review` reads `success`.
+- [x] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
       `[AC-20]`
+  - Result: merged as `e261965`; reconcile count `0 0`.
 
 > **Pause Safety**: Unit 5 is on `main`. Safe to stop. To resume: the starting commands for Unit 6.
 
@@ -1681,7 +1689,8 @@ Branch `worktree/single-admission-decision`.
 
 Branch `worktree/strict-enum-decoding`.
 
-- [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-21]`
+- [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-21]`
+  - Result: `worktree/strict-enum-decoding` from `origin/main` at `e261965`.
 - [ ] `[AI]` **RED** (`swe-developer`): add "History lists a task class this version does not know as recorded" to
       `specs/behaviours/public-cli.feature`; run the unit adapter; acceptance: undefined, then bound and passing as the
       outcome scenario did, the mutation below proving it can fail. `[AC-22]`
