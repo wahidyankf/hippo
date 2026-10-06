@@ -42,7 +42,7 @@ type historyOptions struct {
 	tags         []string
 	taskClass    string
 	resourceTier string
-	outcome      string
+	outcomeFlag  string
 }
 
 type monitorOptions struct {
@@ -314,7 +314,7 @@ func (application Application) historyCommand(execution *commandExecution) *cobr
 	command.Flags().StringArrayVar(&options.tags, "tag", nil, "filter by key=value; repeatable")
 	command.Flags().StringVar(&options.taskClass, "class", "", "filter by task class")
 	command.Flags().StringVar(&options.resourceTier, "resource-tier", "", "filter by resource tier")
-	command.Flags().StringVar(&options.outcome, "outcome", "", "filter by outcome")
+	command.Flags().StringVar(&options.outcomeFlag, "outcome", "", "filter by outcome")
 	command.Flags().BoolVar(&options.jsonOutput, "json", false, "emit one JSON document")
 	command.Flags().BoolVar(&options.jsonLines, "jsonl", false, "emit one JSON object per row")
 

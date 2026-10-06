@@ -63,7 +63,19 @@ func (*blockedAdmissionCollector) Collect(ctx context.Context, previous policy.C
 	return reading, err
 }
 
-func TestRunHostAdmissionDeferralWritesNeverStartedReceipt(t *testing.T) {
+// deadlineDeferral is what a guarded run left behind after the host never
+// became safe before its admission window closed.
+type deadlineDeferral struct {
+	root   string
+	code   int
+	starts int
+	err    error
+}
+
+// deferAtTheDeadline runs a command whose host never admits it, with an
+// admission window of zero, so the run reaches its deadline deferral.
+func deferAtTheDeadline(t *testing.T) deadlineDeferral {
+	t.Helper()
 	root := t.TempDir()
 	settings := policy.DefaultPolicy()
 	settings.AdmissionWindow = 0
@@ -98,8 +110,15 @@ func TestRunHostAdmissionDeferralWritesNeverStartedReceipt(t *testing.T) {
 			return nil, errors.New("payload must not start")
 		},
 	})
-	if err != nil || code != CapacityDeferredExitCode || starts != 0 {
-		t.Fatalf("host-admission result: code=%d starts=%d error=%v", code, starts, err)
+
+	return deadlineDeferral{root: root, code: code, starts: starts, err: err}
+}
+
+func TestRunHostAdmissionDeferralWritesNeverStartedReceipt(t *testing.T) {
+	deferral := deferAtTheDeadline(t)
+	root := deferral.root
+	if deferral.err != nil || deferral.code != CapacityDeferredExitCode || deferral.starts != 0 {
+		t.Fatalf("host-admission result: code=%d starts=%d error=%v", deferral.code, deferral.starts, deferral.err)
 	}
 	receipts, err := os.ReadDir(filepath.Join(root, "receipts"))
 	if err != nil || len(receipts) != 1 {
@@ -110,6 +129,199 @@ func TestRunHostAdmissionDeferralWritesNeverStartedReceipt(t *testing.T) {
 		!strings.Contains(string(data), `"reason":"host-admission"`) {
 		t.Fatalf("host-admission receipt=%s error=%v", data, err)
 	}
+}
+
+// TestDeadlineDeferralSummaryRecordsCapacityDeferred holds the summary of a run
+// the deadline deferred to the word v0.8.4 wrote for it. The run starts with no
+// outcome decided, so the deferral has to decide it.
+func TestDeadlineDeferralSummaryRecordsCapacityDeferred(t *testing.T) {
+	deferral := deferAtTheDeadline(t)
+	if deferral.err != nil || deferral.code != CapacityDeferredExitCode {
+		t.Fatalf("deadline deferral result: code=%d error=%v", deferral.code, deferral.err)
+	}
+	summaryPaths, err := filepath.Glob(filepath.Join(deferral.root, "*.summary.json"))
+	if err != nil || len(summaryPaths) != 1 {
+		t.Fatalf("deadline deferral summary paths=%v error=%v", summaryPaths, err)
+	}
+	data, err := os.ReadFile(summaryPaths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary struct {
+		Outcome string `json:"outcome"`
+	}
+	if err = json.Unmarshal(data, &summary); err != nil || summary.Outcome != "capacity-deferred" {
+		t.Fatalf("deadline deferral summary outcome=%q error=%v, want capacity-deferred", summary.Outcome, err)
+	}
+}
+
+// requireSummaryOutcome holds the one summary a run left in root to the outcome
+// the run decided: the member, and the wire word recorded for it.
+func requireSummaryOutcome(t *testing.T, root string, want evidence.Outcome) {
+	t.Helper()
+	summaryPaths, err := filepath.Glob(filepath.Join(root, "*.summary.json"))
+	if err != nil || len(summaryPaths) != 1 {
+		t.Fatalf("summary paths=%v error=%v, want one summary", summaryPaths, err)
+	}
+	data, err := os.ReadFile(summaryPaths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary evidence.Summary
+	if err = json.Unmarshal(data, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Outcome != evidence.Recorded(want) {
+		t.Fatalf("summary outcome=%q, want %q", summary.Outcome, want)
+	}
+}
+
+// TestFinalOutcomeFailsAnUnsetOutcomeAsASupervisionFailure holds a run that
+// ends with no outcome decided to a supervision failure. It must never read as
+// a deferral, the default whose silent application produced 41bda15 and 529b506.
+func TestFinalOutcomeFailsAnUnsetOutcomeAsASupervisionFailure(t *testing.T) {
+	for _, outcome := range evidence.Outcomes() {
+		if final, err := finalOutcome(outcome); final != outcome || err != nil {
+			t.Errorf("finalOutcome(%s) = %s (%v), want the outcome unchanged", outcome, final, err)
+		}
+	}
+	final, err := finalOutcome(evidence.OutcomeUnset)
+	if final != evidence.OutcomeSupervisionFailed {
+		t.Errorf("finalOutcome(unset) = %s, want %s", final, evidence.OutcomeSupervisionFailed)
+	}
+	failure, classified := errors.AsType[status.Failure](err)
+	if !classified || failure.Code != status.CodeSupervisionFailed {
+		t.Fatalf("finalOutcome(unset) reported %v, want a failure naming %s", err, status.CodeSupervisionFailed)
+	}
+	if status.Status(failure.Code) != status.GuardFailed {
+		t.Errorf("%s maps to %d, want %d", failure.Code, status.Status(failure.Code), status.GuardFailed)
+	}
+}
+
+// TestPromoteFinalizeDecidesWhatTheCallerSees holds the deferred promotion of a
+// finalize failure: a summary that could not be written changes a run's result
+// only when the run had no failure of its own.
+func TestPromoteFinalizeDecidesWhatTheCallerSees(t *testing.T) {
+	runError := errors.New("child lifetime failed")
+	finalizeError := errors.New("summary link failed")
+	refusedWrite := fmt.Errorf("link the summary: %w", fs.ErrPermission)
+	_, unsetFailure := finalOutcome(evidence.OutcomeUnset)
+
+	for _, test := range []struct {
+		name          string
+		exitCode      int
+		returnError   error
+		finalizeError error
+		launched      bool
+		wantExit      int
+		check         func(error) string
+	}{
+		{
+			name: "no finalize error leaves a clean result", exitCode: 0, launched: true, wantExit: 0,
+			check: requireNoError,
+		},
+		{
+			name: "no finalize error leaves a deferral status", exitCode: CapacityDeferredExitCode, wantExit: CapacityDeferredExitCode,
+			check: requireNoError,
+		},
+		{
+			name: "no finalize error leaves the run's own failure", exitCode: 7, returnError: runError, launched: true, wantExit: 7,
+			check: func(err error) string { return requireSame(err, runError) },
+		},
+		{
+			name: "an error the run returned stands over a finalize error", exitCode: 7, returnError: runError,
+			finalizeError: finalizeError, launched: true, wantExit: 7,
+			check: func(err error) string { return requireSame(err, runError) },
+		},
+		{
+			name: "an error the run returned stands over a refused write before launch", exitCode: 1, returnError: runError,
+			finalizeError: refusedWrite, wantExit: 1,
+			check: func(err error) string { return requireSame(err, runError) },
+		},
+		{
+			name: "a finalize error after launch becomes the run's error", exitCode: 0, finalizeError: finalizeError,
+			launched: true, wantExit: 1,
+			check: func(err error) string { return requireSame(err, finalizeError) },
+		},
+		{
+			name: "a finalize error over a deferral status becomes the run's error", exitCode: CapacityDeferredExitCode,
+			finalizeError: finalizeError, launched: true, wantExit: 1,
+			check: func(err error) string { return requireSame(err, finalizeError) },
+		},
+		{
+			name: "a finalize error before launch keeps its own shape unless the root refused a write", exitCode: 0,
+			finalizeError: finalizeError, wantExit: 1,
+			check: func(err error) string { return requireSame(err, finalizeError) },
+		},
+		{
+			name: "a refused write before launch is named as one", exitCode: 0, finalizeError: refusedWrite, wantExit: 1,
+			check: func(err error) string {
+				failure, classified := errors.AsType[status.Failure](err)
+				if !classified || failure.Code != status.CodeEvidenceUnwritable ||
+					!strings.Contains(failure.Message, "recording the lifetime summary") {
+					return fmt.Sprintf("reported %v, want a failure naming %s and the lifetime summary", err, status.CodeEvidenceUnwritable)
+				}
+
+				return ""
+			},
+		},
+		{
+			name: "a refused write after launch is the failure it is", exitCode: 0, finalizeError: refusedWrite,
+			launched: true, wantExit: 1,
+			check: func(err error) string { return requireSame(err, refusedWrite) },
+		},
+		{
+			name: "an unset outcome reaches the caller as a supervision failure before launch", exitCode: CapacityDeferredExitCode,
+			finalizeError: unsetFailure, wantExit: 1, check: requireUnsetSupervisionFailure,
+		},
+		{
+			name: "an unset outcome reaches the caller as a supervision failure after launch", exitCode: 0,
+			finalizeError: unsetFailure, launched: true, wantExit: 1, check: requireUnsetSupervisionFailure,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			code, err := promoteFinalize(test.exitCode, test.returnError, test.finalizeError, test.launched)
+			if code != test.wantExit {
+				t.Errorf("exit code %d, want %d", code, test.wantExit)
+			}
+			if problem := test.check(err); problem != "" {
+				t.Error(problem)
+			}
+		})
+	}
+}
+
+// requireNoError, requireSame, and requireUnsetSupervisionFailure return what
+// is wrong with an error, or the empty string when nothing is.
+func requireNoError(err error) string {
+	if err != nil {
+		return fmt.Sprintf("reported %v, want no error", err)
+	}
+
+	return ""
+}
+
+func requireSame(got, want error) string {
+	if !errors.Is(got, want) {
+		return fmt.Sprintf("reported %v, want %v", got, want)
+	}
+
+	return ""
+}
+
+// requireUnsetSupervisionFailure holds the failure finalOutcome returns for an
+// unset outcome to the code and status the caller reads: hippo.supervision.failed,
+// which the command-line boundary reports as 125.
+func requireUnsetSupervisionFailure(err error) string {
+	failure, classified := errors.AsType[status.Failure](err)
+	if !classified || failure.Code != status.CodeSupervisionFailed {
+		return fmt.Sprintf("reported %v, want a failure naming %s", err, status.CodeSupervisionFailed)
+	}
+	if status.Status(failure.Code) != status.GuardFailed {
+		return fmt.Sprintf("%s maps to %d, want %d", failure.Code, status.Status(failure.Code), status.GuardFailed)
+	}
+
+	return ""
 }
 
 func (collector *emergencyRunCollector) Collect(ctx context.Context, previous policy.CPUState, diskPath string) (policy.Reading, error) {
@@ -178,6 +390,58 @@ func TestRunEmergencyTransactionalStopWritesReceiptWithoutRetry(t *testing.T) {
 		!strings.Contains(string(data), `"reason":"emergency-pressure"`) {
 		t.Fatalf("emergency receipt=%s error=%v", data, err)
 	}
+	requireSummaryOutcome(t, root, evidence.OutcomeEmergencySafetyStop)
+}
+
+// lostSamplerCollector samples the host once, which admits the run, and fails
+// every sample after: the host sampler the guard supervises with is lost.
+type lostSamplerCollector struct {
+	calls int
+}
+
+func (collector *lostSamplerCollector) Collect(
+	ctx context.Context, previous policy.CPUState, diskPath string,
+) (policy.Reading, error) {
+	collector.calls++
+	if collector.calls > 1 {
+		return policy.Reading{}, errors.New("host sampler lost")
+	}
+
+	return (&controlledRunCollector{}).Collect(ctx, previous, diskPath)
+}
+
+// TestRunLosingSupervisionAfterLaunchRecordsSupervisionFailed holds a run whose
+// host sampler is lost while its child runs to a summary that says so, with the
+// child stopped and the failure handed to the caller.
+func TestRunLosingSupervisionAfterLaunchRecordsSupervisionFailed(t *testing.T) {
+	root := t.TempDir()
+	settings := policy.DefaultPolicy()
+	settings.AdmissionWindow = evidenceDecidesAdmission
+	settings.SampleInterval = time.Millisecond
+	settings.TerminationGrace = time.Millisecond
+	settings.ConsecutiveCPUSamples = 1
+	starts, stops := 0, 0
+	code, err := Run(context.Background(), RunConfig{
+		Command: "true", TaskClass: policy.TaskEphemeral, EvidenceRoot: root,
+		Collector: &lostSamplerCollector{}, Policy: settings,
+		Resolution:     policy.Resolution{RequestedProfile: "balanced", ResolvedProfile: "balanced", Concurrency: 1},
+		EvidenceLimits: evidence.DefaultLimits(), Now: time.Now, Stderr: &bytes.Buffer{},
+		startLifetime: func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error) {
+			starts++
+
+			return &supervisedLifetime{processGroup: syscall.Getpgrp(), exited: make(chan error)}, nil
+		},
+		stopLifetime: func(*supervisedLifetime, time.Duration) (error, error) {
+			stops++
+
+			//nolint:nilnil // Two nil results explicitly model a successfully reaped child and supervisor.
+			return nil, nil
+		},
+	})
+	if code != 1 || err == nil || !strings.Contains(err.Error(), "host sampler lost") || starts != 1 || stops != 1 {
+		t.Fatalf("lost supervision: code=%d starts=%d stops=%d error=%v", code, starts, stops, err)
+	}
+	requireSummaryOutcome(t, root, evidence.OutcomeSupervisionFailed)
 }
 
 func TestCoordinationLockSerializesSameProcessByRoot(t *testing.T) {
@@ -2025,10 +2289,11 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 	cases := []struct {
 		name     string
 		exitCode int
+		outcome  evidence.Outcome
 	}{
-		{name: "cancellation", exitCode: 1},
-		{name: "storage", exitCode: StorageBlockedExitCode},
-		{name: "capacity", exitCode: CapacityDeferredExitCode},
+		{name: "cancellation", exitCode: 1, outcome: evidence.OutcomeTaskFailed},
+		{name: "storage", exitCode: StorageBlockedExitCode, outcome: evidence.OutcomeStorageShed},
+		{name: "capacity", exitCode: CapacityDeferredExitCode, outcome: evidence.OutcomePressureShed},
 	}
 	for index, fixture := range cases {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -2151,6 +2416,7 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 			if result.code != callerShedCode(fixture.exitCode) || !errors.Is(result.err, errChildRetirementUnconfirmed) {
 				t.Fatalf("unconfirmed result code=%d error=%v", result.code, result.err)
 			}
+			requireSummaryOutcome(t, reservationRoot, fixture.outcome)
 			if releaseError := holder.release(); releaseError != nil {
 				t.Fatal(releaseError)
 			}
@@ -2471,7 +2737,7 @@ func TestActivationContentionWaitsWithoutCuttingStartedWork(t *testing.T) {
 	if err = json.Unmarshal(summaryData, &summary); err != nil {
 		t.Fatal(err)
 	}
-	if summary.Outcome != "passed" {
+	if summary.Outcome.Outcome() != evidence.OutcomePassed {
 		t.Fatalf("activation contention summary=%+v", summary)
 	}
 	receipts, readError := os.ReadDir(filepath.Join(root, "receipts"))
@@ -2515,7 +2781,7 @@ func TestStalledActivationContentionFailsAfterOwnedCleanup(t *testing.T) {
 	if err = json.Unmarshal(summaryData, &summary); err != nil {
 		t.Fatal(err)
 	}
-	if summary.Outcome != outcomeTaskFailed {
+	if summary.Outcome.Outcome() != evidence.OutcomeTaskFailed {
 		t.Fatalf("stalled activation summary=%+v", summary)
 	}
 	receipts, readError := os.ReadDir(filepath.Join(root, "receipts"))

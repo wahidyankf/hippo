@@ -46,7 +46,7 @@ func TestHistoryJSONFiltersSourceAndTag(t *testing.T) {
 	for index, source := range []string{"hippo", "rhino"} {
 		row := evidence.Summary{
 			SchemaVersion: 5, RunID: source, Source: source, Tags: map[string]string{"checkout": "worktree"},
-			TaskClass: "ephemeral", ResourceTier: "standard", Outcome: "passed",
+			TaskClass: "ephemeral", ResourceTier: "standard", Outcome: evidence.Recorded(evidence.OutcomePassed),
 			FinishedAt: now.Add(time.Duration(index) * time.Minute).Format(time.RFC3339Nano),
 		}
 		data, err := json.Marshal(row)

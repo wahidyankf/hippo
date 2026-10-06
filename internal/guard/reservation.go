@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/evidence"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"golang.org/x/sys/unix"
 )
@@ -1259,7 +1260,7 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 		}
 		if err = waitForReservationRetry(ctx, deadline, now, options.Pause); err != nil {
 			if receiptError := writeSafetyReceipt(
-				root, value, "never-started", "admission-cancelled", options.Metadata, class, now(),
+				root, value, "never-started", evidence.OutcomeAdmissionCancelled.String(), options.Metadata, class, now(),
 			); receiptError != nil {
 				return nil, errors.Join(err, refusedEvidenceWrite("writing the never-started receipt", receiptError))
 			}
@@ -1278,11 +1279,12 @@ func neverStartedAtCoordinationLock(
 	root, runID string, metadata ReservationMetadata, class policy.TaskClass, now time.Time, lockError error,
 ) error {
 	var reason string
+	cancelled := evidence.OutcomeAdmissionCancelled.String()
 	switch {
 	case errors.Is(lockError, errCoordinationDeferred):
 		reason = "admission-deadline"
 	case errors.Is(lockError, context.Canceled), errors.Is(lockError, context.DeadlineExceeded):
-		reason = outcomeAdmissionCancelled
+		reason = cancelled
 	default:
 		return lockError
 	}
@@ -1291,7 +1293,7 @@ func neverStartedAtCoordinationLock(
 		return lockError
 	}
 	refused := refusedEvidenceWrite("writing the never-started receipt", receiptError)
-	if reason == outcomeAdmissionCancelled {
+	if reason == cancelled {
 		return errors.Join(lockError, refused)
 	}
 
