@@ -120,7 +120,7 @@ func reservationSample() policy.Sample {
 	}
 }
 
-func reservationResolution(profile string) policy.Resolution {
+func reservationResolution(profile policy.ProfileName) policy.Resolution {
 	return policy.Resolution{ResolvedProfile: profile, MemoryReserve: 4 * policy.GiB}
 }
 
@@ -128,14 +128,14 @@ func reservationPolicy() guard.ReservationPolicy {
 	return guard.ReservationPolicy{
 		Enabled:         true,
 		MaxActiveOwners: 20,
-		OwnerShares: map[string]int{
+		OwnerShares: map[policy.ProfileName]int{
 			"balanced": 4, "constrained": 2, "minimal": 1,
 		},
 	}
 }
 
 func TestAutomaticAndExplicitReservationPlanning(t *testing.T) {
-	for profile, expectedCPU := range map[string]int{"balanced": 2, "constrained": 4, "minimal": 8} {
+	for profile, expectedCPU := range map[policy.ProfileName]int{"balanced": 2, "constrained": 4, "minimal": 8} {
 		plan, err := guard.PlanReservation(reservationSample(), reservationResolution(profile), reservationPolicy(), 0, 0)
 		if err != nil {
 			t.Fatalf("%s planning failed: %v", profile, err)
@@ -764,5 +764,40 @@ func TestReservationEnvironmentIsFixedAndClamped(t *testing.T) {
 		); mapError == nil {
 			t.Fatalf("invalid mapping %q was accepted", invalid)
 		}
+	}
+}
+
+// TestAutomaticOwnerSharesDefaultByLineage holds the share a profile gets when
+// nothing configures one to its lineage, not to its name.
+func TestAutomaticOwnerSharesDefaultByLineage(t *testing.T) {
+	for _, row := range []struct {
+		lineage policy.Lineage
+		shares  int
+	}{
+		{policy.LineageBalanced, 4},
+		{policy.LineageConstrained, 2},
+		{policy.LineageMinimal, 1},
+		{policy.LineageUnset, 1},
+	} {
+		// A name the old switch never knew, and one it knew for another lineage.
+		for _, name := range []policy.ProfileName{"local-profile", "balanced"} {
+			resolution := policy.Resolution{ResolvedProfile: name, Lineage: row.lineage, MemoryReserve: 4 * policy.GiB}
+			settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: 20, OwnerShares: map[policy.ProfileName]int{}}
+			plan, err := guard.PlanReservation(reservationSample(), resolution, settings, 0, 0)
+			wantCPU := (8 + row.shares - 1) / row.shares
+			if err != nil || plan.Requested.CPU != wantCPU ||
+				plan.Requested.MemoryBytes != (28*policy.GiB+int64(row.shares)-1)/int64(row.shares) {
+				t.Errorf("profile %q of lineage %d planned %+v (%v), want %d owner shares", name, row.lineage, plan.Requested, err, row.shares)
+			}
+		}
+	}
+}
+
+func TestAConfiguredOwnerShareOutranksTheLineageDefault(t *testing.T) {
+	resolution := policy.Resolution{ResolvedProfile: "local-profile", Lineage: policy.LineageBalanced, MemoryReserve: 4 * policy.GiB}
+	settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: 20, OwnerShares: map[policy.ProfileName]int{"local-profile": 2}}
+	plan, err := guard.PlanReservation(reservationSample(), resolution, settings, 0, 0)
+	if err != nil || plan.Requested.CPU != 4 {
+		t.Errorf("a profile configured for two shares planned %+v (%v), want four CPUs", plan.Requested, err)
 	}
 }

@@ -339,3 +339,120 @@ func TestWarningAdmissionRequiresStableDarwinHeadroom(t *testing.T) {
 		}
 	}
 }
+
+// lineageAnswers is what each lineage says to the three questions profile rules
+// ask of it: whether ephemeral work may be admitted degraded under a stable
+// warning, whether the last-resort floor applies, and how many owners share
+// capacity when nothing configures it. Balanced, constrained, and minimal carry
+// v0.8.4's answers; an unset lineage grants no privilege and keeps the share a
+// profile of an unknown name was given.
+var lineageAnswers = []struct {
+	lineage  policy.Lineage
+	degraded bool
+	floor    bool
+	shares   int
+}{
+	{policy.LineageBalanced, true, false, 4},
+	{policy.LineageConstrained, false, false, 2},
+	{policy.LineageMinimal, false, true, 1},
+	{policy.LineageUnset, false, false, 1},
+	// A value that is no member gets the same answers as no lineage at all.
+	{policy.Lineage(200), false, false, 1},
+}
+
+func TestEachLineageAnswersItsThreeQuestions(t *testing.T) {
+	for _, row := range lineageAnswers {
+		if got := row.lineage.DegradedAdmission(); got != row.degraded {
+			t.Errorf("lineage %d DegradedAdmission() = %v, want %v", row.lineage, got, row.degraded)
+		}
+		if got := row.lineage.LastResortFloor(); got != row.floor {
+			t.Errorf("lineage %d LastResortFloor() = %v, want %v", row.lineage, got, row.floor)
+		}
+		if got := row.lineage.DefaultOwnerShares(); got != row.shares {
+			t.Errorf("lineage %d DefaultOwnerShares() = %d, want %d", row.lineage, got, row.shares)
+		}
+	}
+}
+
+func TestBuiltinProfilesCarryTheirLineage(t *testing.T) {
+	catalog := policy.BuiltinCatalog()
+	for name, want := range map[policy.ProfileName]policy.Lineage{
+		"balanced":    policy.LineageBalanced,
+		"constrained": policy.LineageConstrained,
+		"minimal":     policy.LineageMinimal,
+	} {
+		if got := catalog.Profiles[name].Lineage; got != want {
+			t.Errorf("built-in profile %q has lineage %d, want %d", name, got, want)
+		}
+	}
+	if len(catalog.Profiles) != 3 {
+		t.Errorf("the built-in catalog holds %d profiles, want the three that carry a lineage", len(catalog.Profiles))
+	}
+}
+
+// deriveProfile adds a profile that starts from its parent as configuration
+// loading does: a copy of the parent under a new name, which copies the lineage
+// along with the thresholds.
+func deriveProfile(catalog policy.Catalog, name, parent policy.ProfileName) policy.Profile {
+	profile := catalog.Profiles[parent]
+	profile.Name = name
+	catalog.Profiles[name] = profile
+
+	return profile
+}
+
+func TestTheLastResortFloorFollowsTheMinimalLineage(t *testing.T) {
+	catalog := policy.BuiltinCatalog()
+	deriveProfile(catalog, "local-minimal", "minimal")
+	deriveProfile(catalog, "local-minimal-child", "local-minimal")
+	alone := deriveProfile(catalog, "local-constrained-alone", "constrained")
+	alone.Fallback = ""
+	catalog.Profiles["local-constrained-alone"] = alone
+
+	tiny := adaptiveSample(policy.GiB, 200*policy.MiB, 20*policy.GiB, 40*policy.GiB, "unavailable")
+	for _, name := range []policy.ProfileName{"minimal", "local-minimal", "local-minimal-child"} {
+		resolution, err := catalog.Resolve(name, "ephemeral", tiny)
+		if err != nil || resolution.ResolvedProfile != name || resolution.Decision != policy.DecisionRun ||
+			resolution.Reason != policy.ReasonNone || resolution.Concurrency != 1 {
+			t.Fatalf("profile %q on a tiny machine resolved to %+v error=%v, want itself at concurrency one", name, resolution, err)
+		}
+		if resolution.Lineage != policy.LineageMinimal {
+			t.Errorf("profile %q resolved with lineage %d, want minimal", name, resolution.Lineage)
+		}
+		// The floor relaxes admission to the critical memory line and the hard disk floor.
+		if resolution.Policy.AdmissionMemoryBytes != resolution.Policy.CriticalMemoryBytes ||
+			resolution.Policy.DiskWarningBytes != policy.HardDiskFloorBytes {
+			t.Errorf("profile %q was admitted at %d bytes of memory and %d of disk, want the relaxed floor",
+				name, resolution.Policy.AdmissionMemoryBytes, resolution.Policy.DiskWarningBytes)
+		}
+	}
+
+	// Strict work never takes the floor, whatever its lineage.
+	strict, err := catalog.Resolve("local-minimal", "transactional", tiny)
+	if err != nil || strict.Reason != policy.ReasonReplanRequired || strict.Decision != policy.DecisionReplan {
+		t.Errorf("strict work on a minimal-lineage profile resolved to %+v error=%v, want replan", strict, err)
+	}
+
+	// A profile outside the lineage, with nothing behind it, still has no usable fallback.
+	if resolution, resolveError := catalog.Resolve("local-constrained-alone", "ephemeral", tiny); resolveError == nil {
+		t.Errorf("a constrained-lineage profile with no fallback resolved to %+v, want no usable fallback", resolution)
+	}
+
+	// A request that falls back all the way still ends on the built-in minimal profile.
+	fallback, err := catalog.Resolve("balanced", "ephemeral", tiny)
+	if err != nil || fallback.ResolvedProfile != "minimal" {
+		t.Errorf("a balanced request on a tiny machine resolved to %+v error=%v, want minimal", fallback, err)
+	}
+}
+
+func TestResolveRefusesAProfileWithNoLineage(t *testing.T) {
+	catalog := policy.BuiltinCatalog()
+	odd := deriveProfile(catalog, "odd", "balanced")
+	odd.Lineage = policy.LineageUnset
+	catalog.Profiles["odd"] = odd
+
+	roomy := adaptiveSample(32*policy.GiB, 20*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active")
+	if resolution, err := catalog.Resolve("odd", "ephemeral", roomy); err == nil {
+		t.Errorf("a profile with no lineage resolved to %+v", resolution)
+	}
+}

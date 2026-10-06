@@ -58,7 +58,7 @@ type ReservationPolicy struct {
 	MaxCPU          int
 	MaxMemoryBytes  int64
 	MaxActiveOwners int
-	OwnerShares     map[string]int
+	OwnerShares     map[policy.ProfileName]int
 	Tiers           map[string]ResourceTierPolicy
 }
 
@@ -190,34 +190,34 @@ func (cause *ShedCause) UnmarshalJSON(data []byte) error {
 // ReservationOwner is a privacy-safe shared owner record. PID is diagnostic only;
 // ownership liveness is proven by an advisory identity lock rather than PID equality.
 type ReservationOwner struct {
-	Token          string            `json:"token"`
-	PID            int               `json:"pid"`
-	Class          policy.TaskClass  `json:"class"`
-	Profile        string            `json:"profile"`
-	Requested      ReservationVector `json:"requested"`
-	Allocated      ReservationVector `json:"allocated"`
-	Sequence       uint64            `json:"sequence"`
-	ConfigHash     string            `json:"configHash,omitempty"`
-	ProcessGroup   int               `json:"processGroup,omitempty"`
-	Shedding       bool              `json:"shedding,omitempty"`
-	SheddingCause  ShedCause         `json:"sheddingExitCode,omitempty"`
-	MaxOwners      int               `json:"maxActiveOwners"`
-	PeakOwners     int               `json:"peakOwnerCount,omitempty"`
-	IdentityDevice uint64            `json:"identityDevice,omitempty"`
-	IdentityInode  uint64            `json:"identityInode,omitempty"`
+	Token          string             `json:"token"`
+	PID            int                `json:"pid"`
+	Class          policy.TaskClass   `json:"class"`
+	Profile        policy.ProfileName `json:"profile"`
+	Requested      ReservationVector  `json:"requested"`
+	Allocated      ReservationVector  `json:"allocated"`
+	Sequence       uint64             `json:"sequence"`
+	ConfigHash     string             `json:"configHash,omitempty"`
+	ProcessGroup   int                `json:"processGroup,omitempty"`
+	Shedding       bool               `json:"shedding,omitempty"`
+	SheddingCause  ShedCause          `json:"sheddingExitCode,omitempty"`
+	MaxOwners      int                `json:"maxActiveOwners"`
+	PeakOwners     int                `json:"peakOwnerCount,omitempty"`
+	IdentityDevice uint64             `json:"identityDevice,omitempty"`
+	IdentityInode  uint64             `json:"identityInode,omitempty"`
 }
 
 type reservationWaiter struct {
-	Token          string            `json:"token"`
-	PID            int               `json:"pid"`
-	Class          policy.TaskClass  `json:"class"`
-	Profile        string            `json:"profile"`
-	Requested      ReservationVector `json:"requested"`
-	Sequence       uint64            `json:"sequence"`
-	ConfigHash     string            `json:"configHash,omitempty"`
-	MaxOwners      int               `json:"maxActiveOwners"`
-	IdentityDevice uint64            `json:"identityDevice,omitempty"`
-	IdentityInode  uint64            `json:"identityInode,omitempty"`
+	Token          string             `json:"token"`
+	PID            int                `json:"pid"`
+	Class          policy.TaskClass   `json:"class"`
+	Profile        policy.ProfileName `json:"profile"`
+	Requested      ReservationVector  `json:"requested"`
+	Sequence       uint64             `json:"sequence"`
+	ConfigHash     string             `json:"configHash,omitempty"`
+	MaxOwners      int                `json:"maxActiveOwners"`
+	IdentityDevice uint64             `json:"identityDevice,omitempty"`
+	IdentityInode  uint64             `json:"identityInode,omitempty"`
 }
 
 type reservationLedger struct {
@@ -345,14 +345,7 @@ func PlanReservation(
 
 	shares := settings.OwnerShares[resolution.ResolvedProfile]
 	if shares == 0 {
-		switch resolution.ResolvedProfile {
-		case "balanced":
-			shares = 4
-		case "constrained":
-			shares = 2
-		default:
-			shares = 1
-		}
+		shares = resolution.Lineage.DefaultOwnerShares()
 	}
 	automatic := ReservationVector{
 		CPU:         max(MinimumReservationCPU, int(ceilDivide(int64(cpuCapacity), shares))),
@@ -1126,7 +1119,8 @@ func AcquireReservation(
 	ctx context.Context,
 	root, inheritedToken string,
 	class policy.TaskClass,
-	profile, configHash string,
+	profile policy.ProfileName,
+	configHash string,
 	plan ReservationPlan,
 	maxActiveOwners int,
 	wait time.Duration,
@@ -1142,7 +1136,8 @@ func AcquireReservationWithOptions( //nolint:cyclop,funlen,gocognit,gocyclo,main
 	ctx context.Context,
 	root, inheritedToken string,
 	class policy.TaskClass,
-	profile, configHash string,
+	profile policy.ProfileName,
+	configHash string,
 	plan ReservationPlan,
 	maxActiveOwners int,
 	wait time.Duration,

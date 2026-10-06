@@ -9,11 +9,87 @@ import (
 const (
 	// HardDiskFloorBytes is the immutable cleanup boundary.
 	HardDiskFloorBytes = 256 * MiB
-	profileBalanced    = "balanced"
-	profileConstrained = "constrained"
-	profileMinimal     = "minimal"
 	swapUnavailable    = "unavailable"
 )
+
+// ProfileName names one resource profile: a built-in one, or a configured one
+// that extends another. The set is open, since configuration adds names, so it
+// is a defined string; what a profile may do is decided by its Lineage, never
+// by comparing its name. Its JSON is the plain string.
+type ProfileName string
+
+const (
+	profileBalanced    ProfileName = "balanced"
+	profileConstrained ProfileName = "constrained"
+	profileMinimal     ProfileName = "minimal"
+)
+
+// Lineage is the built-in profile a profile derives from, which decides every
+// rule that once keyed on a profile's name: whether it may use degraded
+// admission, whether the last-resort floor applies, and how many owners share
+// capacity when nothing configures it. A built-in profile carries its own
+// lineage, and a configured profile inherits its parent's through any depth of
+// extends; no configuration key can set one. The zero value, LineageUnset, is
+// the lineage of nothing, and Resolve refuses a profile that carries it.
+type Lineage uint8
+
+const (
+	// LineageUnset is the zero value: no lineage.
+	LineageUnset Lineage = iota
+	// LineageBalanced is the lineage of the built-in balanced profile.
+	LineageBalanced
+	// LineageConstrained is the lineage of the built-in constrained profile.
+	LineageConstrained
+	// LineageMinimal is the lineage of the built-in minimal profile.
+	LineageMinimal
+)
+
+// DegradedAdmission reports whether ephemeral work of the lineage may start at
+// concurrency one under a stable macOS warning, and is spared while that
+// warning stays stable. Only the balanced lineage may.
+func (lineage Lineage) DegradedAdmission() bool {
+	switch lineage {
+	case LineageBalanced:
+		return true
+	case LineageConstrained, LineageMinimal, LineageUnset:
+		return false
+	}
+
+	return false
+}
+
+// LastResortFloor reports whether a profile of the lineage that ends its
+// fallback chain, with no fallback behind it, is still admitted when it does not
+// fit, at relaxed memory and disk thresholds, unless the work is strict. A
+// profile that names a fallback falls back to it instead. Only the minimal
+// lineage has the floor.
+func (lineage Lineage) LastResortFloor() bool {
+	switch lineage {
+	case LineageMinimal:
+		return true
+	case LineageBalanced, LineageConstrained, LineageUnset:
+		return false
+	}
+
+	return false
+}
+
+// DefaultOwnerShares is how many owners share the host's capacity for one
+// automatic reservation of a profile of the lineage when no configuration says.
+func (lineage Lineage) DefaultOwnerShares() int {
+	switch lineage {
+	case LineageBalanced:
+		return 4
+	case LineageConstrained:
+		return 2
+	case LineageMinimal:
+		return 1
+	case LineageUnset:
+		// No lineage, no rule: the share v0.8.4 gave a profile it had no name for.
+	}
+
+	return 1
+}
 
 // TaskClass identifies the guarded workload category used for admission.
 type TaskClass string
@@ -45,57 +121,60 @@ const (
 
 // Profile defines one adaptive admission envelope.
 type Profile struct {
-	Name                        string  `json:"name"`
-	Fallback                    string  `json:"fallback,omitempty"`
-	Strict                      bool    `json:"strict"`
-	MemoryReservePercent        float64 `json:"memoryReservePercent"`
-	MemoryReserveMinBytes       int64   `json:"memoryReserveMinBytes"`
-	MemoryReserveMaxBytes       int64   `json:"memoryReserveMaxBytes"`
-	NoSwapMemoryReservePercent  float64 `json:"noSwapMemoryReservePercent"`
-	NoSwapMemoryReserveMinBytes int64   `json:"noSwapMemoryReserveMinBytes"`
-	NoSwapMemoryReserveMaxBytes int64   `json:"noSwapMemoryReserveMaxBytes"`
-	DiskReservePercent          float64 `json:"diskReservePercent"`
-	DiskReserveMinBytes         int64   `json:"diskReserveMinBytes"`
-	DiskReserveMaxBytes         int64   `json:"diskReserveMaxBytes"`
-	MaxConcurrency              int     `json:"maxConcurrency"`
-	MaxCPUUtilizationPercent    float64 `json:"maxCpuUtilizationPercent"`
-	// DegradedAdmission lets ephemeral work of this profile start at
-	// concurrency one under a stable macOS warning, and spares its running
-	// ephemeral children while that warning stays stable. Only the built-in
-	// balanced profile sets it; a configured profile inherits it through its
-	// extends lineage and can never set it, since it has no configuration key.
-	DegradedAdmission bool `json:"-"`
+	Name                        ProfileName `json:"name"`
+	Fallback                    ProfileName `json:"fallback,omitempty"`
+	Strict                      bool        `json:"strict"`
+	MemoryReservePercent        float64     `json:"memoryReservePercent"`
+	MemoryReserveMinBytes       int64       `json:"memoryReserveMinBytes"`
+	MemoryReserveMaxBytes       int64       `json:"memoryReserveMaxBytes"`
+	NoSwapMemoryReservePercent  float64     `json:"noSwapMemoryReservePercent"`
+	NoSwapMemoryReserveMinBytes int64       `json:"noSwapMemoryReserveMinBytes"`
+	NoSwapMemoryReserveMaxBytes int64       `json:"noSwapMemoryReserveMaxBytes"`
+	DiskReservePercent          float64     `json:"diskReservePercent"`
+	DiskReserveMinBytes         int64       `json:"diskReserveMinBytes"`
+	DiskReserveMaxBytes         int64       `json:"diskReserveMaxBytes"`
+	MaxConcurrency              int         `json:"maxConcurrency"`
+	MaxCPUUtilizationPercent    float64     `json:"maxCpuUtilizationPercent"`
+	// Lineage is the built-in profile this one derives from, which decides its
+	// degraded admission, its floor, and its default owner shares. Only a
+	// built-in profile sets it; a configured profile inherits it through
+	// extends and can never set it, since it has no configuration key.
+	Lineage Lineage `json:"-"`
 }
 
 // Catalog owns the named profile graph.
 type Catalog struct {
-	DefaultProfile string
-	Profiles       map[string]Profile
+	DefaultProfile ProfileName
+	Profiles       map[ProfileName]Profile
 }
 
 // Resolution is the selected profile and its concrete host thresholds.
 type Resolution struct {
-	RequestedProfile string   `json:"requestedProfile"`
-	ResolvedProfile  string   `json:"resolvedProfile"`
-	FallbackChain    []string `json:"fallbackChain"`
-	Strict           bool     `json:"strict"`
-	Concurrency      int      `json:"concurrency"`
-	MemoryReserve    int64    `json:"memoryReserveBytes"`
-	DiskReserve      int64    `json:"diskReserveBytes"`
-	Decision         Decision `json:"decision"`
+	RequestedProfile ProfileName   `json:"requestedProfile"`
+	ResolvedProfile  ProfileName   `json:"resolvedProfile"`
+	FallbackChain    []ProfileName `json:"fallbackChain"`
+	Strict           bool          `json:"strict"`
+	Concurrency      int           `json:"concurrency"`
+	MemoryReserve    int64         `json:"memoryReserveBytes"`
+	DiskReserve      int64         `json:"diskReserveBytes"`
+	Decision         Decision      `json:"decision"`
 	// Reason is why the resolution stops work, and ReasonNone when it does not.
 	// Status JSON publishes it as exitCode, the integer v0.8.4 published for it.
 	Reason    Reason `json:"exitCode"`
 	Retryable bool   `json:"retryable"`
-	// DegradedAdmission reports whether the resolved profile may use degraded
-	// admission under a stable macOS warning.
-	DegradedAdmission bool   `json:"degradedAdmission"`
-	Policy            Policy `json:"-"`
+	// DegradedAdmission is the lineage's answer to whether the resolved profile
+	// may use degraded admission under a stable macOS warning, as status
+	// publishes it. Nothing decides from it: the guard asks Lineage.
+	DegradedAdmission bool `json:"degradedAdmission"`
+	// Lineage is the resolved profile's lineage, so the rules that key on it
+	// need not look the profile up again.
+	Lineage Lineage `json:"-"`
+	Policy  Policy  `json:"-"`
 }
 
 // BuiltinCatalog returns deterministic capacity-relative defaults.
 func BuiltinCatalog() Catalog {
-	return Catalog{DefaultProfile: profileBalanced, Profiles: map[string]Profile{
+	return Catalog{DefaultProfile: profileBalanced, Profiles: map[ProfileName]Profile{
 		profileBalanced: {
 			Name:                        profileBalanced,
 			Fallback:                    profileConstrained,
@@ -109,7 +188,7 @@ func BuiltinCatalog() Catalog {
 			DiskReserveMinBytes:         2 * GiB,
 			DiskReserveMaxBytes:         20 * GiB,
 			MaxCPUUtilizationPercent:    85,
-			DegradedAdmission:           true,
+			Lineage:                     LineageBalanced,
 		},
 		profileConstrained: {
 			Name:                        profileConstrained,
@@ -125,6 +204,7 @@ func BuiltinCatalog() Catalog {
 			DiskReserveMaxBytes:         8 * GiB,
 			MaxConcurrency:              2,
 			MaxCPUUtilizationPercent:    92,
+			Lineage:                     LineageConstrained,
 		},
 		profileMinimal: {
 			Name:                        profileMinimal,
@@ -139,6 +219,7 @@ func BuiltinCatalog() Catalog {
 			DiskReserveMaxBytes:         GiB,
 			MaxConcurrency:              1,
 			MaxCPUUtilizationPercent:    98,
+			Lineage:                     LineageMinimal,
 		},
 	}}
 }
@@ -215,7 +296,7 @@ func profileFits(sample Sample, policy Policy) bool {
 }
 
 // Resolve chooses a concrete profile for one sample and task class.
-func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sample) (Resolution, error) {
+func (catalog Catalog) Resolve(requested ProfileName, taskClass TaskClass, sample Sample) (Resolution, error) {
 	if requested == "" {
 		requested = catalog.DefaultProfile
 	}
@@ -224,8 +305,8 @@ func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sam
 	}
 
 	strictClass := taskClass == TaskTransactional || taskClass == TaskRelease
-	seen := map[string]bool{}
-	chain := []string{}
+	seen := map[ProfileName]bool{}
+	chain := []ProfileName{}
 	current := requested
 
 	for current != "" {
@@ -239,18 +320,23 @@ func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sam
 			return Resolution{}, fmt.Errorf("unknown resource profile %q", current)
 		}
 
+		if profile.Lineage == LineageUnset {
+			return Resolution{}, fmt.Errorf("resource profile %q has no lineage", current)
+		}
+
 		chain = append(chain, current)
 		policy, memoryReserve, diskReserve, concurrency := profilePolicy(profile, sample)
 		resolution := Resolution{
 			RequestedProfile:  requested,
 			ResolvedProfile:   current,
-			FallbackChain:     append([]string(nil), chain...),
+			FallbackChain:     append([]ProfileName(nil), chain...),
 			Strict:            strictClass || profile.Strict,
 			Concurrency:       concurrency,
 			MemoryReserve:     memoryReserve,
 			DiskReserve:       diskReserve,
 			Decision:          DecisionRun,
-			DegradedAdmission: profile.DegradedAdmission,
+			DegradedAdmission: profile.Lineage.DegradedAdmission(),
+			Lineage:           profile.Lineage,
 			Policy:            policy,
 		}
 
@@ -261,7 +347,7 @@ func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sam
 		}
 
 		fits := profileFits(sample, policy)
-		if fits || current == profileMinimal && !resolution.Strict {
+		if fits || profile.Lineage.LastResortFloor() && profile.Fallback == "" && !resolution.Strict {
 			if !fits {
 				resolution.Policy.AdmissionMemoryBytes = resolution.Policy.CriticalMemoryBytes
 				resolution.Policy.DiskWarningBytes = HardDiskFloorBytes

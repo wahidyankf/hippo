@@ -10,7 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/guard"
@@ -40,7 +40,7 @@ type Coordination struct {
 	MaxMemoryBytes                int64
 	BaseActiveOwners              int
 	MaxActiveOwners               int
-	OwnerShares                   map[string]int
+	OwnerShares                   map[policy.ProfileName]int
 	Promotion                     Promotion
 	EmergencyAvailableMemoryBytes int64
 	Tiers                         map[string]guard.ResourceTierPolicy
@@ -55,15 +55,15 @@ type Result struct {
 }
 
 type coordinationFile struct {
-	Mode                 string              `json:"mode,omitempty"`
-	MaxCPU               int                 `json:"maxCpu,omitempty"`
-	MaxMemoryMiB         int64               `json:"maxMemoryMiB,omitempty"`
-	MaxActiveOwners      int                 `json:"maxActiveOwners,omitempty"`
-	BaseActiveOwners     int                 `json:"baseActiveOwners,omitempty"`
-	AutomaticOwnerShares map[string]int      `json:"automaticOwnerShares,omitempty"`
-	Promotion            *promotionFile      `json:"promotion,omitempty"`
-	EmergencyMemoryMiB   int64               `json:"emergencyAvailableMemoryMiB,omitempty"`
-	Tiers                map[string]tierFile `json:"tiers,omitempty"`
+	Mode                 string                     `json:"mode,omitempty"`
+	MaxCPU               int                        `json:"maxCpu,omitempty"`
+	MaxMemoryMiB         int64                      `json:"maxMemoryMiB,omitempty"`
+	MaxActiveOwners      int                        `json:"maxActiveOwners,omitempty"`
+	BaseActiveOwners     int                        `json:"baseActiveOwners,omitempty"`
+	AutomaticOwnerShares map[policy.ProfileName]int `json:"automaticOwnerShares,omitempty"`
+	Promotion            *promotionFile             `json:"promotion,omitempty"`
+	EmergencyMemoryMiB   int64                      `json:"emergencyAvailableMemoryMiB,omitempty"`
+	Tiers                map[string]tierFile        `json:"tiers,omitempty"`
 }
 
 type promotionFile struct {
@@ -82,43 +82,47 @@ type tierFile struct {
 }
 
 type profileOverride struct {
-	Extends                    string   `json:"extends,omitempty"`
-	Fallback                   *string  `json:"fallback,omitempty"`
-	Strict                     *bool    `json:"strict,omitempty"`
-	MemoryReservePercent       *float64 `json:"memoryReservePercent,omitempty"`
-	MemoryReserveMinMiB        *int64   `json:"memoryReserveMinMiB,omitempty"`
-	MemoryReserveMaxMiB        *int64   `json:"memoryReserveMaxMiB,omitempty"`
-	NoSwapMemoryReservePercent *float64 `json:"noSwapMemoryReservePercent,omitempty"`
-	NoSwapMemoryReserveMinMiB  *int64   `json:"noSwapMemoryReserveMinMiB,omitempty"`
-	NoSwapMemoryReserveMaxMiB  *int64   `json:"noSwapMemoryReserveMaxMiB,omitempty"`
-	DiskReservePercent         *float64 `json:"diskReservePercent,omitempty"`
-	DiskReserveMinMiB          *int64   `json:"diskReserveMinMiB,omitempty"`
-	DiskReserveMaxMiB          *int64   `json:"diskReserveMaxMiB,omitempty"`
-	MaxConcurrency             *int     `json:"maxConcurrency,omitempty"`
-	MaxCPUUtilizationPercent   *float64 `json:"maxCpuUtilizationPercent,omitempty"`
+	Extends                    policy.ProfileName  `json:"extends,omitempty"`
+	Fallback                   *policy.ProfileName `json:"fallback,omitempty"`
+	Strict                     *bool               `json:"strict,omitempty"`
+	MemoryReservePercent       *float64            `json:"memoryReservePercent,omitempty"`
+	MemoryReserveMinMiB        *int64              `json:"memoryReserveMinMiB,omitempty"`
+	MemoryReserveMaxMiB        *int64              `json:"memoryReserveMaxMiB,omitempty"`
+	NoSwapMemoryReservePercent *float64            `json:"noSwapMemoryReservePercent,omitempty"`
+	NoSwapMemoryReserveMinMiB  *int64              `json:"noSwapMemoryReserveMinMiB,omitempty"`
+	NoSwapMemoryReserveMaxMiB  *int64              `json:"noSwapMemoryReserveMaxMiB,omitempty"`
+	DiskReservePercent         *float64            `json:"diskReservePercent,omitempty"`
+	DiskReserveMinMiB          *int64              `json:"diskReserveMinMiB,omitempty"`
+	DiskReserveMaxMiB          *int64              `json:"diskReserveMaxMiB,omitempty"`
+	MaxConcurrency             *int                `json:"maxConcurrency,omitempty"`
+	MaxCPUUtilizationPercent   *float64            `json:"maxCpuUtilizationPercent,omitempty"`
 }
 
 type file struct {
-	SchemaVersion  int                        `json:"schemaVersion"`
-	DefaultProfile string                     `json:"defaultProfile,omitempty"`
-	Profiles       map[string]profileOverride `json:"profiles,omitempty"`
-	Coordination   *coordinationFile          `json:"coordination,omitempty"`
+	SchemaVersion  int                                    `json:"schemaVersion"`
+	DefaultProfile policy.ProfileName                     `json:"defaultProfile,omitempty"`
+	Profiles       map[policy.ProfileName]profileOverride `json:"profiles,omitempty"`
+	Coordination   *coordinationFile                      `json:"coordination,omitempty"`
 }
 
 func exclusiveCoordination() Coordination {
 	return Coordination{SchemaVersion: schemaVersionExclusive, Mode: "exclusive"}
 }
 
+// reservationCoordination is the coordination a schema-2 file starts from. Its
+// owner shares are each built-in profile's lineage default, so the table of 4, 2,
+// and 1 lives once, with the lineage that decides it.
 func reservationCoordination() Coordination {
+	shares := map[policy.ProfileName]int{}
+	for name, profile := range policy.BuiltinCatalog().Profiles {
+		shares[name] = profile.Lineage.DefaultOwnerShares()
+	}
+
 	return Coordination{
 		SchemaVersion:   schemaVersionReservation,
 		Mode:            "reservation",
 		MaxActiveOwners: defaultMaxActiveOwners,
-		OwnerShares: map[string]int{
-			"balanced":    4,
-			"constrained": 2,
-			"minimal":     1,
-		},
+		OwnerShares:     shares,
 	}
 }
 
@@ -253,9 +257,9 @@ func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, erro
 		}
 		result.OwnerShares[name] = shares
 	}
-	visiting := map[string]bool{}
-	var inheritShares func(string) (int, error)
-	inheritShares = func(name string) (int, error) {
+	visiting := map[policy.ProfileName]bool{}
+	var inheritShares func(policy.ProfileName) (int, error)
+	inheritShares = func(name policy.ProfileName) (int, error) {
 		if shares := result.OwnerShares[name]; shares > 0 {
 			return shares, nil
 		}
@@ -368,7 +372,7 @@ func setBytes(target, override *int64) error {
 	return nil
 }
 
-func apply(name string, base policy.Profile, override profileOverride) (policy.Profile, error) {
+func apply(name policy.ProfileName, base policy.Profile, override profileOverride) (policy.Profile, error) {
 	base.Name = name
 	if override.Fallback != nil {
 		base.Fallback = *override.Fallback
@@ -439,11 +443,11 @@ func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // R
 	}
 
 	catalog := policy.BuiltinCatalog()
-	resolved := map[string]bool{}
-	visiting := map[string]bool{}
-	var resolve func(string) (policy.Profile, error)
+	resolved := map[policy.ProfileName]bool{}
+	visiting := map[policy.ProfileName]bool{}
+	var resolve func(policy.ProfileName) (policy.Profile, error)
 
-	resolve = func(name string) (policy.Profile, error) {
+	resolve = func(name policy.ProfileName) (policy.Profile, error) {
 		if resolved[name] {
 			return catalog.Profiles[name], nil
 		}
@@ -488,12 +492,12 @@ func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // R
 		return base, nil
 	}
 
-	names := make([]string, 0, len(decoded.Profiles))
+	names := make([]policy.ProfileName, 0, len(decoded.Profiles))
 	for name := range decoded.Profiles {
 		names = append(names, name)
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	for _, name := range names {
 		if _, err := resolve(name); err != nil {
@@ -510,7 +514,7 @@ func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // R
 	}
 
 	for name := range catalog.Profiles {
-		seen := map[string]bool{}
+		seen := map[policy.ProfileName]bool{}
 		current := name
 		for current != "" {
 			if seen[current] {
