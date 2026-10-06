@@ -40,7 +40,7 @@ func (driver *Driver) preparePendingV04() error {
 func v04ReservationPolicy() guard.ReservationPolicy {
 	return guard.ReservationPolicy{
 		Enabled: true, MaxActiveOwners: 20,
-		OwnerShares: map[string]int{profileBalanced: 4, profileConstrained: 2, profileMinimal: 1},
+		OwnerShares: map[policy.ProfileName]int{profileBalanced: 4, profileConstrained: 2, profileMinimal: 1},
 	}
 }
 
@@ -81,7 +81,7 @@ func v04Plan(cpu int, memory int64) guard.ReservationPlan {
 
 func requireV04Planning() error {
 	settings := v04ReservationPolicy()
-	for profile, expectedCPU := range map[string]int{profileBalanced: 2, profileConstrained: 4, profileMinimal: 8} {
+	for profile, expectedCPU := range map[policy.ProfileName]int{profileBalanced: 2, profileConstrained: 4, profileMinimal: 8} {
 		plan, err := guard.PlanReservation(
 			v04ReservationSample(),
 			policy.Resolution{ResolvedProfile: profile, MemoryReserve: 4 * policy.GiB},

@@ -133,7 +133,7 @@ func (driver *Driver) prepareCorruptReservationLedgerV04(kind string) error {
 	driver.configPath = filepath.Join(driver.evidenceRoot, "reservations.json")
 	driver.v04State = append(driver.v04State[:0], data...)
 	driver.v04State = append(driver.v04State, '\n')
-	driver.requestedProfile = kind
+	driver.corruptionKind = kind
 
 	return os.WriteFile(driver.configPath, driver.v04State, 0o600)
 }
@@ -145,8 +145,8 @@ func (driver *Driver) inspectCorruptReservationLedgerV04() error {
 }
 
 func (driver *Driver) requireCorruptReservationLedgerV04(kind string) error {
-	if driver.requestedProfile != kind {
-		return fmt.Errorf("prepared corruption %q, want %q", driver.requestedProfile, kind)
+	if driver.corruptionKind != kind {
+		return fmt.Errorf("prepared corruption %q, want %q", driver.corruptionKind, kind)
 	}
 	if driver.v04Error == nil {
 		return fmt.Errorf("%s-corrupt reservation ledger was accepted", kind)

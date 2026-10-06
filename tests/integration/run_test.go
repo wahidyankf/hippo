@@ -277,7 +277,7 @@ func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 	resolution := policy.Resolution{
 		RequestedProfile: "balanced",
 		ResolvedProfile:  "minimal",
-		FallbackChain:    []string{"balanced", "constrained", "minimal"},
+		FallbackChain:    []policy.ProfileName{"balanced", "constrained", "minimal"},
 		Concurrency:      1,
 	}
 	command := `[ "$HIPPO_PROFILE" = minimal ] && [ "$HIPPO_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 5 ]`

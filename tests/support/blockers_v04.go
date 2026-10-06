@@ -486,7 +486,7 @@ func requireV04MaximumAutomaticShares(string) error {
 	sample.PhysicalMemoryBytes = math.MaxInt64
 	sample.EffectiveMemoryLimitBytes = math.MaxInt64
 	for _, testCase := range []struct {
-		profile string
+		profile policy.ProfileName
 		shares  int
 	}{
 		{profile: profileBalanced, shares: 4},
@@ -494,7 +494,7 @@ func requireV04MaximumAutomaticShares(string) error {
 	} {
 		resolution := policy.Resolution{ResolvedProfile: testCase.profile}
 		plan, err := guard.PlanReservation(sample, resolution, guard.ReservationPolicy{
-			Enabled: true, OwnerShares: map[string]int{testCase.profile: testCase.shares},
+			Enabled: true, OwnerShares: map[policy.ProfileName]int{testCase.profile: testCase.shares},
 		}, 0, 0)
 		want := guard.ReservationVector{
 			CPU:         int(exactCeilingV04(int64(math.MaxInt-1), int64(testCase.shares))),
