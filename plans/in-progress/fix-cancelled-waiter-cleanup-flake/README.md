@@ -23,6 +23,8 @@ that produces the failure. The owner's request is what the convention accepts in
 [strict Go linting and domain modeling](../strict-go-linting-and-domain-modeling/README.md) cuts in its Unit 7. This
 plan releases nothing of its own unless that cut happens without the fix (see [Phase 5](#phase-5-release-through-v085)).
 
+Line numbers in this plan are at `db9632a`, the trunk commit that landed it and the one it executes from.
+
 ## Bug Report
 
 **Description.** After cancelling a queued reservation waiter whose coordination lock is briefly held,
@@ -42,7 +44,7 @@ removes it later. The scenario that asserts the removal fails at its `Then` step
    replaces `coordinationLifecycleWait` in both its `context.WithTimeout` and its lock wait, changing nothing else, and
    call it from a test in package `guard` with a zero wait while nothing holds the lock, as Phase 3's RED item does.
 
-**Expected behaviour.** The scenario at `specs/behaviours/reservations.feature`, lines 230–233, says "bounded cleanup
+**Expected behaviour.** The scenario at `specs/behaviours/reservations.feature`, lines 243–246, says "bounded cleanup
 removes the waiter without blocking the FIFO queue", and [`specs/architecture.md`](../../../specs/architecture.md), line
 248, says "cancelled waiter cleanup receives a fresh bounded context". A cleanup whose lock is released within that
 bound, or is free, removes the waiter before the acquisition returns.
@@ -61,7 +63,8 @@ Scenario: Cancelled FIFO waiters use a fresh cleanup deadline
     suite.go:640: cancelled waiter remained in FIFO accounting after fresh cleanup deadline
 ```
 
-Godog prints each location comment at the end of its line; it is wrapped here to fit. Step 3 failed 5 runs of 5 with
+Godog prints each location comment at the end of its line; it is wrapped here to fit. The transcript is verbatim from
+the runs at `a0e7819`, where the scenario began at line 230; it now begins at line 243. Step 3 failed 5 runs of 5 with
 `context deadline exceeded` while no holder had the lock.
 
 **Error output** is the `Error:` line quoted above, from the step binding `requireV04CancelledWaiterCleanup`,
@@ -102,15 +105,13 @@ No duplicate exists.
 
 ## Root Cause
 
-Line numbers are at `a0e7819`.
-
 **The cleanup.** When a queued acquisition returns for any reason, a deferred function in
-`AcquireReservationWithOptions` (`internal/guard/reservation.go`, lines 1195–1207) calls
-`removeReservationWaiterAfterCancellation` (lines 1410–1415). That function makes a fresh
+`AcquireReservationWithOptions` (`internal/guard/reservation.go`, lines 1190–1202) calls
+`removeReservationWaiterAfterCancellation` (lines 1405–1410). That function makes a fresh
 `context.WithTimeout(context.Background(), coordinationLifecycleWait)` and passes it, with the same 100 ms as `wait`
 (`internal/guard/coordination.go`, line 24), to `acquireCoordinationLock` through `removeReservationWaiter` (lines
-1417–1431). One budget is enforced by two clocks. When the cleanup fails, `retainReservationWaiterUntilCleanup` (lines
-1387–1408) keeps the waiter's identity locked and retries every 10 ms in the background, so the waiter leaves the ledger
+1412–1426). One budget is enforced by two clocks. When the cleanup fails, `retainReservationWaiterUntilCleanup` (lines
+1382–1403) keeps the waiter's identity locked and retries every 10 ms in the background, so the waiter leaves the ledger
 only later.
 
 **The step.** `requireV04CancelledWaiterCleanup` (`tests/support/blockers_v04.go`, lines 737–800) fills capacity with
@@ -145,7 +146,7 @@ repeat its `wait`: `lockCoordinationForRelease` (lines 248–250) passes `contex
 
 The production consequence of mode 2: a cancelled run's waiter can stay in the FIFO ledger with a free lock until a
 background retry removes it, and while it is at the head, no waiter behind it is admitted (`reservation.go`, lines
-1289–1290 admit only the head).
+1284–1285 admit only the head).
 
 ## Solution
 
@@ -164,7 +165,7 @@ Why it removes the cause: the refusal paths of mode 2 belong to the context, and
 before the first attempt, a stall in the loop, and every background retry by `retainReservationWaiterUntilCleanup`
 (which calls the same function) all end in an attempt on the lock. The budget stays bounded: a held lock is still
 refused after `wait`, so the scenario "Failed cancelled-waiter cleanup retains verifiable FIFO ownership" (lines
-249–253) keeps its 500 ms bound.
+262–266) keeps its 500 ms bound.
 
 **2. A cleanup-wait seam, for the scenario.** `ReservationAdmissionOptions` (`reservation.go`, lines 47–53), which
 already carries the `Now`, `Pause`, and `Heartbeat` seams, gains `CleanupWait time.Duration`. Zero, the default, means
@@ -177,7 +178,7 @@ configured wait is ever ignored, and 1.5 s below the configured wait — five ti
 **Conditions beyond the reported one.**
 
 - Callers whose context carries a caller's cancellation keep "cancellation wins": the admission wait (`reservation.go`,
-  line 1214), the lease wait (`internal/guard/lease.go`, line 460), and status observation. The test
+  line 1209), the lease wait (`internal/guard/lease.go`, line 460), and status observation. The test
   `TestCoordinationLockRejectsPreCanceledContext` (`internal/guard/run_test.go`, line 694) pins that, and this plan does
   not touch it.
 - `waitReservationVictimRelease` (`run.go`, lines 299–312) is the other production caller with a timeout context. There
@@ -304,8 +305,11 @@ removes it after its own merge.
 1. _Plan_ — this file and the in-progress index entry alone. Rollback: revert its merge.
 2. _Fix_ — the two code changes, their tests, the specification line, the `CHANGELOG.md` bullet, and this plan's
    execution record. Rollback: revert its merge before `v0.8.5` is cut; after it, publish the next patch.
-3. _Release_ — `v0.8.5`, cut by the linting plan's Unit 7 after unit 2 merges; this plan only records it. A published
-   tag is never replaced.
+3. _Release_ — `v0.8.5`, cut by the linting plan's Unit 7 after unit 2 merges; this plan only records it. That plan's
+   Unit 7 holds the cut until this fix has merged, in its item "Before cutting, confirm both bug-fix plans this release
+   carries have merged", and completes the `## [v0.8.5] — Unreleased` entry that Phase 4 adds, in its item "Add the
+   `v0.8.5` entry to `CHANGELOG.md`, or complete and date the `## [v0.8.5] — Unreleased` entry the cancelled-waiter fix
+   added". A published tag is never replaced.
 4. _Record_ — the release record, the execution check, and the move to `plans/done/`. Rollback: revert its merge.
 
 **Out of scope: repinning consumers.** The linting plan leaves repinning `v0.8.5` to each consumer's own repository,
@@ -319,16 +323,23 @@ Phases 1–4 ticked and Phase 5 open.
 
 ### Phase 1: Plan
 
-- [ ] `[AI]` Land this file and its `plans/in-progress/README.md` entry alone with _Land_, from
+- [x] `[AI]` Land this file and its `plans/in-progress/README.md` entry alone with _Land_, from
       `worktree/fix-cancelled-waiter-cleanup-flake`; proof: the merge commit on `origin/main` and _Reconcile_ reading
       `0 0`. `[AC-07]`
-- [ ] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
+  - Result: (2026-10-06) pull request #136, rebased once onto `c109c4d`, merged as `db9632a`; _Reconcile_ `0 0`.
+- [x] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
       `git switch -c worktree/fix-cancelled-waiter-cleanup-flake-fix origin/main`, then `npm ci`; proof:
       `git branch --show-current` prints the branch and `git status --porcelain` prints nothing. `[AC-04]`
-- [ ] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
+  - Result: `worktree/fix-cancelled-waiter-cleanup-flake-fix` from `origin/main` at `db9632a`, `node_modules` already
+    installed by the plan unit's `npm ci`; the merged plan branch was deleted at once; tree clean.
+- [x] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
       in mode `normal`, at most three cycles, and commit its repairs and its verdict line as the fix branch's first
       commit, a `docs(plans)` commit; proof: one terminal `plan-quality-gate:` verdict line recorded here and
       `git status --porcelain` printing nothing. `[AC-07]`
+  - Result: `plan-quality-gate: PASS (2 cycles, 6 rows fixed: 1 HIGH, 3 MEDIUM, 2 LOW; 0 open)`. Entry checks: prettier,
+    `markdownlint-cli2` 0 issues, `./rhino md internal-link validate` and `./rhino governance directory-map validate` no
+    findings. Cycle 1: PQG-01 (HIGH, record-worktree provisioning after the items writing into it), PQG-02, PQG-03,
+    PQG-04, PQG-05 fixed. Cycle 2: all five held; PQG-06 (MEDIUM, rebase on a dirty tree) found and fixed.
 
 ### Phase 2: Mode 1 — The Scenario Honours a Configured Cleanup Wait
 
@@ -353,11 +364,14 @@ Phases 1–4 ticked and Phase 5 open.
 
 - [ ] `[AI]` RED: add `TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent` to `internal/guard/run_test.go`
       beside `TestCoordinationLockRejectsPreCanceledContext`. It calls `ensureReservationCoordination`, writes with
-      `writeReservationLedger` a schema-current ledger whose capacity is one CPU and 256 MiB and whose single waiter has
-      a token from `token()`, this process's PID, class `ephemeral`, profile `minimal`, sequence 1, and owner limit 20,
-      then calls `removeReservationWaiterAfterCancellation(root, value, 0)` with no holder of the lock and requires a
-      nil error and an empty `Waiters` from `readReservationLedger`; run the _Cleanup test_; proof: it fails all 20
-      passes with `context deadline exceeded`, and every `TestCoordinationLock` test passes. `[AC-01]`
+      `writeReservationLedger` a ledger that passes `validateReservationLedger`, so the test fails at the lock alone:
+      `SchemaVersion` `reservationLedgerSchemaVersion`, `NextSequence` 1, `Capacity` one CPU and 256 MiB
+      (`ReservationVector{CPU: MinimumReservationCPU, MemoryBytes: MinimumReservationMemoryBytes}`), and one waiter with
+      `Token` from `token()`, `PID` this process's, `Class` `policy.TaskEphemeral`, `Profile` `minimal`, `Requested` the
+      same one CPU and 256 MiB, `Sequence` 1, and `MaxOwners` 20, then calls
+      `removeReservationWaiterAfterCancellation(root, value, 0)` with no holder of the lock and requires a nil error and
+      an empty `Waiters` from `readReservationLedger`; run the _Cleanup test_; proof: it fails all 20 passes with
+      `context deadline exceeded`, and every `TestCoordinationLock` test passes. `[AC-01]`
 - [ ] `[AI]` GREEN: in `removeReservationWaiterAfterCancellation`, drop the context and acquire with
       `acquireCoordinationLock(context.Background(), root, wait)`, folding `removeReservationWaiter` into it; proof: the
       _Cleanup test_ passes all 20 passes, and _Focused scenarios_ pass at both adapters. `[AC-01]` `[AC-03]`
@@ -396,19 +410,22 @@ Phases 1–4 ticked and Phase 5 open.
       is recorded here, the cause it shows replaces the matching hypothesis in [Root Cause](#root-cause), and no release
       carries this fix until a new RED proves that cause. `[AC-05]`
 - [ ] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` `[AC-05]`
+- [ ] `[AI]` Before landing, commit the execution record so far as a `docs(plans)` commit on the fix branch, because
+      `git rebase` refuses a dirty tree and the rebase never auto-stashes; then `git fetch origin --tags` and confirm
+      `v0.8.5` does not yet exist; then rebase onto `origin/main`, reading the whole incoming diff (the linting plan's
+      units edit `internal/guard/reservation.go`, `tests/support/blockers_v04.go`, and `specs/architecture.md`), and
+      rerun _Focused scenarios_ at both adapters and the _Full gate_ if the rebase brought commits; proof:
+      `git status --porcelain` prints nothing before the rebase, `git ls-remote --tags origin v0.8.5` prints nothing,
+      and the reruns exit `0`. If the tag already exists, land anyway and the recovery item in Phase 5 fires. `[AC-05]`
+      `[AC-06]` `[AC-07]`
 - [ ] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-04]`
-- [ ] `[AI]` Commit this plan's execution record (Phases 1–4 ticked with results, and the first item of Phase 5) as a
-      `docs(plans)` commit on the fix branch, as the last commit before landing; proof: `git status --porcelain` prints
-      nothing. `[AC-07]`
+- [ ] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
+      results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
+      `git status --porcelain` prints nothing. `[AC-07]`
 
 ### Phase 5: Release Through v0.8.5
 
-- [ ] `[AI]` Before landing, `git fetch origin --tags` and confirm `v0.8.5` does not yet exist; then rebase onto
-      `origin/main`, reading the whole incoming diff (the linting plan's units edit `internal/guard/reservation.go`,
-      `tests/support/blockers_v04.go`, and `specs/architecture.md`), and rerun _Focused scenarios_ at both adapters and
-      the _Full gate_ if the rebase brought commits; proof: `git ls-remote --tags origin v0.8.5` prints nothing, and the
-      reruns exit `0`. If the tag already exists, land anyway and the recovery item below fires. `[AC-05]` `[AC-06]`
 - [ ] `[AI]` Land unit 2 with _Land_; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both
       recorded here by unit 4, since the merged copy cannot hold its own merge. The fix must merge before the linting
       plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-05]`
@@ -419,6 +436,9 @@ Phases 1–4 ticked and Phase 5 open.
       locally and on `origin`; proof: `git worktree list` omits it,
       `git branch --list 'worktree/fix-cancelled-waiter-*'` and
       `git ls-remote origin 'refs/heads/worktree/fix-cancelled-waiter-*'` print nothing. `[AC-07]`
+- [ ] `[AI]` Provision `worktrees/fix-cancelled-waiter-cleanup-flake-record` from `origin/main` on branch
+      `worktree/fix-cancelled-waiter-cleanup-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
+      `git branch --show-current` prints the branch. `[AC-07]`
 - [ ] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
       `git merge-base --is-ancestor <unit 2 merge commit> v0.8.5` exits `0`, `git show v0.8.5:CHANGELOG.md` holds the
       `Fixed` bullet, and the release URL, the tag's peeled commit, and `checksums.txt` are recorded here. `[AC-06]`
@@ -430,9 +450,6 @@ Phases 1–4 ticked and Phase 5 open.
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Provision `worktrees/fix-cancelled-waiter-cleanup-flake-record` from `origin/main` on branch
-      `worktree/fix-cancelled-waiter-cleanup-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
-      `git branch --show-current` prints the branch. `[AC-07]`
 - [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-07]`
 - [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
