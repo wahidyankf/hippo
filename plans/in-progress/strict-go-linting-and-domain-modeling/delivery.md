@@ -2044,13 +2044,22 @@ Branch `worktree/strict-enum-decoding`.
 
 ### Unit 6 landing
 
-- [ ] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-21]`
-- [ ] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
+- [x] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-21]`
+  - Result: (2026-10-06) data-safety scan of the diff found no candidate; thematic commits, every hook passed:
+    `81e123d`..`2c4e288` (refactor(config), refactor(policy), docs, docs(governance), docs(plans)); the first grouping
+    put the staged allowlist deletion in the config commit, so the unpushed commits were rebuilt and the config commit
+    verified to build and test alone; rebased once over the four bug-fix landings.
+- [x] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
       recorded. `[AC-21]`
-- [ ] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-21]`
-- [ ] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-21]`
-- [ ] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
+  - Result: push review clean, every `pre-push` gate passed; title and body screened (exit `0`); draft pull request
+    #145.
+- [x] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-21]`
+  - Result: `Quality gate` `success` on head `2c4e288` (run 37520536730).
+- [x] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-21]`
+  - Result: `pass` review posted on `2c4e288`; `leak-review` reads `success`.
+- [x] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
       `[AC-21]`
+  - Result: merged as `2555fc1`; reconcile count `0 0`.
 
 > **Pause Safety**: every code unit is on `main`. Safe to stop. To resume: the starting commands for Unit 7.
 
@@ -2059,7 +2068,8 @@ Branch `worktree/strict-enum-decoding`.
 Branch `worktree/release-v0.8.5`, under [release cut](../../../repo-governance/workflows/maintenance/release-cut.md),
 dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D2, D12).
 
-- [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-24]`
+- [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-24]`
+  - Result: `worktree/release-v0.8.5` from `origin/main` at `2555fc1`.
 - [ ] `[AI]` Before cutting, confirm every bug-fix plan this release carries has merged:
       `fix-cancelled-waiter-cleanup-flake`, `fix-degraded-lineage-scenario-flake`, and
       `fix-distinct-root-lock-test-flake`, plus any later one under `plans/in-progress/fix-*` (added 2026-10-06 at the
