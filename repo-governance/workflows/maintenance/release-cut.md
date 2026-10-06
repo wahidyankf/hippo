@@ -12,7 +12,8 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
 - `scripts/test.sh` — the full gate — passes.
 - A [docs quality gate](../quality/docs-quality-gate.md) verdict on subject `all` is recorded, so `CHANGELOG.md`,
   `README.md`, and `docs/` are checked against the binary being cut. A documented contract the binary breaks is fixed in
-  code before the tag.
+  code before the tag. Output they quote, diagnostics included, is measured on a binary built with the Go release
+  `go.mod` names, as `scripts/build-release.sh` builds it: another local Go can print different text.
 - The tag name and the notes the release will publish pass the screen in
   [data safety](../../conventions/public-repository-data-safety.md). `release.yml` generates those notes from merged
   pull requests, so screen the text
