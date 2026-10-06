@@ -41,8 +41,8 @@ npm ci
 
 Commands the items name:
 
-- _Quick gate_: `npm run test:quick`. _Full gate_: `npm test`. Both run directly: HIPPO cannot guard HIPPO, so never
-  beneath `./hippo`, per
+- _Quick gate_: `npm run test:quick`. _Full gate_: `npm test`, or `GOFLAGS=-timeout=30m npm test` on a loaded host
+  (Phase 4a). Both run directly: HIPPO cannot guard HIPPO, so never beneath `./hippo`, per
   [resource-aware development](../../../repo-governance/development/resource-aware-development.md).
 - _Lint_: `go tool golangci-lint run`.
 - _NilAway_: `go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...`.
@@ -1423,42 +1423,44 @@ Branch `worktree/profile-lineage-rules`.
 
 ### Unit 4 landing
 
-- [ ] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-17]`
-- [ ] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
+- [x] `[AI]` Inspect the diff against data safety and commit thematically; proof: hooks pass, range recorded. `[AC-17]`
+  - Result: (2026-10-06) data-safety scan of the diff found no candidate; thematic commits, every hook passed:
+    `2f498bd`..`6d5faa6`, five commits.
+- [x] `[AI]` Push review, push, screen title and body, open a draft pull request; proof: screen exit `0`, number
       recorded. `[AC-17]`
-- [ ] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-17]`
-- [ ] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-17]`
-- [ ] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
+  - Result: push review clean, every `pre-push` gate passed; title and body screened (exit `0`); draft pull request
+    #135.
+- [x] `[AI]` Mark ready and wait for `Quality gate` on the head; proof: `success` on the recorded head. `[AC-17]`
+  - Result: `Quality gate` `success` on head `6d5faa6` (run 37455536577).
+- [x] `[AI]` Post the leak review for that head; proof: `leak-review` reads `success`. `[AC-17]`
+  - Result: `pass` review posted on `6d5faa6`; `leak-review` reads `success`.
+- [x] `[AI]` Rebase-merge when every precondition holds, then _Reconcile_; proof: merge commit and `0 0` recorded.
       `[AC-17]`
+  - Result: merged as `c109c4d`; reconcile count `0 0`.
 
 > **Pause Safety**: Unit 4 is on `main`. Safe to stop. To resume: the starting commands for Unit 5.
 
-## Phase 4a: Discovered — Explicit Gate Timeouts
+## Phase 4a: Discovered — Explicit Gate Timeouts (Withdrawn)
 
-Added on 2026-10-06 as discovered work, its own pull request on branch `worktree/gate-test-timeouts`, landed before Unit
-5 starts. Every `go test` step of `scripts/test-quick.sh` and `scripts/test.sh` ran under Go's 10-minute package
-default, and on this workstation, where every repository runs HIPPO and host load reached 34–47, the full gate failed on
-timeouts in Units 2, 3, and 4 with no test failing (see [learnings](learnings.md)). The release cut requires
-`scripts/test.sh` to pass, so the gate must not depend on host load. A timeout changes no assertion.
+Added on 2026-10-06 as discovered work to put an explicit `-timeout` on every `go test` step of `scripts/test-quick.sh`
+and `scripts/test.sh`, after the full gate hit Go's 10-minute package default under host load in Units 2, 3, and 4 (see
+[learnings](learnings.md)). Withdrawn the same day before any change: `scripts/test-loaded.sh` already raises the
+timeout through `GOFLAGS` (`-timeout=${HIPPO_LOAD_TEST_TIMEOUT:-60m}`) precisely so that `scripts/test.sh` stays exactly
+as CI runs it, and an explicit timeout in the shared scripts would contradict that decision and delay CI's detection of
+a hung package. On a loaded host the _Full gate_ runs as `GOFLAGS=-timeout=30m npm test`, which changes no assertion.
 
-- [ ] `[AI]` Create the branch from `origin/main` once Unit 4 has merged; proof: `git branch --show-current` prints it.
-      `[AC-24]`
-- [ ] `[AI]` **RED** (`swe-developer`): add a step to the lint-wiring scenario requiring every `go test` invocation in
-      both gate scripts to pass an explicit `-timeout`; run the unit adapter; acceptance: it fails naming the first
-      invocation without one. `[AC-24]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `-timeout 30m` to each `go test` invocation in both scripts; run the unit
-      adapter and the quick gate; acceptance: both exit `0`. `[AC-24]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): state the reason beside the first invocation in each script; run
-      `./scripts/format-check.sh` and `npm run format:check`; acceptance: both exit `0`. `[AC-24]`
-- [ ] `[AI]` Apply rules propagation to `repo-governance/development/quality-gates.md` if it describes the steps'
-      timeouts, and run the _Full gate_; proof: the status recorded and exit `0`. `[AC-24]`
-- [ ] `[AI]` Land it through the same landing steps as each unit; proof: the merge commit and `0 0` recorded. `[AC-24]`
+- [x] `[AI]` Decide the discovered work against the repository's existing loaded-gate mechanism; proof: the reason
+      recorded. `[AC-24]`
+  - Result: (2026-10-06) withdrawn, as above; the branch created for it, `worktree/gate-test-timeouts` at `c109c4d`, was
+    renamed to Unit 5's `worktree/single-admission-decision` with no commit of its own work.
 
 ## Phase 5: Unit 5 — Admission Path and Decision
 
 Branch `worktree/single-admission-decision`.
 
-- [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-20]`
+- [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-20]`
+  - Result: `worktree/single-admission-decision` from `origin/main` at `c109c4d` (renamed from the withdrawn Phase 4a
+    branch).
 - [ ] `[AI]` **RED** (`swe-developer`): add `tests/unit/admission_decision_test.go` covering every path under both
       windows, `WindowUnset` refused, `SparesStableWarning`, and an input whose `Policy` differs from its resolution's
       `Policy`, where the input's `Policy` alone decides; run `go test -count=1 ./tests/unit`; acceptance: compilation
