@@ -109,3 +109,41 @@ one durable owner or discard it with a reason. -->
   gate; the same step alone took 359 s, and a rerun at lower load took 534 s, against 275 s during Unit 1. The non-race
   integration run moved from 213 s to 220 s at comparable load, so the code did not slow it. Routing candidate:
   `scripts/test.sh` (an explicit `-timeout` on the race step) or the quality-gates page, as a separate change.
+- (2026-10-06, Unit 3) **The plan's items could not run in their written order.** The delivery items put the
+  `Resolution.Reason` and constant-deletion REFACTOR (item 10) before the `ShedCause` and `Resolution` items it depends
+  on: the constants `run.go`, `reservation.go`, `development.go`, and the `tests/support` readers still use are deleted
+  only once `ShedCause` and `Resolution.Reason` exist. Unit 3 ran the items in dependency order, with item 10 last, and
+  ticked each when its own acceptance held. Routing candidate: `delivery.md`, Unit 3, as a note on the item order for a
+  later unit that follows the same RED, GREEN, and REFACTOR pattern over a shared constant.
+- (2026-10-06, Unit 3) **`tests/unit` cannot compile between a RED that adds a test for a missing symbol and its GREEN,
+  so the plan's RED acceptance, "compilation fails", is also the state in which the unit adapter cannot run.** The
+  `legacyReasons` bridge in `internal/cli/status.go` followed from it: the guard, the policy, and the handlers return
+  `policy.Stop` in separate items, and each item has to leave the module compiling and its tests passing, so `classify`
+  read both a stop and the old integers until the last item deleted the integers. The bridge was a map of five entries,
+  deleted with the constants. Routing candidate: none; it is the transitional shape the plan's item split implies.
+- (2026-10-06, Unit 3) **A stop that carries no error needs a name of its own, `policy.BareStop`.** The plan says every
+  stop is built by `policy.Stopped`. v0.8.4 returned a status beside a `nil` error for a deferral or a shed, and callers
+  across the guard, the application, and the test driver read `err == nil` as "nothing went wrong beyond this status". A
+  stop whose cause is `nil` must keep that reading: `Application.Run` still returns a `nil` error beside it,
+  `promoteFinalize` and the release defers let a finalize or release error replace it, and `endedByInterruption` treats
+  it as no error. A stop with a cause (a shed whose child could not be confirmed stopped) stands against a finalize
+  error, as the `(74, stopError)` it replaces did. `policy.BareStop` and `carriesNoError` name the rule once; the plan's
+  wording "every stop" would have lost the shed's unconfirmed-retirement error. Routing candidate: `tech-docs/001`'s
+  PW-3 paragraph. **Routed** (2026-10-06, Unit 3 close) to `tech-docs/001-domain-types.md`, Finalize precedence.
+- (2026-10-06, Unit 3) **`Reason.UnmarshalJSON` and `ShedCause.UnmarshalJSON` are strict and read every `uint8` for its
+  integer.** The plan names the legacy codecs; it does not say how a decode refuses what is not a member. Both decode an
+  integer only if some member's legacy integer equals it, so `74` in a ledger's `sheddingExitCode`, `1`, `-73`, `73.5`,
+  and a string all fail at decode and the ledger fails closed with its bytes preserved. The loop over `uint8` keeps the
+  integer table in one `switch` each, so a member added later is read back without a second table. Routing candidate:
+  `tech-docs/001`'s legacy-codec paragraph. **Routed** (2026-10-06, Unit 3 close) to `tech-docs/001-domain-types.md`,
+  Codecs that keep integers.
+- (2026-10-06, Unit 3) **File impact additions.** Beyond `tech-docs/004-file-impact.md`'s Unit 3 list, the unit also
+  touched `internal/cli/application.go` (its final branch reads `noErrorBeyondItsReason`, so a bare stop still returns a
+  `nil` error). The list's `internal/guard/run.go` entry names `callerShedCode`; the function was `callerShedReason`.
+  `tests/support/loaded_gate.go` needed a test-local constant for the near-miss deferral status `75`, which was never an
+  exit status. Routing candidate: `tech-docs/004-file-impact.md`, Unit 3. **Routed** (2026-10-06, Unit 3 close) to
+  `tech-docs/004-file-impact.md`, Unit 3, and the function's name to `tech-docs/001-domain-types.md`.
+- (2026-10-06, Unit 3) **A fixed `go test` default timeout of 10 minutes fails the integration adapter under host
+  load.** At load averages of 27 to 44 the integration package exceeded Go's default 10 minutes on the first Unit 3 run
+  and passed with `-timeout 45m`; the unit adapter took 524 s. The failure was the timeout, not a test. Routing
+  candidate: the Unit 2 learning on the race step's timeout; `scripts/test.sh`.

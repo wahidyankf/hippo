@@ -81,6 +81,12 @@ instead of `status.Code`, also without a `default`, so its `//nolint:exhaustive`
 returned `nil`. A deferral is now an error, so the promotion treats a `*policy.Stop` as it treated `nil`: a deferral
 whose summary write fails still reports the refused write, as today. A unit test pins it.
 
+As built in Unit 3 (2026-10-06): only a stop that carries no error, `policy.BareStop`, is treated as `nil`, through
+`carriesNoError`; this holds in `promoteFinalize`, the ownership- and port-release defers, `endedByInterruption`, and
+`Application.Run`, which still returns a `nil` error beside it. A stop with a cause, such as a shed whose child could
+not be confirmed stopped, stands against a finalize error, as the `(74, stopError)` it replaces did. "Every stop" would
+have lost that error.
+
 **Codecs that keep integers.** Two wire values are integers and stay so:
 
 - `policy.Resolution.ExitCode int` becomes `Reason policy.Reason` with the JSON name `exitCode`, encoded by
@@ -92,6 +98,11 @@ whose summary write fails still reports the refused write, as today. A unit test
   Its `UnmarshalJSON` accepts `0`, `73`, and `75` and refuses anything else, the set `validSheddingExitCode` (line 1618)
   accepts today; that function and `callerShedCode` (`run.go`, line 1168) are deleted, and `ShedCause.Reason()` maps
   storage to `ReasonStorageBlocked` and pressure to `ReasonPressureShed` in one exhaustive `switch`.
+
+As built in Unit 3 (2026-10-06), both decoders are strict the same way: `Reason.UnmarshalJSON` and
+`ShedCause.UnmarshalJSON` accept an integer only when some member's legacy integer equals it, by asking every `uint8`
+value, so each integer table stays one `switch`. `74` in a ledger, `1`, `-73`, `73.5`, and a string fail at decode, and
+the ledger fails closed with its bytes kept. The guard function was named `callerShedReason`, not `callerShedCode`.
 
 **Tests.** `tests/unit/reason_test.go` (legacy integers; `tests/unit` is the run that measures `internal/policy`'s 99%
 coverage), `tests/unit/reservation_test.go` (ledger codec), and a new `internal/cli/status_test.go` (reason to code to

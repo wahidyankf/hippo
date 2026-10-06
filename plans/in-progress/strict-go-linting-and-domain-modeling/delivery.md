@@ -961,58 +961,229 @@ code, and run unchanged as regressions.
 
 - [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-13]`
   - Result: `worktree/typed-internal-reasons` from `origin/main` at `a7b3700`.
-- [ ] `[AI]` **RED** (`swe-developer`): add `tests/unit/reason_test.go` pinning each member's `v0.8.4` integer (`0`,
+- [x] `[AI]` **RED** (`swe-developer`): add `tests/unit/reason_test.go` pinning each member's `v0.8.4` integer (`0`,
       `73`, `74`, `75`, `76`, `78`) and `Stopped`'s unwrapping; run `go test -count=1 ./tests/unit`; acceptance:
       compilation fails on `policy.Reason`. `[AC-13]` `[AC-14]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `internal/policy/reason.go`; run the same command; acceptance: it passes.
+  - Result: (2026-10-06) `tests/unit/reason_test.go` pins each member's `v0.8.4` integer (`0`, `73`, `74`, `75`, `76`,
+    `78`) through `json.Marshal`, refuses a non-member, reads back only those six integers (`1`, `2`, `72`, `77`, `79`,
+    `-73`, `73.5`, `"73"`, `true`, and `[]` all refused), and pins `Stopped`'s unwrapping, `errors.AsType` through a
+    wrapping error, a cause-less stop's text, and `policy.BareStop`. RED observed: `go test -count=1 ./tests/unit`
+    reports `tests/unit/reason_test.go:18:16: undefined: policy.Reason` (and the five members) with
+    `FAIL ... [build failed]`.
+- [x] `[AI]` **GREEN** (`swe-developer`): add `internal/policy/reason.go`; run the same command; acceptance: it passes.
       `[AC-13]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): keep the integer table in one `switch`; run the same command and _Lint_;
+  - Result: (2026-10-06) `internal/policy/reason.go` adds `Reason` (`ReasonNone`, `ReasonStorageBlocked`,
+    `ReasonCapacityDeferred`, `ReasonPressureShed`, `ReasonProtocolMismatch`, `ReasonReplanRequired`), its
+    legacy-integer codec (`MarshalJSON` and a strict `UnmarshalJSON`), `Stop`, `Stopped`, and `BareStop`. The new tests
+    pass (7 passed) and `go test -count=1 ./tests/unit` exits `0` (253 s). Two additions beyond the plan's list, both
+    needed by the design: `UnmarshalJSON`, because `tests/support/driver.go` decodes status JSON into
+    `policy.Resolution` and a bare `uint8` would silently read `75` as no member; and `BareStop`, the cause-less stop
+    that `promoteFinalize` and the ownership-release path treat as they treated a `nil` error. `Stop` carries
+    `//nolint:errname` with its reason, as `status.Failure` and `status.Interruption` do. The unit run overlapped one
+    compile-neutral edit to `reason.go`, so the REFACTOR run below repeats it clean.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): keep the integer table in one `switch`; run the same command and _Lint_;
       acceptance: both exit `0`. `[AC-13]`
-- [ ] `[AI]` **RED** (`swe-developer`): add `internal/cli/status_test.go` asserting each reason's code, exit status, and
+  - Result: (2026-10-06) The integer table was already one `switch` (`Reason.legacyExitCode`), read in both directions:
+    `MarshalJSON` calls it and `UnmarshalJSON` asks every `uint8` value for its integer, so a new member needs no second
+    table. Nothing to move. `go test -count=1 ./tests/unit` exits `0` (351 s, run clean after the last edit) and
+    `go tool golangci-lint run` exits `0` (the first lint run found `errname` on `Stop`, `errorlint` in the new test,
+    and `nilerr` in `BareStop`; the first and third were fixed in the code, the second in the test, and the `errname`
+    finding carries the justified `//nolint` described above).
+- [x] `[AI]` **RED** (`swe-developer`): add `internal/cli/status_test.go` asserting each reason's code, exit status, and
       message, and that `ReasonNone` inside a stop reports `hippo.supervision.failed`; run
       `go test -count=1 ./internal/cli`; acceptance: compilation fails on `reasonCode`. `[AC-13]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): replace `internalReasons` with `reasonCode` and switch `reasonMessage` over
+  - Result: (2026-10-06) `internal/cli/status_test.go` asserts each of the five reasons' code, exit status (`124` or
+    `125`), and message through `reasonCode`, `reasonMessage`, and `classify`; that a stop with a cause reports the
+    cause's text and one inside a wrapping error keeps its reason; that `ReasonNone` and a value that is no member
+    inside a stop report `hippo.supervision.failed` (`125`); that a classified failure inside a stop outranks it; and
+    that a started child's status is never explained. RED observed: `go test -count=1 ./internal/cli` fails
+    `[build failed]` with `undefined: reasonCode`.
+- [x] `[AI]` **GREEN** (`swe-developer`): replace `internalReasons` with `reasonCode` and switch `reasonMessage` over
       `policy.Reason` without a `default` in `internal/cli/status.go`; run the same command; acceptance: it passes.
       `[AC-13]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): delete the `//nolint:exhaustive` above `reasonMessage`; run _Lint_ and
+  - Result: (2026-10-06) `internal/cli/status.go` gains `reasonCode(policy.Reason) status.Code` and switches
+    `reasonMessage` over `policy.Reason`, neither with a `default`; `classify` reads a `*policy.Stop` first (a bare stop
+    says the reason's sentence, a stop with a cause says the cause), and `go test -count=1 ./internal/cli` exits `0`.
+    Deviation, recorded in `learnings.md`: the plan orders this item before the guard and handlers return stops (items 8
+    to 10), and the `internal/cli` tests drive the real guard (`TestPressureShedNamesItsOwnReason`, the
+    protocol-mismatch tests), which still return the integers here. So `internalReasons` is kept for now as
+    `legacyReasons`, retyped to map each integer to its `policy.Reason`, read after the stop; the later REFACTOR that
+    deletes the five constants deletes it too.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): delete the `//nolint:exhaustive` above `reasonMessage`; run _Lint_ and
       `git grep -n 'nolint:exhaustive' -- internal`; acceptance: lint exits `0` and the grep prints nothing. `[AC-13]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `internal/guard/run_test.go` a test that a deferral whose summary write
+  - Result: (2026-10-06) The `//nolint:exhaustive` above `reasonMessage` is gone: both switches over `policy.Reason`
+    name `ReasonNone` and fall to one trailing return. `go tool golangci-lint run` exits `0` and
+    `git grep -n 'nolint:exhaustive' -- internal` prints nothing (exit `1`).
+- [x] `[AI]` **RED** (`swe-developer`): add to `internal/guard/run_test.go` a test that a deferral whose summary write
       fails still reports the refused write, and switch the guard tests' deferral expectations to `*policy.Stop`; run
       `go test -count=1 ./internal/guard`; acceptance: the new expectations fail against integer returns. `[AC-13]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): return `policy.Stopped(...)` at every site in `internal/guard/run.go`,
+  - Result: (2026-10-06) `internal/guard/run_test.go` now expects `*policy.Stop` where the deferral and shed tests
+    expected integers: a new `requireStop` (status `0` beside a stop that carries only its reason) serves the
+    host-admission and deadline deferrals, the emergency stop, and the held-service-port deferral; the
+    unconfirmed-retirement table carries the stop it expects (`ReasonStorageBlocked`, `ReasonPressureShed`, and none for
+    the cancellation); and the `promoteFinalize` table's deferral rows return a stop instead of exit `75`. Two
+    additions: a stop that carries an error stands over a finalize error, and the new
+    `TestADeferralWhoseSummaryCannotBeWrittenReportsTheFailedWrite`, which makes a real deadline deferral's summary link
+    fail (a directory at the summary's name, derived from a fixed clock) and requires status `1` with the failed write
+    and the deferral's one receipt. RED observed: `go test -count=1 ./internal/guard` reports 12 failed (for example
+    `result code=75 error=<nil>, want status 0 and a stop for reason 2`,
+    `result code=74 error=<nil>, want status 0 and a stop for reason 3`, and three `promoteFinalize` rows
+    `exit code 0, want 1`). The new summary-write test passes against integer returns, since integers and `nil` already
+    gave that precedence; it guards the stop-for-`nil` change and is proved by mutation at the GREEN.
+- [x] `[AI]` **GREEN** (`swe-developer`): return `policy.Stopped(...)` at every site in `internal/guard/run.go`,
       `internal/guard/reservation.go`, `internal/policy/profiles.go`, `internal/cli/development.go`, and
       `internal/cli/release.go`, and treat a stop like `nil` in `promoteFinalize`; run
       `go test -count=1 ./internal/... ./tests/unit`; acceptance: exit `0`. `[AC-13]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): update the test files
+  - Result: (2026-10-06) Every site now returns `policy.Stopped(...)` beside status `0`: `internal/guard/run.go` (the
+    deadline, reservation, lease, storage, protocol-mismatch, replan, and shed returns), `internal/cli/development.go`
+    (replan, the schema-3 and status coordination mismatches through one `coordinationFailure`, and a non-fitting
+    resolution), and `internal/cli/release.go`. `profiles.go` has no return site, only the two `Resolution.ExitCode`
+    assignments, which move with the `Resolution.Reason` items below; until then the two resolution returns read the
+    reason through `legacyReasons`. `promoteFinalize` treats a stop that carries no error (`policy.BareStop`) as it
+    treated `nil`, through `carriesNoError`, and a stop that carries an error stands, as the `(74, stopError)` it
+    replaces did: the plan says every stop, which would have let a finalize error replace a shed whose child could not
+    be confirmed stopped. The ownership-release and port-release defers use the same rule, and keep a storage or
+    capacity deferral's reason beside a release failure as the old exit status survived it. Two things the plan did not
+    name, both needed to keep the in-process contract: `Application.Run` still returns a `nil` error beside a bare stop
+    (`TestPressureShedNamesItsOwnReason` pins it), and `endedByInterruption` treats a bare stop as no error. Mutation:
+    `carriesNoError` reduced to `err == nil` failed `TestADeferralWhoseSummaryCannotBeWrittenReportsTheFailedWrite` and
+    three `promoteFinalize` rows, and passed again once restored. `go test -count=1 ./internal/... ./tests/unit` exits
+    `0` (the unit adapter in 524 s at host load 27 to 44), after the `tests/support` updates the next item lists, since
+    the adapter drives them.
+- [x] `[AI]` **GREEN** (`swe-developer`): update the test files
       [the file impact](tech-docs/004-file-impact.md#unit-3--internal-reasons) lists to read reasons from the stop; run
       the unit and integration adapters and `go test -count=1 ./tests/integration`; acceptance: all exit `0`. `[AC-13]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): delete the five constants and the bare `73`; run
+  - Result: (2026-10-06) Test files now read the reason from the stop: `internal/guard/run_test.go` and
+    `tests/integration/run_test.go` use `requireStop` (status `0` beside a bare `policy.Stop` naming the reason),
+    `internal/cli/development_test.go` and `tests/unit/adaptive_test.go` read `Resolution.Reason`, and
+    `tests/support/driver.go` records the reason beside the exit status in `recordGuardResult`, so `requireDeferred`,
+    `requireShed`, `requireDegradedShed`, the lineage guard, and the protocol-mismatch sentinels in
+    `degraded_lineage.go`, `blockers_v04.go`, `pending_v04.go`, `review_v04.go`, and `history_v05.go` compare
+    `driver.reason`. `tests/support/loaded_gate.go` holds a test-local `internalDeferralStatus` (`75`) for its near-miss
+    deferral, a status v0.8.4 never exited with. Results: `go test -count=1 -timeout 45m ./tests/unit` (the unit adapter
+    and every package test there) exits `0` in 732 s, and `go test -count=1 -timeout 45m ./tests/integration` (the
+    integration adapter) exits `0` in 392 s, both at host load 28 to 73 with the whole unit in place. An earlier
+    integration run at the default 10-minute timeout failed on the timeout, not on a test, at load 27 to 44.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): delete the five constants and the bare `73`; run
       `git grep -nE '(StorageBlocked|PressureShed|CapacityDeferred|ReplanRequired|ProtocolMismatch)ExitCode' -- '*.go'`
       and _Lint_; acceptance: the grep prints nothing, because the pathspec leaves out the Markdown that names the
       constants, and lint exits `0`. `[AC-13]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `tests/unit/reservation_test.go` cases that a ledger owner with
+  - Result: (2026-10-06) Deleted `StorageBlockedExitCode`, `CapacityDeferredExitCode`, and `PressureShedExitCode` from
+    `internal/guard/run.go`, `ReplanRequiredExitCode` and `ProtocolMismatchExitCode` from `internal/policy/profiles.go`
+    (the bare `73` went with the `Resolution.Reason` GREEN), and the `legacyReasons` bridge from
+    `internal/cli/status.go`, since no layer returns an integer reason any more and `classify` reads a `policy.Stop`
+    alone after a classified failure.
+    `git grep -nE '(StorageBlocked|PressureShed|CapacityDeferred|ReplanRequired|ProtocolMismatch)ExitCode' -- '*.go'`
+    prints nothing (exit `1`), `git grep -nE 'nolint:exhaustive' -- '*.go'` prints nothing, and
+    `go tool golangci-lint run` exits `0` with `0 issues`. Lint first reported three findings after the deletions, none
+    a weakened check: an `exhaustive` map over `policy.Reason` in `internal/cli/development_test.go` (now a table), a
+    `maintidx` finding on `TestRunUnconfirmedRetirementPreservesOwnershipAndExit` (the stop check moved into
+    `requireUnconfirmedRetirementResult`), and a `nolintlint` finding that `gocyclo` no longer fires on
+    `Application.run` (removed from that directive). NilAway
+    (`go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...`) exits `0` and
+    `go test -count=1 -run DomainLiteral ./tests/support` exits `0`.
+- [x] `[AI]` **RED** (`swe-developer`): add to `tests/unit/reservation_test.go` cases that a ledger owner with
       `sheddingExitCode` `74` fails at decode and that storage and pressure sheds write `73` and `75`; run
       `go test -count=1 ./tests/unit`; acceptance: compilation fails on `guard.ShedCause`. `[AC-15]` `[AC-16]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `ShedCause` and its codec to `internal/guard/reservation.go` and type
+  - Result: (2026-10-06) `tests/unit/reservation_test.go` gains the ledger cases: `sheddingExitCode` `74`, a shedding
+    owner with no cause, and a cause with no shedding each fail closed with the ledger bytes preserved (the corruption
+    table); `TestALedgerShedCauseOutsideStorageAndPressureFailsAdmissionClosed` holds `AcquireReservation` over a ledger
+    recording `74` to an error and unchanged bytes; `TestShedCauseKeepsItsV084LedgerCode` pins `0`, `73`, and `75` both
+    ways and refuses `1`, `72`, `74`, `76`, `78`, `-73`, `73.5`, `"73"`, `true`, and `[]`;
+    `TestShedCauseNamesTheReasonItsOwnerStopsFor` pins storage to `ReasonStorageBlocked` and pressure to
+    `ReasonPressureShed`; and `TestEachShedWritesItsV084LedgerCode` reads the ledger after a storage and a pressure shed
+    and requires `73` and `75`. `SelectPressureVictim` and `SelectEmergencyPressureVictim` callers take the typed
+    causes. RED observed: `go test -count=1 ./tests/unit` fails `[build failed]` with `undefined: guard.ShedCause` (and
+    `ShedCauseNone`, `ShedCauseStorage`, `ShedCausePressure`).
+- [x] `[AI]` **GREEN** (`swe-developer`): add `ShedCause` and its codec to `internal/guard/reservation.go` and type
       `ReservationOwner`'s field; run the same command; acceptance: it passes. `[AC-15]` `[AC-16]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): delete `validSheddingExitCode` and `callerShedCode` for
+  - Result: (2026-10-06) `internal/guard/reservation.go` adds `ShedCause` (`ShedCauseNone`, `ShedCauseStorage`,
+    `ShedCausePressure`), `ShedCause.Reason()` (one exhaustive `switch`), and a ledger codec: `ledgerCode` is the one
+    table (`0`, `73`, `75`), `MarshalJSON` refuses a non-member, and `UnmarshalJSON` asks every `uint8` value for its
+    integer and refuses every other one, so a ledger recording `74`, `1`, or `"73"` fails closed at decode.
+    `ReservationOwner.SheddingExit int` is now `SheddingCause ShedCause` (JSON name `sheddingExitCode`, omitted when
+    none); the ledger validation, `ReservationSheddingSelection`, `SelectPressureVictim`,
+    `SelectEmergencyPressureVictim`, and `Run`'s two shed sites take the type, and every test caller passes
+    `guard.ShedCauseStorage` or `guard.ShedCausePressure`. The new tests pass and `go test -count=1 ./tests/unit` exits
+    `0` (the same 524 s run as the stops item above). `validSheddingExitCode` and `callerShedReason` are now unused and
+    go in the next item.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): delete `validSheddingExitCode` and `callerShedCode` for
       `ShedCause.Reason()`; run `go test -count=1 ./internal/guard ./tests/unit` and the unit adapter; acceptance: exit
       `0`, with "Reservation ledger structure is validated before mutation" passing. `[AC-15]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `internal/cli/development_test.go` an assertion that status JSON's
+  - Result: (2026-10-06) `validSheddingExitCode` and the guard's `callerShedReason` (the plan's `callerShedCode`) are
+    deleted and nothing reads either:
+    `git grep -nE 'validSheddingExitCode|callerShedCode|callerShedReason|SheddingExit\b' -- '*.go'` prints nothing. The
+    ledger's shed-cause check is `ShedCause`'s strict decoder plus the `ShedCauseNone` comparisons in the ledger
+    validation, and `ShedCause.Reason()` answers the reason a shed's caller is told. `go test -count=1 ./internal/...`
+    exits `0`, and the full unit adapter run exits `0`. "Reservation ledger structure is validated before mutation"
+    passes (`go test -count=1 -v -run 'TestUnitBehaviours/.*Reservation_ledger_structure' ./tests/unit`: `PASS`).
+- [x] `[AI]` **RED** (`swe-developer`): add to `internal/cli/development_test.go` an assertion that status JSON's
       `profile.exitCode` encodes `73`, `75`, and `78` for cleanup, wait, and replan resolutions; run
       `go test -count=1 ./internal/cli`; acceptance: compilation fails on `Resolution.Reason`. `[AC-14]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): replace `Resolution.ExitCode` with `Reason` encoded by `Reason.MarshalJSON`;
+  - Result: (2026-10-06) `internal/cli/development_test.go` gains
+    `TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode`, which runs `status --json` over normal pressure, a
+    warning, and a disk below the floor and requires `profile.decision` and `profile.exitCode` of `run`/`0`, `wait`/`75`
+    (retryable), and `cleanup`/`73`; and `TestAResolutionCarriesTheReasonItsDecisionStopsFor`, which requires
+    `withAssessmentDecision` to set `ReasonStorageBlocked` or `ReasonCapacityDeferred` (and none for normal pressure), a
+    resolution that already stops to keep its own reason, and `Resolution.Reason` to publish `73`, `75`, and `78` as
+    `exitCode`. The `replan`/`78` row is the `ReasonReplanRequired` case of the last assertion here, and
+    `tests/unit/adaptive_test.go` holds the strict profile that resolves to it. RED observed:
+    `go test -count=1 ./internal/cli` fails `[build failed]` with
+    `cleanup.Reason undefined (type policy.Resolution has no field or method Reason)`.
+- [x] `[AI]` **GREEN** (`swe-developer`): replace `Resolution.ExitCode` with `Reason` encoded by `Reason.MarshalJSON`;
       run the same command; acceptance: it passes. `[AC-14]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): make `withAssessmentDecision` set reasons, not integers; run the unit
+  - Result: (2026-10-06) `internal/policy/profiles.go`: `Resolution.ExitCode int` is now `Resolution.Reason Reason` with
+    the JSON name `exitCode`, so `Reason.MarshalJSON` publishes the v0.8.4 integer; `Resolve` sets
+    `ReasonStorageBlocked` for a cleanup and `ReasonReplanRequired` for a replan, which removes the bare `73` and
+    `ReplanRequiredExitCode`. `internal/cli/development.go` and `release.go` read `resolution.Reason`
+    (`return 0, policy.Stopped(resolution.Reason, nil)` when it is not `ReasonNone`), and `withAssessmentDecision` sets
+    the reasons the next item asks for, because it was the last reader of the guard constants.
+    `tests/unit/adaptive_test.go` and `tests/support/driver.go` read `Reason`.
+    `go test -count=1 ./internal/cli ./internal/policy` passes, including
+    `TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode` (`run`/`0`, `wait`/`75`, `cleanup`/`73`) and
+    `TestAResolutionCarriesTheReasonItsDecisionStopsFor` (`73`, `75`, `78`).
+- [x] `[AI]` **REFACTOR** (`swe-developer`): make `withAssessmentDecision` set reasons, not integers; run the unit
       adapter; acceptance: exit `0`. `[AC-14]`
+  - Result: (2026-10-06) `withAssessmentDecision` sets `ReasonStorageBlocked` with decision `cleanup` for a blocked disk
+    and `ReasonCapacityDeferred` with decision `wait` and `Retryable` for any other state but normal, and keeps the
+    reason a resolution already carries; it names no integer. The edit landed with the `Resolution.Reason` GREEN above,
+    since the function read the deleted guard constants, so the item's own evidence is the unit adapter after it: the
+    full `go test -count=1 -timeout 45m ./tests/unit` (which runs `TestUnitBehaviours`, the _Unit adapter_) exits `0` in
+    732 s at host load 52 to 73, with every Go change of the unit in place.
 
 ### Unit 3 close
 
-- [ ] `[AI]` Assess `specs/` and run docs propagation; record the verified no-op for the behaviour corpus and whether
+- [x] `[AI]` Assess `specs/` and run docs propagation; record the verified no-op for the behaviour corpus and whether
       `specs/architecture.md`'s shedding-cause bullet still reads true; proof: the status recorded. `[AC-13]`
-- [ ] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-13]`
-- [ ] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-13]` `[AC-14]` `[AC-15]`
+  - Result: (2026-10-06) status `landed`, plan documents only. Behaviour corpus: a verified no-op.
+    `git diff --stat -- specs docs README.md CHANGELOG.md` prints nothing, no feature file names an internal integer or
+    a deleted constant (`grep -rnE 'ExitCode|\b7[3-8]\b' specs/behaviours` prints nothing), and the unchanged scenarios
+    pass as regressions in the unit and integration adapters (the item results above). `specs/architecture.md`: the
+    shedding-cause bullet ("the internal shedding cause: storage (73) or other pressure (75), which callers see as
+    `124`") still reads true, because `ShedCause` writes `73` and `75` to `sheddingExitCode`. The decode refusal of any
+    other value falls under the next bullet's "shedding-state invariants ... fail closed". The shedding paragraph's
+    "internal shed reason (storage or other pressure); both reach the caller as `124`" also holds; the C4 section names
+    no constant. `docs/`: no page names `73` to `78` as an internal reason or any deleted constant. Status JSON's
+    `profile.exitCode` is shown only as `0` in `json-schemas.md`, unchanged and still true. `README.md`: nothing.
+    `CHANGELOG.md`: no entry, the `v0.8.5` one being Unit 7's. Updated: `tech-docs/001-domain-types.md` (as-built notes:
+    only `policy.BareStop` is treated as `nil`; both legacy decoders are strict over every `uint8`; `callerShedReason`),
+    and `tech-docs/004-file-impact.md` (Unit 3: `internal/cli/application.go`, the `loaded_gate.go` constant, the
+    function's name, and the architecture row resolved), routing three Unit 3 learnings. Removed: none. Not run: none.
+- [x] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-13]`
+  - Result: (2026-10-06) no blocking finding; all 24 integer sites, the boundary classification, `callerShedReason`,
+    finalize precedence, the ledger codecs (write `73`/`75`, accept `0`/`73`/`75`), and `profile.exitCode` verified
+    equivalent to `origin/main`. F1 MEDIUM (session-release precedence untested) fixed: `promoteRelease` extracted and
+    pinned by `TestPromoteReleaseDecidesWhatTheCallerSeesOfAFailedRelease`, two mutations failing it. F2 LOW: comment
+    corrected. F3 LOW: the abandon and port-release defers use the shared helper. F4 LOW: one `policy.CarriesNoError`,
+    counting only a top-level bare stop, tested with wrapped and joined stops. F5 LOW: a bare stop's `Error()` names its
+    reason in words, tested to carry no digits.
+- [x] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-13]` `[AC-14]` `[AC-15]`
       `[AC-16]`
+  - Result: (2026-10-06) `npm test` passed the quick gate (99.33%, 893/899), the integration suite, and the end-to-end
+    suite, then its race step timed out at Go's 10-minute package default in `tests/unit` and `tests/integration` at
+    host load 34–47 (Spotlight indexing). The race step rerun with `-timeout 30m` and nothing else changed exited `0`
+    (`tests/unit` 553 s, `tests/integration` 599 s), and `govulncheck` reported "No vulnerabilities found." The
+    unmodified gate runs in CI on both platforms; see the learning on the race-step timeout.
 
 ### Unit 3 landing
 
