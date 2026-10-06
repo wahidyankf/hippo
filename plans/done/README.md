@@ -17,6 +17,10 @@ then verifies the archive rather than assuming it.
 ## Completed Plans
 
 - 2026-10-07 —
+  [Fix: Cancelled Waiter Cleanup Flakes Under Load](2026-10-07__fix-cancelled-waiter-cleanup-flake/README.md): the
+  cancelled waiter's cleanup never refuses a free coordination lock, and its scenario tolerates a loaded host; released
+  as v0.8.5.
+- 2026-10-07 —
   [Fix: Distinct-Root Coordination Lock Test Flakes Under Load](2026-10-07__fix-distinct-root-lock-test-flake/README.md):
   the distinct-root lock test judges serialization by a zero-wait refusal, not the wall clock, so a slow runner no
   longer fails it; test-only, carried by v0.8.5.
@@ -46,6 +50,8 @@ then verifies the archive rather than assuming it.
 
 ## Directory Map
 
+- [Fix: Cancelled Waiter Cleanup Flakes Under Load](2026-10-07__fix-cancelled-waiter-cleanup-flake/README.md) is the
+  delivery record for the v0.8.5 cancelled-waiter cleanup fix.
 - [Fix: Configured profiles starve under macOS warning](2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md)
   is the delivery record for the v0.8.4 degraded-admission lineage fix.
 - [Fix: Corrupt-Waiter Identity Test Flakes Under Load](2026-10-07__fix-corrupt-waiter-identity-test-flake/README.md) is
