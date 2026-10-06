@@ -356,6 +356,8 @@ func TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode(t *testing.T) {
 		decision  string
 		exitCode  int
 		retryable bool
+		// strictProfile asks for a configured profile that refuses every fallback.
+		strictProfile bool
 	}{
 		{name: "normal pressure", sample: func(*policy.Sample) {}, decision: "run", exitCode: 0},
 		{
@@ -365,6 +367,16 @@ func TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode(t *testing.T) {
 		{
 			name: "free disk below the 256 MiB floor", decision: "cleanup", exitCode: 73,
 			sample: func(sample *policy.Sample) { sample.DiskFreeBytes = new(200 * policy.MiB) },
+		},
+		{
+			// 10 GiB is below DefaultPolicy's 30 GiB disk reserve and above the one the
+			// resolved profile derives, so only the resolution's own policy admits it.
+			name: "free disk between the resolved profile's reserve and the default policy's", decision: "run", exitCode: 0,
+			sample: func(sample *policy.Sample) { sample.DiskFreeBytes = new(10 * policy.GiB) },
+		},
+		{
+			name: "a strict profile that does not fit", decision: "replan", exitCode: 78, strictProfile: true,
+			sample: func(sample *policy.Sample) { sample.AvailableMemoryBytes = new(policy.GiB) },
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -376,7 +388,16 @@ func TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode(t *testing.T) {
 				Collector: stableCollector{sample: sample}, Now: func() time.Time { return now },
 				Sleep: func(time.Duration) {},
 			}
-			code, err := application.Run(context.Background(), []string{"status", "--json"})
+			arguments := []string{"status", "--json"}
+			if test.strictProfile {
+				configPath := filepath.Join(t.TempDir(), "hippo.local.json")
+				strict := `{"schemaVersion":1,"defaultProfile":"local","profiles":{"local":{"extends":"constrained","strict":true}}}`
+				if err := os.WriteFile(configPath, []byte(strict), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				arguments = append(arguments, "--config", configPath)
+			}
+			code, err := application.Run(context.Background(), arguments)
 			var payload struct {
 				Profile statusProfile `json:"profile"`
 			}
@@ -388,28 +409,7 @@ func TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode(t *testing.T) {
 	}
 }
 
-func TestAResolutionCarriesTheReasonItsDecisionStopsFor(t *testing.T) {
-	cleanup := withAssessmentDecision(policy.Resolution{}, policy.Assessment{StorageBlocked: true})
-	if cleanup.Decision != policy.DecisionCleanup || cleanup.Reason != policy.ReasonStorageBlocked || cleanup.Retryable {
-		t.Errorf("a blocked disk resolves to %+v, want cleanup for storage blocked", cleanup)
-	}
-	wait := withAssessmentDecision(policy.Resolution{}, policy.Assessment{State: policy.StateWarning})
-	if wait.Decision != policy.DecisionWait || wait.Reason != policy.ReasonCapacityDeferred || !wait.Retryable {
-		t.Errorf("a warning resolves to %+v, want a retryable wait for capacity deferred", wait)
-	}
-	run := withAssessmentDecision(policy.Resolution{}, policy.Assessment{State: policy.StateNormal})
-	if run.Reason != policy.ReasonNone || run.Retryable {
-		t.Errorf("normal pressure resolves to %+v, want no reason", run)
-	}
-
-	// A resolution that already stops keeps its own reason, whatever the host says.
-	replan := policy.Resolution{Decision: policy.DecisionReplan, Reason: policy.ReasonReplanRequired}
-	if kept := withAssessmentDecision(replan, policy.Assessment{StorageBlocked: true}); kept.Decision != replan.Decision ||
-		kept.Reason != replan.Reason {
-		t.Errorf("a replan resolution became %+v under a blocked disk, want it unchanged", kept)
-	}
-
-	// Its published exit code is the integer v0.8.4 carried for the reason.
+func TestAResolutionPublishesTheIntegerV084CarriedForItsReason(t *testing.T) {
 	for _, row := range []struct {
 		reason policy.Reason
 		want   string
@@ -423,5 +423,44 @@ func TestAResolutionCarriesTheReasonItsDecisionStopsFor(t *testing.T) {
 		if err != nil || json.Unmarshal(encoded, &published) != nil || published.ExitCode.String() != row.want {
 			t.Errorf("reason %d publishes %s (%v), want exitCode %s", row.reason, encoded, err, row.want)
 		}
+	}
+}
+
+func TestStatusDecisionFollowsTheAdmissionPath(t *testing.T) {
+	running := policy.Resolution{Decision: policy.DecisionRun}
+	cleanup := policy.Resolution{Decision: policy.DecisionCleanup, Reason: policy.ReasonStorageBlocked}
+	replan := policy.Resolution{Decision: policy.DecisionReplan, Reason: policy.ReasonReplanRequired}
+
+	// Each row is one of status's published answers, as AC-14 lists them, and the
+	// path that produces it. Degraded is a wait: under any warning decision stays wait.
+	for _, test := range []struct {
+		name       string
+		resolution policy.Resolution
+		path       policy.AdmissionPath
+		want       statusProfile
+	}{
+		{"normal pressure", running, policy.AdmissionNormal, statusProfile{Decision: "run", ExitCode: 0}},
+		{"a wait", running, policy.AdmissionWait, statusProfile{Decision: "wait", ExitCode: 75, Retryable: true}},
+		{"a degraded admission", running, policy.AdmissionDegraded, statusProfile{Decision: "wait", ExitCode: 75, Retryable: true}},
+		{"free disk below the floor", running, policy.AdmissionCleanup, statusProfile{Decision: "cleanup", ExitCode: 73}},
+		{"a resolution already at cleanup", cleanup, policy.AdmissionCleanup, statusProfile{Decision: "cleanup", ExitCode: 73}},
+		{"a strict profile that does not fit", replan, policy.AdmissionReplan, statusProfile{Decision: "replan", ExitCode: 78}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			decided, err := withAssessmentDecision(test.resolution, test.path)
+			encoded, encodeError := json.Marshal(decided)
+			var published statusProfile
+			if err != nil || encodeError != nil || json.Unmarshal(encoded, &published) != nil || published != test.want {
+				t.Errorf("path %d publishes %+v (%v), want %+v", test.path, published, err, test.want)
+			}
+		})
+	}
+}
+
+func TestStatusRefusesAnUnsetAdmissionPathInsteadOfDefaulting(t *testing.T) {
+	resolution := policy.Resolution{Decision: policy.DecisionRun}
+	decided, err := withAssessmentDecision(resolution, policy.AdmissionUnset)
+	if err == nil || decided.Decision != resolution.Decision || decided.Reason != policy.ReasonNone || decided.Retryable {
+		t.Errorf("an unset path decided %+v (%v), want a refusal that leaves the resolution as it was", decided, err)
 	}
 }

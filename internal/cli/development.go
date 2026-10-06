@@ -91,18 +91,50 @@ func (application Application) version(options versionOptions) (int, error) {
 	return 0, err
 }
 
-func withAssessmentDecision(resolution policy.Resolution, assessment policy.Assessment) policy.Resolution {
-	if resolution.Reason != policy.ReasonNone {
-		return resolution
+// decideStatus assesses the two samples status takes against the resolution's
+// own policy, as status always has, and sets the resolution's decision from the
+// admission path they take. A decision that cannot be made is a fault, never a
+// default.
+func decideStatus(resolution policy.Resolution, first, second policy.Sample) (policy.Resolution, policy.Assessment, error) {
+	samples := []policy.Sample{first, second}
+	assessment := policy.ResourceAssessment(samples, resolution.Policy)
+	path, decisionError := policy.DecideAdmission(policy.AdmissionInput{
+		Resolution: resolution, TaskClass: policy.TaskEphemeral, Samples: samples,
+		Policy: resolution.Policy, Window: policy.WindowSnapshot,
+	})
+	if decisionError == nil {
+		resolution, decisionError = withAssessmentDecision(resolution, path)
+	}
+	if decisionError != nil {
+		return resolution, assessment, status.Fail(status.CodeSupervisionFailed, "decide admission: %v", decisionError)
 	}
 
-	if assessment.StorageBlocked {
-		resolution.Decision, resolution.Reason = policy.DecisionCleanup, policy.ReasonStorageBlocked
-	} else if assessment.State != policy.StateNormal {
+	return resolution, assessment, nil
+}
+
+// withAssessmentDecision sets the decision status publishes for the admission
+// path the host evidence took. A normal path keeps the resolution as resolved.
+// A wait, and a degraded admission, which status never reaches from its two
+// samples, are the documented "under any warning decision stays wait": a
+// retryable deferral. A blocked disk is cleanup for storage, which a resolution
+// already at cleanup already says, and a replan keeps the resolution that chose
+// it. An unset path decides nothing and is refused, never defaulted.
+func withAssessmentDecision(resolution policy.Resolution, path policy.AdmissionPath) (policy.Resolution, error) {
+	switch path {
+	case policy.AdmissionNormal, policy.AdmissionReplan:
+		return resolution, nil
+	case policy.AdmissionWait, policy.AdmissionDegraded:
 		resolution.Decision, resolution.Reason, resolution.Retryable = policy.DecisionWait, policy.ReasonCapacityDeferred, true
+
+		return resolution, nil
+	case policy.AdmissionCleanup:
+		resolution.Decision, resolution.Reason = policy.DecisionCleanup, policy.ReasonStorageBlocked
+
+		return resolution, nil
+	case policy.AdmissionUnset:
 	}
 
-	return resolution
+	return resolution, errors.New("admission path is unset")
 }
 
 // statusCoordination reads the shared root's coordination summary. Taking the
@@ -213,8 +245,10 @@ func (application Application) status(ctx context.Context, options statusOptions
 		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
 
-	assessment := policy.ResourceAssessment([]policy.Sample{first.Sample, second.Sample}, resolution.Policy)
-	resolution = withAssessmentDecision(resolution, assessment)
+	resolution, assessment, decisionError := decideStatus(resolution, first.Sample, second.Sample)
+	if decisionError != nil {
+		return 0, decisionError
+	}
 	root := host.DefaultEvidenceRoot(environmentMap(application.Environment))
 	promotion, promotionError := evaluatePromotion(root, configuration.Coordination, assessment, application.Now())
 	if promotionError != nil {

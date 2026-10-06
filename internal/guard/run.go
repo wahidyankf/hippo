@@ -852,7 +852,6 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	deadline := config.Now().Add(config.Policy.AdmissionWindow)
 	var previous policy.CPUState
 	samples := []policy.Sample{}
-	admitted := false
 	// A caller that cancels while the host is still being sampled cancels
 	// work that never started, exactly as one that cancels a queued waiter
 	// does, and leaves the same receipt so it may requeue once.
@@ -870,6 +869,24 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		return 1, errors.Join(cause, refusedEvidenceWrite("writing the never-started receipt", receiptError))
 	}
 
+	// The admission window closed before the host was safe: the work never
+	// started, and the receipt says so for a caller deciding whether to retry.
+	deferAtTheDeadline := func() (int, error) {
+		outcome = evidence.OutcomeCapacityDeferred
+		config.noteDeferralf("HIPPO deferred task: safe admission was not reached.\n")
+		if receiptError := writeSafetyReceipt(
+			config.EvidenceRoot, writer.summary.RunID, "never-started", "host-admission",
+			config.ReservationMetadata, config.TaskClass, config.Now(),
+		); receiptError != nil {
+			outcome = evidence.OutcomeAdmissionFailed
+
+			return 1, refusedEvidenceWrite("writing the never-started receipt", receiptError)
+		}
+
+		return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
+	}
+
+admission:
 	for {
 		if err := ctx.Err(); err != nil {
 			return cancelledBeforeLaunch(err)
@@ -893,23 +910,37 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			return 1, refusedEvidenceWrite("recording a host sample", appendError)
 		}
 
-		assessment := policy.ResourceAssessment(samples, config.Policy)
-		if assessment.StorageBlocked {
+		path, decisionError := policy.DecideAdmission(policy.AdmissionInput{
+			Resolution: config.Resolution, TaskClass: config.TaskClass, Samples: samples,
+			Policy: config.Policy, Window: policy.WindowSampling,
+		})
+		// A refused decision is a fault whatever path came beside its error, and no path at
+		// all is a fault too: refuse both here, before any path is acted on.
+		if decisionError != nil || path == policy.AdmissionUnset {
+			outcome = evidence.OutcomeAdmissionFailed
+
+			return 1, status.Fail(status.CodeSupervisionFailed, "the admission decision was refused: %v", decisionError)
+		}
+
+		switch path {
+		case policy.AdmissionCleanup:
 			outcome = evidence.OutcomeStorageBlocked
-			_, _ = fmt.Fprintf(config.Stderr, "HIPPO blocked task: %s; storage inspection or cleanup is required.\n", assessment.Reason)
+			// A resolution already at cleanup decided its own path before any sample was
+			// read, so its reason, not the assessment of a host that may be healthy, is why.
+			cause := policy.ResourceAssessment(samples, config.Policy).Reason
+			if config.Resolution.Decision == policy.DecisionCleanup {
+				cause = config.Resolution.Reason.String()
+			}
+			_, _ = fmt.Fprintf(config.Stderr, "HIPPO blocked task: %s; storage inspection or cleanup is required.\n", cause)
 
 			return 0, policy.Stopped(policy.ReasonStorageBlocked, nil)
-		}
+		case policy.AdmissionReplan:
+			outcome = evidence.OutcomeAdmissionFailed
 
-		if policy.AdmissionReady(samples, config.Policy) {
-			admitted = true
-			break
-		}
-
-		if config.TaskClass == policy.TaskEphemeral &&
-			config.Resolution.Lineage.DegradedAdmission() &&
-			policy.WarningAdmissionReady(samples, config.Policy) {
-			admitted = true
+			return 0, policy.Stopped(policy.ReasonReplanRequired, nil)
+		case policy.AdmissionNormal:
+			break admission
+		case policy.AdmissionDegraded:
 			if !config.ReservationPolicy.Enabled {
 				config.Resolution.Concurrency = 1
 				config.Environment = resolvedEnvironment(config.Environment, config.Resolution, true, config.ConcurrencyEnvironment)
@@ -917,31 +948,18 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			writer.SetContext(config.Resolution, config.ConfigHash)
 			_, _ = fmt.Fprintln(config.Stderr, "HIPPO admitting ephemeral child under stable macOS warning pressure with concurrency 1.")
 
-			break
-		}
-
-		if !config.Now().Before(deadline) {
-			break
+			break admission
+		case policy.AdmissionWait:
+			if !config.Now().Before(deadline) {
+				return deferAtTheDeadline()
+			}
+		case policy.AdmissionUnset:
+			// Refused above, with the error DecideAdmission returns beside it.
 		}
 
 		if err := waitForContext(ctx, config.Policy.SampleInterval, config.Sleep); err != nil {
 			return cancelledBeforeLaunch(err)
 		}
-	}
-
-	if !admitted {
-		outcome = evidence.OutcomeCapacityDeferred
-		config.noteDeferralf("HIPPO deferred task: safe admission was not reached.\n")
-		if receiptError := writeSafetyReceipt(
-			config.EvidenceRoot, writer.summary.RunID, "never-started", "host-admission",
-			config.ReservationMetadata, config.TaskClass, config.Now(),
-		); receiptError != nil {
-			outcome = evidence.OutcomeAdmissionFailed
-
-			return 1, refusedEvidenceWrite("writing the never-started receipt", receiptError)
-		}
-
-		return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
 	}
 
 	lifetime, launchError := launchConfiguredLifetime(ctx, config, session, portLease)
@@ -1076,9 +1094,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			// A stable macOS warning never counts toward the grace of a running
 			// ephemeral child whose profile may use degraded admission, however
 			// that child was admitted: the same warning would admit it now.
-			stableWarning := config.TaskClass == policy.TaskEphemeral &&
-				config.Resolution.Lineage.DegradedAdmission() &&
-				policy.WarningAdmissionReady(samples, config.Policy)
+			stableWarning := policy.SparesStableWarning(config.TaskClass, config.Resolution, samples, config.Policy)
 			if assessment.State == policy.StateNormal || stableWarning {
 				warningSince = nil
 			} else if assessment.State == policy.StateWarning && warningSince == nil {
