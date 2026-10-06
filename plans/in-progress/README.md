@@ -20,8 +20,6 @@ that already exists, with both stage indexes updated in that one change.
 - [Fix: Corrupt-waiter identity test flakes under load](fix-corrupt-waiter-identity-test-flake/README.md) — the
   corrupt-identity test parks its waiter outside the coordination lock, so its competing admission always reaches the
   ledger.
-- [Fix: Degraded-lineage admission scenario flakes under load](fix-degraded-lineage-scenario-flake/README.md) — the
-  degraded-lineage scenarios time their admission window on a logical clock, so a loaded runner no longer defers them.
 - [Fix: Distinct-root coordination lock test flakes under load](fix-distinct-root-lock-test-flake/README.md) — the
   distinct-root lock test judges serialization by a zero-wait refusal, not the wall clock, so a slow runner no longer
   fails it.

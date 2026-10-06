@@ -16,6 +16,10 @@ then verifies the archive rather than assuming it.
 
 ## Completed Plans
 
+- 2026-10-07 —
+  [Fix: Degraded-Lineage Admission Scenario Flakes Under Load](2026-10-07__fix-degraded-lineage-scenario-flake/README.md):
+  the degraded-lineage scenarios time their admission window on a logical clock, so a loaded runner no longer defers
+  them; test-only, carried by v0.8.5.
 - 2026-10-03 —
   [Fix: Configured profiles starve under macOS warning](2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md):
   degraded admission and its stable-warning shed exemption follow the `balanced` lineage, not the name; released as
@@ -36,6 +40,8 @@ then verifies the archive rather than assuming it.
 
 - [Fix: Configured profiles starve under macOS warning](2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md)
   is the delivery record for the v0.8.4 degraded-admission lineage fix.
+- [Fix: Degraded-Lineage Admission Scenario Flakes Under Load](2026-10-07__fix-degraded-lineage-scenario-flake/README.md)
+  is the delivery record for the degraded-lineage scenario flake fix.
 - [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md) is
   the delivery record for the v0.8.3 page-cache fix.
 - [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the

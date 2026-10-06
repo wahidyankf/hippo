@@ -21,7 +21,7 @@ succeeds" as a workaround. Here the retry is not reliable: the host's sustained 
 failure. The owner's request is what the convention accepts in place of a blocking defect, as in
 [the v0.8.4 fix](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md) and the sibling
 plans [`fix-cancelled-waiter-cleanup-flake`](../fix-cancelled-waiter-cleanup-flake/README.md),
-[`fix-degraded-lineage-scenario-flake`](../fix-degraded-lineage-scenario-flake/README.md), and
+[`fix-degraded-lineage-scenario-flake`](../../done/2026-10-07__fix-degraded-lineage-scenario-flake/README.md), and
 [`fix-distinct-root-lock-test-flake`](../fix-distinct-root-lock-test-flake/README.md).
 
 **Release.** The change is test-only, so it carries no release content of its own: no `CHANGELOG.md` entry and no tag.
