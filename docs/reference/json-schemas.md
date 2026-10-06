@@ -22,7 +22,7 @@ compatibility contract. Field _order_ is not part of any contract.
 ## `version --json`
 
 The smallest public document has three required fields: integer `schemaVersion` `1`, the release string in `version`,
-and the exact source commit in `commit`. Release builds currently report `v0.8.4`; source builds report `dev` and
+and the exact source commit in `commit`. Release builds currently report `v0.8.5`; source builds report `dev` and
 `unknown`, and the repository's test builds report `v0.0.0-test` with an all-zero commit.
 
 ## `monitor --json`

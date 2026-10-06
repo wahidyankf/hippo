@@ -7,7 +7,7 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
-## [v0.8.5] — Unreleased
+## [v0.8.5] — 2026-10-07
 
 ### Fixed
 
@@ -16,6 +16,33 @@ Entries are reconstructed from the repository's own history. For the complete co
   budget was enforced by a second timer that could lapse before the cleanup tried the lock, so it refused a lock nobody
   held and left the waiter for a background retry. The cleanup now takes a free lock however late it starts. A lock that
   stays held is still refused after 100 ms, so the cancelled run still returns promptly.
+- The last-resort floor now follows a profile's `extends` lineage instead of its name. Only a profile literally named
+  `minimal` had it, so when no profile fitted, ordinary work whose fallback chain ended at a configured profile that
+  extends `minimal`, at any depth of `extends` and with no `fallback`, set or inherited, exited `125` naming
+  `hippo.policy.replan-required` ("resource profile has no usable fallback") where the built-in `minimal` would have
+  run. That profile now resolves as `minimal` does, with its admission memory lowered to its critical level and its disk
+  warning to the 256 MiB floor. This holds whether the profile is requested or reached through another profile's
+  `fallback`. The floor applies only where a chain ends: a `minimal`-lineage profile with a `fallback`, set or
+  inherited, falls back to it, and transactional and release work still replans. Where a profile's name and lineage
+  disagree, lineage decides: a configured profile named `minimal` that extends `constrained` no longer takes the floor,
+  and a configured `minimal` that names a `fallback` now falls back to it instead of taking the floor itself. A
+  configured `minimal` without `extends` or `fallback` keeps the floor. No configuration key or JSON field changed.
+
+### Changed
+
+- Some diagnostics for input HIPPO already refused read differently; no exit status and no `hippo.*` code changed. A
+  coordination `mode` other than `reservation` reads `unsupported coordination mode "exclusive"` where a schema 2 file
+  read `unsupported schema 2 coordination mode "exclusive"`, and it is now reported before any other configuration
+  error, such as a profile that extends a missing one. A schema 1 file with an unknown `mode` reports that mode where it
+  read `schema 1 does not support reservation coordination`; with `"mode": "reservation"` it reads as before. A
+  reservation ledger owner with a class HIPPO does not know reads
+  `decode reservation ledger: unknown task class "batch"` where it read `reservation ledger owner class is invalid`, and
+  a `sheddingExitCode` other than `73` or `75` is refused as the ledger is decoded, naming the value. A non-string value
+  for a configuration or history field that HIPPO now decodes as a type of its own names that type where it named
+  `string`: `policy.ProfileName` for `extends`, `fallback`, or `defaultProfile`, and, followed by
+  `JSON value must be string type`, `config.coordinationMode` for `mode` and `evidence.RecordedOutcome`,
+  `evidence.RecordedBudgetOutcome`, or `policy.RecordedTaskClass` for a history row's `outcome`, `budgetOutcome`, or
+  `taskClass`.
 
 ## [v0.8.4] — 2026-10-03
 
