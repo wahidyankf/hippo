@@ -1461,46 +1461,209 @@ Branch `worktree/single-admission-decision`.
 - [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-20]`
   - Result: `worktree/single-admission-decision` from `origin/main` at `c109c4d` (renamed from the withdrawn Phase 4a
     branch).
-- [ ] `[AI]` **RED** (`swe-developer`): add `tests/unit/admission_decision_test.go` covering every path under both
+- [x] `[AI]` **RED** (`swe-developer`): add `tests/unit/admission_decision_test.go` covering every path under both
       windows, `WindowUnset` refused, `SparesStableWarning`, and an input whose `Policy` differs from its resolution's
       `Policy`, where the input's `Policy` alone decides; run `go test -count=1 ./tests/unit`; acceptance: compilation
       fails on `policy.DecideAdmission`. `[AC-20]` `[AC-19]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): add `internal/policy/admission.go` as
+  - Result: (2026-10-06) `tests/unit/admission_decision_test.go` holds ten tests: every path under both windows (21
+    rows: snapshot normal, one sample, warning, critical, no samples, blocked disk, and a stable warning that still
+    waits; sampling normal, short of the consecutive samples, busy CPU, warning, critical, blocked disk, the stable
+    warning of the balanced lineage as `AdmissionDegraded` and of the constrained, minimal, unset, service,
+    transactional, release, and one-sample-short cases as `AdmissionWait`), a resolution at replan or cleanup deciding
+    its own path under both windows and outranking a blocked disk, `WindowUnset` and an unknown window refused with
+    `AdmissionUnset`, five rows where the input's `Policy` and a different `Resolution.Policy` disagree (strict versus
+    lenient, both ways, under both windows, and a zero resolution policy), the same for the stable-warning floor through
+    both `DecideAdmission` and `SparesStableWarning`, `SparesStableWarning`'s nine rows, and a table proving
+    `AdmissionDegraded` is exactly "a stable warning that is spared" over 4 lineages, 4 classes, and 4 sample windows.
+    Every `AdmissionInput` literal comes from one helper that names all five fields. RED observed with
+    `go test -count=1 -timeout 30m ./tests/unit`: `unit [build failed]` with `undefined: policy.EvidenceWindow`,
+    `policy.AdmissionInput`, and the rest; `-gcflags=-e` lists all 99 undefined references, 9 of them
+    `policy.DecideAdmission` and 4 `policy.SparesStableWarning`.
+- [x] `[AI]` **GREEN** (`swe-developer`): add `internal/policy/admission.go` as
       [the design](tech-docs/001-domain-types.md#admission-path-and-the-single-decision-unit-5) specifies; run the same
       command, then _Policy coverage_; acceptance: the tests pass, and the coverage tool exits `0` printing a figure at
       or above 99%. `[AC-20]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): share the eligibility rule between `DecideAdmission` and
+  - Result: (2026-10-06) `internal/policy/admission.go` adds `AdmissionPath` (`AdmissionUnset` zero, then `Normal`,
+    `Degraded`, `Wait`, `Cleanup`, `Replan`), `EvidenceWindow` (`WindowUnset` zero, `WindowSnapshot`, `WindowSampling`),
+    `AdmissionInput` (the five fields), `DecideAdmission`, and `SparesStableWarning`, in the design's order: a
+    resolution at `replan` or `cleanup` decides its own path, a storage-blocked assessment is `AdmissionCleanup`, a
+    snapshot is `Normal` for a normal state and `Wait` otherwise, a sampling window is `Normal` when `AdmissionReady`,
+    `Degraded` for an ephemeral task whose lineage allows it with `WarningAdmissionReady`, and `Wait` otherwise, and an
+    unset or unknown window returns `AdmissionUnset` with an error. Both functions read the input's `Policy` alone. The
+    eligibility condition is written out in both `DecideAdmission` and `SparesStableWarning` here, for the REFACTOR to
+    share. `go test -count=1 -timeout 30m ./tests/unit` exits `0` (`ok ... 382.010s`, host load averages 33 to 45);
+    under `-coverpkg=./internal/policy -coverprofile=coverage/unit.out` it passed 480 tests, and
+    `go run ./tests/coverage --profile coverage/unit.out --directories internal/policy --minimum 99` printed
+    `selected production line coverage: 100.00% (404/404 statements)` and exited `0`, every block of `admission.go`
+    covered.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): share the eligibility rule between `DecideAdmission` and
       `SparesStableWarning`; run the same command and _Lint_; acceptance: both exit `0`. `[AC-20]`
-- [ ] `[AI]` **RED** (`swe-developer`): add to `internal/cli/development_test.go` a table from each path to status's
+  - Result: (2026-10-06) `DecideAdmission`'s degraded step now calls
+    `SparesStableWarning(input.TaskClass, input.Resolution, input.Samples, input.Policy)`, so the eligibility condition
+    (an ephemeral task, a lineage that allows degraded admission, and `WarningAdmissionReady`) is written once.
+    `go test -count=1 -timeout 30m ./tests/unit` exits `0` (`ok ... 254.959s`) and `go tool golangci-lint run` exits `0`
+    with `0 issues` (after `gofumpt -extra -w` fixed one wrapped row in the new test file). Mutation check: replacing
+    the two reads of `input.Policy` in `DecideAdmission` by `input.Resolution.Policy` fails 6 of the 36 admission tests
+    (`path = 3 (<nil>), want 1` and the reverse), so the input's `Policy` alone decides.
+- [x] `[AI]` **RED** (`swe-developer`): add to `internal/cli/development_test.go` a table from each path to status's
       decision, `profile.exitCode`, and retryability, matching AC-14's rows; run `go test -count=1 ./internal/cli`;
       acceptance: compilation fails because `withAssessmentDecision` takes no path. `[AC-14]`
-- [ ] `[AI]` **GREEN** (`swe-developer`): make `withAssessmentDecision` an exhaustive `switch` over the path, fed by
+  - Result: (2026-10-06) `TestStatusDecisionFollowsTheAdmissionPath` holds six rows from a path to the decision, exit
+    code, and retryability that the resolution publishes through its JSON codec: normal to `run`/0, wait and degraded to
+    a retryable `wait`/75, a blocked disk and a resolution already at cleanup to `cleanup`/73, and a replan resolution
+    to `replan`/78. `TestStatusRefusesAnUnsetAdmissionPathInsteadOfDefaulting` pins that an unset path is an error that
+    leaves the resolution as it was. Both call `withAssessmentDecision(resolution, path)` and read its error. The status
+    table `TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode` also gains AC-14's fourth row, a configured strict
+    profile that does not fit, through `status --json --config`: it passes on the unchanged code
+    (`ok ... internal/cli`), so it is a regression row, not part of the RED. RED observed with
+    `go test -count=1 ./internal/cli`: `FAIL ... [build failed]` with
+    `cannot use test.path (variable of uint8 type policy.AdmissionPath) as policy.Assessment value` in argument to
+    `withAssessmentDecision`, and `assignment mismatch: 2 variables but withAssessmentDecision returns 1 value`.
+- [x] `[AI]` **GREEN** (`swe-developer`): make `withAssessmentDecision` an exhaustive `switch` over the path, fed by
       `DecideAdmission` with `WindowSnapshot` and `resolution.Policy`, the policy `status` assesses with today; run the
       same command; acceptance: it passes. `[AC-14]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): route `run.go`'s sampling loop and supervision exemption through
+  - Result: (2026-10-06) `withAssessmentDecision(resolution, path)` in `internal/cli/development.go` is one `switch`
+    over all six paths with no `default`: normal and replan keep the resolution, wait and degraded set `wait`,
+    `ReasonCapacityDeferred`, and retryable, cleanup sets `cleanup` and `ReasonStorageBlocked` (what a resolution
+    already at cleanup says), and an unset path returns an error. `status` builds an `AdmissionInput` from its two
+    samples, `TaskEphemeral`, `resolution.Policy`, and `WindowSnapshot`, and a refused decision is
+    `hippo.supervision.failed`. The superseded assessment-fed test became
+    `TestAResolutionPublishesTheIntegerV084CarriedForItsReason`, its decision half now held by the path table.
+    `go test -count=1 ./internal/cli` exits `0` (`ok ... 4.624s`), the six path rows and the four status JSON rows (the
+    strict row included) passing.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): route `run.go`'s sampling loop and supervision exemption through
       `DecideAdmission` and `SparesStableWarning`, passing `config.Policy`, the policy `run` admits against today and
       which callers set apart from `config.Resolution`, and deleting `admitted`; run `go test -count=1 ./internal/guard`
       and the unit and integration adapters; acceptance: all exit `0`, the admission and execution scenarios included.
       `[AC-20]` `[AC-19]`
-- [ ] `[AI]` **REFACTOR** (`swe-developer`): make the driver's `assessAdmission` call `DecideAdmission` with
+  - Result: (2026-10-06) `Run`'s admission loop calls `policy.DecideAdmission` with `config.Resolution`,
+    `config.TaskClass`, the samples, `config.Policy` (the policy `run` admits against, after the default it substitutes
+    when unset), and `WindowSampling`, and switches over all six paths with no `default`: cleanup is the storage-blocked
+    stop (same stderr line, outcome, and reason), normal breaks the labelled loop, degraded forces concurrency one
+    without reservation and breaks, wait defers through `deferAtTheDeadline` once the deadline passes and otherwise
+    sleeps one interval, replan stops with `ReasonReplanRequired` and outcome `admission-failed`, and an unset path is
+    `hippo.supervision.failed`. The `admitted` boolean is deleted, and the supervision loop's stable-warning exemption
+    calls `policy.SparesStableWarning` with `config.Policy`. New RED first:
+    `TestARunWhoseResolutionAlreadyStopsNeverLaunches` (a resolution at replan or cleanup over healthy samples) failed
+    on the old loop with `result code=1 error=payload must not start, want status 0 and a stop for reason 5` (and
+    `... reason 1`), the old loop ignoring the resolution, and passes after. `go tool golangci-lint run` caught `status`
+    growing to 127 lines (`funlen`, limit 120), so the status decision moved to `decideStatus`; lint then exits `0`.
+    `go test -count=1 -timeout 30m ./internal/guard ./internal/cli` exits `0` (15.585 s, 4.918 s); the unit adapter
+    (`-run TestUnitBehaviours ./tests/unit`) exits `0` in 216.970 s, and
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` exits `0`; the integration adapter
+    (`-run TestIntegrationBehaviours ./tests/integration`) exits `0` in 214.619 s, and
+    `HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd` exits `0`. Host load averages 13 to 45. The first run
+    of these adapters lost its log to another session's scratchpad cleanup and was rerun whole.
+- [x] `[AI]` **REFACTOR** (`swe-developer`): make the driver's `assessAdmission` call `DecideAdmission` with
       `WindowSampling` and `resolution.Policy`; run the unit adapter and
       `git grep -nE "AdmissionReady\(" -- internal/guard internal/cli tests/support`; acceptance: the adapter exits `0`
       and the grep prints nothing. `[AC-20]`
-- [ ] `[AI]` Add `policy.AdmissionInput` to `exhaustruct_v5`'s enforce patterns, plant a literal omitting `Policy` and
+  - Result: (2026-10-06) `Driver.assessAdmission` (`tests/support/driver.go`) resolves the profile through `config.Load`
+    as before, then calls `policy.DecideAdmission` with the resolution, `driver.taskClass`, its samples,
+    `resolution.Policy`, and `WindowSampling`, and keeps no rule of its own: a `switch` over all six paths admits for
+    `AdmissionNormal`, admits at concurrency one for `AdmissionDegraded`, and does not admit for the other four. The
+    seven admission scenarios whose `When` is "development admission is assessed" change binding only. Every
+    `AdmissionInput` literal outside `internal/policy` names all five fields.
+    `go test -count=1 -timeout 30m -run TestUnitBehaviours ./tests/unit` exits `0` in 258.494 s,
+    `HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd` exits `0`, `go tool golangci-lint run` exits `0`, and
+    `git grep -nE "AdmissionReady\(" -- internal/guard internal/cli tests/support` prints nothing (exit `1`).
+- [x] `[AI]` Add `policy.AdmissionInput` to `exhaustruct_v5`'s enforce patterns, plant a literal omitting `Policy` and
       `Window`, run _Lint_, record the output, and remove it; acceptance: the literal fails naming `exhaustruct`, and
       lint exits `0` once removed. `[AC-20]`
-- [ ] `[AI]` Synchronize `specs/architecture.md`'s policy-engine element with the admission clause; proof:
+  - Result: (2026-10-06) `.golangci.yml` gains `^github\.com/wahidyankf/hippo/internal/policy\.AdmissionInput$` beside
+    the two `Recorded*` patterns (explicit mode stays on); lint with the pattern and every literal complete exits `0`
+    (`0 issues`). Planting the literal in `decideStatus` with `Policy` and `Window` removed, lint exits `1` printing
+    `internal/cli/development.go:101:48: policy.AdmissionInput is missing fields Policy, Window (exhaustruct_v5)` and
+    `* exhaustruct_v5: 1`. With the file restored byte for byte (`cmp`), lint exits `0` with `0 issues`.
+- [x] `[AI]` Synchronize `specs/architecture.md`'s policy-engine element with the admission clause; proof:
       `./rhino md internal-link validate` exits `0`. `[AC-20]`
+  - Result: (2026-10-06) the **Policy engine and profiles** element reads "... key every profile rule on the built-in
+    lineage a profile inherits through `extends`, decide the admission path once for `run`, `status`, and the behaviour
+    driver, and preserve strict transaction and release envelopes", the clause the specification changes plan names.
+    `specs/behaviours/admission.feature` changes bindings only, so it has no text change.
+    `./rhino md internal-link validate` prints `checked 1280 links, no findings` and exits `0`. With every item above
+    ticked, the finishing gates pass on the tree: `npm run test:quick` exits `0` (selected production line coverage
+    99.36%, 928/934 statements; its first run failed one scenario, "Release builds use only exact committed source", on
+    a toolchain fault recorded in [learnings](learnings.md), and passed alone and on the whole rerun),
+    `go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...` exits `0`,
+    `go tool golangci-lint run` exits `0`, and the integration adapter
+    (`-run TestIntegrationBehaviours ./tests/integration`, 237.292 s) and
+    `HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd` exit `0` after the driver change.
 
 ### Unit 5 close
 
-- [ ] `[AI]` Apply rules propagation to the `exhaustruct_v5` scope change in the adapter's [Go analysis gates][go-gates]
+- [x] `[AI]` Apply rules propagation to the `exhaustruct_v5` scope change in the adapter's [Go analysis gates][go-gates]
       module; proof: status recorded. `[AC-20]`
-- [ ] `[AI]` Run docs propagation; proof: status recorded. `[AC-14]`
-- [ ] `[AI]` Run the Gherkin implementation review over the rebound admission scenarios; proof: statuses recorded.
+  - Result: (2026-10-06) verified no-op: the [Go analysis gates][go-gates] module states the rule ("one
+    `enforce-patterns` regex per closed domain struct", explicit mode) without enumerating targets, so adding
+    `^github\.com/wahidyankf/hippo/internal/policy\.AdmissionInput$` to `.golangci.yml` stays inside it;
+    `gochecksumtype` keeps no annotated target, since `AdmissionPath` and `EvidenceWindow` are scalar enums. No higher
+    or lower rule names the targets (`git grep -n "AdmissionInput\|RecordedOutcome" -- repo-governance AGENTS.md` prints
+    nothing).
+- [x] `[AI]` Run docs propagation; proof: status recorded. `[AC-14]`
+  - Result: (2026-10-06) verified no-op for `docs/`: the unit changes no exit status, `hippo.*` code, message, or
+    `status --json` value (D7), and no page names `AdmissionReady`, `withAssessmentDecision`, `DecideAdmission`, or
+    `SparesStableWarning` (`git grep` over `docs/` and `README.md` prints nothing); `specs/architecture.md` line 116
+    already carries the single admission decision from the sync item.
+- [x] `[AI]` Run the Gherkin implementation review over the rebound admission scenarios; proof: statuses recorded.
       `[AC-20]`
-- [ ] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-20]`
-- [ ] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-14]` `[AC-20]`
+  - Result: (2026-10-06) 24 frozen rows, every one passing in `TestUnitBehaviours` and `TestIntegrationBehaviours`
+    before and after the breaks; each break was reverted byte for byte (`cmp`). Paths: `DecideAdmission` and
+    `SparesStableWarning` (`internal/policy/admission.go`), reached through `assessAdmission`
+    (`tests/support/driver.go`), `Run`'s sampling loop and supervision exemption (`internal/guard/run.go`), and
+    `decideStatus` (`internal/cli/development.go`). Breaks: (a) never `AdmissionDegraded`; (b) lineage gate dropped in
+    `DecideAdmission`, (b2) in `SparesStableWarning`; (c) status and run windows swapped, (c1) status alone; (d)
+    `SparesStableWarning` false, (j) true; (e) no storage check, (f) no resolution switch; (g) sampling never normal;
+    (h) `WarningAdmissionReady` dropped; (i) class gate dropped. **implemented** (`admission.feature` unless noted):
+    `:5` Healthy consecutive samples (g: `work was not admitted`); `:11` Stable macOS warning admits degraded (a, d:
+    `got admitted=false`); `:17` Growing pressure defers (h: `unsafe degraded work was admitted`); `:23` Strict work
+    never degraded (i: same); `:29` derived from balanced (a, c, d:
+    `HIPPO deferred task: safe admission was not reached`); `:36` outside balanced's lineage (b, b2:
+    `admitting ephemeral child under stable macOS warning`); `execution.feature:124` Warning outlasts the grace (j:
+    `got reason 0 with exit 0`); `:130` Worsening warning (h: `reason=0`; under a it does not fail but spins the
+    one-hour admission window with a no-op `Sleep`, killed after 11 min, so c and d skipped it); `:136` both rows (d:
+    `HIPPO shedding ephemeral child after memory-warning`); `:147` compressor, swap, and disk rows (h, j:
+    `child finished instead of being shed`); `:160` both rows (b2 or i, and j: same). **untested** by any break,
+    decision open: `admission.feature:43` and `:49` (4 rows), which assert `Resolve`'s profile; `:62` Exhausted storage
+    and `:80` strict transaction (e, f, e+f all pass: the driver reads the resolution, not the path; only
+    `tests/unit/admission_decision_test.go` and `TestARunWhoseResolutionAlreadyStopsNeverLaunches` fail);
+    `execution.feature:118` Critical pressure and `:147`'s critical row, which shed without the exemption; and every
+    status scenario (`public-cli.feature:9`–`:106`, `evidence.feature:39`): under c1 all 346 scenarios pass at both
+    adapters, and only `internal/cli`'s `TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode` fails
+    (`Decision:wait ExitCode:75`). None unimplemented or drifted. Decisions on the open rows (2026-10-06):
+    `admission.feature:62` and `:80` now read the decided path (`Driver.admission`, set by `assessAdmission`;
+    `requireStorageBlocked` wants `AdmissionCleanup` and `requireReplan` wants `AdmissionReplan`; the feature text is
+    unchanged), so they are **implemented**: with the resolution switch removed `:80` fails (unit adapter,
+    `admission path 3`), and with the storage check and the resolution switch both removed both fail at both adapters,
+    while the storage check removed alone leaves both passing and the switch removed alone leaves `:62` passing (a disk
+    below the floor reaches cleanup by either route, so only the joint break is observable there); without the new
+    assertion every one of those breaks passes. `admission.feature:43` and `:49` test profile selection, not the
+    admission decision, so they are outside this review's subject. `execution.feature:118` and the critical row of
+    `:147` shed without the exemption, also outside it. The status scenarios are window-insensitive on fixture samples,
+    and the status window and policy are pinned by the Go tests
+    `TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode` and `TestStatusDecisionFollowsTheAdmissionPath` instead.
+- [x] `[AI]` Dispatch `swe-reviewer` over the unit's diff; proof: findings recorded, none blocking open. `[AC-20]`
+  - Result: (2026-10-06) no CRITICAL or HIGH finding, and equivalence of the three callers verified; no blocking finding
+    remains. The MEDIUM, status's unpinned `policy` argument (`decideStatus`), is fixed test-first: a row in
+    `TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode` with 10 GiB free disk (below `DefaultPolicy`'s 30 GiB
+    reserve, above the resolved profile's) expects `run` with exit 0; it passes on the code and fails under the mutation
+    `Policy: policy.DefaultPolicy()` (`Decision:cleanup ExitCode:73`), then the mutation was reverted. LOW: the unpinned
+    stable-warning exemption policy in `Run` is fixed by `TestARunSparesAStableWarningByThePolicyItAdmitsAgainst`
+    (`RunConfig.Policy` spares, `Resolution.Policy` would not), which fails alone under `config.Resolution.Policy`
+    (`pressure shed after 2 samples`), then reverted. LOW: `Run` now checks `decisionError` before the switch, with the
+    unset path in the same guard (a `(Normal, err)` is refused); it keeps no test of its own, because `DecideAdmission`
+    is a pure function whose error `Run` cannot be made to receive with a path beside it without a seam added only for
+    the test, and the guard adds no uncovered statement. LOW: the unreachable cleanup path prints the resolution's own
+    reason (`HIPPO blocked task: storage blocked; ...`, not `normal`), RED first in
+    `TestARunWhoseResolutionAlreadyStopsNeverLaunches`; the exit status, stop reason, and outcome are unchanged. LOW:
+    the driver's refusal of a replan or cleanup resolution it used to admit degraded is recorded in
+    [learnings](learnings.md). LOW accepted as designed, with no change: the window is validated after the replan,
+    cleanup, and storage steps (learning (a)). The Gherkin review's two `untested` rows, `admission.feature:62` and
+    `:80`, are fixed in the item above; its other open rows are decided there, and the spin of `execution.feature:130`
+    under a break that never admits is recorded in learnings.
+- [x] `[AI]` Run the _Full gate_; proof: exit `0` with the coverage figure recorded. `[AC-14]` `[AC-20]`
+  - Result: (2026-10-06) `GOFLAGS=-timeout=30m npm test` exit `0` at host load 16–32: selected production line coverage
+    99.36% (928/934), race detector clean, `govulncheck` "No vulnerabilities found."
 
 ### Unit 5 landing
 
@@ -1599,9 +1762,16 @@ Branch `worktree/release-v0.8.5`, under [release cut](../../../repo-governance/w
 dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D2, D12).
 
 - [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-24]`
-- [ ] `[AI]` Add the `v0.8.5` entry to `CHANGELOG.md` — `Fixed`: the `minimal`-lineage floor, naming the configured
-      profiles whose exit `125` becomes an admission — and name `v0.8.5` as the current release in the five pages the
-      file impact lists; proof: `git grep -n 'v0\.8\.4' -- ':!plans' ':!CHANGELOG.md'` prints nothing. `[AC-24]`
+- [ ] `[AI]` Before cutting, confirm every bug-fix plan this release carries has merged:
+      `fix-cancelled-waiter-cleanup-flake`, `fix-degraded-lineage-scenario-flake`, and
+      `fix-distinct-root-lock-test-flake`, plus any later one under `plans/in-progress/fix-*` (added 2026-10-06 at the
+      owner's direction that every flake found is fixed); proof: each fix pull request reads `MERGED` and its merge
+      commit is an ancestor of this branch's head. If one has not merged, wait for it rather than cut without it.
+      `[AC-24]`
+- [ ] `[AI]` Add the `v0.8.5` entry to `CHANGELOG.md`, or complete and date the `## [v0.8.5] — Unreleased` entry the
+      cancelled-waiter fix added — `Fixed`: the `minimal`-lineage floor, naming the configured profiles whose exit `125`
+      becomes an admission — and name `v0.8.5` as the current release in the five pages the file impact lists; proof:
+      `git grep -n 'v0\.8\.4' -- ':!plans' ':!CHANGELOG.md'` prints nothing. `[AC-24]`
 - [ ] `[AI]` Run docs propagation and the _Full gate_; proof: status recorded and exit `0`. `[AC-24]`
 - [ ] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
       `all` on this branch's head, before landing, so any repair it makes is committed here and reaches the commit being

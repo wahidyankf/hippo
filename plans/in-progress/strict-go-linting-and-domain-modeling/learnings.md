@@ -201,3 +201,66 @@ one durable owner or discard it with a reason. -->
   its strict assertion) and a lock-wait check of the lock before honouring the deadline. **Routed** (2026-10-06, at the
   owner's direction) to the bug-fix plan `fix-cancelled-waiter-cleanup-flake`; the degraded-admission flake gets its own
   bug-fix plan.
+- (2026-10-06, Unit 5) **Decisions the plan left open in the decision function and its callers.** (a) The window is
+  checked after steps 1 and 2, as the design lists them, so a resolution already at replan or cleanup decides its own
+  path even under `WindowUnset`; an unset or unknown window is an error only once the samples have to be read. (b) A
+  resolution at `wait`, which `Resolve` never returns, is decided by its samples, like one at `run`. (c) `Run` has no
+  outcome for a replan, which the command line never hands it (`cli.run` stops on any resolution with a reason before
+  `guard.Run`); the loop records `admission-failed`, "a run HIPPO itself stopped after host sampling began and before
+  its child started", and stops with `ReasonReplanRequired`. The branch is pinned by a new guard test, written RED
+  first, `TestARunWhoseResolutionAlreadyStopsNeverLaunches`. (d) A path left unset, which only an error from
+  `DecideAdmission` produces, is `hippo.supervision.failed` in both `run` and `status`, and neither can reach it: both
+  pass a fixed window. (e) `withAssessmentDecision` returns `(policy.Resolution, error)`, with an unset path an error,
+  so no caller silently defaults; the decision for `status` moved into a helper, `decideStatus`, because `status` grew
+  to 127 lines under `funlen`'s 120. Routing candidate: `tech-docs/001-domain-types.md`, the Unit 5 section.
+- (2026-10-06, Unit 5) **Unit 5 removes no allowlist entry and adds none.** After Unit 4 the allowlist holds only Unit 6
+  entries, so the plan's note "remove Unit 5's entries if any become unnecessary" had nothing to remove; the new types
+  (`AdmissionPath`, `EvidenceWindow`) are introduced typed, and `AdmissionPath` is on the analysis's name list, so a raw
+  field of that name would have failed. The ratchet scenario still passes (it runs in the unit adapter). Routing
+  candidate: none; `tech-docs/002-gates-and-analysis.md`'s removal table already lists no Unit 5 row.
+- (2026-10-06, Unit 5) **A RED in `internal/cli` breaks the unit adapter the way one in `internal/guard` does.** The
+  Unit 2 learning names `internal/guard` and `internal/policy`; `tests/support/blockers_v04.go` also shells out to
+  `go test` for `./internal/cli` (three regressions), `./internal/conformance`, `./tests/integration`, and
+  `./tests/unit` (`runGoRegressionV10`). A CLI RED that does not compile, and any edit to those packages while an
+  adapter run is in flight, contaminates the run. Unit 5 ran each adapter only after the GREEN or REFACTOR that restored
+  compilation, and edited Go files only between runs. Routing candidate: the same note as the Unit 2 learning, in
+  `delivery.md`'s "Commands the items name".
+- (2026-10-06, Unit 5) **The first ten compile errors of a RED do not name the function the acceptance names.**
+  `go test ./tests/unit` stops after ten errors, which are the new types and constants (`policy.EvidenceWindow`,
+  `policy.AdmissionInput`, ...); `policy.DecideAdmission` shows only with `-gcflags=-e` (99 undefined references, 9 of
+  them `DecideAdmission`). The RED still fails for the stated reason. Routing candidate: none.
+- (2026-10-06, Unit 5) **AC-14's fourth row had no test at the command boundary.** The status table
+  `TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode` held three of AC-14's four rows (normal, a stable warning,
+  a blocked disk); "a strict profile that does not fit" was reached only through `withAssessmentDecision` in the plan's
+  new table. Unit 5 adds the row to the status table through `status --json --config`, with a configured strict profile
+  that does not fit; it passes on the unchanged `origin/main` code, which is the point of a regression row. Routing
+  candidate: none.
+- (2026-10-06, Unit 5) **File impact additions.** Beyond `tech-docs/004-file-impact.md`'s Unit 5 list, the unit also
+  touched `internal/guard/run_test.go` (the already-stopped resolution test above). The list's
+  `specs/behaviours/admission.feature` needs no edit (bindings only, as listed), and the adapter module's
+  `exhaustruct_v5` entry belongs to the Unit 5 close. Routing candidate: `tech-docs/004-file-impact.md`, Unit 5.
+- (2026-10-06, Unit 5) **Logs kept in the shared scratchpad root are not safe across sessions.** Another session's
+  cleanup deleted the first adapter run's log while it ran, so its result was unknown and the run was repeated whole
+  (about 8 minutes at a load of 13 to 45). Later logs went under a subdirectory of the scratchpad unique to this task.
+  Routing candidate: the coordinator's task template (a per-task scratch subdirectory), not this repository.
+- (2026-10-06, Unit 5) **A toolchain fault failed one unit scenario once.** In the first `npm run test:quick` of the
+  unit, "Release builds use only exact committed source" failed with
+  `package runtime is not in std (/opt/homebrew/Cellar/go/1.27.1/libexec/src/runtime)` while the other 345 scenarios
+  passed; the same scenario passed alone on rerun, and the directory is present. The cause is outside the repository
+  (the Go installation, on a host other sessions share), and the scenario has no connection to admission. The gate was
+  rerun whole. Routing candidate: none.
+- (2026-10-06, Unit 5) **The driver now refuses a replan or cleanup resolution it used to admit degraded.** The old
+  `assessAdmission` admitted an ephemeral task of the balanced lineage degraded under a stable warning without reading
+  the resolution's decision, so a resolution already at replan or cleanup (a reason other than none) was admitted at
+  concurrency one; `DecideAdmission` lets such a resolution decide its own path first, so the driver refuses it, as
+  `cli.run` already does before `guard.Run`. No scenario relied on it: the 24 frozen rows pass at both adapters before
+  and after. The change is observable only to a future scenario that pairs an unfitting or storage-blocked resolution
+  with a stable warning. Routing candidate: `tech-docs/001-domain-types.md`, the Unit 5 driver paragraph (one sentence
+  saying the driver now agrees with the command line on a resolution that already stops).
+- (2026-10-06, Unit 5) **A fixture that never admits spins at full CPU through its one-hour window.** Under a break that
+  never admits, `execution.feature:130` ("Worsening warning") runs `Run`'s admission loop with a no-op `Sleep` and an
+  admission window of one hour (`evidenceDecidesAdmission`), so the loop samples as fast as the CPU allows until the
+  window closes or the run is killed (it was killed after 11 minutes in the Gherkin review). A break that admits at
+  once, or the correct code, never notices; only a mutation that withholds admission does, and it also hides every
+  scenario behind it. Routing candidate: an idea brief to bound such fixtures (a sample budget or a test sleep that
+  advances the injected clock, so a window the evidence never decides closes in a few iterations).
