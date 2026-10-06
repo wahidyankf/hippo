@@ -611,24 +611,50 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ### Phase 5: Release Through v0.8.5
 
-- [ ] `[AI]` Land unit 2 with _Land_, its pull-request body carrying the RED and GREEN captures per
+- [x] `[AI]` Land unit 2 with _Land_, its pull-request body carrying the RED and GREEN captures per
       [red-green-refactor](../../../repo-governance/workflows/quality/red-green-refactor.md); proof: the merge commit on
       `origin/main` and _Reconcile_ reading `0 0`, both recorded here by unit 4, since the merged copy cannot hold its
       own merge. The fix must merge before the linting plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]`
       `[AC-04]` `[AC-05]` `[AC-06]` `[AC-07]`
-- [ ] `[AI]` Immediately after that merge, run
+  - Result: (2026-10-07) pull request #144 rebase-merged as `6b28306` (fix commit `56bb8d5`) from head `e581c9d`, its
+    body's "How it was proved" carrying the RED stall-overlay failure and the GREEN pass. `Quality gate` passed on that
+    head in run `37517100753`, every job `success`; run `37517088117` on the same head, superseded when the pull request
+    was marked ready, was cancelled, and its `Quality gate` job failed. The leak review was posted `pass` for head
+    `e581c9d`, and `leak-review` read `success` for it. _Reconcile_ read `0 0`. The merge preceded the `v0.8.5` tag.
+- [x] `[AI]` Immediately after that merge, run
       [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for this
       worktree, at the owner's direction: confirm nothing is unpushed or running, then remove the worktree with
       `git worktree remove` without `--force`, and delete `worktree/fix-corrupt-waiter-identity-test-flake` and
       `...-fix` locally and on `origin`; proof: `git worktree list` omits it,
       `git branch --list 'worktree/fix-corrupt-waiter-*'` and
       `git ls-remote origin 'refs/heads/worktree/fix-corrupt-waiter-*'` print nothing. `[AC-09]`
-- [ ] `[AI]` Provision `worktrees/fix-corrupt-waiter-identity-test-flake-record` from `origin/main` on branch
+  - Result: (2026-10-07) right after the merge, with nothing unpushed or running in it, the worktree was removed with
+    `git worktree remove` without `--force` and both local branches were deleted; GitHub had already deleted both remote
+    branches. Rerun from the record worktree on 2026-10-07: `git worktree list` lists only
+    `worktrees/fix-corrupt-waiter-identity-test-flake-record` of this plan's worktrees;
+    `git branch --list 'worktree/fix-corrupt-waiter-*'` now lists only the record branch, which the glob also matches,
+    and `git branch --list` for the two named branches prints nothing; `git ls-remote origin`
+    `'refs/heads/worktree/fix-corrupt-waiter-*'` prints nothing (exit `0`).
+- [x] `[AI]` Provision `worktrees/fix-corrupt-waiter-identity-test-flake-record` from `origin/main` on branch
       `worktree/fix-corrupt-waiter-identity-test-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
       `git branch --show-current` prints the branch. `[AC-09]`
-- [ ] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
+  - Result: (2026-10-07) after `git fetch origin --prune`, created with
+    `git worktree add -b worktree/fix-corrupt-waiter-identity-test-flake-record` from `origin/main` at `456d24b`, and
+    `npm ci` run under `./hippo run --class ephemeral --resource-tier light`; `git branch --show-current` prints
+    `worktree/fix-corrupt-waiter-identity-test-flake-record`, and `git rev-list --left-right --count HEAD...origin/main`
+    reads `0 0`.
+- [x] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
       `git merge-base --is-ancestor <unit 2 merge commit> v0.8.5` exits `0`, and the release URL and the tag's peeled
       commit are recorded here. `[AC-08]`
+  - Result: (2026-10-07) <https://github.com/wahidyankf/hippo/releases/tag/v0.8.5>, published 2026-10-06T22:19:10Z, not
+    a draft or prerelease. The annotated tag `v0.8.5` (tag object `f24bba1`) peels to
+    `456d24bc2a20ee23a7b81746c1789133cd5c3a97` (`git rev-parse v0.8.5^{commit}`), and `release.yml` run `37539705716` on
+    it succeeded. `git merge-base --is-ancestor 6b28306 v0.8.5` exits `0`; the tag sits 13 commits above it. As
+    [Release content](#solution) decided, `git show v0.8.5:CHANGELOG.md` carries no entry for this test-only fix.
+    `checksums.txt`: `darwin_amd64` `70f6ea5475adf5b818ed1be46e18ce481493cfecae635b1fb0ca5f806c6aefba`, `darwin_arm64`
+    `498beba385fc887ac75f41e92ae091854a92354570b2c2c48109877b5ad34862`, `linux_amd64`
+    `13aac6777ea838a80eb699bc00816ca7f59ae6e1be4bbefd007fa15666cb7c4c`, and `linux_arm64`
+    `1b3e60aa5f491228487f8994efe237d5c2cbbf42b32d69c46cdb5295b683b6f2`, each for `hippo_v0.8.5_<os>_<arch>.tar.gz`.
 - [ ] `[AI]` Recovery, dormant until triggered. Trigger: `v0.8.5` is published without unit 2's merge commit (the
       ancestry check above exits `1`). Then cut no patch release, because the binary is unchanged: record in the record
       worktree's copy of this plan that the fix is test-only with no release content and that `v0.8.5`'s full gate ran
@@ -636,11 +662,19 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
       `git merge-base --is-ancestor <unit 2 merge commit> origin/main` exits `0` and the `v0.8.5` check exits `1`, both
       recorded there, so the next release cut from `origin/main` carries the fix. Otherwise: a dated, evidenced
       `Not triggered`. `[AC-08]`
+  - Not triggered (2026-10-07): `v0.8.5` carries unit 2's merge commit, since
+    `git merge-base --is-ancestor 6b28306 v0.8.5` exits `0`, so no patch-release decision arises. The box stays
+    unticked: under [knowledge capture and archival][knowledge-capture], this dated disposition, not a tick, resolves a
+    trigger that never fires.
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
+- [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-09]`
+  - Result: (2026-10-07) [Learnings](#learnings) holds no entry: execution recorded none, so nothing needed routing. The
+    one incidental observation in the record, the `TempDir RemoveAll` cleanup line on the no-pause break test's failure
+    path (Phase 3), stays there and is not promoted. It appears only under a deliberately broken copy, and the shipped
+    test's `t.Cleanup(cancel)` already handles the failure path it shows.
 - [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
       verdict line recorded here. `[AC-09]`
 
@@ -656,8 +690,7 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 
 ## Learnings
 
-None yet. Entries are added as execution teaches something, and each is routed to a durable owner or discarded with a
-reason before archival.
+None. Execution recorded no entry; the Phase 6 routing item recorded that on 2026-10-07.
 
 ## Directory Map
 
@@ -669,3 +702,4 @@ This plan is one document, so this README has no siblings to map.
 [go-build]: https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies
 [go-testflag]: https://pkg.go.dev/cmd/go#hdr-Testing_flags
 [go-runtime]: https://pkg.go.dev/runtime
+[knowledge-capture]: ../../../repo-governance/conventions/plans/008-knowledge-capture-and-archival.md
