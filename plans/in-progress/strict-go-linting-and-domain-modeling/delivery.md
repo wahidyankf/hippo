@@ -2076,15 +2076,59 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
       owner's direction that every flake found is fixed); proof: each fix pull request reads `MERGED` and its merge
       commit is an ancestor of this branch's head. If one has not merged, wait for it rather than cut without it.
       `[AC-24]`
-- [ ] `[AI]` Add the `v0.8.5` entry to `CHANGELOG.md`, or complete and date the `## [v0.8.5] — Unreleased` entry the
+- [x] `[AI]` Add the `v0.8.5` entry to `CHANGELOG.md`, or complete and date the `## [v0.8.5] — Unreleased` entry the
       cancelled-waiter fix added — `Fixed`: the `minimal`-lineage floor, naming the configured profiles whose exit `125`
       becomes an admission — and name `v0.8.5` as the current release in the five pages the file impact lists; proof:
       `git grep -n 'v0\.8\.4' -- ':!plans' ':!CHANGELOG.md'` prints nothing. `[AC-24]`
-- [ ] `[AI]` Run docs propagation and the _Full gate_; proof: status recorded and exit `0`. `[AC-24]`
-- [ ] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
+  - Result: (2026-10-07) `## [v0.8.5] — 2026-10-07`, verified against `git diff v0.8.4..HEAD` and by running a binary
+    built from `git archive v0.8.4` and one built from `HEAD` over the same crafted configurations, evidence, and
+    ledgers in a scratch `HIPPO_ROOT`. `Fixed` keeps the cancelled-waiter bullet and adds the floor: a configured
+    profile extending `minimal` (directly, through another configured profile, or reached by another profile's
+    `fallback`) with no `fallback` and a disk reserve no host meets exited `125` naming `hippo.policy.replan-required`
+    on `v0.8.4` and runs on `HEAD`; a `constrained`-lineage profile with no `fallback` and transactional work exit `125`
+    on both. The bullet also names two narrowings the binaries show where name and lineage disagree: a configured
+    `minimal` with `extends: constrained, fallback: ""`, and a configured `minimal` that names a `fallback`, took the
+    floor on `v0.8.4` and now do not (the second falls back; with a `constrained`-lineage fallback it exits `125`).
+    `Changed` lists the diagnostic text of already-refused inputs, each with the same exit status and code on both
+    binaries: the coordination mode wording, schema 1 with an unknown mode, the mode error preempting an unknown
+    `extends`, a ledger owner with class `batch`, a `sheddingExitCode` of `99`, and the Go type names for non-string
+    values. Left out, because the binaries agree: automatic owner shares (a configured profile that extends
+    `constrained`, at depth one or two, is allocated 6 of 12 CPUs on both, since `buildCoordination` already inherits
+    shares through `extends` for every catalog profile, so the guard's lineage default is unreachable from the command
+    line), and `history` over an unknown `outcome`, `budgetOutcome`, or `taskClass` (listed as recorded, selected by no
+    `--outcome` or `--class`, on both). The five pages now name `v0.8.5`, and
+    `git grep -n 'v0\.8\.4' -- ':!plans' ':!CHANGELOG.md' ':!*.go'` prints nothing. Deviation from the item's proof
+    grep: 18 comment lines in 13 Go files under `internal/` and `tests/` still cite `v0.8.4` as the historical baseline
+    the typed codecs preserve, and stay unchanged.
+- [x] `[AI]` Run docs propagation and the _Full gate_; proof: status recorded and exit `0`. `[AC-24]`
+  - Result: (2026-10-07) docs propagation status `landed`, committed as `e0c9648` and `0f7be31`; the _Full gate_
+    (`GOFLAGS=-timeout=30m npm test`) exited `0` at load 3.9–7.7: selected production line coverage 99.38% (955/961),
+    race detector clean, `govulncheck` "No vulnerabilities found." Updated: `docs/reference/resource-policy.md` (Derived
+    thresholds: the floor applies to the profile that ends the fallback chain when its lineage reaches `minimal`, and a
+    `minimal`-lineage profile with a `fallback`, set or inherited, falls back instead; the Unit 4 wording, "the first
+    profile of the `minimal` lineage its fallback chain reaches", was wrong for such a profile) and
+    `docs/reference/configuration.md` (the lineage note: only a `minimal`-lineage profile with no `fallback` is a floor,
+    and a profile inherits its parent's configured share, so it gets its lineage's built-in share only when no profile
+    in its lineage is named). Verified unchanged: the owner-share tables in `configuration.md`, `resource-policy.md`,
+    and `enable-reservation-coordination.md`; the recorded unknown outcome and class in `cli.md`, `json-schemas.md`, and
+    `specs/architecture.md`; and no page or spec quotes a diagnostic whose text changed. `npm run format:check`,
+    `markdownlint-cli2` over the changed pages, `scripts/check-markdown-line-length.sh`, and
+    `./rhino md internal-link validate` (1375 links, no findings) exit `0`.
+- [x] `[AI]` Run the [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) on subject
       `all` on this branch's head, before landing, so any repair it makes is committed here and reaches the commit being
       tagged (PQG-14); proof: its verdict line recorded here and `git status --porcelain` printing nothing after the
       repairs are committed. `[AC-24]`
+  - Result: (2026-10-07) `docs-quality-gate: PASS_WITH_FINDINGS (2 cycles, 1 MEDIUM and 2 LOW open)` on `0f7be31`, then
+    `91b3784`. Cycle 1 (`all__20261006T2032Z`) found D-001 (HIGH, pre-existing since before `v0.8.4`: a release check
+    whose first reading does not fit exits `125` naming `hippo.policy.replan-required`, where `cli.md` and
+    `monitor-a-release.md` said `124`) and six MEDIUM or LOW rows; the documents, not the code, were fixed, because the
+    binary agrees with `release.feature` and the explanation page, and the fixer added the one first-reading `124` (free
+    disk below the 256 MiB floor). Cycle 2 (`all__20261006T2055Z`) held all seven and left D-008 (MEDIUM: the first
+    reading has no CPU figure on Linux), D-009, and D-010 (LOW: a "v1 client" label; the `HIPPO_` prefix rule) open and
+    non-blocking; all three were then fixed here, verified against `internal/cli/release.go` and
+    `internal/host/collector.go`. Repairs committed as `91b3784` and the commit after it; formatter, linter, line
+    length, word budget, and internal links pass, and `git status --porcelain` printed only this plan's record.
+
 - [ ] `[AI]` Land it: data-safety inspection and commit, push review and push, screened draft pull request, ready,
       `Quality gate` on the head, the leak review for that head, rebase merge, and _Reconcile_; proof: the merge commit
       and `0 0` recorded. `[AC-24]`

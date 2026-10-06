@@ -365,3 +365,14 @@ one durable owner or discard it with a reason. -->
   class), `tests/support/domain_literals_internal_test.go`, `docs/reference/cli.md`, `specs/architecture.md`, and
   `repository-adapter/README.md`, and added `tests/unit/task_class_test.go` and
   `internal/guard/reservation_class_test.go`. Routing candidate: `tech-docs/004-file-impact.md`, Unit 6.
+- (2026-10-07, Unit 7) **The lineage floor narrows two name-lineage disagreements, by decision.** Running binaries built
+  from `v0.8.4` and from the release branch over crafted configurations showed that a configured profile named `minimal`
+  with `extends: constrained` and no `fallback` took the floor in `v0.8.4` and now exits `125`
+  (`hippo.policy.replan-required`), and that a configured `minimal` naming a `fallback` now falls back to it, exiting
+  `125` when that fallback is of the `constrained` lineage and does not fit, where `v0.8.4` took the floor at `minimal`.
+  Both follow D5 (lineage, not names, decides the floor, as `v0.8.4` already did for degraded admission) and the Unit 4
+  review decision that the floor applies only where a chain ends, so the release keeps them and `CHANGELOG.md` names
+  both. No consumer configuration on the author's workstation redefines `minimal`: of the eight `hippo.local.json` and
+  `hippo.machine.json` files, only HIPPO's own names a profile (`local-constrained`, extending `constrained` with
+  `fallback: minimal`, the built-in), which resolves as before. Decided by the executor under the owner's standing
+  direction not to stop for permission. Routing candidate: `tech-docs/001-domain-types.md` Conditions, in Unit 8.
