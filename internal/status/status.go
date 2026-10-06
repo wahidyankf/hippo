@@ -175,10 +175,28 @@ var statuses = map[Code]int{
 
 // retryable marks the codes whose condition can lift on its own. It is
 // advisory: it tells a caller whether waiting is worth anything, and it is
-// what error.retryable reports.
+// what error.retryable reports. Every code is listed, the false ones too, so a
+// new code cannot land without a decision on whether waiting helps; the
+// exhaustive linter refuses a map that omits one.
 var retryable = map[Code]bool{
-	CodeLimitCapacityDeferred: true,
-	CodeLimitPressureShed:     true,
+	CodeArgsInvalid:                  false,
+	CodeConfigUnreadable:             false,
+	CodeConfigUnresolvable:           false,
+	CodeLimitCapacityDeferred:        true,
+	CodeLimitStorageBlocked:          false,
+	CodeLimitPressureShed:            true,
+	CodeLimitReleaseEnvelopeExceeded: false,
+	CodeIdentityInvalid:              false,
+	CodePolicyReplanRequired:         false,
+	CodeCoordinationProtocolMismatch: false,
+	CodeChildNotFound:                false,
+	CodeChildNotExecutable:           false,
+	CodeHostUnreadable:               false,
+	CodeEvidenceUnwritable:           false,
+	CodeEvidenceUnreadable:           false,
+	CodeLeaseUnwritable:              false,
+	CodeSupervisionFailed:            false,
+	CodeInternalFailure:              false,
 }
 
 // Status is the exit status a code returns.

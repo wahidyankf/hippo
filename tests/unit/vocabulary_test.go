@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -43,5 +44,22 @@ func TestPublishedVocabularyMatchesTheCodeTable(t *testing.T) {
 	}
 	for code := range published {
 		t.Errorf("exit-codes.md publishes %s, which hippo never returns", code)
+	}
+}
+
+// TestRetryableMarksOnlyTheCodesWhoseConditionLiftsOnItsOwn holds status.Retryable to the two codes whose condition
+// can clear without the caller changing anything. The table behind it lists every code, false ones included, so a
+// new code needs a decision; this test is the decision a flipped or newly added true entry must justify.
+func TestRetryableMarksOnlyTheCodesWhoseConditionLiftsOnItsOwn(t *testing.T) {
+	retryable := []status.Code{status.CodeLimitCapacityDeferred, status.CodeLimitPressureShed}
+	for _, code := range status.All {
+		if got, want := status.Retryable(code), slices.Contains(retryable, code); got != want {
+			t.Errorf("Retryable(%s) = %t, want %t", code, got, want)
+		}
+	}
+	for _, code := range retryable {
+		if !slices.Contains(status.All, code) {
+			t.Errorf("%s is expected to be retryable but is not in status.All", code)
+		}
 	}
 }
