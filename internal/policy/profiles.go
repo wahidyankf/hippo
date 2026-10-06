@@ -9,14 +9,10 @@ import (
 const (
 	// HardDiskFloorBytes is the immutable cleanup boundary.
 	HardDiskFloorBytes = 256 * MiB
-	// ReplanRequiredExitCode is used when strict capacity or configuration is incompatible.
-	ReplanRequiredExitCode = 78
-	// ProtocolMismatchExitCode identifies live peer coordination state this client cannot safely join.
-	ProtocolMismatchExitCode = 76
-	profileBalanced          = "balanced"
-	profileConstrained       = "constrained"
-	profileMinimal           = "minimal"
-	swapUnavailable          = "unavailable"
+	profileBalanced    = "balanced"
+	profileConstrained = "constrained"
+	profileMinimal     = "minimal"
+	swapUnavailable    = "unavailable"
 )
 
 // TaskClass identifies the guarded workload category used for admission.
@@ -87,8 +83,10 @@ type Resolution struct {
 	MemoryReserve    int64    `json:"memoryReserveBytes"`
 	DiskReserve      int64    `json:"diskReserveBytes"`
 	Decision         Decision `json:"decision"`
-	ExitCode         int      `json:"exitCode"`
-	Retryable        bool     `json:"retryable"`
+	// Reason is why the resolution stops work, and ReasonNone when it does not.
+	// Status JSON publishes it as exitCode, the integer v0.8.4 published for it.
+	Reason    Reason `json:"exitCode"`
+	Retryable bool   `json:"retryable"`
 	// DegradedAdmission reports whether the resolved profile may use degraded
 	// admission under a stable macOS warning.
 	DegradedAdmission bool   `json:"degradedAdmission"`
@@ -257,7 +255,7 @@ func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sam
 		}
 
 		if sample.DiskFreeBytes == nil || *sample.DiskFreeBytes < HardDiskFloorBytes {
-			resolution.Decision, resolution.ExitCode = DecisionCleanup, 73
+			resolution.Decision, resolution.Reason = DecisionCleanup, ReasonStorageBlocked
 
 			return resolution, nil
 		}
@@ -273,7 +271,7 @@ func (catalog Catalog) Resolve(requested string, taskClass TaskClass, sample Sam
 		}
 
 		if resolution.Strict {
-			resolution.Decision, resolution.ExitCode = DecisionReplan, ReplanRequiredExitCode
+			resolution.Decision, resolution.Reason = DecisionReplan, ReasonReplanRequired
 
 			return resolution, nil
 		}

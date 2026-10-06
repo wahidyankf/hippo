@@ -19,20 +19,6 @@ import (
 	"github.com/wahidyankf/hippo/internal/status"
 )
 
-const (
-	// StorageBlockedExitCode indicates cleanup is required before retrying.
-	StorageBlockedExitCode = 73
-	// CapacityDeferredExitCode indicates transient pressure that should be retried.
-	// It is also the shed cause the reservation ledger records for pressure
-	// other than storage.
-	CapacityDeferredExitCode = 75
-	// PressureShedExitCode reports a started child shed under host pressure
-	// other than storage. Like the others it never leaves the process: the
-	// command-line boundary turns it into 124 naming hippo.limit.pressure-shed,
-	// so a shed is never mistaken for a deferral that started nothing.
-	PressureShedExitCode = 74
-)
-
 // RunConfig describes one guarded child process and its resource policy.
 type RunConfig struct {
 	Command                               string
@@ -498,17 +484,38 @@ func finalOutcome(outcome evidence.Outcome) (evidence.Outcome, error) {
 	)
 }
 
+// promoteRelease decides what the caller sees once the ownership release has
+// failed. A run that already failed keeps its own failure, and so does a stop
+// that carries an error, as the (74, stopError) it replaces did. A run that said
+// nothing beyond its reason reports the failure with exit status 1, except that a
+// storage or capacity deferral keeps its reason beside the failure, as it kept
+// its exit status: nothing started, so retrying after the cleanup is still right.
+// A pressure shed, a replan, and a protocol mismatch do not; the failure is the
+// news.
+func promoteRelease(exitCode int, returnError, releaseError error) (int, error) {
+	if !policy.CarriesNoError(returnError) || releaseError == nil {
+		return exitCode, returnError
+	}
+	if stop, bare := policy.BareStop(returnError); bare &&
+		(stop.Reason == policy.ReasonStorageBlocked || stop.Reason == policy.ReasonCapacityDeferred) {
+		return exitCode, policy.Stopped(stop.Reason, releaseError)
+	}
+
+	return 1, releaseError
+}
+
 // promoteFinalize decides what the caller sees once the lifetime summary has
 // been finalized. A run that already failed keeps its own failure, and so does a
-// run whose summary was written. Otherwise the summary's failure becomes the
-// run's, with exit status 1; before anything launched, a write the evidence root
+// run whose summary was written. A stop with no error of its own counts as no
+// failure of the run's own. Otherwise the summary's failure becomes the run's,
+// with exit status 1; before anything launched, a write the evidence root
 // refused is named as one.
 //
 // This is how the supervision failure finalOutcome returns for a run that ended
 // with its outcome unset reaches the caller: it is the finalize error here, so
 // the command-line boundary reports hippo.supervision.failed and exit 125.
 func promoteFinalize(exitCode int, returnError, finalizeError error, launched bool) (int, error) {
-	if returnError != nil || finalizeError == nil {
+	if !policy.CarriesNoError(returnError) || finalizeError == nil {
 		return exitCode, returnError
 	}
 	if !launched {
@@ -577,7 +584,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	concurrencyEnvironment, concurrencyError := normalizeConcurrencyEnvironment(config.ConcurrencyEnvironment)
 	if concurrencyError != nil {
 		if config.ReservationPolicy.Enabled {
-			return policy.ReplanRequiredExitCode, concurrencyError
+			return 0, policy.Stopped(policy.ReasonReplanRequired, concurrencyError)
 		}
 
 		return 1, concurrencyError
@@ -643,22 +650,22 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 	}
 	if err != nil {
 		if errors.Is(err, ErrReservationReplan) {
-			return policy.ReplanRequiredExitCode, nil
+			return 0, policy.Stopped(policy.ReasonReplanRequired, nil)
 		}
 		if errors.Is(err, ErrCoordinationProtocolMismatch) {
 			config.noteDeferralf("HIPPO protocol mismatch: %s.\n", err)
 
-			return policy.ProtocolMismatchExitCode, nil
+			return 0, policy.Stopped(policy.ReasonProtocolMismatch, nil)
 		}
 		if errors.Is(err, ErrReservationDeferred) {
 			config.noteDeferralf("HIPPO deferred task: reservation capacity remained exhausted through the bounded wait.\n")
 
-			return CapacityDeferredExitCode, nil
+			return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
 		}
 		if errors.Is(err, errCoordinationDeferred) {
 			config.noteDeferralf("HIPPO deferred task: %s.\n", err)
 
-			return CapacityDeferredExitCode, nil
+			return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
 		}
 
 		// Coordination state lives in the evidence root, and nothing has
@@ -676,7 +683,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			)
 		}
 
-		return CapacityDeferredExitCode, nil
+		return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
 	}
 	if config.ReservationPolicy.Enabled {
 		config.Environment, err = ReservationEnvironment(
@@ -688,7 +695,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		if err != nil {
 			_ = ReleaseReservation(config.EvidenceRoot, session) //nolint:contextcheck // Rejected environment cleanup owns its bounded release context.
 
-			return policy.ReplanRequiredExitCode, err
+			return 0, policy.Stopped(policy.ReasonReplanRequired, err)
 		}
 		config.Resolution.Concurrency = session.Allocation.CPU
 	}
@@ -696,7 +703,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 	defer func() { //nolint:contextcheck // Ownership release runs after caller cancellation and deliberately uses its own bounded context.
 		if !ownershipRetired {
-			if abandonError := abandonReservationIdentity(session); returnError == nil && abandonError != nil {
+			if abandonError := abandonReservationIdentity(session); policy.CarriesNoError(returnError) && abandonError != nil {
 				returnError = abandonError
 			}
 
@@ -708,20 +715,15 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		} else {
 			releaseError = ReleaseSession(config.EvidenceRoot, session)
 		}
-		if returnError == nil && releaseError != nil {
-			// A peer holding the shared lock at cleanup time already left a
-			// reconcilable owner mark, so the caller's completed work must not
-			// be reported as a failure.
-			if errors.Is(releaseError, ErrCoordinationCleanupDeferred) {
-				_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred coordination cleanup: %s.\n", releaseError)
+		// A peer holding the shared lock at cleanup time already left a
+		// reconcilable owner mark, so the caller's completed work must not be
+		// reported as a failure.
+		if errors.Is(releaseError, ErrCoordinationCleanupDeferred) && policy.CarriesNoError(returnError) {
+			_, _ = fmt.Fprintf(config.Stderr, "HIPPO deferred coordination cleanup: %s.\n", releaseError)
 
-				return
-			}
-			returnError = releaseError
-			if exitCode != StorageBlockedExitCode && exitCode != CapacityDeferredExitCode {
-				exitCode = 1
-			}
+			return
 		}
+		exitCode, returnError = promoteRelease(exitCode, returnError, releaseError)
 	}()
 
 	var portLease *PortLease
@@ -735,7 +737,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		if errors.Is(err, errCoordinationDeferred) {
 			config.noteDeferralf("HIPPO deferred task: %s.\n", err)
 
-			return CapacityDeferredExitCode, nil
+			return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
 		}
 		if err != nil && evidence.WriteRefused(err) {
 			// Nothing has started, and the lease root is not the state root,
@@ -748,13 +750,13 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 		defer func() {
 			if !ownershipRetired {
-				if abandonError := abandonPortLeaseIdentity(portLease); returnError == nil && abandonError != nil {
+				if abandonError := abandonPortLeaseIdentity(portLease); policy.CarriesNoError(returnError) && abandonError != nil {
 					returnError = abandonError
 				}
 
 				return
 			}
-			if releaseError := ReleasePortLease(root, portLease); returnError == nil && releaseError != nil {
+			if releaseError := ReleasePortLease(root, portLease); policy.CarriesNoError(returnError) && releaseError != nil {
 				returnError = releaseError
 				exitCode = 1
 			}
@@ -811,7 +813,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 		if errors.Is(statusError, errCoordinationDeferred) {
 			config.noteDeferralf("HIPPO deferred task: %s.\n", statusError)
 
-			return CapacityDeferredExitCode, nil
+			return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
 		}
 		if statusError != nil {
 			return 1, statusError
@@ -896,7 +898,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			outcome = evidence.OutcomeStorageBlocked
 			_, _ = fmt.Fprintf(config.Stderr, "HIPPO blocked task: %s; storage inspection or cleanup is required.\n", assessment.Reason)
 
-			return StorageBlockedExitCode, nil
+			return 0, policy.Stopped(policy.ReasonStorageBlocked, nil)
 		}
 
 		if policy.AdmissionReady(samples, config.Policy) {
@@ -939,7 +941,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			return 1, refusedEvidenceWrite("writing the never-started receipt", receiptError)
 		}
 
-		return CapacityDeferredExitCode, nil
+		return 0, policy.Stopped(policy.ReasonCapacityDeferred, nil)
 	}
 
 	lifetime, launchError := launchConfiguredLifetime(ctx, config, session, portLease)
@@ -994,7 +996,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 
 		case <-ticker.C:
 			if config.ReservationPolicy.Enabled { //nolint:nestif // Owner-side marked shedding must remain ahead of fresh pressure collection.
-				selected, selectedExit, selectionError := ReservationSheddingSelection(config.EvidenceRoot, session) //nolint:contextcheck // Owner mark observation remains bounded independently of sampling cancellation.
+				selected, selectedCause, selectionError := ReservationSheddingSelection(config.EvidenceRoot, session) //nolint:contextcheck // Owner mark observation remains bounded independently of sampling cancellation.
 				// A contended shared root defers this observation to the next
 				// sample instead of costing the caller a healthy child.
 				if selectionError != nil && !errors.Is(selectionError, errCoordinationDeferred) {
@@ -1008,7 +1010,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					if config.TaskClass == policy.TaskTransactional {
 						outcome = evidence.OutcomeEmergencySafetyStop
 					}
-					if selectedExit == StorageBlockedExitCode {
+					if selectedCause == ShedCauseStorage {
 						outcome = evidence.OutcomeStorageShed
 					}
 					_, _ = fmt.Fprintln(config.Stderr, "HIPPO shedding this selected child from its owning guard.")
@@ -1020,7 +1022,7 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 						))
 					}
 
-					return callerShedCode(selectedExit), stopError
+					return 0, policy.Stopped(selectedCause.Reason(), stopError)
 				}
 			}
 			reading, collectError := config.Collector.Collect(ctx, previous, config.DiskPath)
@@ -1094,9 +1096,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 			}
 
 			if assessment.State == policy.StateCritical || (warningSince != nil && config.Now().Sub(*warningSince) >= grace) { //nolint:nestif // Pressure outcome, atomic victim election, and owned reaping remain one lifecycle branch.
-				shedCode := CapacityDeferredExitCode
+				shedCause := ShedCausePressure
 				if assessment.StorageBlocked {
-					shedCode, outcome = StorageBlockedExitCode, evidence.OutcomeStorageShed
+					shedCause, outcome = ShedCauseStorage, evidence.OutcomeStorageShed
 				} else {
 					outcome = evidence.OutcomePressureShed
 				}
@@ -1119,9 +1121,9 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					var selected bool
 					var selectionError error
 					if emergency {
-						victim, selected, selectionError = SelectEmergencyPressureVictim(config.EvidenceRoot, shedCode) //nolint:contextcheck // Selection is one bounded locked evaluation.
+						victim, selected, selectionError = SelectEmergencyPressureVictim(config.EvidenceRoot, shedCause) //nolint:contextcheck // Selection is one bounded locked evaluation.
 					} else {
-						victim, selected, selectionError = SelectPressureVictim(config.EvidenceRoot, shedCode) //nolint:contextcheck // Selection is one bounded locked evaluation.
+						victim, selected, selectionError = SelectPressureVictim(config.EvidenceRoot, shedCause) //nolint:contextcheck // Selection is one bounded locked evaluation.
 					}
 					// Pressure persists across samples, so a contended shared
 					// root re-elects on the next one rather than shedding work
@@ -1163,22 +1165,10 @@ func Run(ctx context.Context, config RunConfig) (exitCode int, returnError error
 					))
 				}
 
-				return callerShedCode(shedCode), stopError
+				return 0, policy.Stopped(shedCause.Reason(), stopError)
 			}
 		}
 	}
-}
-
-// callerShedCode turns the shed cause the ledger records into the status the
-// guard returns for a child it stopped. Storage keeps its own status; any
-// other pressure is a shed, not the capacity deferral the ledger shares a code
-// with.
-func callerShedCode(shedCode int) int {
-	if shedCode == CapacityDeferredExitCode {
-		return PressureShedExitCode
-	}
-
-	return shedCode
 }
 
 func executableGuardPath() string {

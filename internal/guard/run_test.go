@@ -76,7 +76,16 @@ type deadlineDeferral struct {
 // admission window of zero, so the run reaches its deadline deferral.
 func deferAtTheDeadline(t *testing.T) deadlineDeferral {
 	t.Helper()
+
+	return deferAtTheDeadlineWith(t, time.Now, func(string) {})
+}
+
+// deferAtTheDeadlineWith is deferAtTheDeadline on a clock the caller chooses,
+// after prepare has had the evidence root to itself.
+func deferAtTheDeadlineWith(t *testing.T, now func() time.Time, prepare func(root string)) deadlineDeferral {
+	t.Helper()
 	root := t.TempDir()
+	prepare(root)
 	settings := policy.DefaultPolicy()
 	settings.AdmissionWindow = 0
 	settings.LeaseWait = 100 * time.Millisecond
@@ -103,7 +112,7 @@ func deferAtTheDeadline(t *testing.T) deadlineDeferral {
 		ReservationMetadata: ReservationMetadata{
 			Source: "hippo", Tags: map[string]string{"plan": "admission-test"}, Tier: "light",
 		},
-		EvidenceLimits: evidence.DefaultLimits(), Now: time.Now, Stderr: &bytes.Buffer{},
+		EvidenceLimits: evidence.DefaultLimits(), Now: now, Stderr: &bytes.Buffer{},
 		startLifetime: func(context.Context, RunConfig, string, []string, ...*os.File) (*supervisedLifetime, error) {
 			starts++
 
@@ -114,11 +123,22 @@ func deferAtTheDeadline(t *testing.T) deadlineDeferral {
 	return deadlineDeferral{root: root, code: code, starts: starts, err: err}
 }
 
+// requireStop holds a run's result to a stop that says only its reason: no
+// integer status beside it, since a stop carries what the status once did, and
+// no error of its own.
+func requireStop(t *testing.T, code int, err error, want policy.Reason) {
+	t.Helper()
+	if stop, bare := policy.BareStop(err); code != 0 || !bare || stop.Reason != want {
+		t.Fatalf("result code=%d error=%v, want status 0 and a stop for reason %d", code, err, want)
+	}
+}
+
 func TestRunHostAdmissionDeferralWritesNeverStartedReceipt(t *testing.T) {
 	deferral := deferAtTheDeadline(t)
 	root := deferral.root
-	if deferral.err != nil || deferral.code != CapacityDeferredExitCode || deferral.starts != 0 {
-		t.Fatalf("host-admission result: code=%d starts=%d error=%v", deferral.code, deferral.starts, deferral.err)
+	requireStop(t, deferral.code, deferral.err, policy.ReasonCapacityDeferred)
+	if deferral.starts != 0 {
+		t.Fatalf("host-admission started %d payloads, want none", deferral.starts)
 	}
 	receipts, err := os.ReadDir(filepath.Join(root, "receipts"))
 	if err != nil || len(receipts) != 1 {
@@ -136,9 +156,7 @@ func TestRunHostAdmissionDeferralWritesNeverStartedReceipt(t *testing.T) {
 // outcome decided, so the deferral has to decide it.
 func TestDeadlineDeferralSummaryRecordsCapacityDeferred(t *testing.T) {
 	deferral := deferAtTheDeadline(t)
-	if deferral.err != nil || deferral.code != CapacityDeferredExitCode {
-		t.Fatalf("deadline deferral result: code=%d error=%v", deferral.code, deferral.err)
-	}
+	requireStop(t, deferral.code, deferral.err, policy.ReasonCapacityDeferred)
 	summaryPaths, err := filepath.Glob(filepath.Join(deferral.root, "*.summary.json"))
 	if err != nil || len(summaryPaths) != 1 {
 		t.Fatalf("deadline deferral summary paths=%v error=%v", summaryPaths, err)
@@ -152,6 +170,30 @@ func TestDeadlineDeferralSummaryRecordsCapacityDeferred(t *testing.T) {
 	}
 	if err = json.Unmarshal(data, &summary); err != nil || summary.Outcome != "capacity-deferred" {
 		t.Fatalf("deadline deferral summary outcome=%q error=%v, want capacity-deferred", summary.Outcome, err)
+	}
+}
+
+// TestADeferralWhoseSummaryCannotBeWrittenReportsTheFailedWrite holds a
+// deferral to the precedence it had when it travelled as a status: a stop with
+// nothing to report beside its reason gives way to a summary the root refused,
+// so a caller never reads a deferral for a run whose evidence was lost. The
+// summary's name is fixed by the clock and the process, so a directory stands
+// there: evidence cleanup passes it over, and the final link cannot replace it.
+func TestADeferralWhoseSummaryCannotBeWrittenReportsTheFailedWrite(t *testing.T) {
+	now := time.Now()
+	deferral := deferAtTheDeadlineWith(t, func() time.Time { return now }, func(root string) {
+		summary := filepath.Join(root, EvidenceIdentifier("development-ephemeral", now, os.Getpid())+".summary.json")
+		if err := os.Mkdir(summary, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, stopped := errors.AsType[*policy.Stop](deferral.err); stopped || deferral.code != 1 ||
+		!errors.Is(deferral.err, fs.ErrExist) {
+		t.Fatalf("deferral whose summary write failed: code=%d error=%v, want status 1 and the failed write", deferral.code, deferral.err)
+	}
+	receipts, err := os.ReadDir(filepath.Join(deferral.root, "receipts"))
+	if err != nil || len(receipts) != 1 {
+		t.Fatalf("the deferral left receipts=%d error=%v, want its one never-started receipt", len(receipts), err)
 	}
 }
 
@@ -205,6 +247,10 @@ func TestPromoteFinalizeDecidesWhatTheCallerSees(t *testing.T) {
 	runError := errors.New("child lifetime failed")
 	finalizeError := errors.New("summary link failed")
 	refusedWrite := fmt.Errorf("link the summary: %w", fs.ErrPermission)
+	// A deferral says only its reason, as a shed with nothing to report does;
+	// a shed whose child could not be confirmed stopped carries that error.
+	deferral := policy.Stopped(policy.ReasonCapacityDeferred, nil)
+	shedWithCause := policy.Stopped(policy.ReasonPressureShed, errChildRetirementUnconfirmed)
 	_, unsetFailure := finalOutcome(evidence.OutcomeUnset)
 
 	for _, test := range []struct {
@@ -221,8 +267,8 @@ func TestPromoteFinalizeDecidesWhatTheCallerSees(t *testing.T) {
 			check: requireNoError,
 		},
 		{
-			name: "no finalize error leaves a deferral status", exitCode: CapacityDeferredExitCode, wantExit: CapacityDeferredExitCode,
-			check: requireNoError,
+			name: "no finalize error leaves a deferral", returnError: deferral, wantExit: 0,
+			check: func(err error) string { return requireSame(err, deferral) },
 		},
 		{
 			name: "no finalize error leaves the run's own failure", exitCode: 7, returnError: runError, launched: true, wantExit: 7,
@@ -244,9 +290,18 @@ func TestPromoteFinalizeDecidesWhatTheCallerSees(t *testing.T) {
 			check: func(err error) string { return requireSame(err, finalizeError) },
 		},
 		{
-			name: "a finalize error over a deferral status becomes the run's error", exitCode: CapacityDeferredExitCode,
+			name: "a finalize error over a deferral becomes the run's error", returnError: deferral,
 			finalizeError: finalizeError, launched: true, wantExit: 1,
 			check: func(err error) string { return requireSame(err, finalizeError) },
+		},
+		{
+			name: "a refused write over a deferral before launch is named as one", returnError: deferral,
+			finalizeError: refusedWrite, wantExit: 1, check: requireRefusedSummaryWrite,
+		},
+		{
+			name: "a stop that carries an error stands over a finalize error", returnError: shedWithCause,
+			finalizeError: finalizeError, launched: true, wantExit: 0,
+			check: func(err error) string { return requireSame(err, shedWithCause) },
 		},
 		{
 			name: "a finalize error before launch keeps its own shape unless the root refused a write", exitCode: 0,
@@ -255,15 +310,7 @@ func TestPromoteFinalizeDecidesWhatTheCallerSees(t *testing.T) {
 		},
 		{
 			name: "a refused write before launch is named as one", exitCode: 0, finalizeError: refusedWrite, wantExit: 1,
-			check: func(err error) string {
-				failure, classified := errors.AsType[status.Failure](err)
-				if !classified || failure.Code != status.CodeEvidenceUnwritable ||
-					!strings.Contains(failure.Message, "recording the lifetime summary") {
-					return fmt.Sprintf("reported %v, want a failure naming %s and the lifetime summary", err, status.CodeEvidenceUnwritable)
-				}
-
-				return ""
-			},
+			check: requireRefusedSummaryWrite,
 		},
 		{
 			name: "a refused write after launch is the failure it is", exitCode: 0, finalizeError: refusedWrite,
@@ -271,7 +318,7 @@ func TestPromoteFinalizeDecidesWhatTheCallerSees(t *testing.T) {
 			check: func(err error) string { return requireSame(err, refusedWrite) },
 		},
 		{
-			name: "an unset outcome reaches the caller as a supervision failure before launch", exitCode: CapacityDeferredExitCode,
+			name: "an unset outcome reaches the caller as a supervision failure before launch", returnError: deferral,
 			finalizeError: unsetFailure, wantExit: 1, check: requireUnsetSupervisionFailure,
 		},
 		{
@@ -291,8 +338,112 @@ func TestPromoteFinalizeDecidesWhatTheCallerSees(t *testing.T) {
 	}
 }
 
-// requireNoError, requireSame, and requireUnsetSupervisionFailure return what
-// is wrong with an error, or the empty string when nothing is.
+// TestPromoteReleaseDecidesWhatTheCallerSeesOfAFailedRelease holds the deferred
+// promotion of an ownership release failure: it changes a run's result only
+// when the run said nothing beyond its reason, a storage or capacity deferral
+// keeps that reason beside the failure, and every other stop reports the
+// failure with exit status 1.
+func TestPromoteReleaseDecidesWhatTheCallerSeesOfAFailedRelease(t *testing.T) {
+	releaseError := errors.New("ownership release failed")
+	runError := errors.New("child lifetime failed")
+	shedWithCause := policy.Stopped(policy.ReasonPressureShed, errChildRetirementUnconfirmed)
+	storageDeferral := policy.Stopped(policy.ReasonStorageBlocked, nil)
+	bareStop := func(reason policy.Reason) error { return policy.Stopped(reason, nil) }
+	keepsReason := func(reason policy.Reason) func(error) string {
+		return func(err error) string {
+			stop, stopped := errors.AsType[*policy.Stop](err)
+			if !stopped || stop.Reason != reason || stop.Cause != releaseError { //nolint:errorlint // Identity: the stop must carry this very failure.
+				return fmt.Sprintf("reported %v, want a stop for reason %d carrying the release failure", err, reason)
+			}
+
+			return ""
+		}
+	}
+	reportsFailure := func(err error) string { return requireSame(err, releaseError) }
+
+	for _, test := range []struct {
+		name         string
+		exitCode     int
+		returnError  error
+		releaseError error
+		wantExit     int
+		check        func(error) string
+	}{
+		{
+			name: "a storage deferral keeps its reason beside the release failure", returnError: bareStop(policy.ReasonStorageBlocked),
+			releaseError: releaseError, wantExit: 0, check: keepsReason(policy.ReasonStorageBlocked),
+		},
+		{
+			name: "a capacity deferral keeps its reason beside the release failure", returnError: bareStop(policy.ReasonCapacityDeferred),
+			releaseError: releaseError, wantExit: 0, check: keepsReason(policy.ReasonCapacityDeferred),
+		},
+		{
+			name: "a pressure shed reports the release failure", returnError: bareStop(policy.ReasonPressureShed),
+			releaseError: releaseError, wantExit: 1, check: reportsFailure,
+		},
+		{
+			name: "a replan stop reports the release failure", returnError: bareStop(policy.ReasonReplanRequired),
+			releaseError: releaseError, wantExit: 1, check: reportsFailure,
+		},
+		{
+			name: "a protocol mismatch reports the release failure", returnError: bareStop(policy.ReasonProtocolMismatch),
+			releaseError: releaseError, wantExit: 1, check: reportsFailure,
+		},
+		{
+			name: "a stop that names no reason reports the release failure", returnError: bareStop(policy.ReasonNone),
+			releaseError: releaseError, wantExit: 1, check: reportsFailure,
+		},
+		{
+			name: "a stop that is no member reports the release failure", returnError: bareStop(policy.Reason(200)),
+			releaseError: releaseError, wantExit: 1, check: reportsFailure,
+		},
+		{
+			name: "a clean run reports the release failure", exitCode: 0, releaseError: releaseError,
+			wantExit: 1, check: reportsFailure,
+		},
+		{
+			name: "no release failure leaves a deferral", returnError: storageDeferral, wantExit: 0,
+			check: func(err error) string { return requireSame(err, storageDeferral) },
+		},
+		{
+			name: "no release failure leaves a clean run", wantExit: 0, check: requireNoError,
+		},
+		{
+			name: "an error the run returned stands over a release failure", exitCode: 7, returnError: runError,
+			releaseError: releaseError, wantExit: 7, check: func(err error) string { return requireSame(err, runError) },
+		},
+		{
+			name: "a stop that carries an error stands over a release failure", returnError: shedWithCause,
+			releaseError: releaseError, wantExit: 0, check: func(err error) string { return requireSame(err, shedWithCause) },
+		},
+		{
+			name: "a deferral inside a wrapper stands over a release failure", exitCode: 0,
+			returnError:  fmt.Errorf("verify: %w", bareStop(policy.ReasonStorageBlocked)),
+			releaseError: releaseError, wantExit: 0,
+			check: func(err error) string {
+				if _, stopped := errors.AsType[*policy.Stop](err); !stopped || errors.Is(err, releaseError) {
+					return fmt.Sprintf("reported %v, want the wrapped stop left as it was", err)
+				}
+
+				return ""
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			code, err := promoteRelease(test.exitCode, test.returnError, test.releaseError)
+			if code != test.wantExit {
+				t.Errorf("exit code %d, want %d", code, test.wantExit)
+			}
+			if problem := test.check(err); problem != "" {
+				t.Error(problem)
+			}
+		})
+	}
+}
+
+// requireNoError, requireSame, requireRefusedSummaryWrite, and
+// requireUnsetSupervisionFailure return what is wrong with an error, or the
+// empty string when nothing is.
 func requireNoError(err error) string {
 	if err != nil {
 		return fmt.Sprintf("reported %v, want no error", err)
@@ -304,6 +455,18 @@ func requireNoError(err error) string {
 func requireSame(got, want error) string {
 	if !errors.Is(got, want) {
 		return fmt.Sprintf("reported %v, want %v", got, want)
+	}
+
+	return ""
+}
+
+// requireRefusedSummaryWrite holds a refused summary write to the failure the
+// caller reads: hippo.evidence.unwritable, naming the lifetime summary.
+func requireRefusedSummaryWrite(err error) string {
+	failure, classified := errors.AsType[status.Failure](err)
+	if !classified || failure.Code != status.CodeEvidenceUnwritable ||
+		!strings.Contains(failure.Message, "recording the lifetime summary") {
+		return fmt.Sprintf("reported %v, want a failure naming %s and the lifetime summary", err, status.CodeEvidenceUnwritable)
 	}
 
 	return ""
@@ -378,8 +541,9 @@ func TestRunEmergencyTransactionalStopWritesReceiptWithoutRetry(t *testing.T) {
 		//nolint:nilnil // Two nil results explicitly model a successfully reaped child and supervisor.
 		stopLifetime: func(*supervisedLifetime, time.Duration) (error, error) { return nil, nil },
 	})
-	if err != nil || code != PressureShedExitCode || starts != 1 {
-		t.Fatalf("emergency result: code=%d starts=%d error=%v", code, starts, err)
+	requireStop(t, code, err, policy.ReasonPressureShed)
+	if starts != 1 {
+		t.Fatalf("emergency started %d children, want one", starts)
 	}
 	receipts, err := os.ReadDir(filepath.Join(root, "receipts"))
 	if err != nil || len(receipts) != 1 {
@@ -2285,15 +2449,35 @@ func awaitReservationActivation(t *testing.T, reservationRoot string) {
 	}
 }
 
+// requireUnconfirmedRetirementResult holds a run whose child could not be
+// confirmed stopped to what its shed cause promises: a cancelled run returns
+// status 1 beside the error, and a shed run returns status 0 beside a stop for
+// the cause's reason, the error carried inside it.
+func requireUnconfirmedRetirementResult(t *testing.T, code int, err error, cause ShedCause) {
+	t.Helper()
+	wantReason := cause.Reason()
+	wantCode := 0
+	if wantReason == policy.ReasonNone {
+		wantCode = 1
+	}
+	stop, stopped := errors.AsType[*policy.Stop](err)
+	if code != wantCode || stopped != (wantReason != policy.ReasonNone) ||
+		stopped && stop.Reason != wantReason || !errors.Is(err, errChildRetirementUnconfirmed) {
+		t.Fatalf("unconfirmed result code=%d error=%v, want status %d and reason %d", code, err, wantCode, wantReason)
+	}
+}
+
 func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nolint:cyclop,funlen,gocognit,gocyclo // The table verifies every stable exit across reservation, port, holder, and competitor lifecycle assertions.
 	cases := []struct {
-		name     string
-		exitCode int
-		outcome  evidence.Outcome
+		name string
+		// cause is why the owner is marked for shedding; ShedCauseNone is a run
+		// that is cancelled, not shed, and returns status 1 beside its error.
+		cause   ShedCause
+		outcome evidence.Outcome
 	}{
-		{name: "cancellation", exitCode: 1, outcome: evidence.OutcomeTaskFailed},
-		{name: "storage", exitCode: StorageBlockedExitCode, outcome: evidence.OutcomeStorageShed},
-		{name: "capacity", exitCode: CapacityDeferredExitCode, outcome: evidence.OutcomePressureShed},
+		{name: "cancellation", cause: ShedCauseNone, outcome: evidence.OutcomeTaskFailed},
+		{name: "storage", cause: ShedCauseStorage, outcome: evidence.OutcomeStorageShed},
+		{name: "capacity", cause: ShedCausePressure, outcome: evidence.OutcomePressureShed},
 	}
 	for index, fixture := range cases {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -2370,7 +2554,7 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 				ledgerBefore, readError = os.ReadFile(reservationLedgerPath(reservationRoot))
 				cancel()
 			} else {
-				_, selected, selectionError := SelectPressureVictim(reservationRoot, fixture.exitCode)
+				_, selected, selectionError := SelectPressureVictim(reservationRoot, fixture.cause)
 				if selectionError != nil || !selected {
 					t.Fatalf("select pressure victim: selected=%v error=%v", selected, selectionError)
 				}
@@ -2413,9 +2597,7 @@ func TestRunUnconfirmedRetirementPreservesOwnershipAndExit(t *testing.T) { //nol
 				t.Fatalf("unconfirmed ownership was not detectable: totals=%+v status=%v port=%v reservation=%v",
 					totals, statusError, portAcquireError, reservationAcquireError)
 			}
-			if result.code != callerShedCode(fixture.exitCode) || !errors.Is(result.err, errChildRetirementUnconfirmed) {
-				t.Fatalf("unconfirmed result code=%d error=%v", result.code, result.err)
-			}
+			requireUnconfirmedRetirementResult(t, result.code, result.err, fixture.cause)
 			requireSummaryOutcome(t, reservationRoot, fixture.outcome)
 			if releaseError := holder.release(); releaseError != nil {
 				t.Fatal(releaseError)
@@ -2876,12 +3058,7 @@ func TestRunDefersWhenTheRequestedPortIsHeldByALiveOwner(t *testing.T) {
 		Stderr:        &bytes.Buffer{},
 	})
 
-	if runError != nil {
-		t.Fatalf("a held service port reported %v", runError)
-	}
-	if code != CapacityDeferredExitCode {
-		t.Fatalf("a held service port exited %d, want the retryable %d", code, CapacityDeferredExitCode)
-	}
+	requireStop(t, code, runError, policy.ReasonCapacityDeferred)
 }
 
 // TestEnvironmentValueResolvesLastDuplicate pins duplicate-key resolution to the

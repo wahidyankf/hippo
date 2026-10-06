@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -105,6 +106,87 @@ func DefaultResourceTiers() map[string]ResourceTierPolicy {
 	}
 }
 
+// ShedCause is why the reservation ledger marks an owner for shedding, which the
+// owner's own guard reads to stop its child. The zero value is ShedCauseNone: the
+// owner is not marked. The ledger is shared state that every HIPPO version reads,
+// so a cause is the integer v0.8.4 wrote for it and nothing else decodes.
+type ShedCause uint8
+
+const (
+	// ShedCauseNone is the zero value: no shed.
+	ShedCauseNone ShedCause = iota
+	// ShedCauseStorage is a shed because the disk floor was crossed.
+	ShedCauseStorage
+	// ShedCausePressure is a shed under host pressure other than storage.
+	ShedCausePressure
+)
+
+// Reason is the reason the owner's guard stops with when it sheds for the cause:
+// storage keeps its own, and any other pressure is a shed, never the capacity
+// deferral whose integer the ledger shares. A value that is no member has none.
+func (cause ShedCause) Reason() policy.Reason {
+	switch cause {
+	case ShedCauseStorage:
+		return policy.ReasonStorageBlocked
+	case ShedCausePressure:
+		return policy.ReasonPressureShed
+	case ShedCauseNone:
+		// Nothing is shed, so there is nothing to stop for.
+	}
+
+	return policy.ReasonNone
+}
+
+// ledgerCode is the integer v0.8.4 wrote for the cause in the ledger's
+// sheddingExitCode: 73 for storage, and 75 for any other pressure, the integer
+// the capacity deferral also carried. This switch is the only table of them.
+func (cause ShedCause) ledgerCode() (int, error) {
+	switch cause {
+	case ShedCauseNone:
+		return 0, nil
+	case ShedCauseStorage:
+		return 73, nil
+	case ShedCausePressure:
+		return 75, nil
+	}
+
+	return 0, fmt.Errorf("shed cause %d is not one the ledger records", uint8(cause))
+}
+
+// MarshalJSON writes the integer the ledger records for the cause, and refuses
+// a value that is no member.
+func (cause ShedCause) MarshalJSON() ([]byte, error) {
+	code, err := cause.ledgerCode()
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(code)
+}
+
+// UnmarshalJSON reads 0, 73, or 75 and refuses every other value, so a ledger
+// that records a cause this version does not know fails closed before anything
+// is admitted or mutated. It asks every possible cause for its integer, so a
+// member added to the constants is read back without a second table.
+func (cause *ShedCause) UnmarshalJSON(data []byte) error {
+	var code int
+	if err := json.Unmarshal(data, &code); err != nil {
+		return fmt.Errorf("a shedding code is an integer: %w", err)
+	}
+	for raw := uint8(0); ; raw++ {
+		if recorded, err := ShedCause(raw).ledgerCode(); err == nil && recorded == code {
+			*cause = ShedCause(raw)
+
+			return nil
+		}
+		if raw == math.MaxUint8 {
+			break
+		}
+	}
+
+	return fmt.Errorf("sheddingExitCode %d is neither 73 nor 75", code)
+}
+
 // ReservationOwner is a privacy-safe shared owner record. PID is diagnostic only;
 // ownership liveness is proven by an advisory identity lock rather than PID equality.
 type ReservationOwner struct {
@@ -118,7 +200,7 @@ type ReservationOwner struct {
 	ConfigHash     string            `json:"configHash,omitempty"`
 	ProcessGroup   int               `json:"processGroup,omitempty"`
 	Shedding       bool              `json:"shedding,omitempty"`
-	SheddingExit   int               `json:"sheddingExitCode,omitempty"`
+	SheddingCause  ShedCause         `json:"sheddingExitCode,omitempty"`
 	MaxOwners      int               `json:"maxActiveOwners"`
 	PeakOwners     int               `json:"peakOwnerCount,omitempty"`
 	IdentityDevice uint64            `json:"identityDevice,omitempty"`
@@ -603,7 +685,7 @@ func validateReservationLedger(ledger reservationLedger) error { //nolint:cyclop
 			return errors.New("reservation ledger owner sequence is invalid")
 		}
 		if owner.ProcessGroup < 0 || owner.Shedding && owner.ProcessGroup == 0 ||
-			owner.Shedding && !validSheddingExitCode(owner.SheddingExit) || !owner.Shedding && owner.SheddingExit != 0 {
+			owner.Shedding && owner.SheddingCause == ShedCauseNone || !owner.Shedding && owner.SheddingCause != ShedCauseNone {
 			return errors.New("reservation ledger owner process state is invalid")
 		}
 		if err := validateReservationVector("owner request", owner.Requested, ledger.Capacity); err != nil {
@@ -1607,7 +1689,7 @@ func reservationVictimPresent(ctx context.Context, root string, victim Reservati
 		if owner.Token != victim.Token {
 			continue
 		}
-		if owner.ProcessGroup != victim.ProcessGroup || !owner.Shedding || owner.SheddingExit != victim.SheddingExit {
+		if owner.ProcessGroup != victim.ProcessGroup || !owner.Shedding || owner.SheddingCause != victim.SheddingCause {
 			return finish(false, errors.New("selected reservation victim ownership changed during shedding"))
 		}
 
@@ -1617,54 +1699,50 @@ func reservationVictimPresent(ctx context.Context, root string, victim Reservati
 	return finish(false, nil)
 }
 
-func validSheddingExitCode(code int) bool {
-	return code == StorageBlockedExitCode || code == CapacityDeferredExitCode
-}
-
-// ReservationSheddingSelection returns the privacy-safe exit selected for this owner.
+// ReservationSheddingSelection returns the privacy-safe cause selected for this owner.
 // Only the owning guard uses this mark to stop and reap its own supervised child.
-func ReservationSheddingSelection(root string, session *Session) (bool, int, error) {
+func ReservationSheddingSelection(root string, session *Session) (bool, ShedCause, error) {
 	if session == nil || session.Inherited {
-		return false, 0, nil
+		return false, ShedCauseNone, nil
 	}
 	lock, err := lockCoordinationForRelease(root)
 	if err != nil {
-		return false, 0, err
+		return false, ShedCauseNone, err
 	}
-	finish := func(selected bool, exitCode int, outcome error) (bool, int, error) {
-		return selected, exitCode, errors.Join(outcome, releaseCoordinationLock(lock))
+	finish := func(selected bool, cause ShedCause, outcome error) (bool, ShedCause, error) {
+		return selected, cause, errors.Join(outcome, releaseCoordinationLock(lock))
 	}
 
 	ledger, err := readReservationLedger(root)
 	if err != nil {
-		return finish(false, 0, err)
+		return finish(false, ShedCauseNone, err)
 	}
 	if err = reconcileReservationLedger(root, &ledger); err != nil {
-		return finish(false, 0, err)
+		return finish(false, ShedCauseNone, err)
 	}
 	for _, owner := range ledger.Owners {
 		if owner.Token == session.Token {
-			return finish(owner.Shedding, owner.SheddingExit, nil)
+			return finish(owner.Shedding, owner.SheddingCause, nil)
 		}
 	}
 
-	return finish(false, 0, errors.New("reservation owner disappeared during supervision"))
+	return finish(false, ShedCauseNone, errors.New("reservation owner disappeared during supervision"))
 }
 
 // SelectPressureVictim atomically selects at most one newest revocable owner.
-func SelectPressureVictim(root string, exitCode int) (ReservationOwner, bool, error) {
-	return selectPressureVictim(root, exitCode, false)
+func SelectPressureVictim(root string, cause ShedCause) (ReservationOwner, bool, error) {
+	return selectPressureVictim(root, cause, false)
 }
 
 // SelectEmergencyPressureVictim permits transactional work only after all
 // revocable classes have been considered at the configured emergency floor.
-func SelectEmergencyPressureVictim(root string, exitCode int) (ReservationOwner, bool, error) {
-	return selectPressureVictim(root, exitCode, true)
+func SelectEmergencyPressureVictim(root string, cause ShedCause) (ReservationOwner, bool, error) {
+	return selectPressureVictim(root, cause, true)
 }
 
-func selectPressureVictim(root string, exitCode int, includeTransactional bool) (ReservationOwner, bool, error) {
-	if !validSheddingExitCode(exitCode) {
-		return ReservationOwner{}, false, errors.New("reservation shedding exit code is invalid")
+func selectPressureVictim(root string, cause ShedCause, includeTransactional bool) (ReservationOwner, bool, error) {
+	if cause.Reason() == policy.ReasonNone {
+		return ReservationOwner{}, false, errors.New("reservation shed cause is invalid")
 	}
 	lock, err := acquireCoordinationLock(context.Background(), root, coordinationSelectionWait)
 	if err != nil {
@@ -1703,7 +1781,7 @@ func selectPressureVictim(root string, exitCode int, includeTransactional bool) 
 		return ReservationOwner{}, false, nil
 	}
 	ledger.Owners[selected].Shedding = true
-	ledger.Owners[selected].SheddingExit = exitCode
+	ledger.Owners[selected].SheddingCause = cause
 	if err = writeReservationLedger(root, ledger); err != nil {
 		return ReservationOwner{}, false, err
 	}

@@ -26,10 +26,10 @@ func (application Application) releaseCheck(ctx context.Context, options release
 
 	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskRelease, probe.Sample)
 	if resolveError != nil {
-		return policy.ReplanRequiredExitCode, resolveError
+		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
-	if resolution.ExitCode != 0 {
-		return resolution.ExitCode, nil
+	if resolution.Reason != policy.ReasonNone {
+		return 0, policy.Stopped(resolution.Reason, nil)
 	}
 
 	return releaseCheckVerdict(releaseguard.CheckWithPolicy(

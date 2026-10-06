@@ -264,11 +264,12 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 		if execution.usage != "" {
 			_, _ = fmt.Fprint(application.Stderr, "\n", execution.usage)
 		}
-		if err == nil {
-			// The guard returns no error when it sheds work against a limit,
-			// because being shed is an outcome and not a fault. Reporting it
-			// is this boundary's job; turning it into an error here would tell
-			// every in-process caller that something went wrong.
+		if policy.CarriesNoError(err) {
+			// The guard stops with no error of its own when it sheds work
+			// against a limit, because being shed is an outcome and not a
+			// fault. Reporting it is this boundary's job; turning it into an
+			// error here would tell every in-process caller that something
+			// went wrong.
 			return failure.Status(), nil
 		}
 

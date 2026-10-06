@@ -8,7 +8,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -18,17 +17,26 @@ import (
 // without pinning what it runs.
 const bodySchemaVersion = 1
 
-// internalReasons maps the statuses hippo's guard and policy layers return
-// among themselves to the reason each one meant. Those numbers — 73, 74, 75,
-// 76, 78 — never leave the process; they survive here only as the seam that
-// carries their meaning into the body, so the layers below need no rewrite
-// to gain it.
-var internalReasons = map[int]status.Code{
-	guard.StorageBlockedExitCode:    status.CodeLimitStorageBlocked,
-	guard.CapacityDeferredExitCode:  status.CodeLimitCapacityDeferred,
-	guard.PressureShedExitCode:      status.CodeLimitPressureShed,
-	policy.ProtocolMismatchExitCode: status.CodeCoordinationProtocolMismatch,
-	policy.ReplanRequiredExitCode:   status.CodePolicyReplanRequired,
+// reasonCode is the code the boundary reports for an internal reason, and the
+// one place that decides it; status.Status turns the code into 124 or 125. A
+// stop that names no reason, or one that is no member, is hippo's own fault.
+func reasonCode(reason policy.Reason) status.Code {
+	switch reason {
+	case policy.ReasonStorageBlocked:
+		return status.CodeLimitStorageBlocked
+	case policy.ReasonCapacityDeferred:
+		return status.CodeLimitCapacityDeferred
+	case policy.ReasonPressureShed:
+		return status.CodeLimitPressureShed
+	case policy.ReasonProtocolMismatch:
+		return status.CodeCoordinationProtocolMismatch
+	case policy.ReasonReplanRequired:
+		return status.CodePolicyReplanRequired
+	case policy.ReasonNone:
+		// Nothing stopped, so a stop naming no reason is a fault; the code below says so.
+	}
+
+	return status.CodeSupervisionFailed
 }
 
 // failureBody is the machine-readable failure, and the only shape hippo writes
@@ -59,15 +67,11 @@ func classify(execution *commandExecution, err error) *status.Failure {
 		return &failure
 	}
 
-	code, internal := internalReasons[execution.exitCode]
-	switch {
-	case internal:
-		message := reasonMessage(code)
-		if err != nil {
-			message = err.Error()
-		}
+	if stop, stopped := errors.AsType[*policy.Stop](err); stopped {
+		return stopFailure(stop.Reason, err)
+	}
 
-		return &status.Failure{Code: code, Message: message}
+	switch {
 	case err == nil:
 		// A status hippo returned without an error is a result, not a failure:
 		// 0 for an affirmative answer and 1 for a negative one.
@@ -81,11 +85,22 @@ func classify(execution *commandExecution, err error) *status.Failure {
 	}
 }
 
+// stopFailure is the failure a stop for the reason reports. A stop that carries
+// an error says that error; one that carries nothing says the reason's sentence.
+func stopFailure(reason policy.Reason, err error) *status.Failure {
+	message := reasonMessage(reason)
+	if !policy.CarriesNoError(err) {
+		message = err.Error()
+	}
+
+	return &status.Failure{Code: reasonCode(reason), Message: message}
+}
+
 // endedByInterruption reports whether a handler's result is only the
 // cancellation a signal caused: no error, or the cancellation itself. A
 // classified failure is hippo's own answer and outranks the signal.
 func endedByInterruption(err error) bool {
-	if err == nil {
+	if policy.CarriesNoError(err) {
 		return true
 	}
 	if _, classified := errors.AsType[status.Failure](err); classified {
@@ -98,23 +113,23 @@ func endedByInterruption(err error) bool {
 // reasonMessage is the sentence a reason carries when the layer that decided
 // returned no error of its own — which the guard does deliberately, because
 // being shed against a limit is an outcome rather than a fault.
-//
-//nolint:exhaustive // Only the reasons the internal statuses carry reach here; the default covers the rest.
-func reasonMessage(code status.Code) string {
-	switch code {
-	case status.CodeLimitStorageBlocked:
+func reasonMessage(reason policy.Reason) string {
+	switch reason {
+	case policy.ReasonStorageBlocked:
 		return "the disk floor stopped this work; free space before retrying"
-	case status.CodeLimitCapacityDeferred:
+	case policy.ReasonCapacityDeferred:
 		return "capacity deferred this work; retry when the host is quieter"
-	case status.CodeLimitPressureShed:
+	case policy.ReasonPressureShed:
 		return "host pressure shed this work after the payload ran; recover it before repeating anything"
-	case status.CodeCoordinationProtocolMismatch:
+	case policy.ReasonProtocolMismatch:
 		return "live peer coordination state this client cannot safely join"
-	case status.CodePolicyReplanRequired:
+	case policy.ReasonReplanRequired:
 		return "no profile admits this request as asked for"
-	default:
-		return "hippo could not complete this work"
+	case policy.ReasonNone:
+		// A stop that names no reason has no sentence of its own; the one below is the fault's.
 	}
+
+	return "hippo could not complete this work"
 }
 
 // report writes the failure the two ways a caller may read it: a single line

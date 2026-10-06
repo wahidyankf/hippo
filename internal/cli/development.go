@@ -92,14 +92,14 @@ func (application Application) version(options versionOptions) (int, error) {
 }
 
 func withAssessmentDecision(resolution policy.Resolution, assessment policy.Assessment) policy.Resolution {
-	if resolution.ExitCode != 0 {
+	if resolution.Reason != policy.ReasonNone {
 		return resolution
 	}
 
 	if assessment.StorageBlocked {
-		resolution.Decision, resolution.ExitCode = policy.DecisionCleanup, guard.StorageBlockedExitCode
+		resolution.Decision, resolution.Reason = policy.DecisionCleanup, policy.ReasonStorageBlocked
 	} else if assessment.State != policy.StateNormal {
-		resolution.Decision, resolution.ExitCode, resolution.Retryable = policy.DecisionWait, guard.CapacityDeferredExitCode, true
+		resolution.Decision, resolution.Reason, resolution.Retryable = policy.DecisionWait, policy.ReasonCapacityDeferred, true
 	}
 
 	return resolution
@@ -137,12 +137,16 @@ func readStatusCoordination(ctx context.Context, root, configuredMode string) (g
 	return guard.ReservationStatus(ctx, root)
 }
 
-func coordinationStatusExitCode(err error) int {
+// coordinationFailure is what a failed read of the shared root's coordination
+// state returns: a protocol mismatch stops the work for that reason, anything
+// else is a failure of the read. The action says what was being done.
+func coordinationFailure(action string, err error) (int, error) {
+	failure := fmt.Errorf("%s: %w", action, err)
 	if guard.IsCoordinationProtocolMismatch(err) {
-		return policy.ProtocolMismatchExitCode
+		return 0, policy.Stopped(policy.ReasonProtocolMismatch, failure)
 	}
 
-	return 1
+	return 1, failure
 }
 
 func tagsMatch(actual, expected map[string]string) bool {
@@ -206,7 +210,7 @@ func (application Application) status(ctx context.Context, options statusOptions
 
 	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, policy.TaskEphemeral, second.Sample)
 	if resolveError != nil {
-		return policy.ReplanRequiredExitCode, resolveError
+		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
 
 	assessment := policy.ResourceAssessment([]policy.Sample{first.Sample, second.Sample}, resolution.Policy)
@@ -220,7 +224,7 @@ func (application Application) status(ctx context.Context, options statusOptions
 	if options.jsonOutput {
 		coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
 		if coordinationError != nil {
-			return coordinationStatusExitCode(coordinationError), fmt.Errorf("read coordination status: %w", coordinationError)
+			return coordinationFailure("read coordination status", coordinationError)
 		}
 		payload := struct {
 			policy.Sample
@@ -260,7 +264,7 @@ func (application Application) status(ctx context.Context, options statusOptions
 
 	coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
 	if coordinationError != nil {
-		return coordinationStatusExitCode(coordinationError), fmt.Errorf("read coordination status: %w", coordinationError)
+		return coordinationFailure("read coordination status", coordinationError)
 	}
 	coordination = filterCoordinationRows(coordination, options.source, filterTags)
 	_, err = fmt.Fprintf(
@@ -533,7 +537,7 @@ func (application Application) runIdentity(options runOptions, schemaVersion int
 	return runIdentity, nil
 }
 
-func (application Application) run(ctx context.Context, options runOptions) (int, error) { //nolint:cyclop,funlen,gocognit,gocyclo // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
+func (application Application) run(ctx context.Context, options runOptions) (int, error) { //nolint:cyclop,funlen,gocognit // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
 	if options.workingDir != "" {
 		absolute, err := filepath.Abs(options.workingDir)
 		if err != nil {
@@ -580,9 +584,9 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	taskClass := policy.TaskClass(options.class)
 	resolution, resolveError := configuration.Catalog.Resolve(options.requestedProfile, taskClass, probe.Sample)
 	if resolveError != nil {
-		return policy.ReplanRequiredExitCode, resolveError
+		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
-	if resolution.ExitCode != 0 {
+	if resolution.Reason != policy.ReasonNone {
 		_, _ = fmt.Fprintf(
 			application.Stderr,
 			"HIPPO decision=%s requested=%s resolved=%s.\n",
@@ -591,7 +595,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 			resolution.ResolvedProfile,
 		)
 
-		return resolution.ExitCode, nil
+		return 0, policy.Stopped(resolution.Reason, nil)
 	}
 	liveAssessment := policy.ResourceAssessment([]policy.Sample{probe.Sample}, resolution.Policy)
 	promotion, promotionError := evaluatePromotion(root, configuration.Coordination, liveAssessment, application.Now())
@@ -601,17 +605,13 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 	if configuration.Coordination.SchemaVersion >= 3 {
 		coordination, coordinationError := statusCoordination(ctx, root, configuration.Coordination.Mode)
 		if coordinationError != nil {
-			if guard.IsCoordinationProtocolMismatch(coordinationError) {
-				return policy.ProtocolMismatchExitCode, fmt.Errorf("verify schema-3 activation: %w", coordinationError)
-			}
-
-			return 1, fmt.Errorf("verify schema-3 activation: %w", coordinationError)
+			return coordinationFailure("verify schema-3 activation", coordinationError)
 		}
 		if coordination.LegacyEntries > 0 {
-			return policy.ProtocolMismatchExitCode, fmt.Errorf(
+			return 0, policy.Stopped(policy.ReasonProtocolMismatch, fmt.Errorf(
 				"schema 3 activation requires legacy owners and waiters to drain (remaining=%d)",
 				coordination.LegacyEntries,
-			)
+			))
 		}
 	}
 
@@ -664,7 +664,7 @@ func (application Application) run(ctx context.Context, options runOptions) (int
 			}
 		}
 		if resolveError != nil {
-			return policy.ReplanRequiredExitCode, resolveError
+			return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 		}
 	}
 	resolution.Policy.LeaseWait = admissionWait

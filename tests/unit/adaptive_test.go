@@ -8,7 +8,6 @@ import (
 	"time"
 
 	resourceconfig "github.com/wahidyankf/hippo/internal/config"
-	"github.com/wahidyankf/hippo/internal/guard"
 	"github.com/wahidyankf/hippo/internal/host"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
@@ -54,17 +53,17 @@ func TestAdaptiveProfileSelectionAndThresholds(t *testing.T) { //nolint:cyclop /
 	}
 
 	minimal, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(policy.GiB, 200*policy.MiB, policy.GiB, 4*policy.GiB, "unavailable"))
-	if err != nil || minimal.ResolvedProfile != "minimal" || minimal.Concurrency != 1 || minimal.ExitCode != 0 {
+	if err != nil || minimal.ResolvedProfile != "minimal" || minimal.Concurrency != 1 || minimal.Reason != policy.ReasonNone {
 		t.Fatalf("unexpected minimal resolution %+v error=%v", minimal, err)
 	}
 
 	strict, err := catalog.Resolve("balanced", "transactional", adaptiveSample(5*policy.GiB, 700*policy.MiB, 12*policy.GiB, 14*policy.GiB, "unavailable"))
-	if err != nil || strict.ExitCode != policy.ReplanRequiredExitCode || strict.Decision != "replan" {
+	if err != nil || strict.Reason != policy.ReasonReplanRequired || strict.Decision != "replan" {
 		t.Fatalf("unexpected strict resolution %+v error=%v", strict, err)
 	}
 
 	cleanup, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(policy.GiB, 800*policy.MiB, 200*policy.MiB, policy.GiB, "unavailable"))
-	if err != nil || cleanup.ExitCode != guard.StorageBlockedExitCode || cleanup.Decision != "cleanup" {
+	if err != nil || cleanup.Reason != policy.ReasonStorageBlocked || cleanup.Decision != "cleanup" {
 		t.Fatalf("unexpected cleanup resolution %+v error=%v", cleanup, err)
 	}
 	if _, err := catalog.Resolve("missing", "ephemeral", adaptiveSample(policy.GiB, policy.GiB, policy.GiB, policy.GiB, "idle")); err == nil {

@@ -3,11 +3,13 @@ package unit_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -79,7 +81,11 @@ func TestReservationLedgerCorruptionFailsClosedWithoutMutation(t *testing.T) {
 		"overflow totals":       `{"schemaVersion":2,"capacity":{"cpu":9223372036854775807,"memoryBytes":9223372036854775807},"nextSequence":2,"owners":[{"token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pid":1,"class":"ephemeral","profile":"balanced","requested":{"cpu":9223372036854775807,"memoryBytes":9223372036854775807},"allocated":{"cpu":9223372036854775807,"memoryBytes":9223372036854775807},"sequence":1,"maxActiveOwners":20},{"token":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pid":1,"class":"service","profile":"balanced","requested":{"cpu":1,"memoryBytes":268435456},"allocated":{"cpu":1,"memoryBytes":268435456},"sequence":2,"maxActiveOwners":20}],"waiters":[]}`,
 		"impossible structure":  strings.Replace(validOwner, `"allocated":{"cpu":1`, `"allocated":{"cpu":2`, 1),
 		"invalid shedding exit": strings.TrimSuffix(validOwner, "}") + `,"processGroup":123,"shedding":true,"sheddingExitCode":1}`,
-		"duplicate field":       `{"schemaVersion":2,"schemaVersion":2,"capacity":{"cpu":0,"memoryBytes":0},"nextSequence":0,"owners":[],"waiters":[]}`,
+		// 74 is the status a shed returns inside the process; a ledger records 73 or 75.
+		"shedding exit 74":         strings.TrimSuffix(validOwner, "}") + `,"processGroup":123,"shedding":true,"sheddingExitCode":74}`,
+		"shedding without a cause": strings.TrimSuffix(validOwner, "}") + `,"processGroup":123,"shedding":true}`,
+		"a cause without shedding": strings.TrimSuffix(validOwner, "}") + `,"processGroup":123,"sheddingExitCode":73}`,
+		"duplicate field":          `{"schemaVersion":2,"schemaVersion":2,"capacity":{"cpu":0,"memoryBytes":0},"nextSequence":0,"owners":[],"waiters":[]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
@@ -582,25 +588,136 @@ func TestPressureVictimOrderingNeverSelectsTransactional(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, selected, err := guard.SelectPressureVictim(root, 1); err == nil || selected {
-		t.Fatalf("invalid shedding exit was accepted: selected=%v error=%v", selected, err)
+	for _, cause := range []guard.ShedCause{guard.ShedCauseNone, guard.ShedCause(200)} {
+		if _, selected, err := guard.SelectPressureVictim(root, cause); err == nil || selected {
+			t.Fatalf("shed cause %d was accepted: selected=%v error=%v", cause, selected, err)
+		}
 	}
-	victim, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != ephemeral.Token {
 		t.Fatalf("first victim=%+v selected=%v error=%v", victim, selected, err)
 	}
 	if err = guard.ReleaseReservation(root, ephemeral); err != nil {
 		t.Fatal(err)
 	}
-	victim, selected, err = guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err = guard.SelectPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != service.Token {
 		t.Fatalf("second victim=%+v selected=%v error=%v", victim, selected, err)
 	}
 	if err = guard.ReleaseReservation(root, service); err != nil {
 		t.Fatal(err)
 	}
-	if _, selected, err = guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); err != nil || selected {
+	if _, selected, err = guard.SelectPressureVictim(root, guard.ShedCausePressure); err != nil || selected {
 		t.Fatalf("transactional owner was selected: selected=%v error=%v", selected, err)
+	}
+}
+
+// legacyShedCauses is every shed cause with the integer v0.8.4 wrote for it in
+// the reservation ledger's sheddingExitCode: 73 for storage and 75 for any other
+// pressure, which is the integer the capacity deferral also carried.
+var legacyShedCauses = []struct {
+	cause  guard.ShedCause
+	code   int
+	reason policy.Reason
+}{
+	{guard.ShedCauseNone, 0, policy.ReasonNone},
+	{guard.ShedCauseStorage, 73, policy.ReasonStorageBlocked},
+	{guard.ShedCausePressure, 75, policy.ReasonPressureShed},
+}
+
+func TestShedCauseKeepsItsV084LedgerCode(t *testing.T) {
+	for _, row := range legacyShedCauses {
+		encoded, err := json.Marshal(row.cause)
+		if err != nil || string(encoded) != strconv.Itoa(row.code) {
+			t.Errorf("shed cause %d encodes as %s (%v), want %d", row.cause, encoded, err, row.code)
+		}
+		var decoded guard.ShedCause
+		if err = json.Unmarshal([]byte(strconv.Itoa(row.code)), &decoded); err != nil || decoded != row.cause {
+			t.Errorf("%d decodes as shed cause %d (%v), want %d", row.code, decoded, err, row.cause)
+		}
+	}
+	if encoded, err := json.Marshal(guard.ShedCause(200)); err == nil {
+		t.Errorf("a shed cause that is no member encoded as %s, want a refusal", encoded)
+	}
+	// 74 is the pressure-shed status inside the process, which a ledger never
+	// records; 1 and 72 are neither cause, and the rest are not integers.
+	for _, text := range []string{"1", "72", "74", "76", "78", "-73", "73.5", `"73"`, "true", "[]"} {
+		decoded := guard.ShedCausePressure
+		if err := json.Unmarshal([]byte(text), &decoded); err == nil || decoded != guard.ShedCausePressure {
+			t.Errorf("%s decodes as shed cause %d (%v), want a refusal that leaves the cause as it was", text, decoded, err)
+		}
+	}
+}
+
+func TestShedCauseNamesTheReasonItsOwnerStopsFor(t *testing.T) {
+	for _, row := range legacyShedCauses {
+		if reason := row.cause.Reason(); reason != row.reason {
+			t.Errorf("shed cause %d stops for reason %d, want %d", row.cause, reason, row.reason)
+		}
+	}
+	if reason := guard.ShedCause(200).Reason(); reason != policy.ReasonNone {
+		t.Errorf("a shed cause that is no member stops for reason %d, want none", reason)
+	}
+}
+
+func TestEachShedWritesItsV084LedgerCode(t *testing.T) {
+	for _, row := range legacyShedCauses[1:] {
+		t.Run("sheddingExitCode "+strconv.Itoa(row.code), func(t *testing.T) {
+			root := t.TempDir()
+			session := acquireReservation(t, root, policy.TaskEphemeral, fixedPlan(1, 256*policy.MiB, 4, policy.GiB))
+			defer func() { _ = guard.ReleaseReservation(root, session) }()
+			if err := guard.ActivateReservation(root, session, 10_000); err != nil {
+				t.Fatal(err)
+			}
+			victim, selected, err := guard.SelectPressureVictim(root, row.cause)
+			if err != nil || !selected || victim.SheddingCause != row.cause {
+				t.Fatalf("victim=%+v selected=%v error=%v, want it shed for cause %d", victim, selected, err, row.cause)
+			}
+
+			data, err := os.ReadFile(filepath.Join(root, "reservations.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ledger struct {
+				Owners []struct {
+					Shedding bool `json:"shedding"`
+					Code     int  `json:"sheddingExitCode"`
+				} `json:"owners"`
+			}
+			if err = json.Unmarshal(data, &ledger); err != nil || len(ledger.Owners) != 1 ||
+				!ledger.Owners[0].Shedding || ledger.Owners[0].Code != row.code {
+				t.Fatalf("ledger %s (%v), want one shedding owner recording sheddingExitCode %d", data, err, row.code)
+			}
+		})
+	}
+}
+
+func TestALedgerShedCauseOutsideStorageAndPressureFailsAdmissionClosed(t *testing.T) {
+	root := t.TempDir()
+	marker := []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
+	if err := os.WriteFile(filepath.Join(root, "coordination-mode.json"), marker, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	owner := `{"token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pid":1,"class":"ephemeral","profile":"balanced",` +
+		`"requested":{"cpu":1,"memoryBytes":268435456},"allocated":{"cpu":1,"memoryBytes":268435456},"sequence":1,` +
+		`"processGroup":123,"shedding":true,"sheddingExitCode":74,"maxActiveOwners":20}`
+	ledger := []byte(`{"schemaVersion":2,"capacity":{"cpu":4,"memoryBytes":1073741824},"nextSequence":1,"owners":[` +
+		owner + `],"waiters":[]}` + "\n")
+	path := filepath.Join(root, "reservations.json")
+	if err := os.WriteFile(path, ledger, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	session, err := guard.AcquireReservation(
+		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
+		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, 0,
+	)
+	if session != nil || err == nil || guard.IsCoordinationDeferred(err) {
+		t.Fatalf("admission over a ledger recording sheddingExitCode 74: session=%+v error=%v, want it to fail closed", session, err)
+	}
+	after, readError := os.ReadFile(path)
+	if readError != nil || !bytes.Equal(after, ledger) {
+		t.Fatalf("the refused ledger changed: %q error=%v", after, readError)
 	}
 }
 
@@ -613,10 +730,10 @@ func TestEmergencyPressureSelectsTransactionalLast(t *testing.T) {
 	if err := guard.ActivateReservation(root, transactional, 12_345); err != nil {
 		t.Fatal(err)
 	}
-	if _, selected, err := guard.SelectPressureVictim(root, guard.CapacityDeferredExitCode); err != nil || selected {
+	if _, selected, err := guard.SelectPressureVictim(root, guard.ShedCausePressure); err != nil || selected {
 		t.Fatalf("ordinary pressure selected transactional: selected=%v error=%v", selected, err)
 	}
-	victim, selected, err := guard.SelectEmergencyPressureVictim(root, guard.CapacityDeferredExitCode)
+	victim, selected, err := guard.SelectEmergencyPressureVictim(root, guard.ShedCausePressure)
 	if err != nil || !selected || victim.Token != transactional.Token || victim.Class != policy.TaskTransactional {
 		t.Fatalf("emergency victim=%+v selected=%v error=%v", victim, selected, err)
 	}
