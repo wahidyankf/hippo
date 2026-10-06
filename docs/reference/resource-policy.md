@@ -77,11 +77,12 @@ Worked example: a 16 GiB host with swap, on `balanced`, reserves 15% of 16 GiB, 
 reads `memory-warning`; below 1.2 GiB, `memory-critical`. A 32 GiB host reaches the 4 GiB maximum reserve, so its
 warning starts at 4 GiB and its critical level at 2 GiB.
 
-When no profile fits, ordinary work still resolves to the first profile of the `minimal` lineage its fallback chain
-reaches: built-in `minimal`, or a configured profile whose `extends` lineage reaches `minimal`. That profile's admission
-memory is lowered to its critical level and its disk warning to the 256 MiB floor. A chain that reaches no such profile,
-such as a `constrained`-lineage profile with no `fallback`, has no usable fallback and fails with `125` naming
-`hippo.policy.replan-required`. Strict classes replan instead.
+When no profile fits, ordinary work still resolves to the profile that ends its fallback chain, the one with no
+`fallback`, when that profile's lineage reaches `minimal`: built-in `minimal`, or a configured profile whose `extends`
+lineage reaches `minimal`. That profile's admission memory is lowered to its critical level and its disk warning to the
+256 MiB floor. A `minimal`-lineage profile with a `fallback`, set or inherited, falls back to it instead. A chain that
+ends at any other profile, such as a `constrained`-lineage profile with no `fallback`, has no usable fallback and fails
+with `125` naming `hippo.policy.replan-required`. Strict classes replan instead.
 
 ### Fixed signals
 
