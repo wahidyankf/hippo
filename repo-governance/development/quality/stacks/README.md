@@ -20,5 +20,7 @@ deviation, is in the repository adapter.
   interfaces, owned goroutines, and statement coverage
 - [Repository Adapter](repository-adapter.md) — the packs adopted here, the decisions their standards leave open, and
   every local deviation
+- [Repository Adapter modules](repository-adapter/README.md) — the full records behind adapter decisions too large for
+  its entrypoint
 - [Shell Standards](shell-standards.md) — beyond Shell Scripts: a supported dialect, analyser and formatter gates,
   quoted and validated input, and behaviour tests without coverage

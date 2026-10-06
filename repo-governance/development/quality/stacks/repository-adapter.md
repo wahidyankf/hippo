@@ -77,8 +77,8 @@ Grouped by the source that leaves the choice open; each entry reads decision: ch
     adapters
   - race detection: deviation: the full gate's race pass, not the coverage run — keeps the quick gate fast enough never
     to be bypassed
-  - gates: `gofumpt` and `goimports`; golangci-lint with every linter enabled — stronger than the standard; each
-    disabled linter carries its reason in `.golangci.yml`
+  - gates: every golangci-lint linter, NilAway, and the domain literal analysis — stronger than the standard, per
+    [Go Analysis Gates](repository-adapter/001-go-analysis-gates.md)
   - context parameter: deviation: `noctx` disabled — host probes and supervised process groups have no request context
     to propagate
 - `shell-scripts.md`
