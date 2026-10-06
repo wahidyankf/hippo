@@ -338,3 +338,90 @@ func TestSchemaTwoRejectsATierCombinedWithAnAdmissionWait(t *testing.T) {
 		t.Fatalf("the refused run touched the ledger: totals=%+v error=%v", totals, statusError)
 	}
 }
+
+// statusProfile is the decision and exit code status JSON publishes for the
+// resolved profile. The exit code stays an integer in the JSON: it is the
+// number v0.8.4 published, whatever type the resolution holds it as.
+type statusProfile struct {
+	Decision  string `json:"decision"`
+	ExitCode  int    `json:"exitCode"`
+	Retryable bool   `json:"retryable"`
+}
+
+func TestStatusJSONKeepsEachResolutionsV084DecisionAndExitCode(t *testing.T) {
+	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name      string
+		sample    func(*policy.Sample)
+		decision  string
+		exitCode  int
+		retryable bool
+	}{
+		{name: "normal pressure", sample: func(*policy.Sample) {}, decision: "run", exitCode: 0},
+		{
+			name: "a stable warning", decision: "wait", exitCode: 75, retryable: true,
+			sample: func(sample *policy.Sample) { sample.MemoryPressureLevel = new(2) },
+		},
+		{
+			name: "free disk below the 256 MiB floor", decision: "cleanup", exitCode: 73,
+			sample: func(sample *policy.Sample) { sample.DiskFreeBytes = new(200 * policy.MiB) },
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			sample := stableDevelopmentSample(now)
+			test.sample(&sample)
+			stdout := &bytes.Buffer{}
+			application := Application{
+				Stdout: stdout, Stderr: &bytes.Buffer{}, Environment: []string{"HIPPO_ROOT=" + t.TempDir()},
+				Collector: stableCollector{sample: sample}, Now: func() time.Time { return now },
+				Sleep: func(time.Duration) {},
+			}
+			code, err := application.Run(context.Background(), []string{"status", "--json"})
+			var payload struct {
+				Profile statusProfile `json:"profile"`
+			}
+			if code != 0 || err != nil || json.Unmarshal(stdout.Bytes(), &payload) != nil ||
+				payload.Profile != (statusProfile{Decision: test.decision, ExitCode: test.exitCode, Retryable: test.retryable}) {
+				t.Fatalf("status code=%d error=%v profile=%+v, want %s with exit code %d", code, err, payload.Profile, test.decision, test.exitCode)
+			}
+		})
+	}
+}
+
+func TestAResolutionCarriesTheReasonItsDecisionStopsFor(t *testing.T) {
+	cleanup := withAssessmentDecision(policy.Resolution{}, policy.Assessment{StorageBlocked: true})
+	if cleanup.Decision != policy.DecisionCleanup || cleanup.Reason != policy.ReasonStorageBlocked || cleanup.Retryable {
+		t.Errorf("a blocked disk resolves to %+v, want cleanup for storage blocked", cleanup)
+	}
+	wait := withAssessmentDecision(policy.Resolution{}, policy.Assessment{State: policy.StateWarning})
+	if wait.Decision != policy.DecisionWait || wait.Reason != policy.ReasonCapacityDeferred || !wait.Retryable {
+		t.Errorf("a warning resolves to %+v, want a retryable wait for capacity deferred", wait)
+	}
+	run := withAssessmentDecision(policy.Resolution{}, policy.Assessment{State: policy.StateNormal})
+	if run.Reason != policy.ReasonNone || run.Retryable {
+		t.Errorf("normal pressure resolves to %+v, want no reason", run)
+	}
+
+	// A resolution that already stops keeps its own reason, whatever the host says.
+	replan := policy.Resolution{Decision: policy.DecisionReplan, Reason: policy.ReasonReplanRequired}
+	if kept := withAssessmentDecision(replan, policy.Assessment{StorageBlocked: true}); kept.Decision != replan.Decision ||
+		kept.Reason != replan.Reason {
+		t.Errorf("a replan resolution became %+v under a blocked disk, want it unchanged", kept)
+	}
+
+	// Its published exit code is the integer v0.8.4 carried for the reason.
+	for _, row := range []struct {
+		reason policy.Reason
+		want   string
+	}{
+		{policy.ReasonStorageBlocked, "73"}, {policy.ReasonCapacityDeferred, "75"}, {policy.ReasonReplanRequired, "78"},
+	} {
+		encoded, err := json.Marshal(policy.Resolution{Reason: row.reason})
+		var published struct {
+			ExitCode json.Number `json:"exitCode"`
+		}
+		if err != nil || json.Unmarshal(encoded, &published) != nil || published.ExitCode.String() != row.want {
+			t.Errorf("reason %d publishes %s (%v), want exitCode %s", row.reason, encoded, err, row.want)
+		}
+	}
+}
