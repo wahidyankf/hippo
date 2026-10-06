@@ -421,6 +421,9 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 - [x] `[AI]` Create the fix branch in the same directory: `git fetch origin --prune`, then
       `git switch -c worktree/fix-corrupt-waiter-identity-test-flake-fix origin/main`, then `npm ci`; proof:
       `git branch --show-current` prints the branch and `git status --porcelain` prints nothing. `[AC-06]`
+  - Result: (2026-10-07, recorded at the execution check) `worktree/fix-corrupt-waiter-identity-test-flake-fix` from
+    `origin/main` at `8e989ad`, with `npm ci`; the branch is #144's head branch, and the next item's gate commit was its
+    first commit on a clean tree.
 - [x] `[AI]` Run the [plan quality gate](../../../repo-governance/workflows/quality/plan-quality-gate.md) on this folder
       in mode `normal`, at most three cycles, and commit its repairs and its verdict line as the fix branch's first
       commit, a `docs(plans)` commit; proof: one terminal `plan-quality-gate:` verdict line recorded here and
@@ -608,6 +611,8 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
 - [x] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
       results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
       `git status --porcelain` prints nothing. `[AC-09]`
+  - Result: (2026-10-07, recorded at the execution check) committed as `e581c9d`, #144's head and last commit, on a
+    clean tree; it landed as `6b28306`. Recorded here because the commit cannot hold its own hash.
 
 ### Phase 5: Release Through v0.8.5
 
@@ -617,10 +622,11 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
       own merge. The fix must merge before the linting plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]`
       `[AC-04]` `[AC-05]` `[AC-06]` `[AC-07]`
   - Result: (2026-10-07) pull request #144 rebase-merged as `6b28306` (fix commit `56bb8d5`) from head `e581c9d`, its
-    body's "How it was proved" carrying the RED stall-overlay failure and the GREEN pass. `Quality gate` passed on that
-    head in run `37517100753`, every job `success`; run `37517088117` on the same head, superseded when the pull request
-    was marked ready, was cancelled, and its `Quality gate` job failed. The leak review was posted `pass` for head
-    `e581c9d`, and `leak-review` read `success` for it. _Reconcile_ read `0 0`. The merge preceded the `v0.8.5` tag.
+    body's "How it was proved" summarizing the RED stall-overlay failure and the GREEN pass; the captured output is in
+    this plan's Phase 2 results, which the pull request's diff carries. `Quality gate` passed on that head in run
+    `37517100753`, every job `success`; run `37517088117` on the same head, superseded when the pull request was marked
+    ready, was cancelled, and its `Quality gate` job failed. The leak review was posted `pass` for head `e581c9d`, and
+    `leak-review` read `success` for it. _Reconcile_ read `0 0`. The merge preceded the `v0.8.5` tag.
 - [x] `[AI]` Immediately after that merge, run
       [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for this
       worktree, at the owner's direction: confirm nothing is unpushed or running, then remove the worktree with
@@ -675,8 +681,13 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
     one incidental observation in the record, the `TempDir RemoveAll` cleanup line on the no-pause break test's failure
     path (Phase 3), stays there and is not promoted. It appears only under a deliberately broken copy, and the shipped
     test's `t.Cleanup(cancel)` already handles the failure path it shows.
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
       verdict line recorded here. `[AC-09]`
+  - Result: (2026-10-07)
+    `plan-execution-check: PASS_WITH_FINDINGS (1 run, 3 LOW, 3 repaired, AC-09 closed by archival)`, at `0ebb36f`. F1
+    and F2 (LOW: the last Phase 4 item and Phase 1's fix-branch item had no result line) and F3 (LOW: the Land result
+    said the pull-request body carried the captures, where it summarizes them) are repaired in this commit; F4
+    (informational: Phase 2 names pre-rebase hashes, which the Phase 5 result maps) needs no repair.
 
 ### Archival
 
