@@ -593,18 +593,25 @@ Branch `worktree/strict-go-linting-gates`.
 
 ### Unit 1 landing
 
-- [ ] `[AI]` Inspect the diff against
+- [x] `[AI]` Inspect the diff against
       [data safety](../../../repo-governance/conventions/public-repository-data-safety.md) and commit thematically;
       proof: every hook passes and `git log --oneline origin/main..HEAD` is recorded. `[AC-01]`
-- [ ] `[AI]` Run the [push review](../../../repo-governance/workflows/quality/pr-leak-review/002-push-review.md), push,
+  - Result: (2026-10-06) data-safety scan of the diff found no candidate; six thematic commits, every hook passed:
+    `7e03023`, `8539e1b`, `6a4ec32`, `44e9424`, `737fff8`, `083d691`.
+- [x] `[AI]` Run the [push review](../../../repo-governance/workflows/quality/pr-leak-review/002-push-review.md), push,
       screen the title and body with `scripts/public-safety/outbound-preflight.sh --surface pull-request`, and open a
       draft pull request; proof: the screen exits `0` and the pull request number is recorded. `[AC-01]`
-- [ ] `[AI]` Mark it ready and wait, polling no faster than every three minutes, for `Quality gate` on the head; proof:
+  - Result: push review clean, every `pre-push` gate passed; title and body screened (exit `0`); draft pull request
+    #132.
+- [x] `[AI]` Mark it ready and wait, polling no faster than every three minutes, for `Quality gate` on the head; proof:
       `success` on the recorded head. `[AC-01]`
-- [ ] `[AI]` Post the [leak review](../../../repo-governance/workflows/quality/pr-leak-review.md) for that exact head;
+  - Result: `Quality gate` `success` on head `083d691` (run 37399366467).
+- [x] `[AI]` Post the [leak review](../../../repo-governance/workflows/quality/pr-leak-review.md) for that exact head;
       proof: the `leak-review` status on the head reads `success`. `[AC-01]`
-- [ ] `[AI]` Rebase-merge once every [merge precondition](../../../repo-governance/conventions/pull-request-merge.md)
+  - Result: `pass` review posted on `083d691`; `leak-review` reads `success`.
+- [x] `[AI]` Rebase-merge once every [merge precondition](../../../repo-governance/conventions/pull-request-merge.md)
       holds, then _Reconcile_; proof: the merge commit recorded and the reconcile count `0 0`. `[AC-01]`
+  - Result: merged as `341cb75`; reconcile count `0 0`.
 
 > **Pause Safety**: Unit 1 is on `main`. Safe to stop. To resume: the starting commands for Unit 2.
 
@@ -612,7 +619,8 @@ Branch `worktree/strict-go-linting-gates`.
 
 Branch `worktree/typed-run-outcome`.
 
-- [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-09]`
+- [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-09]`
+  - Result: `worktree/typed-run-outcome` from `origin/main` at `341cb75`.
 - [ ] `[AI]` **RED** (`swe-developer`): add "History lists an outcome this version does not know as recorded" to
       `specs/behaviours/public-cli.feature`; run the unit adapter; acceptance: its steps are undefined. Bind them in
       `tests/support/steps.go` and `tests/support/history_v05.go`; acceptance: it passes, because `v0.8.4` reads the
