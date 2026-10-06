@@ -521,37 +521,78 @@ Phases 1–4 ticked and Phase 5 open.
 - [x] `[AI]` Commit the rest of this plan's execution record (Phases 1–4 ticked with the rebase, rerun, and boundary
       results) as a `docs(plans)` commit on the fix branch, as the last commit before landing; proof:
       `git status --porcelain` prints nothing. `[AC-07]`
+  - Result: (2026-10-07, recorded at the execution check) committed as `f932fb6`, #141's head and last commit, on a
+    clean tree; it landed as `aa274ee`. Recorded here because the commit cannot hold its own hash.
 
 ### Phase 5: Release Through v0.8.5
 
-- [ ] `[AI]` Land unit 2 with _Land_; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both
+- [x] `[AI]` Land unit 2 with _Land_; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both
       recorded here by unit 4, since the merged copy cannot hold its own merge. The fix must merge before the linting
       plan's Unit 7 tags `v0.8.5`. `[AC-01]` `[AC-02]` `[AC-03]` `[AC-04]` `[AC-05]`
-- [ ] `[AI]` Immediately after that merge, run
+  - Result: (2026-10-07) pull request #141, head `f932fb6`, rebase-merged on 2026-10-06 at 17:18:41Z as `aa274ee` on
+    `origin/main`, before `v0.8.5` was tagged. `Quality gate` passed on that head in PR Quality Gate run 37500123861
+    (job 112402742726, `success`); the earlier run on the same head, 37500107993, was cancelled and superseded, its
+    aggregate reading the cancellation as failure. The leak review of `f932fb6` was posted at 17:00:17Z with result
+    `pass`. _Reconcile_ read `0 0`.
+- [x] `[AI]` Immediately after that merge, run
       [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for this
       worktree, at the owner's direction: confirm nothing is unpushed or running, then remove the worktree with
       `git worktree remove` without `--force`, and delete `worktree/fix-cancelled-waiter-cleanup-flake` and `...-fix`
       locally and on `origin`; proof: `git worktree list` omits it,
       `git branch --list 'worktree/fix-cancelled-waiter-*'` and
       `git ls-remote origin 'refs/heads/worktree/fix-cancelled-waiter-*'` print nothing. `[AC-07]`
-- [ ] `[AI]` Provision `worktrees/fix-cancelled-waiter-cleanup-flake-record` from `origin/main` on branch
+  - Result: (2026-10-07) run at once after the merge: nothing was unpushed or running, the worktree was removed with
+    `git worktree remove` without `--force`, both branches were deleted locally, and `origin` had already deleted them
+    when their pull requests merged. Rerun from the record worktree: `git worktree list` omits
+    `worktrees/fix-cancelled-waiter-cleanup-flake`; `git branch --list 'worktree/fix-cancelled-waiter-*'` prints only
+    `worktree/fix-cancelled-waiter-cleanup-flake-record`, which the next item provisions, and with the two deleted names
+    prints nothing; `git ls-remote origin 'refs/heads/worktree/fix-cancelled-waiter-*'` prints nothing.
+- [x] `[AI]` Provision `worktrees/fix-cancelled-waiter-cleanup-flake-record` from `origin/main` on branch
       `worktree/fix-cancelled-waiter-cleanup-flake-record`, with `npm ci`, once `v0.8.5` is published; proof:
       `git branch --show-current` prints the branch. `[AC-07]`
-- [ ] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
+  - Result: (2026-10-07) after `git fetch origin --prune`, the worktree was added on
+    `worktree/fix-cancelled-waiter-cleanup-flake-record` from `origin/main` at `456d24b`, the commit `v0.8.5` tags, and
+    `npm ci` ran there under `./hippo run --class ephemeral --resource-tier light --disk-path .` (a dependency install,
+    not a gate). `git branch --show-current` prints `worktree/fix-cancelled-waiter-cleanup-flake-record`.
+- [x] `[AI]` Once `v0.8.5` is published, record the release in the record worktree's copy of this plan; proof:
       `git merge-base --is-ancestor <unit 2 merge commit> v0.8.5` exits `0`, `git show v0.8.5:CHANGELOG.md` holds the
       `Fixed` bullet, and the release URL, the tag's peeled commit, and `checksums.txt` are recorded here. `[AC-06]`
+  - Result: (2026-10-07) `v0.8.5` is published at <https://github.com/wahidyankf/hippo/releases/tag/v0.8.5> (2026-10-06
+    at 22:19:10Z, neither draft nor prerelease) by `release.yml` run 37539705716, `success`. The annotated tag object is
+    `f24bba1`; `git rev-parse v0.8.5^{commit}` prints `456d24bc2a20ee23a7b81746c1789133cd5c3a97`, the merge of #147.
+    `git merge-base --is-ancestor aa274ee v0.8.5` exits `0`. `git show v0.8.5:CHANGELOG.md` holds the bullet under
+    `## [v0.8.5] — 2026-10-07`, `### Fixed`, beginning "Cancelling a queued run could leave its waiter in the shared
+    FIFO queue" and ending "so the cancelled run still returns promptly." `checksums.txt`, as
+    `gh release download v0.8.5 -R wahidyankf/hippo -p checksums.txt -O -` prints it:
+
+    ```text
+    70f6ea5475adf5b818ed1be46e18ce481493cfecae635b1fb0ca5f806c6aefba  hippo_v0.8.5_darwin_amd64.tar.gz
+    498beba385fc887ac75f41e92ae091854a92354570b2c2c48109877b5ad34862  hippo_v0.8.5_darwin_arm64.tar.gz
+    13aac6777ea838a80eb699bc00816ca7f59ae6e1be4bbefd007fa15666cb7c4c  hippo_v0.8.5_linux_amd64.tar.gz
+    1b3e60aa5f491228487f8994efe237d5c2cbbf42b32d69c46cdb5295b683b6f2  hippo_v0.8.5_linux_arm64.tar.gz
+    ```
+
 - [ ] `[AI]` Recovery, dormant until triggered. Trigger: `v0.8.5` is published without unit 2's merge commit (the
       ancestry check above exits `1`). Then cut `v0.8.6` on `origin/main` through
       [release cut](../../../repo-governance/workflows/maintenance/release-cut.md), moving the bullet to a dated
       `## [v0.8.6]` entry and naming `v0.8.6` in every page that names the current release; proof: the same three
       records for `v0.8.6`. Otherwise: a dated, evidenced `Not triggered`. `[AC-06]`
+  - Result: (2026-10-07) Not triggered: `git merge-base --is-ancestor aa274ee v0.8.5` exits `0`, so `v0.8.5` carries
+    unit 2's merge commit and no `v0.8.6` is cut. The box stays unticked, as an untriggered recovery does.
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
+- [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-07]`
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
+  - Result: (2026-10-07) one entry promoted to governance, three discarded with reasons.
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md); proof: its
       verdict line recorded here. `[AC-07]`
+  - Result: (2026-10-07) `plan-execution-check: PASS_WITH_FINDINGS (1 run, 1 MEDIUM, 4 LOW, 0 blocking)`, at `220c548`.
+    F1 (MEDIUM: the last Phase 4 item had no result line), F2 (LOW: the promoted paragraph compared the remedy with
+    `scripts/test-loaded.sh`, whose own timeout defaults to 60 minutes), and F3 (LOW: the promotion recorded no Rules
+    Propagation or enforcement) are repaired here; F4 (LOW: `npm ci` under `./hippo`, a dependency install, already
+    recorded with its reason) needs no repair; F5 (LOW: two sibling plans link this plan's in-progress path) closes with
+    the archival change, which repoints them.
 
 ### Archival
 
@@ -571,15 +612,25 @@ before archival.
 - (2026-10-06) Only the unit test guards mode 2. With the context restored in the cleanup (Phase 4's third break test),
   both cleanup scenarios still pass at both adapters, because the step's 2 s `CleanupWait` and 500 ms hold leave the
   context time to spare; `TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent` alone fails, 20 of 20. No scenario
-  can stall the cleanup's goroutine deterministically, so the test stays in package `guard`.
+  can stall the cleanup's goroutine deterministically, so the test stays in package `guard`. **Discarded:** already
+  owned; the test's own comment (`internal/guard/run_test.go`, lines 834–836) names the late start after a stalled
+  goroutine that it alone reaches, and this plan's Gherkin implementation review records the scenarios' reach.
 - (2026-10-06) Phase 2's GREEN had to thread `wait` through `removeReservationWaiter` as well as
   `removeReservationWaiterAfterCancellation`, which its item names alone, because the lock wait lives in the former
-  until Phase 3's GREEN folds it into the latter.
+  until Phase 3's GREEN folds it into the latter. **Discarded:** specific to this plan's item wording;
+  `removeReservationWaiter` no longer exists.
 - (2026-10-06) Execution ran at load averages of 6–11, a quarter of the 34–47 the bug report saw, so the REDs are the
   two deterministic mutations (a 500 ms hold, a zero wait), never load. They prove both mechanisms; only AC-05's 20
-  repeated runs on a loaded host can show that load no longer flakes the scenarios.
+  repeated runs on a loaded host can show that load no longer flakes the scenarios. **Discarded:** specific to this
+  execution, and resolved within it: AC-05's 20 repeated runs passed at load averages up to 30.86, and the
+  [bug-fix plan](../../../repo-governance/conventions/plans/010-bug-fix-plan.md) convention already requires a
+  regression test that fails for the reported reason.
 - (2026-10-06) `npm run test:quick` ran `tests/unit` for 434.775 s at a load average of 7, close to Go's default
-  10-minute package timeout, so the run used `GOFLAGS=-timeout=30m`, as the _Full gate_ already does.
+  10-minute package timeout, so the run used `GOFLAGS=-timeout=30m`, as the _Full gate_ already does. **Promoted** to
+  governance: [quality gates](../../../repo-governance/development/quality-gates.md), "The Full Gate", which had no
+  local-run note; only `scripts/test-loaded.sh` raised the timeout, for its own run. Applied through Rules Propagation
+  at the execution check: no existing rule covered it, nothing conflicts, and the paragraph states that no gate checks
+  it.
 
 ## Directory Map
 
