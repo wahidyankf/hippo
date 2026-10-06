@@ -27,6 +27,26 @@ func marshalJSON(t *testing.T, value any) []byte {
 	return data
 }
 
+// readOwnerDocument decodes an owner document into a map the test can edit, and fails the test on a document that is
+// unreadable or decodes to null, which would leave the map nil.
+func readOwnerDocument(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var owner map[string]any
+	if err = json.Unmarshal(data, &owner); err != nil {
+		t.Fatal(err)
+	}
+	if owner == nil {
+		t.Fatalf("owner document %s decodes to null", path)
+	}
+
+	return owner
+}
+
 func TestHeavyLeaseLifecycleAndInheritance(t *testing.T) {
 	root := t.TempDir()
 	session, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
@@ -38,7 +58,7 @@ func TestHeavyLeaseLifecycleAndInheritance(t *testing.T) {
 		t.Fatal("inheritance validation failed")
 	}
 	inherited, err := guard.AcquireSession(context.Background(), root, session.Token, "ephemeral", 0)
-	if err != nil || !inherited.Inherited {
+	if err != nil || inherited == nil || !inherited.Inherited {
 		t.Fatalf("inherit failed: %+v %v", inherited, err)
 	}
 
@@ -275,11 +295,9 @@ func TestHeavyLeaseRejectsInvalidReleaseAndReclaimsStaleOwner(t *testing.T) {
 	}
 
 	ownerPath := filepath.Join(lock, "owner.json")
-	ownerData, _ := os.ReadFile(ownerPath)
-	var owner map[string]any
-	_ = json.Unmarshal(ownerData, &owner)
+	owner := readOwnerDocument(t, ownerPath)
 	owner["token"] = "other"
-	ownerData = marshalJSON(t, owner)
+	ownerData := marshalJSON(t, owner)
 	_ = os.WriteFile(ownerPath, ownerData, 0o600)
 	if guard.ReleaseSession(root, session) == nil {
 		t.Fatal("foreign owner release accepted")
@@ -318,11 +336,9 @@ func TestPortLeaseLifecycleValidationAndStaleRecovery(t *testing.T) {
 	}
 
 	ownerPath := filepath.Join(lease.Path, "owner.json")
-	data, _ := os.ReadFile(ownerPath)
-	var owner map[string]any
-	_ = json.Unmarshal(data, &owner)
+	owner := readOwnerDocument(t, ownerPath)
 	owner["owner"] = "other"
-	data = marshalJSON(t, owner)
+	data := marshalJSON(t, owner)
 	_ = os.WriteFile(ownerPath, data, 0o600)
 	if guard.ReleasePortLease(root, lease) == nil {
 		t.Fatal("foreign port release accepted")
@@ -591,5 +607,37 @@ func TestHeavyLeaseDeferralDescribesItsHolder(t *testing.T) {
 
 	if empty := guard.DescribeHeavyLease(root); !strings.Contains(empty, "no live") {
 		t.Fatalf("released lease was still described as held: %q", empty)
+	}
+}
+
+func TestDescribeHeavyLeaseReportsNullOwnerDocumentAsUnverifiable(t *testing.T) {
+	root := t.TempDir()
+	owner := filepath.Join(root, "heavy.lock", "owner.json")
+	if err := os.MkdirAll(filepath.Dir(owner), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(owner, []byte("null\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	description := guard.DescribeHeavyLease(root)
+	if !strings.Contains(description, "cannot be verified") {
+		t.Fatalf("a null owner document was described as %q", description)
+	}
+}
+
+func TestDescribeHeavyLeaseReportsEmptyOwnerDocumentAsUnverifiable(t *testing.T) {
+	root := t.TempDir()
+	owner := filepath.Join(root, "heavy.lock", "owner.json")
+	if err := os.MkdirAll(filepath.Dir(owner), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(owner, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	description := guard.DescribeHeavyLease(root)
+	if !strings.Contains(description, "cannot be verified") {
+		t.Fatalf("an empty owner document was described as %q", description)
 	}
 }

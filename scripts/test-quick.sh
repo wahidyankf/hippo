@@ -23,6 +23,13 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 ./scripts/format-check.sh
 go test -run '^$' ./...
 go tool golangci-lint run
+# NilAway follows nil flow across functions and packages, which golangci-lint's
+# per-function nilness cannot, so it runs beside the linter rather than inside
+# it. It exits 3 on a diagnostic and 1 when loading fails, either of which stops
+# this script; -json is not used because it always exits 0, so a finding would
+# pass. A false positive is excluded where it stands with a reasoned
+# //nolint:nilaway directive.
+go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...
 # Every package's own tests. The scenario "Every package with tests runs in a
 # gate" fails if a package holding tests falls outside these patterns.
 go test -count=1 ./cmd/... ./internal/... ./tests/support

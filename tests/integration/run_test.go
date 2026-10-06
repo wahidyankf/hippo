@@ -169,8 +169,8 @@ func TestReservationCoordinationReturnsProtocolMismatchBeforeChildExecution(t *t
 func TestInheritedGuardRunsDirectlyAndKeepsPortLease(t *testing.T) {
 	root, portRoot := t.TempDir(), t.TempDir()
 	session, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || session == nil {
+		t.Fatalf("acquire session: session=%v error=%v", session != nil, err)
 	}
 
 	defer func() { _ = guard.ReleaseSession(root, session) }()

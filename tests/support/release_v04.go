@@ -1396,7 +1396,7 @@ func requireV04ReleaseReproducibleArchives(root string) error {
 	if err != nil {
 		return err
 	}
-	var outputs []string
+	var outputs [2]string
 	for index, stamp := range []string{"200001020304", "201005060708"} {
 		build := filepath.Join(root, fmt.Sprintf("build-%d", index))
 		toolchain, installError := installStampedFakeGoV04(filepath.Join(build, "tool"), filepath.Join(build, "go-invocations"), stamp)
@@ -1411,7 +1411,7 @@ func requireV04ReleaseReproducibleArchives(root string) error {
 		if err = invokeReleaseBuilderEnvironmentV04(repository, releaseFixtureVersion, head, output, toolchain, map[string]string{temporaryDirectoryVariable: temporary}); err != nil {
 			return err
 		}
-		outputs = append(outputs, output)
+		outputs[index] = output
 	}
 	entries, err := os.ReadDir(outputs[0])
 	if err != nil {
