@@ -495,20 +495,31 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
 
 ### Phase 5: Land and Record
 
-- [ ] `[AI]` Land unit 1 with _Land_, its pull-request body carrying the RED and GREEN captures per
+- [x] `[AI]` Land unit 1 with _Land_, its pull-request body carrying the RED and GREEN captures per
       [red-green-refactor](../../../repo-governance/workflows/quality/red-green-refactor.md) and the plan-first
       deviation above; proof: the merge commit on `origin/main` and _Reconcile_ reading `0 0`, both recorded here by
       unit 2, since the merged copy cannot hold its own merge. `[AC-08]`
-- [ ] `[AI]` Immediately after that merge, run
+  - Result: (2026-10-07) pull request #152, head `b9f9d83` on base `0761ebf`, rebase-merged as `b9761fc` (the plan),
+    `c9d5bba` (the fix), `5aa78f7`, and `b8b8359`, so the plan landed on trunk first. Its body carries the RED and GREEN
+    captures and the plan-first deviation. `Quality gate` passed on that head in run 37556730560; the leak review was
+    posted `pass` for `b9f9d83` and `leak-review` read `success`. _Reconcile_ read `0 0`.
+- [x] `[AI]` Immediately after that merge, run
       [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for this
       worktree: confirm nothing is unpushed or running, remove it with `git worktree remove` without `--force`, and
       delete `worktree/fix-stable-warning-run-test-finds-no-summary` locally and on `origin`; proof: `git worktree list`
       omits it, and `git branch --list` and `git ls-remote origin` for that branch print nothing. `[AC-10]`
-- [ ] `[AI]` Provision the record worktree from the HIPPO repository location, since unit 1's worktree is gone:
+  - Result: (2026-10-07) nothing unpushed or running; `git worktree remove` without `--force` removed the worktree, and
+    the branch was deleted locally (`origin` had already deleted it). `git worktree list` omits it, and
+    `git branch --list` and `git ls-remote origin` for the branch print nothing; _Reconcile_ read `0 0`.
+- [x] `[AI]` Provision the record worktree from the HIPPO repository location, since unit 1's worktree is gone:
       `git fetch origin`, then `git worktree add worktrees/fix-stable-warning-run-test-finds-no-summary-record`
       `-b worktree/fix-stable-warning-run-test-finds-no-summary-record origin/main`, then `npm ci` inside the new
       worktree; proof: `git branch --show-current`, run there, prints the branch. `[AC-10]`
-- [ ] `[AI]` Record the landing in the record worktree's copy of this plan: the pull request, its merge commit, and the
+  - Result: (2026-10-07) from the HIPPO repository location: `git fetch origin`, then `git worktree add` at
+    `origin/main` `b8b8359`, then `npm ci` under `./hippo run --class ephemeral --resource-tier light` (a dependency
+    install, not a gate), exit `0`; `git branch --show-current` prints
+    `worktree/fix-stable-warning-run-test-finds-no-summary-record`.
+- [x] `[AI]` Record the landing in the record worktree's copy of this plan: the pull request, its merge commit, and the
       `Quality gate` run on the merged head, then commit it as
       `docs(plans): record fix-stable-warning-run-test-finds-no-summary's landing`; proof:
       `git merge-base --is-ancestor <merge commit> origin/main` exits `0`, and
@@ -516,6 +527,9 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
       request's commit count, `gh pr view <number> --json commits --jq '.commits | length'`, since a rebase-merge leaves
       those commits last on `origin/main`, each recorded here, and `git status --porcelain` prints nothing after the
       commit. `[AC-09]`
+  - Result: (2026-10-07) #152, merge commit `b8b8359`, `Quality gate` run 37556730560 on head `b9f9d83`.
+    `git merge-base --is-ancestor b8b8359 origin/main` exits `0`; the pull request has 4 commits, and
+    `git log --oneline b8b8359~4..b8b8359 -- CHANGELOG.md` prints nothing. Committed as this record commit.
 
 ### Phase 6: Close
 
