@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -56,7 +58,7 @@ func (driver *Driver) checkReleaseThroughCLI() error {
 		return err
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	driver.exitCode, _ = (cli.Application{
+	driver.exitCode, _ = bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr,
 		Environment: []string{"HIPPO_ROOT=" + root, "HOME=" + root, "PATH=/usr/bin:/bin"},
 		Collector:   &sequenceCollector{samples: driver.samples, failureFrom: driver.releaseCheckFailureFrom},

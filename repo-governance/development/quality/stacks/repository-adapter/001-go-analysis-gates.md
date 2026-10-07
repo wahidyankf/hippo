@@ -51,11 +51,11 @@ decision: choice — reason. Commands live where they run, in [`.golangci.yml`](
 
 The two exclusions, both false positives that tests beside them failed to reach:
 
-- `internal/guard/exclusive_status.go`, `ExclusiveStatus`, result 0 of `liveExclusiveHeavyOwner`: a nil owner comes only
-  with `live` false or an error, and both return first; NilAway does not correlate the three results. Tests:
-  `internal/guard/exclusive_status_test.go`.
-- `internal/guard/lease.go`, `DescribeHeavyLease`, result 0 of `readLeaseOwner`: a nil owner comes only with an error,
-  which the guarded condition tests first; NilAway loses that once `err` is reassigned. Tests:
+- `internal/adapters/runtime/exclusive_status.go`, `ExclusiveStatus`, result 0 of `liveExclusiveHeavyOwner`: a nil owner
+  comes only with `live` false or an error, and both return first; NilAway does not correlate the three results. Tests:
+  `internal/adapters/runtime/exclusive_status_test.go`.
+- `internal/adapters/runtime/lease.go`, `DescribeHeavyLease`, result 0 of `readLeaseOwner`: a nil owner comes only with
+  an error, which the guarded condition tests first; NilAway loses that once `err` is reassigned. Tests:
   `tests/integration/lease_evidence_test.go`.
 
 ## Domain Literal Analysis
@@ -65,6 +65,6 @@ The two exclusions, both false positives that tests beside them failed to reach:
   value with a literal" in [`quality-gates.feature`](../../../../../specs/behaviours/quality-gates.feature) — no private
   golangci-lint build and no new test-support dependency
 - reach: non-test files under `cmd/` and `internal/` built on the running platform; its header comment states both rules
-  and the name list — only `internal/host` has platform-only files, and it carries no domain name
+  and the name list — platform-specific collection lives in `internal/adapters/host` and carries no domain name
 - findings: none — the scenario fails on any; a violation is fixed where it stands, and no allowlist, waiver, or
   exemption exists

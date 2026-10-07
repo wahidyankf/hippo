@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 )
 
 // TestPublishedOutcomesMatchTheOutcomeList holds the closed outcome list in

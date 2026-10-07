@@ -15,11 +15,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/evidence"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	releaseguard "github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/policy"
-	releaseguard "github.com/wahidyankf/hippo/internal/release"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -151,7 +154,7 @@ func (driver *Driver) requireNoSummaryV082() error {
 // would hide the run behind a usage mistake, so it must answer 0 and list it.
 func (driver *Driver) requireHistoryOutcomeV082(outcome string) error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 	}).Run(context.Background(), []string{historyCommandName, "--outcome", outcome, "--jsonl"})
 	if code != 0 || err != nil {
@@ -239,7 +242,7 @@ func (driver *Driver) signalWatchV082(name string) error {
 			// the interval between snapshots.
 			sleeps++
 			if sleeps == 2 {
-				interrupt(status.Interruption{Signal: signalNamed(name)})
+				interrupt(status.Interruption{Signal: int(signalNamed(name))})
 			}
 		})
 
@@ -248,7 +251,7 @@ func (driver *Driver) signalWatchV082(name string) error {
 
 func (driver *Driver) runInterruptible(ctx context.Context, arguments []string, collector policy.Collector, sleep func(time.Duration)) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := (cli.Application{
+	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 		Collector: collector, Sleep: sleep,
 	}).Run(ctx, arguments)
@@ -383,7 +386,7 @@ type interruptingSampler struct {
 func (sampler *interruptingSampler) Collect(_ context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
 	sampler.calls++
 	if sampler.calls == sampler.interruptAt {
-		sampler.interrupt(status.Interruption{Signal: syscall.SIGINT})
+		sampler.interrupt(status.Interruption{Signal: int(syscall.SIGINT)})
 
 		return policy.Reading{}, errors.New("available memory estimate is unavailable")
 	}
@@ -423,12 +426,12 @@ func (driver *Driver) endReleaseCaptureV082(end string) error {
 	}
 	root := driver.interruption.root
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := (cli.Application{
+	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 		Collector: &sequenceCollector{samples: driver.samples},
 		MonitorRelease: func(monitorContext context.Context, _ releaseguard.MonitorConfig) error {
 			if end == signalTerminate {
-				interrupt(status.Interruption{Signal: syscall.SIGTERM})
+				interrupt(status.Interruption{Signal: int(syscall.SIGTERM)})
 			}
 			<-monitorContext.Done()
 			driver.interruption.captureFinished = true
@@ -479,7 +482,7 @@ func (driver *Driver) filledReservationRootV082() error {
 		return err
 	}
 	for _, source := range []string{"first-holder", "second-holder"} {
-		holder, err := guard.AcquireReservationWithOptions(
+		holder, err := runtimewiring.AcquireReservationWithOptions(
 			context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 			guard.ReservationPlan{
 				Capacity:  guard.ReservationVector{CPU: 2, MemoryBytes: 2 * policy.GiB},
@@ -521,7 +524,7 @@ func (driver *Driver) signalQueuedRunV082() error {
 	defer interrupt(nil)
 	// The first pause is the queued waiter's retry wait.
 	driver.runInterruptible(ctx, driver.interruptedRunArguments(), &sequenceCollector{samples: driver.samples},
-		func(time.Duration) { interrupt(status.Interruption{Signal: syscall.SIGINT}) })
+		func(time.Duration) { interrupt(status.Interruption{Signal: int(syscall.SIGINT)}) })
 	if !strings.Contains(driver.errorOutput, queuedNotice) {
 		return fmt.Errorf("the run was never queued: %q", driver.errorOutput)
 	}
@@ -539,7 +542,7 @@ func (driver *Driver) signalSamplingRunV082() error {
 	// Admission needs consecutive host samples, so the first pause is the wait
 	// between the first sample and the second.
 	driver.runInterruptible(ctx, driver.interruptedRunArguments(), &sequenceCollector{samples: driver.samples},
-		func(time.Duration) { interrupt(status.Interruption{Signal: syscall.SIGTERM}) })
+		func(time.Duration) { interrupt(status.Interruption{Signal: int(syscall.SIGTERM)}) })
 
 	return nil
 }

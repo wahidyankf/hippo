@@ -11,8 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -44,7 +47,7 @@ func (driver *Driver) capacityBlockedRoot() error {
 		Requested: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 		Allocated: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 	}
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), driver.leaseRoot, "", policy.TaskEphemeral, "balanced", "", plan, 2, 0,
 	)
 	if err != nil {
@@ -202,13 +205,13 @@ func (driver *Driver) runWaitingForAdmission(budget time.Duration, childExit int
 	driver.admissionAttempts = 0
 	driver.admissionElapsed = 0
 
-	application := cli.Application{
+	application := bootstrap.WithDefaults(cli.Application{
 		Stdout:      stdout,
 		Stderr:      stderr,
 		Environment: []string{"HIPPO_ROOT=" + root, "HIPPO_CHILD_RUNS=" + runs},
 		Collector:   &sequenceCollector{samples: driver.samples},
 		Now:         func() time.Time { return base.Add(time.Duration(elapsed.Load())) },
-	}
+	})
 	// This sleep serves the queue pause and the guard's own sampling alike. It
 	// advances the scenario clock and frees
 	// capacity at the arranged point; the assertions below read behaviour instead.

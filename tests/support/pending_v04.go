@@ -16,10 +16,14 @@ import (
 	"strings"
 	"time"
 
-	resourceconfig "github.com/wahidyankf/hippo/internal/config"
-	"github.com/wahidyankf/hippo/internal/conformance"
-	"github.com/wahidyankf/hippo/internal/evidence"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
+
+	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
+	"github.com/wahidyankf/hippo/internal/adapters/conformance"
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -84,7 +88,7 @@ func v04Plan(cpu int, memory int64) guard.ReservationPlan {
 func requireV04Planning() error {
 	settings := v04ReservationPolicy()
 	for profile, expectedCPU := range map[policy.ProfileName]int{profileBalanced: 2, profileConstrained: 4, profileMinimal: 8} {
-		plan, err := guard.PlanReservation(
+		plan, err := coordination.PlanReservation(
 			v04ReservationSample(),
 			policy.Resolution{ResolvedProfile: profile, MemoryReserve: 4 * policy.GiB},
 			settings, 0, 0,
@@ -97,7 +101,7 @@ func requireV04Planning() error {
 }
 
 func requireV04ExplicitPlanning() error {
-	plan, err := guard.PlanReservation(
+	plan, err := coordination.PlanReservation(
 		v04ReservationSample(), policy.Resolution{ResolvedProfile: profileBalanced, MemoryReserve: 4 * policy.GiB},
 		v04ReservationPolicy(), 1, 256*policy.MiB,
 	)
@@ -113,7 +117,7 @@ func requireV04ReservationFloors() error {
 		{CPU: -1, MemoryBytes: 256 * policy.MiB},
 		{CPU: 1, MemoryBytes: 255 * policy.MiB},
 	} {
-		if _, err := guard.PlanReservation(
+		if _, err := coordination.PlanReservation(
 			v04ReservationSample(), policy.Resolution{ResolvedProfile: profileBalanced, MemoryReserve: 4 * policy.GiB},
 			v04ReservationPolicy(), request.CPU, request.MemoryBytes,
 		); !errors.Is(err, guard.ErrReservationReplan) {
@@ -176,7 +180,7 @@ func requireV04AllClasses(root string) error {
 	plan := v04Plan(1, 256*policy.MiB)
 	sessions := make([]*guard.Session, 0, 3)
 	for _, class := range []policy.TaskClass{policy.TaskService, policy.TaskEphemeral, policy.TaskTransactional} {
-		session, err := guard.AcquireReservation(context.Background(), root, "", class, profileBalanced, "", plan, 20, 0)
+		session, err := runtimewiring.AcquireReservation(context.Background(), root, "", class, profileBalanced, "", plan, 20, 0)
 		if err != nil || session == nil {
 			return fmt.Errorf("admit %s: %w", class, err)
 		}
@@ -198,7 +202,7 @@ func requireV04AllClasses(root string) error {
 }
 
 func requireV04AtomicAdmission(root string) error {
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "",
 		v04Plan(3, 512*policy.MiB), 20, 0,
 	)
@@ -206,7 +210,7 @@ func requireV04AtomicAdmission(root string) error {
 		return fmt.Errorf("create asymmetric owner: %w", err)
 	}
 	defer func() { _ = guard.ReleaseReservation(root, owner) }()
-	candidate, acquireError := guard.AcquireReservation(
+	candidate, acquireError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(2, 256*policy.MiB), 20, 0,
 	)
@@ -224,7 +228,7 @@ func requireV04AtomicAdmission(root string) error {
 func requireV04ImpossibleReservation(root string) error {
 	plan := v04Plan(1, 256*policy.MiB)
 	plan.Requested.CPU, plan.Allocated.CPU = 5, 5
-	session, err := guard.AcquireReservation(context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 0)
+	session, err := runtimewiring.AcquireReservation(context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 0)
 	if session != nil || !errors.Is(err, guard.ErrReservationReplan) {
 		return fmt.Errorf("impossible reservation did not replan: session=%+v error=%w", session, err)
 	}
@@ -233,7 +237,7 @@ func requireV04ImpossibleReservation(root string) error {
 }
 
 func requireV04TemporaryExhaustion(root string) error {
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "",
 		v04Plan(4, policy.GiB), 20, 0,
 	)
@@ -242,7 +246,7 @@ func requireV04TemporaryExhaustion(root string) error {
 	}
 	defer func() { _ = guard.ReleaseReservation(root, owner) }()
 	started := time.Now()
-	session, acquireError := guard.AcquireReservation(
+	session, acquireError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 30*time.Millisecond,
 	)
@@ -257,7 +261,7 @@ func requireV04TemporaryExhaustion(root string) error {
 }
 
 func requireV04FIFO(root string) error {
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "",
 		v04Plan(2, 512*policy.MiB), 20, 0,
 	)
@@ -266,7 +270,7 @@ func requireV04FIFO(root string) error {
 	}
 	result, errorsFound := make(chan *guard.Session, 1), make(chan error, 1)
 	go func() {
-		session, acquireError := guard.AcquireReservation(
+		session, acquireError := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 			v04Plan(3, 512*policy.MiB), 20, time.Second,
 		)
@@ -286,7 +290,7 @@ func requireV04FIFO(root string) error {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	small, smallError := guard.AcquireReservation(
+	small, smallError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskTransactional, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 50*time.Millisecond,
 	)
@@ -308,7 +312,7 @@ func requireV04FIFO(root string) error {
 
 func requireV04Inheritance(root string) error {
 	plan := v04Plan(1, 256*policy.MiB)
-	owner, err := guard.AcquireReservation(context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 0)
+	owner, err := runtimewiring.AcquireReservation(context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 0)
 	if err != nil || owner == nil {
 		return fmt.Errorf("create inheritable reservation: %w", err)
 	}
@@ -317,7 +321,7 @@ func requireV04Inheritance(root string) error {
 	if err != nil {
 		return err
 	}
-	inherited, err := guard.AcquireReservation(
+	inherited, err := runtimewiring.AcquireReservation(
 		context.Background(), root, owner.Token, policy.TaskEphemeral, profileMinimal, "",
 		v04Plan(4, policy.GiB), 20, 0,
 	)
@@ -353,7 +357,7 @@ func requireV04StaleIdentity(root string) error {
 	if err = os.WriteFile(filepath.Join(root, "reservations.json"), append(data, '\n'), 0o600); err != nil {
 		return err
 	}
-	fresh, err := guard.AcquireReservation(
+	fresh, err := runtimewiring.AcquireReservation(
 		context.Background(), root, tokenValue, policy.TaskTransactional, profileMinimal, "",
 		v04Plan(4, policy.GiB), 20, 0,
 	)
@@ -371,7 +375,7 @@ func requireV04ThresholdAuthority(root string) error {
 	childMarker := filepath.Join(root, "child-started")
 	policySettings := v04FastPolicy()
 	policySettings.AdmissionWindow = 0
-	exitCode, err := guard.Run(context.Background(), guard.RunConfig{
+	exitCode, err := RunGuard(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", childStartedScript}, TaskClass: policy.TaskEphemeral,
 		Environment: []string{"CHILD_MARKER=" + childMarker}, EvidenceRoot: root,
 		Collector: &sequenceCollector{samples: []policy.Sample{critical}}, Policy: policySettings,
@@ -393,7 +397,7 @@ func requireV04ThresholdAuthority(root string) error {
 }
 
 func acquireV04Victim(root string, class policy.TaskClass, processGroup int) (*guard.Session, error) {
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", class, profileBalanced, "", v04Plan(1, 256*policy.MiB), 20, 0,
 	)
 	if err != nil {
@@ -458,7 +462,7 @@ func requireV04NewestService(root string) error {
 
 func requireV04TransactionalProtection(root string) error {
 	full := v04Plan(4, policy.GiB)
-	transactional, err := guard.AcquireReservation(
+	transactional, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskTransactional, profileBalanced, "", full, 20, 0,
 	)
 	if err != nil || transactional == nil {
@@ -471,7 +475,7 @@ func requireV04TransactionalProtection(root string) error {
 	if _, selected, selectionError := guard.SelectPressureVictim(root, guard.ShedCausePressure); selectionError != nil || selected {
 		return fmt.Errorf("transactional owner was selected: selected=%v error=%w", selected, selectionError)
 	}
-	other, acquireError := guard.AcquireReservation(
+	other, acquireError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "", v04Plan(1, 256*policy.MiB), 20, 0,
 	)
 	if other != nil || !errors.Is(acquireError, guard.ErrReservationDeferred) {
@@ -482,13 +486,13 @@ func requireV04TransactionalProtection(root string) error {
 }
 
 func requireV04Bridge(root string) error {
-	exclusive, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, 0)
+	exclusive, err := runtimewiring.AcquireSession(context.Background(), root, "", policy.TaskService, 0)
 	if err != nil || exclusive == nil {
 		return fmt.Errorf("create compatibility owner: %w", err)
 	}
 	defer guard.ReleaseSession(root, exclusive) //nolint:errcheck // The asserted operation precedes cleanup.
 
-	reserved, reserveError := guard.AcquireReservation(
+	reserved, reserveError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -513,7 +517,7 @@ func (driver *Driver) malformedCompatibilityV04() error {
 }
 
 func (driver *Driver) inspectMalformedCompatibilityV04() error {
-	driver.v04Session, driver.v04Error = guard.AcquireReservation(
+	driver.v04Session, driver.v04Error = runtimewiring.AcquireReservation(
 		context.Background(), driver.evidenceRoot, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -548,7 +552,7 @@ func (driver *Driver) unsupportedCompatibilityV04() error {
 }
 
 func (driver *Driver) inspectUnsupportedCompatibilityV04() error {
-	driver.v04Session, driver.v04Error = guard.AcquireSession(
+	driver.v04Session, driver.v04Error = runtimewiring.AcquireSession(
 		context.Background(), driver.evidenceRoot, "", policy.TaskEphemeral, 0,
 	)
 	driver.output = guard.DescribeHeavyLease(driver.evidenceRoot)
@@ -573,7 +577,7 @@ func (driver *Driver) requireUnsupportedCompatibilityV04() error {
 }
 
 func requireV04SummaryAndRetention(root string) error {
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(2, 512*policy.MiB), 20, 0,
 	)
@@ -795,7 +799,7 @@ func (driver *Driver) requirePendingTerminalV04() error {
 		healthySample(time.Now()), healthySample(time.Now()), healthySample(time.Now()),
 	}}
 	output := &bytes.Buffer{}
-	exitCode, err := guard.Run(context.Background(), guard.RunConfig{
+	exitCode, err := RunGuard(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", "printf terminal-safe"}, TaskClass: policy.TaskEphemeral,
 		EvidenceRoot: root, Collector: collector, Policy: v04FastPolicy(),
 		Resolution: policy.Resolution{RequestedProfile: profileBalanced, ResolvedProfile: profileBalanced, Concurrency: 4},
@@ -1023,5 +1027,5 @@ func (driver *Driver) requirePendingConformanceV04() error {
 		return err
 	}
 
-	return conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+	return RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 }

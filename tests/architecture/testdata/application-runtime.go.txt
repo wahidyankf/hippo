@@ -1,0 +1,2 @@
+package application
+import _ "github.com/wahidyankf/hippo/internal/adapters/runtime"

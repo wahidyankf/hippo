@@ -16,9 +16,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/conformance"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/conformance"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -39,7 +42,7 @@ func (driver *Driver) malformedServiceCompatibilityV04() error {
 }
 
 func (driver *Driver) inspectMalformedServiceCompatibilityV04() error {
-	driver.v04Session, driver.v04Error = guard.AcquireReservation(
+	driver.v04Session, driver.v04Error = runtimewiring.AcquireReservation(
 		context.Background(), driver.evidenceRoot, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -162,7 +165,7 @@ func (driver *Driver) requireCorruptReservationLedgerV04(kind string) error {
 func requireV04MaximumWidthAdmission(root string) error {
 	maximum := guard.ReservationVector{CPU: math.MaxInt, MemoryBytes: math.MaxInt64}
 	ownerPlan := guard.ReservationPlan{Capacity: maximum, Requested: maximum, Allocated: maximum}
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "", ownerPlan, 20, 0,
 	)
 	if err != nil || owner == nil {
@@ -170,7 +173,7 @@ func requireV04MaximumWidthAdmission(root string) error {
 	}
 	defer func() { _ = guard.ReleaseReservation(root, owner) }()
 	minimum := guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB}
-	candidate, acquireError := guard.AcquireReservation(
+	candidate, acquireError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		guard.ReservationPlan{Capacity: maximum, Requested: minimum, Allocated: minimum}, 20, 0,
 	)
@@ -193,7 +196,7 @@ func (driver *Driver) mixedOwnerLimitsV04() error { return driver.preparePending
 func (driver *Driver) requestLooserOwnerLimitV04() error {
 	root := driver.evidenceRoot
 	plan := v04Plan(1, 256*policy.MiB)
-	owner, err := guard.AcquireReservation(context.Background(), root, "", policy.TaskService, profileBalanced, "", plan, 20, 0)
+	owner, err := runtimewiring.AcquireReservation(context.Background(), root, "", policy.TaskService, profileBalanced, "", plan, 20, 0)
 	if err != nil || owner == nil {
 		driver.v04Error = fmt.Errorf("initial owner admission: %w", err)
 
@@ -201,7 +204,7 @@ func (driver *Driver) requestLooserOwnerLimitV04() error {
 	}
 	strictResult, strictErrors := make(chan *guard.Session, 1), make(chan error, 1)
 	go func() {
-		strict, strictError := guard.AcquireReservation(
+		strict, strictError := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "", plan, 1, time.Second,
 		)
 		strictResult <- strict
@@ -221,7 +224,7 @@ func (driver *Driver) requestLooserOwnerLimitV04() error {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	loose, acquireError := guard.AcquireReservation(context.Background(), root, "", policy.TaskTransactional, profileBalanced, "", plan, 20, 0)
+	loose, acquireError := runtimewiring.AcquireReservation(context.Background(), root, "", policy.TaskTransactional, profileBalanced, "", plan, 20, 0)
 	if loose != nil {
 		_ = guard.ReleaseReservation(root, loose)
 	}
@@ -240,7 +243,7 @@ func (driver *Driver) requestLooserOwnerLimitV04() error {
 		return nil
 	}
 	defer func() { _ = guard.ReleaseReservation(root, strict) }()
-	loose, acquireError = guard.AcquireReservation(context.Background(), root, "", policy.TaskTransactional, profileBalanced, "", plan, 20, 0)
+	loose, acquireError = runtimewiring.AcquireReservation(context.Background(), root, "", policy.TaskTransactional, profileBalanced, "", plan, 20, 0)
 	if loose != nil {
 		_ = guard.ReleaseReservation(root, loose)
 	}
@@ -264,7 +267,7 @@ func requireV04ActiveEpochCapacity(root string) error { //nolint:cyclop,gocognit
 		caseRoot := filepath.Join(root, testCase.name)
 		originalCapacity := guard.ReservationVector{CPU: 4, MemoryBytes: policy.GiB}
 		ownerVector := guard.ReservationVector{CPU: 3, MemoryBytes: 512 * policy.MiB}
-		owner, err := guard.AcquireReservation(
+		owner, err := runtimewiring.AcquireReservation(
 			context.Background(), caseRoot, "", policy.TaskService, profileBalanced, "",
 			guard.ReservationPlan{Capacity: originalCapacity, Requested: ownerVector, Allocated: ownerVector}, 20, 0,
 		)
@@ -274,7 +277,7 @@ func requireV04ActiveEpochCapacity(root string) error { //nolint:cyclop,gocognit
 		waiterResult, waiterErrors := make(chan *guard.Session, 1), make(chan error, 1)
 		go func() {
 			request := guard.ReservationVector{CPU: 2, MemoryBytes: 512 * policy.MiB}
-			waiter, waiterError := guard.AcquireReservation(
+			waiter, waiterError := runtimewiring.AcquireReservation(
 				context.Background(), caseRoot, "", policy.TaskEphemeral, profileBalanced, "",
 				guard.ReservationPlan{Capacity: originalCapacity, Requested: request, Allocated: request}, 20, 2*time.Second,
 			)
@@ -302,7 +305,7 @@ func requireV04ActiveEpochCapacity(root string) error { //nolint:cyclop,gocognit
 			return err
 		}
 		minimum := guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB}
-		lower, lowerError := guard.AcquireReservation(
+		lower, lowerError := runtimewiring.AcquireReservation(
 			context.Background(), caseRoot, "", policy.TaskTransactional, profileBalanced, "",
 			guard.ReservationPlan{Capacity: testCase.capacity, Requested: minimum, Allocated: minimum}, 20, 100*time.Millisecond,
 		)
@@ -330,7 +333,7 @@ func requireV04ActiveEpochCapacity(root string) error { //nolint:cyclop,gocognit
 		if err = guard.ReleaseReservation(caseRoot, waiter); err != nil {
 			return err
 		}
-		lower, lowerError = guard.AcquireReservation(
+		lower, lowerError = runtimewiring.AcquireReservation(
 			context.Background(), caseRoot, "", policy.TaskTransactional, profileBalanced, "",
 			guard.ReservationPlan{Capacity: testCase.capacity, Requested: minimum, Allocated: minimum}, 20, 0,
 		)
@@ -444,7 +447,7 @@ func awaitNoCascade(root string, cause guard.ShedCause, wait time.Duration) erro
 func awaitVictimRelease(root string, victim guard.ReservationOwner, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 	for {
-		observeError := guard.WaitPressureVictimRelease(root, victim, 10*time.Second)
+		observeError := runtimewiring.WaitPressureVictimRelease(root, victim, 10*time.Second)
 		if observeError == nil {
 			return nil
 		}
@@ -488,7 +491,7 @@ func (driver *Driver) exerciseOwnerSideSheddingV04(cause guard.ShedCause) error 
 		}
 	}()
 	go func() {
-		code, runError := guard.Run(ctx, guard.RunConfig{
+		code, runError := RunGuard(ctx, guard.RunConfig{
 			Command: shellPath, Arguments: []string{"-c", `trap 'printf x > "$OWNER_TERM_MARKER"' TERM; printf ready > "$OWNER_READY_MARKER"; while :; do sleep 0.01; done`},
 			TaskClass: policy.TaskEphemeral, Environment: append(os.Environ(), "OWNER_TERM_MARKER="+marker, "OWNER_READY_MARKER="+ready),
 			EvidenceRoot: root, DiskPath: ".", Collector: &sequenceCollector{samples: []policy.Sample{
@@ -549,7 +552,7 @@ func (driver *Driver) replacedRemoteOwnerV04() error { return driver.preparePend
 
 func (driver *Driver) exerciseReplacedRemoteOwnerV04() error {
 	root := driver.evidenceRoot
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -588,7 +591,7 @@ func (driver *Driver) exerciseReplacedRemoteOwnerV04() error {
 
 		return nil
 	}
-	completeError := guard.WaitPressureVictimRelease(root, victim, 20*time.Millisecond)
+	completeError := runtimewiring.WaitPressureVictimRelease(root, victim, 20*time.Millisecond)
 	select {
 	case waitError := <-exited:
 		driver.v04Error = fmt.Errorf("unowned process group was signaled after identity replacement: %w", waitError)
@@ -609,7 +612,7 @@ func (driver *Driver) unresponsiveRemoteOwnerV04() error { return driver.prepare
 
 func (driver *Driver) exerciseUnresponsiveRemoteOwnerV04() error {
 	root := driver.evidenceRoot
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -646,7 +649,7 @@ func (driver *Driver) exerciseUnresponsiveRemoteOwnerV04() error {
 
 		return nil
 	}
-	waitError := guard.WaitPressureVictimRelease(root, victim, 20*time.Millisecond)
+	waitError := runtimewiring.WaitPressureVictimRelease(root, victim, 20*time.Millisecond)
 	select {
 	case childError := <-exited:
 		driver.v04Error = fmt.Errorf("remote selector signaled another owner's child: %w", childError)
@@ -718,7 +721,7 @@ func (driver *Driver) aliasedConsumerManifestV04() error {
 }
 
 func (driver *Driver) validateAliasedConsumerManifestV04() error {
-	driver.v04Error = conformance.Run(context.Background(), driver.configPath, &bytes.Buffer{})
+	driver.v04Error = RunConformance(context.Background(), driver.configPath, &bytes.Buffer{})
 
 	return nil
 }
@@ -804,7 +807,7 @@ func (driver *Driver) exerciseFailingConformancePhasesV04() error {
 
 			return nil //nolint:nilerr // Step drivers record the production error for the subsequent Then assertion.
 		}
-		runError := conformance.Run(context.Background(), path, &bytes.Buffer{})
+		runError := RunConformance(context.Background(), path, &bytes.Buffer{})
 		if runError == nil || !strings.Contains(runError.Error(), phase) || !strings.Contains(runError.Error(), "checkout changed") {
 			driver.v04Error = fmt.Errorf("%s failure did not reconcile every pre-snapshotted checkout: %w", phase, runError)
 
@@ -852,7 +855,7 @@ func (driver *Driver) requestCorruptCoordinationStatusV04() error {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Collector: collector, Sleep: func(time.Duration) {},
 		Environment: []string{"HIPPO_ROOT=" + driver.evidenceRoot},
 	}).Run(context.Background(), []string{statusCommandName, jsonFlag, configFlag, driver.configPath, diskPathFlag, "."})
@@ -883,7 +886,7 @@ func (collector *peakReviewCollector) Collect(ctx context.Context, previous poli
 		return policy.Reading{}, err
 	}
 	if collector.index == 3 && collector.second == nil && collector.acquire == nil {
-		collector.second, collector.acquire = guard.AcquireReservation(
+		collector.second, collector.acquire = runtimewiring.AcquireReservation(
 			ctx, collector.root, "", policy.TaskService, profileBalanced, "", v04Plan(1, 256*policy.MiB), 20, 0,
 		)
 	}
@@ -899,7 +902,7 @@ func (driver *Driver) sampleLifetimeOwnerPeakV04() error {
 	policySettings := v04FastPolicy()
 	policySettings.SampleInterval = 2 * time.Millisecond
 	policySettings.AdmissionWindow = evidenceDecidesAdmission
-	exitCode, runError := guard.Run(context.Background(), guard.RunConfig{
+	exitCode, runError := RunGuard(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", "sleep 0.05"}, TaskClass: policy.TaskEphemeral,
 		EvidenceRoot: driver.evidenceRoot, Collector: collector, Policy: policySettings,
 		Resolution:        policy.Resolution{RequestedProfile: profileBalanced, ResolvedProfile: profileBalanced, Concurrency: 1},

@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -37,7 +39,7 @@ func (driver *Driver) abandonOwner(withLivePayload bool) error {
 
 	// Take and give back a real reservation so the ledger, its capacity, and the
 	// owner record are all shaped by the product rather than by this fixture.
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -183,7 +185,7 @@ func (driver *Driver) liveGuardOwner() error {
 	driver.temporaryPaths = append(driver.temporaryPaths, root)
 	driver.leaseRoot = root
 
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)

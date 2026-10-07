@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -175,7 +177,7 @@ func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
 		return usageAttempt{}, err
 	}
 	defer func() { _ = os.Chdir(workingDirectory) }()
-	attempt.exitCode, _ = (cli.Application{
+	attempt.exitCode, _ = bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environment,
 	}).Run(ctx, arguments)
 	attempt.stdout, attempt.stderr = stdout.String(), stderr.String()

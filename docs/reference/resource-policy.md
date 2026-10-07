@@ -176,7 +176,7 @@ govern, and an owner admitted legitimately can be shed:
 
 - **Critical pressure** sheds at once.
 - **Warning pressure** sheds once it outlasts the guarded child's class grace — 10 s for `ephemeral`, 30 s for `service`
-  — counted from the first warning sample and reset by any normal one (`internal/guard/run.go`). For a running
+  — counted from the first warning sample and reset by any normal one (`internal/application/run.go`). For a running
   `ephemeral` child whose profile may use [degraded admission](#degraded-admission-on-macos), a warning that would admit
   degraded work does not count toward it, however that child was admitted. Any other warning still counts — one that
   grows swap-outs or the compressor payload past their thresholds, leaves less than the warning-admission memory, or
@@ -220,9 +220,9 @@ transactional work, and releases cannot use this path.
 | macOS    | `["compressor", "memory-pressure", "swap"]` |
 | Linux    | `["cgroup-v2", "memory-psi"]`               |
 
-The array is fixed per platform (`internal/host/collector_darwin.go` and `internal/host/collector_linux.go`). It names
-the evidence the collector reads, not what a particular host supplied: a Linux sample says `memory-psi` even when no
-pressure file was readable.
+The array is fixed per platform (`internal/adapters/host/collector_darwin.go` and
+`internal/adapters/host/collector_linux.go`). It names the evidence the collector reads, not what a particular host
+supplied: a Linux sample says `memory-psi` even when no pressure file was readable.
 
 What a host could not supply shows in the readings instead. On Linux, `memoryPsiSomeAvg10` and `memoryPsiFullAvg10` are
 omitted when neither the cgroup's `memory.pressure` nor `/proc/pressure/memory` parses, while `oomEvents` and

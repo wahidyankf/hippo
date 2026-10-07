@@ -5,8 +5,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/wahidyankf/hippo/internal/conformance"
-	"github.com/wahidyankf/hippo/internal/status"
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
 )
 
 func main() {
@@ -14,8 +14,8 @@ func main() {
 }
 
 func run() int {
-	ctx, stop := status.SignalContext(context.Background())
+	ctx, stop := cli.SignalContext(context.Background())
 	defer stop()
 
-	return conformance.Main(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	return cli.ConformanceMain(ctx, os.Args[1:], os.Stdout, os.Stderr, bootstrap.ConformanceService())
 }

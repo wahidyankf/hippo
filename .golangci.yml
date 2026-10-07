@@ -80,8 +80,8 @@ linters:
       # each unit that adds such a type adds its pattern, matched against the full import path and type name.
       explicit-mode: true
       enforce-patterns:
-        - ^github\.com/wahidyankf/hippo/internal/evidence\.RecordedOutcome$
-        - ^github\.com/wahidyankf/hippo/internal/evidence\.RecordedBudgetOutcome$
+        - ^github\.com/wahidyankf/hippo/internal/domain/evidence\.RecordedOutcome$
+        - ^github\.com/wahidyankf/hippo/internal/domain/evidence\.RecordedBudgetOutcome$
         - ^github\.com/wahidyankf/hippo/internal/policy\.AdmissionInput$
         - ^github\.com/wahidyankf/hippo/internal/policy\.RecordedTaskClass$
     goconst:
@@ -121,7 +121,7 @@ linters:
     warn-unused: true
     rules:
       # The guarded-process state machine is branch-heavy by design and separately behavior tested.
-      - path: ^internal/guard/run\.go$
+      - path: ^internal/application/run\.go$
         linters:
           - cyclop
           - funlen
@@ -131,7 +131,7 @@ linters:
           # Deferred cleanup must be able to promote its failure into the process result.
           - nonamedreturns
       # A nil session with no error is the explicit transient-capacity result consumed as exit 124.
-      - path: ^internal/guard/lease\.go$
+      - path: ^internal/adapters/runtime/lease\.go$
         linters:
           - nilnil
 

@@ -17,11 +17,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/config"
-	"github.com/wahidyankf/hippo/internal/conformance"
-	"github.com/wahidyankf/hippo/internal/evidence"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/config"
+	"github.com/wahidyankf/hippo/internal/adapters/conformance"
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 	"golang.org/x/sys/unix" //nolint:depguard // Cross-process flock fixtures must exercise the production kernel primitive.
@@ -51,7 +56,7 @@ func releaseContendedReservation(root string, session *guard.Session) error {
 }
 
 func requireV04UnknownIdentityError(root string) error {
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -76,7 +81,7 @@ func requireV04UnknownIdentityError(root string) error {
 	}()
 
 	_, statusError := guard.ReservationStatus(context.Background(), root)
-	candidate, admissionError := guard.AcquireReservation(
+	candidate, admissionError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -97,7 +102,7 @@ func requireV04UnknownIdentityError(root string) error {
 }
 
 func requireV04MissingLiveLedger(root string) error {
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -118,7 +123,7 @@ func requireV04MissingLiveLedger(root string) error {
 	}()
 
 	_, statusError := guard.ReservationStatus(context.Background(), root)
-	candidate, admissionError := guard.AcquireReservation(
+	candidate, admissionError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -146,7 +151,7 @@ func requireV04UnreadableSessionInventory(root string) error {
 	if err := os.WriteFile(inventoryPath, before, 0o600); err != nil {
 		return err
 	}
-	session, admissionError := guard.AcquireReservation(
+	session, admissionError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -185,7 +190,7 @@ func requireV04FailedStaleHeavyCleanup(root string) error {
 		_ = os.Chmod(heavyPath, 0o700)
 		_ = os.RemoveAll(heavyPath)
 	}()
-	session, admissionError := guard.AcquireReservation(
+	session, admissionError := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -233,7 +238,7 @@ func setLedgerSequence(path string, sequence uint64) ([]byte, error) {
 
 func requireV04SequenceExhaustion(root string) error {
 	liveRoot := filepath.Join(root, "live")
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), liveRoot, "", policy.TaskService, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -253,7 +258,7 @@ func requireV04SequenceExhaustion(root string) error {
 		_ = os.WriteFile(ledgerPath, original, 0o600)
 		_ = guard.ReleaseReservation(liveRoot, owner)
 	}()
-	candidate, admissionError := guard.AcquireReservation(
+	candidate, admissionError := runtimewiring.AcquireReservation(
 		context.Background(), liveRoot, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -288,7 +293,7 @@ func requireV04SequenceExhaustion(root string) error {
 	if err = os.WriteFile(filepath.Join(staleRoot, "reservations.json"), append(data, '\n'), 0o600); err != nil {
 		return err
 	}
-	fresh, err := guard.AcquireReservation(
+	fresh, err := runtimewiring.AcquireReservation(
 		context.Background(), staleRoot, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -306,7 +311,7 @@ func requireV04SequenceExhaustion(root string) error {
 func requireV04WaiterAggregateOverflow(root string) error {
 	maximum := guard.ReservationVector{CPU: math.MaxInt, MemoryBytes: math.MaxInt64}
 	floor := guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB}
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "",
 		guard.ReservationPlan{Capacity: maximum, Requested: floor, Allocated: floor}, 20, 0,
 	)
@@ -320,7 +325,7 @@ func requireV04WaiterAggregateOverflow(root string) error {
 	results := make(chan error, 2)
 	for range 2 {
 		go func() {
-			session, acquireError := guard.AcquireReservation(ctx, root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 10*time.Second)
+			session, acquireError := runtimewiring.AcquireReservation(ctx, root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 10*time.Second)
 			if session != nil {
 				_ = guard.ReleaseReservation(root, session) //nolint:contextcheck // Test cleanup must outlive the canceled contender context.
 			}
@@ -394,7 +399,7 @@ func (driver *Driver) requireCheckedMiBConversionV04(root string) error {
 	}
 	base := time.Unix(0, 0)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, runError := (cli.Application{
+	code, runError := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr,
 		Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(base)}},
 		Environment: []string{"HIPPO_ROOT=" + filepath.Join(root, "cli-root")},
@@ -437,7 +442,7 @@ func requireV04CustomProfileReservation(root string) error {
 	if err != nil {
 		return err
 	}
-	plan, err := guard.PlanReservation(sample, resolution, guard.ReservationPolicy{
+	plan, err := coordination.PlanReservation(sample, resolution, guard.ReservationPolicy{
 		Enabled: true, MaxCPU: configured.Coordination.MaxCPU, MaxMemoryBytes: configured.Coordination.MaxMemoryBytes,
 		MaxActiveOwners: configured.Coordination.MaxActiveOwners, OwnerShares: configured.Coordination.OwnerShares,
 	}, 0, 0)
@@ -446,7 +451,7 @@ func requireV04CustomProfileReservation(root string) error {
 	}
 	concurrencyPath := filepath.Join(root, "concurrency")
 	settings := v04FastPolicy()
-	exit, runError := guard.Run(context.Background(), guard.RunConfig{
+	exit, runError := RunGuard(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", `printf '%s' "$HIPPO_CONCURRENCY" > "$CONCURRENCY_PATH"`},
 		TaskClass: policy.TaskEphemeral, Environment: append(os.Environ(), "CONCURRENCY_PATH="+concurrencyPath), EvidenceRoot: filepath.Join(root, "shared"),
 		Collector: &sequenceCollector{samples: []policy.Sample{sample, sample, sample}}, Policy: settings, Resolution: resolution,
@@ -493,7 +498,7 @@ func requireV04MaximumAutomaticShares(string) error {
 		{profile: profileConstrained, shares: 2},
 	} {
 		resolution := policy.Resolution{ResolvedProfile: testCase.profile}
-		plan, err := guard.PlanReservation(sample, resolution, guard.ReservationPolicy{
+		plan, err := coordination.PlanReservation(sample, resolution, guard.ReservationPolicy{
 			Enabled: true, OwnerShares: map[policy.ProfileName]int{testCase.profile: testCase.shares},
 		}, 0, 0)
 		want := guard.ReservationVector{
@@ -538,7 +543,7 @@ func releaseHeldCoordination(lock *os.File) error {
 }
 
 func requireV04BoundedRemoteObservation(root string) error {
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
@@ -559,7 +564,7 @@ func requireV04BoundedRemoteObservation(root string) error {
 	}
 	start := time.Now()
 	observed := make(chan error, 1)
-	go func() { observed <- guard.WaitPressureVictimRelease(root, victim, 20*time.Millisecond) }()
+	go func() { observed <- runtimewiring.WaitPressureVictimRelease(root, victim, 20*time.Millisecond) }()
 	var observeError error
 	select {
 	case observeError = <-observed:
@@ -627,7 +632,7 @@ func main() {
 	}
 	done := make(chan result, 1)
 	go func() {
-		code, runError := guard.Run(ctx, guard.RunConfig{
+		code, runError := RunGuard(ctx, guard.RunConfig{
 			// Install the trap before publishing the marker, so readiness means the
 			// child already ignores TERM and only the bounded KILL can stop it.
 			Command: shellPath, Arguments: []string{"-c", `trap '' TERM; printf '%s' "$$" > "$CHILD_PID"; while :; do sleep 0.01; done`},
@@ -740,7 +745,7 @@ func requireV04CancelledWaiterCleanup(root string) error {
 		Requested: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 		Allocated: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 	}
-	owner, err := guard.AcquireReservation(context.Background(), root, "", policy.TaskService, profileMinimal, "", ownerPlan, 20, 0)
+	owner, err := runtimewiring.AcquireReservation(context.Background(), root, "", policy.TaskService, profileMinimal, "", ownerPlan, 20, 0)
 	if err != nil {
 		return err
 	}
@@ -748,7 +753,7 @@ func requireV04CancelledWaiterCleanup(root string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
 	go func() {
-		session, acquireError := guard.AcquireReservationWithOptions(
+		session, acquireError := runtimewiring.AcquireReservationWithOptions(
 			ctx, root, "", policy.TaskEphemeral, profileMinimal, "", ownerPlan, 20, time.Second,
 			guard.ReservationAdmissionOptions{CleanupWait: 2 * time.Second},
 		)
@@ -808,7 +813,7 @@ func requireV04FailedCancelledWaiterCleanup(root string) error { //nolint:cyclop
 		Requested: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 		Allocated: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 	}
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileMinimal, "", plan, 20, 0,
 	)
 	if err != nil {
@@ -824,7 +829,7 @@ func requireV04FailedCancelledWaiterCleanup(root string) error { //nolint:cyclop
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		session, acquireError := guard.AcquireReservation(
+		session, acquireError := runtimewiring.AcquireReservation(
 			ctx, root, "", policy.TaskEphemeral, profileMinimal, "", plan, 20, time.Second,
 		)
 		if session != nil {
@@ -890,7 +895,7 @@ func requireV04FailedCancelledWaiterCleanup(root string) error { //nolint:cyclop
 	}
 	following := make(chan followingResult, 1)
 	go func() {
-		session, acquireError := guard.AcquireReservation(
+		session, acquireError := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskTransactional, profileMinimal, "", plan, 20, 2*time.Second,
 		)
 		following <- followingResult{session: session, err: acquireError}
@@ -955,7 +960,7 @@ func requireV04SupervisorDeathOwnership(root string) error {
 		return err
 	}
 	binary := filepath.Join(root, "hippo-guard-helper.test")
-	build := exec.Command("go", "test", "-c", "-o", binary, "./internal/guard")
+	build := exec.Command("go", "test", "-c", "-o", binary, "./internal/adapters/runtime")
 	build.Dir = moduleRoot
 	if output, buildError := build.CombinedOutput(); buildError != nil {
 		return fmt.Errorf("build compiled guard fixture: %s: %w", output, buildError)
@@ -1051,7 +1056,7 @@ func runInternalGuardRegressionV04(name string) error {
 	if err != nil {
 		return err
 	}
-	command := exec.Command("go", "test", "./internal/guard", "-run", "^"+name+"$", "-count=1", "-v")
+	command := exec.Command("go", "test", "./internal/adapters/runtime", "-run", "^"+name+"$", "-count=1", "-v")
 	command.Dir = moduleRoot
 	output, runError := command.CombinedOutput()
 	if runError != nil {
@@ -1091,11 +1096,11 @@ func requireV10FutureReservationLedger(string) error {
 }
 
 func requireV10SchemaThreeLegacyOwner(string) error {
-	return runGoRegressionV10("./internal/cli", "TestSchemaThreeRefusesLiveLegacyOwnerWithProtocolMismatch")
+	return runGoRegressionV10("./internal/adapters/cli", "TestSchemaThreeRefusesLiveLegacyOwnerWithProtocolMismatch")
 }
 
 func requireTierRefusesAdmissionWait(string) error {
-	return runGoRegressionV10("./internal/cli", "TestSchemaTwoRejectsATierCombinedWithAnAdmissionWait")
+	return runGoRegressionV10("./internal/adapters/cli", "TestSchemaTwoRejectsATierCombinedWithAnAdmissionWait")
 }
 
 func requireV10ConformanceProtocolMismatch(string) error {
@@ -1235,7 +1240,7 @@ func requireV04PortSupervisorLifetime(root string) error {
 		return err
 	}
 	binary := filepath.Join(root, "hippo-port-supervisor.test")
-	build := exec.Command("go", "test", "-c", "-o", binary, "./internal/guard")
+	build := exec.Command("go", "test", "-c", "-o", binary, "./internal/adapters/runtime")
 	build.Dir = moduleRoot
 	if output, buildError := build.CombinedOutput(); buildError != nil {
 		return fmt.Errorf("build port supervisor fixture: %s: %w", output, buildError)
@@ -1269,7 +1274,7 @@ func requireV04PortSupervisorLifetime(root string) error {
 		return err
 	}
 	_ = guardCommand.Wait()
-	competitor, acquireError := guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
+	competitor, acquireError := runtimewiring.AcquirePortLease(leaseRoot, port, "competitor", port, port)
 	if acquireError == nil {
 		_ = guard.ReleasePortLease(leaseRoot, competitor)
 		_ = syscall.Kill(-childPID, syscall.SIGKILL)
@@ -1281,7 +1286,7 @@ func requireV04PortSupervisorLifetime(root string) error {
 	}
 	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
-		competitor, acquireError = guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
+		competitor, acquireError = runtimewiring.AcquirePortLease(leaseRoot, port, "competitor", port, port)
 		if acquireError == nil {
 			return guard.ReleasePortLease(leaseRoot, competitor)
 		}
@@ -1355,7 +1360,7 @@ func main() {
 	}
 	done := make(chan result, 1)
 	go func() {
-		code, runError := guard.Run(context.Background(), guard.RunConfig{
+		code, runError := RunGuard(context.Background(), guard.RunConfig{
 			Command: helperBinary, TaskClass: policy.TaskEphemeral, EvidenceRoot: sharedRoot,
 			Environment: append(os.Environ(), "DESCENDANT_PIDS="+pidsPath),
 			Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(time.Now())}}, Policy: v04FastPolicy(),
@@ -1389,7 +1394,7 @@ func main() {
 		return errors.New("background descendant leader did not exit")
 	}
 	totals, statusError := guard.ReservationStatus(context.Background(), sharedRoot)
-	competitor, portError := guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
+	competitor, portError := runtimewiring.AcquirePortLease(leaseRoot, port, "competitor", port, port)
 	if competitor != nil {
 		_ = guard.ReleasePortLease(leaseRoot, competitor)
 	}
@@ -1415,7 +1420,7 @@ func main() {
 	deadline = time.Now().Add(fixtureLivenessWait)
 	for {
 		totals, statusError = guard.ReservationStatus(context.Background(), sharedRoot)
-		competitor, portError = guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
+		competitor, portError = runtimewiring.AcquirePortLease(leaseRoot, port, "competitor", port, port)
 		if statusError == nil && totals.ActiveOwners == 0 && portError == nil {
 			return guard.ReleasePortLease(leaseRoot, competitor)
 		}
@@ -1449,7 +1454,7 @@ func main() {
 	sharedRoot := filepath.Join(root, "inherited-shared")
 	leaseRoot := filepath.Join(root, "inherited-ports")
 	plan := v04Plan(1, 256*policy.MiB)
-	outer, err := guard.AcquireReservation(
+	outer, err := runtimewiring.AcquireReservation(
 		context.Background(), sharedRoot, "", policy.TaskEphemeral, profileMinimal, fixtureOwner, plan, 4, time.Second,
 	)
 	if err != nil || outer == nil {
@@ -1464,7 +1469,7 @@ func main() {
 	}
 	done := make(chan result, 1)
 	go func() {
-		code, runError := guard.Run(context.Background(), guard.RunConfig{
+		code, runError := RunGuard(context.Background(), guard.RunConfig{
 			Command: helperBinary, TaskClass: policy.TaskEphemeral, EvidenceRoot: sharedRoot,
 			Environment: append(os.Environ(), "HIPPO_SESSION="+outer.Token, "DESCENDANT_PIDS="+pidsPath),
 			Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(time.Now())}}, Policy: v04FastPolicy(),
@@ -1504,7 +1509,7 @@ func main() {
 		return fmt.Errorf("inherited leader retired before its descendant: exit=%d error=%w", run.code, run.err)
 	default:
 	}
-	competitor, portError := guard.AcquirePortLease(leaseRoot, port, "competitor", port, port)
+	competitor, portError := runtimewiring.AcquirePortLease(leaseRoot, port, "competitor", port, port)
 	if competitor != nil {
 		_ = guard.ReleasePortLease(leaseRoot, competitor)
 	}
@@ -1570,7 +1575,7 @@ func requireV04ShortOverlapPeak(root string) error {
 	}
 	done := make(chan result, 1)
 	go func() {
-		code, runError := guard.Run(context.Background(), guard.RunConfig{
+		code, runError := RunGuard(context.Background(), guard.RunConfig{
 			Command: shellPath, Arguments: []string{"-c", `printf started > "$PEAK_CHILD"; while [ ! -f "$PEAK_FINISH" ]; do sleep 0.005; done`},
 			TaskClass: policy.TaskEphemeral, Environment: append(os.Environ(), "PEAK_CHILD="+marker, "PEAK_FINISH="+finish), EvidenceRoot: scenarioRoot,
 			Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now()), healthySample(time.Now()), healthySample(time.Now())}},
@@ -1591,7 +1596,7 @@ func requireV04ShortOverlapPeak(root string) error {
 		time.Sleep(time.Millisecond)
 	}
 	defer func() { _ = os.WriteFile(finish, []byte("finish\n"), 0o600) }()
-	second, err := guard.AcquireReservation(
+	second, err := runtimewiring.AcquireReservation(
 		context.Background(), scenarioRoot, "", policy.TaskService, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, time.Second,
 	)
@@ -1700,7 +1705,7 @@ func requireV04ReservedHIPPOEnvironmentMappings(root string) error {
 	for _, name := range []string{hippoRootEnvironment, "HIPPO_RESERVED_MEMORY_BYTES", "HIPPO_CONFIG", "HIPPO_DEFAULT_CONFIG"} {
 		caseRoot := filepath.Join(root, strings.ToLower(strings.TrimPrefix(name, "HIPPO_")))
 		marker := filepath.Join(caseRoot, "child-started")
-		code, runError := guard.Run(context.Background(), guard.RunConfig{
+		code, runError := RunGuard(context.Background(), guard.RunConfig{
 			Command: shellPath, Arguments: []string{"-c", childStartedScript},
 			TaskClass: policy.TaskEphemeral, EvidenceRoot: caseRoot,
 			Environment:            append(os.Environ(), name+"=1", "CHILD_MARKER="+marker),
@@ -1723,7 +1728,7 @@ func requireV04ReservedHIPPOEnvironmentMappings(root string) error {
 
 	caseRoot := filepath.Join(root, "arbitrary")
 	output := &bytes.Buffer{}
-	code, runError := guard.Run(context.Background(), guard.RunConfig{
+	code, runError := RunGuard(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", `printf '%s' "$ARBITRARY_WORKERS"`},
 		TaskClass: policy.TaskEphemeral, EvidenceRoot: caseRoot,
 		Environment: os.Environ(), ConcurrencyEnvironment: []string{"ARBITRARY_WORKERS"},
@@ -1745,7 +1750,7 @@ func runEvidenceCleanupGuardV04(root string, class policy.TaskClass) (int, error
 	settings.SampleInterval = 2 * time.Millisecond
 	settings.AdmissionWindow = evidenceDecidesAdmission
 
-	return guard.Run(context.Background(), guard.RunConfig{
+	return RunGuard(context.Background(), guard.RunConfig{
 		Command: shellPath, Arguments: []string{"-c", "sleep 0.02"}, TaskClass: class, EvidenceRoot: root,
 		Environment: os.Environ(), Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now()), healthySample(time.Now())}},
 		Policy: settings, Resolution: policy.Resolution{RequestedProfile: profileBalanced, ResolvedProfile: profileBalanced, Concurrency: 1},
@@ -1890,7 +1895,7 @@ func requireV04EmptyConformanceInput(root, kind string) error {
 	if err = writeConformanceManifestV04(manifestPath, manifest); err != nil {
 		return err
 	}
-	runError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+	runError := RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 	if runError == nil || !strings.Contains(runError.Error(), "required") {
 		return fmt.Errorf("empty raw %s input was canonicalized before required-field validation: %w", kind, runError)
 	}
@@ -1966,7 +1971,7 @@ func requireV04CanonicalConformanceInputs(root string) error { //nolint:gocognit
 			_ = os.Unsetenv(hippoRootEnvironment)
 		}
 	}()
-	if err = conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}); err != nil {
+	if err = RunConformance(context.Background(), manifestPath, &bytes.Buffer{}); err != nil {
 		return fmt.Errorf("canonical manifest inputs were not frozen/replaced: %w", err)
 	}
 
@@ -1987,7 +1992,7 @@ func requireV04CanonicalConformanceInputs(root string) error { //nolint:gocognit
 		if err = writeConformanceManifestV04(path, overlap); err != nil {
 			return err
 		}
-		runError := conformance.Run(context.Background(), path, &bytes.Buffer{})
+		runError := RunConformance(context.Background(), path, &bytes.Buffer{})
 		if runError == nil || !strings.Contains(runError.Error(), "overlap") {
 			return fmt.Errorf("%s shared-root relation was not rejected: %w", relation, runError)
 		}
@@ -2008,7 +2013,7 @@ func requireV04ConformanceCallerSessionIsolation(root string) error {
 		return err
 	}
 	plan := v04Plan(1, 256*policy.MiB)
-	caller, err := guard.AcquireReservation(
+	caller, err := runtimewiring.AcquireReservation(
 		context.Background(), manifest.SharedRoot, "", policy.TaskService, profileBalanced, "caller", plan, 20, 0,
 	)
 	if err != nil {
@@ -2052,7 +2057,7 @@ func requireV04ConformanceCallerSessionIsolation(root string) error {
 			}
 		}
 	}()
-	if runError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}); runError != nil {
+	if runError := RunConformance(context.Background(), manifestPath, &bytes.Buffer{}); runError != nil {
 		return fmt.Errorf("conformance consumer inherited caller reservation state: %w", runError)
 	}
 
@@ -2063,7 +2068,7 @@ func requireV04ConformanceCallerSessionIsolation(root string) error {
 		}
 	}()
 	for index := range 3 {
-		owner, acquireError := guard.AcquireReservation(
+		owner, acquireError := runtimewiring.AcquireReservation(
 			context.Background(), manifest.SharedRoot, "", policy.TaskEphemeral, profileBalanced,
 			fmt.Sprintf("consumer-%d", index+1), plan, 20, 0,
 		)
@@ -2071,14 +2076,14 @@ func requireV04ConformanceCallerSessionIsolation(root string) error {
 			return fmt.Errorf("independent consumer reservation %d: %w", index+1, acquireError)
 		}
 		owners = append(owners, owner)
-		inherited, inheritError := guard.AcquireReservation(
+		inherited, inheritError := runtimewiring.AcquireReservation(
 			context.Background(), manifest.SharedRoot, owner.Token, policy.TaskEphemeral, profileBalanced, "nested", plan, 20, 0,
 		)
 		if inheritError != nil || inherited == nil || !inherited.Inherited || inherited.Token != owner.Token {
 			return fmt.Errorf("consumer %d nested reservation did not inherit only its outer owner: %w", index+1, inheritError)
 		}
 	}
-	deferred, deferError := guard.AcquireReservation(
+	deferred, deferError := runtimewiring.AcquireReservation(
 		context.Background(), manifest.SharedRoot, "", policy.TaskEphemeral, profileBalanced, "consumer-4", plan, 20, 50*time.Millisecond,
 	)
 	if deferred != nil {
@@ -2111,7 +2116,7 @@ func requireV04ReplacedConformanceCheckout(root string) error {
 		return err
 	}
 
-	runError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+	runError := RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 	if runError == nil {
 		return errors.New("conformance accepted a replacement checkout directory with identical Git state")
 	}
@@ -2157,7 +2162,7 @@ func requireV04ReplacedConformanceSharedRoot(root, replacement string) error {
 		return err
 	}
 
-	runError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+	runError := RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 	if runError == nil {
 		return fmt.Errorf("conformance accepted shared-root replacement with %s", replacement)
 	}
@@ -2189,7 +2194,7 @@ func requireV04ConformanceCancellation(root string) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- conformance.Run(ctx, manifestPath, &bytes.Buffer{}) }()
+	go func() { done <- RunConformance(ctx, manifestPath, &bytes.Buffer{}) }()
 	deadline := time.Now().Add(fixtureLivenessWait)
 	var childPID int
 	for {
@@ -2241,7 +2246,7 @@ func runInternalConformanceRegressionV04(name string) error {
 	if err != nil {
 		return err
 	}
-	command := exec.Command("go", "test", "./internal/conformance", "-run", "^"+name+"$", "-count=1")
+	command := exec.Command("go", "test", "./internal/adapters/conformance", "-run", "^"+name+"$", "-count=1")
 	command.Dir = moduleRoot
 	if output, runError := command.CombinedOutput(); runError != nil {
 		return fmt.Errorf("internal conformance regression %s: %s: %w", name, bytes.TrimSpace(output), runError)
@@ -2315,7 +2320,7 @@ func requireV04VerifiedBinaryCleanupFailure(root string) error {
 	if err = writeConformanceManifestV04(manifestPath, manifest); err != nil {
 		return err
 	}
-	runError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+	runError := RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 	privateStorage, readError := os.ReadFile(storagePath)
 	if readError != nil {
 		return readError
@@ -2371,7 +2376,7 @@ func requireV04ConformanceBinaryReplacement(root string) error {
 	if err = writeConformanceManifestV04(manifestPath, manifest); err != nil {
 		return err
 	}
-	runError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+	runError := RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 	if runError == nil || !strings.Contains(runError.Error(), "binary") || !strings.Contains(runError.Error(), "checkout changed") {
 		return fmt.Errorf("changed binary was not rejected and reconciled: %w", runError)
 	}
@@ -2411,7 +2416,7 @@ func requireV04PinnedBinaryIdentity(root string) error {
 		return err
 	}
 	done := make(chan error, 1)
-	go func() { done <- conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}) }()
+	go func() { done <- RunConformance(context.Background(), manifestPath, &bytes.Buffer{}) }()
 	deadline := time.Now().Add(fixtureLivenessWait)
 	for {
 		if _, statError := os.Stat(ready); statError == nil {
@@ -2478,7 +2483,7 @@ func requireV04ConformanceBinaryFIFO(root string) error {
 		return err
 	}
 	done := make(chan error, 1)
-	go func() { done <- conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}) }()
+	go func() { done <- RunConformance(context.Background(), manifestPath, &bytes.Buffer{}) }()
 	select {
 	case runError := <-done:
 		return requirePrivateBinaryValidationErrorV04(runError, privatePath)
@@ -2505,7 +2510,7 @@ func requireV04ConformanceBinaryDirectory(root string) error {
 		return err
 	}
 
-	return requirePrivateBinaryValidationErrorV04(conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}), privatePath)
+	return requirePrivateBinaryValidationErrorV04(RunConformance(context.Background(), manifestPath, &bytes.Buffer{}), privatePath)
 }
 
 func requireV04ConformanceBinaryMode(root string) error {
@@ -2520,7 +2525,7 @@ func requireV04ConformanceBinaryMode(root string) error {
 		return err
 	}
 
-	return requirePrivateBinaryValidationErrorV04(conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}), privatePath)
+	return requirePrivateBinaryValidationErrorV04(RunConformance(context.Background(), manifestPath, &bytes.Buffer{}), privatePath)
 }
 
 func requireSafeConformanceStartErrorV04(runError error, consumerName, phase string, privatePaths ...string) error {
@@ -2570,7 +2575,7 @@ func requireV04MissingCommandPrivacy(root string) error {
 	}
 
 	return requireSafeConformanceStartErrorV04(
-		conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}), manifest.Consumers[0].Name, "gate", privateExecutable, root,
+		RunConformance(context.Background(), manifestPath, &bytes.Buffer{}), manifest.Consumers[0].Name, "gate", privateExecutable, root,
 	)
 }
 
@@ -2590,7 +2595,7 @@ func requireV04InvalidCheckoutPrivacy(root string) error {
 	}
 
 	return requireSafeConformanceIdentityErrorV04(
-		conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}), manifest.Consumers[0].Name, "bootstrap", privateCheckout, movedCheckout, root,
+		RunConformance(context.Background(), manifestPath, &bytes.Buffer{}), manifest.Consumers[0].Name, "bootstrap", privateCheckout, movedCheckout, root,
 	)
 }
 
@@ -2625,7 +2630,7 @@ func requireV04ParallelConformanceBootstrap(root string) error {
 	if err = writeConformanceManifestV04(manifestPath, manifest); err != nil {
 		return err
 	}
-	runError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+	runError := RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 	if runError == nil {
 		return errors.New("multiple bootstrap failures were not aggregated")
 	}
@@ -2710,7 +2715,7 @@ func (driver *Driver) statusModeV04(configPath, root string) (string, error) {
 	} else {
 		base := time.Unix(0, 0)
 		stdout := &bytes.Buffer{}
-		code, err := (cli.Application{
+		code, err := bootstrap.WithDefaults(cli.Application{
 			Stdout: stdout, Stderr: &bytes.Buffer{},
 			Collector: &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 			Sleep:     func(time.Duration) {}, Environment: []string{"HIPPO_ROOT=" + root},
@@ -2747,7 +2752,7 @@ func (driver *Driver) requestCompiledWaiterOverflowStatusV04() error {
 	root := driver.evidenceRoot
 	maximum := guard.ReservationVector{CPU: math.MaxInt, MemoryBytes: math.MaxInt64}
 	floor := guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB}
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, profileBalanced, "",
 		guard.ReservationPlan{Capacity: maximum, Requested: floor, Allocated: floor}, 20, 0,
 	)
@@ -2763,7 +2768,7 @@ func (driver *Driver) requestCompiledWaiterOverflowStatusV04() error {
 	plan := guard.ReservationPlan{Capacity: maximum, Requested: maximum, Allocated: maximum}
 	for range 2 {
 		go func() {
-			session, acquireError := guard.AcquireReservation(ctx, root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 10*time.Second)
+			session, acquireError := runtimewiring.AcquireReservation(ctx, root, "", policy.TaskEphemeral, profileBalanced, "", plan, 20, 10*time.Second)
 			if session != nil {
 				_ = guard.ReleaseReservation(root, session) //nolint:contextcheck // Test cleanup must outlive the canceled contender context.
 			}
@@ -2797,7 +2802,7 @@ func (driver *Driver) requestCompiledWaiterOverflowStatusV04() error {
 		driver.exitCode = exitCode(err)
 	} else {
 		base := time.Unix(0, 0)
-		driver.exitCode, err = (cli.Application{
+		driver.exitCode, err = bootstrap.WithDefaults(cli.Application{
 			Stdout: stdout, Stderr: stderr, Sleep: func(time.Duration) {},
 			Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 			Environment: []string{"HIPPO_ROOT=" + root},
