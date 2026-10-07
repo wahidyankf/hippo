@@ -11,8 +11,10 @@ part of it guessing.
 
 ## Requirements
 
-- Write prose a reader can follow without the context that produced it. A comment that explains why is worth more than
-  one that restates what.
+- Write prose a reader can follow without the context that produced it.
+- Keep comments, commit messages, and work notes brief.
+- Use clear, simple, natural English in those texts so readers who use English as an additional language can follow.
+- When a work note explains code, state why it is needed rather than narrating its visible behavior.
 - Prefer plain words to jargon where both are exact. Where jargon is exact and plain words are not, use the jargon and
   define it once.
 - Keep identifier names, exit-code names, and configuration keys stable and in English. Renaming one is a
@@ -22,3 +24,8 @@ part of it guessing.
 
 Non-English content is acceptable only where it is the subject rather than the medium — a test fixture proving that
 Unicode handling works, for instance.
+
+## Enforcement
+
+Review judges brevity, natural wording, and whether a note explains a reason. A mechanical check cannot distinguish
+useful context from needless narration, so these rules are unenforced by decision.
