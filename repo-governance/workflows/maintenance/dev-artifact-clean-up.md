@@ -24,6 +24,17 @@ of its result.
    | unknown  | investigate before removing; never delete something you cannot classify |
 
 3. **Remove the scratch class.** Delete files, remove worktrees, delete task branches that have served their purpose.
+
+   A rebase merge gives the landed commits new identifiers, so `git branch -d` refuses. After
+   `git fetch origin --prune`, `git branch -D <branch>` may delete a task branch no worktree holds
+   (`git worktree list --porcelain` names no `branch refs/heads/<branch>`) that either **landed**, its pull request
+   `MERGED` with `headRefOid` equal to the tip or `git cherry origin/main <branch>` printing only `-` lines, or is
+   **stale**, its tip's committer date over 72 hours old with no open pull request from it. When that cherry prints a
+   `+` line, a stale tip is preserved first: keep `origin/<branch>` if it holds the tip, else
+   `git bundle create <path> origin/main..<branch>` under the primary checkout's ignored `local-tmp/`, recording the
+   path. Only then does the remote branch go, by exact ref: `git push origin --delete <branch>`. Otherwise retain the
+   branch with the reason. Never use wildcard refs, delete `main` or a protected branch, or force a worktree removal.
+
 4. **Preserve unrelated work.** A dirty file that this task did not create is not cleanup's business. Cleanup removes
    what the task made; it never restores a working copy to some imagined clean state.
 5. **Prove absence.** Re-list the paths and confirm they are gone, and confirm the working tree holds only what it

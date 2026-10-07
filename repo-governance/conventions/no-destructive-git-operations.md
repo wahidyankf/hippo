@@ -4,8 +4,8 @@ Git keeps no undo for uncommitted work, and a rewrite of pushed history reaches 
 someone else is using the same machine and remote at the same moment.
 
 Adapted from the catalog rule of the same name. What changed: a secret in history follows
-[data safety](public-repository-data-safety.md), which rules out rewriting here, and a landed task branch is still
-deleted as [integration path](integration-path.md) directs.
+[data safety](public-repository-data-safety.md), which rules out rewriting here, and an unused task branch is deleted
+under the proofs of [dev artifact clean-up](../workflows/maintenance/dev-artifact-clean-up.md).
 
 ## The Rule Is the Effect
 
@@ -36,7 +36,7 @@ command destroys and who made it, not whether it appears below.
   - Use instead: leave the entries
 - `git branch -D`, `git update-ref -d`
   - Destroys: a branch, skipping the merged check
-  - Use instead: `git branch -d`
+  - Use instead: `git branch -d`; an unused task branch follows the section below
 - **expiring the reflog and pruning at once**
   - Destroys: the recovery path itself
   - Use instead: let automatic maintenance run
@@ -46,11 +46,13 @@ command destroys and who made it, not whether it appears below.
 
 The lease form is still a force push and still needs approval; it only refuses to overwrite commits nobody has seen.
 
-## Landed Task Branches
+## Unused Task Branches
 
 Deleting the worktree and both copies of the branch once every unit that used them has landed is required cleanup, not
-an operation this rule gates. A rebase merge gives the landed commits new identifiers, so `git branch -d` refuses and
-`-D` is expected there. Confirm the pull request merged and nothing is unpushed first.
+an operation this rule gates. A rebase merge gives the landed commits new identifiers, so `git branch -d` refuses.
+`git branch -D` on a task branch is the one exception to the list above, and only under the landed or stale proof and
+the preservation step of [dev artifact clean-up](../workflows/maintenance/dev-artifact-clean-up.md) step 3. Any other
+`-D` still needs approval.
 
 ## Asking for Approval
 
