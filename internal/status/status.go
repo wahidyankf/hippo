@@ -28,9 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 // The closed exit vocabulary. Nothing else is ever returned, except a status
@@ -262,16 +259,28 @@ func (failure Failure) Retryable() bool { return Retryable(failure.Code) }
 //
 //nolint:errname // "Interruption" is the event; InterruptionError would call a stop someone asked for an error.
 type Interruption struct {
-	Signal syscall.Signal
+	Signal int
+	Name   string
 }
 
 // Error names the signal, the way context.Cause reports it.
 func (interruption Interruption) Error() string {
-	return interruption.Signal.String() + " signal received"
+	name := interruption.Name
+	if name == "" {
+		switch interruption.Signal {
+		case 2:
+			name = "interrupt"
+		case 15:
+			name = "terminated"
+		default:
+			name = fmt.Sprintf("signal %d", interruption.Signal)
+		}
+	}
+	return name + " signal received"
 }
 
 // Status is the exit status a signal-ended process reports: 128+N.
-func (interruption Interruption) Status() int { return 128 + int(interruption.Signal) }
+func (interruption Interruption) Status() int { return 128 + interruption.Signal }
 
 // Interrupted reports the interruption that cancelled ctx, if a signal did.
 // A context cancelled for any other reason reports none.
@@ -281,29 +290,4 @@ func Interrupted(ctx context.Context) (Interruption, bool) {
 	}
 
 	return errors.AsType[Interruption](context.Cause(ctx))
-}
-
-// SignalContext is the one place a process entry turns SIGINT and SIGTERM into
-// cancellation. The cancellation carries the signal itself as an Interruption,
-// so the command can finish cleanly and still end with the 128+N a shell
-// reports for it. Call stop once the command has returned.
-func SignalContext(parent context.Context) (context.Context, func()) {
-	ctx, cancel := context.WithCancelCause(parent)
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		select {
-		case received := <-signals:
-			if number, ok := received.(syscall.Signal); ok {
-				cancel(Interruption{Signal: number})
-			}
-		case <-ctx.Done():
-		}
-	}()
-
-	return ctx, func() {
-		signal.Stop(signals)
-		cancel(nil)
-	}
 }

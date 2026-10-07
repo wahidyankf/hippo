@@ -10,7 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -61,7 +63,7 @@ func gatePlan() guard.ReservationPlan {
 func admitWithNearlySpentWait(root string) (*guard.Session, error) {
 	clock := time.Now()
 
-	return guard.AcquireReservationWithOptions(
+	return runtimewiring.AcquireReservationWithOptions(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "", gatePlan(), 3, time.Nanosecond,
 		guard.ReservationAdmissionOptions{
 			Metadata: guard.ReservationMetadata{Source: "gate-fixture"},

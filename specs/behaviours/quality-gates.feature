@@ -18,7 +18,7 @@ Feature: HIPPO quality gates
     And the unit adapter permits no behavior exemptions
     And every configured behavior exemption names a concrete boundary and reason
     And the quick gate invokes each compliance adapter serially
-    And compiled end-to-end behavior runs only in the full gate
+    And the standalone compiled end-to-end suite runs only in the full gate
 
   @e2e-exempt
   Scenario: Contributor gate wiring is complete
@@ -51,6 +51,12 @@ Feature: HIPPO quality gates
   Scenario: Every package with tests runs in a gate
     When gate package wiring is inspected
     Then every package that holds tests is run by a gate
+
+  @e2e-exempt
+  Scenario: Hexagonal dependency boundaries stay enforced
+    When the production dependency graph is inspected for every supported platform
+    Then application and domain dependencies point inward
+    And the architecture checker rejects forbidden dependency fixtures
 
   @e2e-exempt
   Scenario: Production code compares no domain value with a literal

@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support"
+
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -165,7 +167,7 @@ func TestHIPPOPTYHelper(t *testing.T) {
 	ptyPolicy.TerminationGrace = 200 * time.Millisecond
 
 	runStarted := time.Now()
-	exitCode, runErr := guard.Run(ctx, guard.RunConfig{
+	exitCode, runErr := support.RunGuard(ctx, guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", childScript},
 		ChildStdin:   os.Stdin,

@@ -21,6 +21,6 @@ cd "$tool_dir"
 # Exercise the public process boundary with the same embedded identity used by
 # tagged binaries, while keeping compilation concurrency bounded.
 GOMAXPROCS=2 "$go_binary" build -p=1 -trimpath \
-	-ldflags "-X github.com/wahidyankf/hippo/internal/cli.Version=v0.0.0-test -X github.com/wahidyankf/hippo/internal/cli.Commit=0000000000000000000000000000000000000000" \
+	-ldflags "-X github.com/wahidyankf/hippo/internal/adapters/cli.Version=v0.0.0-test -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit=0000000000000000000000000000000000000000" \
 	-o "$temporary_dir/hippo" ./cmd/hippo
 HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -count=1 ./tests/e2e

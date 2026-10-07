@@ -12,8 +12,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -21,7 +24,7 @@ func (driver *Driver) liveExclusiveStatusOwner() error {
 	if err := driver.preparePendingV04(); err != nil {
 		return err
 	}
-	session, err := guard.AcquireSession(
+	session, err := runtimewiring.AcquireSession(
 		context.Background(), driver.evidenceRoot, "", policy.TaskEphemeral, time.Second,
 	)
 	if err != nil {
@@ -69,7 +72,7 @@ func (driver *Driver) inspectExclusiveStatusOwner() error {
 
 	base := time.Unix(0, 0)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr,
 		Collector: &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 		Sleep:     func(time.Duration) {}, Environment: []string{hippoRootEnvironment + "=" + driver.evidenceRoot},

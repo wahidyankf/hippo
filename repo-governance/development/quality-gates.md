@@ -23,9 +23,11 @@ Install them with `npm ci`. A worktree whose hooks never ran pushes unverified w
 ## The Quick Gate
 
 `scripts/test-quick.sh`, in order: the worktree layout check, formatting, whole-module compilation, strict lint,
-NilAway, the tests of every package under `./cmd/...` and `./internal/...` plus `tests/support`, the `tests/unit` corpus
-once under deterministic core coverage at 99%, the three behaviour adapters serially, and artifact policy. The domain
-literal analysis runs as a behaviour scenario in the corpus and the adapters. The
+NilAway, the production-import check and its negative fixtures under `tests/architecture`, the tests of every package
+under `./cmd/...` and `./internal/...` plus `tests/support` and `tests/coverage`; the `tests/unit` corpus and the
+application, coordination-domain, evidence-domain, identity, and status package tests together under deterministic core
+coverage at 99%, the three behaviour adapters serially, and artifact policy. The domain literal analysis runs as a
+behaviour scenario in the corpus and the adapters. The
 [repository adapter](quality/stacks/repository-adapter/001-go-analysis-gates.md) records these analysis gates.
 Documentation hygiene is not in it; it runs as its own gates on the same surfaces.
 

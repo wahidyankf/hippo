@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/evidence"
+	releaseguard "github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/policy"
-	releaseguard "github.com/wahidyankf/hippo/internal/release"
+	"github.com/wahidyankf/hippo/tests/support"
 )
 
 func TestReleaseMonitorWritesAndAssessesPrivateEvidence(t *testing.T) {
@@ -32,7 +32,7 @@ func TestReleaseMonitorWritesAndAssessesPrivateEvidence(t *testing.T) {
 	defer cancel()
 	collector := &integrationCollector{samples: samples, cancel: cancel, cancelAfter: len(samples)}
 
-	err := releaseguard.RunMonitor(ctx, releaseguard.MonitorConfig{
+	err := support.RunReleaseMonitor(ctx, releaseguard.MonitorConfig{
 		OutputPath:     outputPath,
 		SummaryPath:    summaryPath,
 		DeploymentRoot: root,
@@ -51,7 +51,7 @@ func TestReleaseMonitorWritesAndAssessesPrivateEvidence(t *testing.T) {
 		t.Fatalf("invalid output mode: info=%v error=%v", info, statError)
 	}
 
-	summary, err := releaseguard.AssessFile(summaryPath)
+	summary, err := support.AssessReleaseFile(summaryPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,13 +81,13 @@ func TestReleaseMonitorRotatesRawEvidenceWithoutTruncatingSummary(t *testing.T) 
 	defer cancel()
 
 	collector := &integrationCollector{samples: samples, cancel: cancel, cancelAfter: len(samples)}
-	err := releaseguard.RunMonitor(ctx, releaseguard.MonitorConfig{
+	err := support.RunReleaseMonitor(ctx, releaseguard.MonitorConfig{
 		OutputPath:     outputPath,
 		SummaryPath:    summaryPath,
 		DeploymentRoot: root,
 		Collector:      collector,
 		Interval:       time.Microsecond,
-		EvidenceLimits: evidence.Limits{ChunkBytes: 2048, Chunks: 5},
+		EvidenceLimits: releaseguard.ReleaseLimits{ChunkBytes: 2048, Chunks: 5},
 		ServiceRSS:     func(context.Context) int64 { return 4096 },
 		Health:         func(context.Context) (int, float64) { return 200, 2.5 },
 		RoutedHealth:   func(context.Context) (int, float64) { return 200, 75 },
@@ -126,7 +126,7 @@ func TestReleaseAssessmentRejectsInvalidAndUnhealthyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := releaseguard.AssessFile(legacy); err != nil {
+	if _, err := support.AssessReleaseFile(legacy); err != nil {
 		t.Fatalf("legacy summary rejected: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestReleaseAssessmentRejectsInvalidAndUnhealthyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if summary, err := releaseguard.AssessFile(legacyRouted); err != nil || summary.SchemaVersion != 4 {
+	if summary, err := support.AssessReleaseFile(legacyRouted); err != nil || summary.SchemaVersion != 4 {
 		t.Fatalf("legacy routed summary rejected: summary=%+v error=%v", summary, err)
 	}
 
@@ -144,7 +144,7 @@ func TestReleaseAssessmentRejectsInvalidAndUnhealthyEvidence(t *testing.T) {
 	if err := os.WriteFile(invalid, []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := releaseguard.AssessFile(invalid); err == nil {
+	if _, err := support.AssessReleaseFile(invalid); err == nil {
 		t.Fatal("invalid summary accepted")
 	}
 
@@ -153,7 +153,7 @@ func TestReleaseAssessmentRejectsInvalidAndUnhealthyEvidence(t *testing.T) {
 	if err := os.WriteFile(unhealthy, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := releaseguard.AssessFile(unhealthy); err == nil {
+	if _, err := support.AssessReleaseFile(unhealthy); err == nil {
 		t.Fatal("unhealthy summary accepted")
 	}
 }

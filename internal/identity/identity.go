@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -85,7 +83,8 @@ func consumeUniqueJSON(decoder *json.Decoder) error {
 	return err
 }
 
-func decode(data []byte) (Value, error) {
+// Decode validates strict identity document syntax.
+func Decode(data []byte) (Value, error) {
 	unique := json.NewDecoder(bytes.NewReader(data))
 	if err := consumeUniqueJSON(unique); err != nil {
 		return Value{}, err
@@ -180,22 +179,19 @@ func ValidateOverrides(sourceOverride string, tagOverrides []string) error {
 	return err
 }
 
-// Load reads an optional schema-1 file, then applies invocation overrides.
-func Load(path, sourceOverride string, tagOverrides []string) (Value, error) {
+// Resolve applies invocation overrides to an optional decoded document.
+func Resolve(data []byte, present bool, sourceOverride string, tagOverrides []string) (Value, error) {
 	value := Value{SchemaVersion: SchemaVersion, Tags: map[string]string{}}
-	data, err := os.ReadFile(filepath.Clean(path))
-	if err == nil {
-		value, err = decode(data)
+	if present {
+		var err error
+		value, err = Decode(data)
 		if err != nil {
 			return Value{}, fmt.Errorf("decode identity: %w", err)
 		}
 		if value.Tags == nil {
 			value.Tags = map[string]string{}
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Value{}, err
 	}
-
 	if sourceOverride != "" {
 		value.Source = sourceOverride
 	}
@@ -207,36 +203,5 @@ func Load(path, sourceOverride string, tagOverrides []string) (Value, error) {
 	if err = Validate(value); err != nil {
 		return Value{}, err
 	}
-
 	return value, nil
-}
-
-// Path resolves an explicit environment path, then discovers a worktree-local
-// identity while walking upward. A machine default is the final fallback.
-func Path(environment map[string]string, workingDirectory string) string {
-	if path := environment["HIPPO_IDENTITY"]; path != "" {
-		return path
-	}
-	if workingDirectory == "" {
-		workingDirectory, _ = os.Getwd()
-	}
-	current, err := filepath.Abs(workingDirectory)
-	if err == nil {
-		for {
-			candidate := filepath.Join(current, "hippo.identity.json")
-			if _, statError := os.Stat(candidate); statError == nil {
-				return candidate
-			}
-			parent := filepath.Dir(current)
-			if parent == current {
-				break
-			}
-			current = parent
-		}
-	}
-	if path := environment["HIPPO_DEFAULT_IDENTITY"]; path != "" {
-		return path
-	}
-
-	return filepath.Join(workingDirectory, "hippo.identity.json")
 }

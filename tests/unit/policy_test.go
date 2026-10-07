@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 

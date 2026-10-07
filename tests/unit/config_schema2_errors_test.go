@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	resourceconfig "github.com/wahidyankf/hippo/internal/config"
+	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
 )
 
 // overflowMiB exceeds math.MaxInt64/MiB so every MiB-to-bytes conversion must fail closed.

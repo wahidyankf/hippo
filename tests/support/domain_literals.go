@@ -35,7 +35,7 @@ import (
 //     list, declared as string, int, or bool.
 //
 // Files a build constraint excludes on the running platform are not analysed;
-// internal/host holds the only such files and no domain name. Outside both
+// internal/adapters/host holds the platform-specific collector files and no domain name. Outside both
 // rules, and so not refused: a negative literal such as -1, a rune literal, a
 // comparison through a conversion such as string(x), and a domain name declared
 // as a named result.
