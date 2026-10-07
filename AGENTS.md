@@ -3,6 +3,9 @@
 This file is an index. Every rule lives in [`repo-governance/`](repo-governance/README.md); this file states none of its
 own.
 
+For required English in artifacts and clear English agent replies, follow
+[Language](repo-governance/conventions/language.md).
+
 New here? Start with [the vision](repo-governance/vision/README.md).
 
 ## The Product
@@ -94,8 +97,7 @@ One canonical instruction body, expressed per harness:
 
 ## Working Here
 
-Write in [English](repo-governance/conventions/language.md). Keep
-[task state in the repository](repo-governance/conventions/task-tracking.md). Run at most
+Keep [task state in the repository](repo-governance/conventions/task-tracking.md). Run at most
 [three delegated agents at once](repo-governance/conventions/delegated-agent-concurrency.md).
 [Exhaust the repository before asking](repo-governance/conventions/last-resort-questions.md). Diagrams are
 [ASCII](repo-governance/conventions/markdown-visualizations.md), Markdown
