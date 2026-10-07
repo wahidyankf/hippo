@@ -54,7 +54,8 @@ repository's role, then how it relates to HIPPO:
 - **[`hippo`](https://github.com/wahidyankf/hippo)** — resource coordination. This repository.
 - [`ose-public`](https://github.com/wahidyankf/ose-public) — the OSE product platform and research. Upstream consumption
   both ways: it pins HIPPO releases, and HIPPO's contributor gates pin its FERRET release.
-- _(unnamed, private)_ — authorized operations. Upstream consumption: it pins HIPPO releases.
+- [`ose-private`](https://github.com/wahidyankf/ose-private) (Private) — authorized operations. Upstream consumption: it
+  pins HIPPO releases.
 - [`rhino`](https://github.com/wahidyankf/rhino) — repository hygiene. Upstream consumption both ways: HIPPO's
   contributor gates pin RHINO releases, and RHINO guards its own builds with a pinned HIPPO.
 - [`beaver-nest`](https://github.com/wahidyankf/beaver-nest) — an independent family product. Upstream consumption: it
@@ -68,9 +69,9 @@ repository's role, then how it relates to HIPPO:
 Each consumer reaches HIPPO through a checksum-pinned bootstrap. Nothing crosses the other way at runtime: the HIPPO
 binary depends on none of them, and cannot guard itself.
 
-The private one is left unnamed here on purpose: this repository is public, and a public document naming a private
-repository publishes the fact that it exists and what it is called. Anyone authorized to work in it already knows its
-name.
+`ose-private`'s name and link are public by the maintainer's 2026-10-07 decision, and the link resolves only for
+authorized maintainers. Its contents stay private: this repository publishes nothing about it beyond its name, link, and
+role.
 
 **That label is navigation, not coupling.** `ose-projects` is a routing label only — not an organization, a parent
 repository, a parity group, or a shared release. The seven are developed, versioned, gated, and released independently,

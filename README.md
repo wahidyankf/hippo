@@ -185,8 +185,8 @@ single instruction body rather than two that drift.
 ## 🌙 Part of Open Sharia Enterprise
 
 HIPPO is one of seven **`ose-projects`** repositories, with `ose-public`, `rhino`, `beaver-nest`, `ose-rules`,
-`py-typekit`, and one private operations repository this public one does not name. The label is navigation only — see
-[project context](./docs/README.md#project-context) for each one's link and relationship.
+`py-typekit`, and [`ose-private`](https://github.com/wahidyankf/ose-private) (Private). The label is navigation only —
+see [project context](./docs/README.md#project-context) for each one's link and relationship.
 
 HIPPO compiles in no OSE-specific defaults and works entirely on its own — consumers supply their own commands, paths,
 ports, and health endpoints.
