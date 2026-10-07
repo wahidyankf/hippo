@@ -14,10 +14,10 @@ This is a [bug-fix plan](../../../repo-governance/conventions/plans/010-bug-fix-
 skipping the test would weaken a gate, which the
 [upstream tool defects](../../../repo-governance/development/upstream-tool-defects.md) standard forbids. As for the
 sibling plans
-[`fix-corrupt-waiter-identity-test-flake`](../../done/2026-10-07__fix-corrupt-waiter-identity-test-flake/README.md) and
-[`fix-distinct-root-lock-test-flake`](../../done/2026-10-07__fix-distinct-root-lock-test-flake/README.md), the owner's
-direction is the standing request [plan lifecycle](../../../repo-governance/conventions/plan-lifecycle.md) accepts, and
-it also directs this plan's quality gate and execution.
+[`fix-corrupt-waiter-identity-test-flake`](../2026-10-07__fix-corrupt-waiter-identity-test-flake/README.md) and
+[`fix-distinct-root-lock-test-flake`](../2026-10-07__fix-distinct-root-lock-test-flake/README.md), the owner's direction
+is the standing request [plan lifecycle](../../../repo-governance/conventions/plan-lifecycle.md) accepts, and it also
+directs this plan's quality gate and execution.
 
 **Release.** The change is test-only, so it carries no release content: no `CHANGELOG.md` entry and no tag. `v0.8.5`,
 published 2026-10-06T22:19:10Z, contains the test but its binary is unaffected; the next release cut from `origin/main`

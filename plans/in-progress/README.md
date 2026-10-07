@@ -15,5 +15,4 @@ that already exists, with both stage indexes updated in that one change.
 
 ## Directory Map
 
-- [Strict Go linting and domain modeling](strict-go-linting-and-domain-modeling/README.md) — carry outcomes, internal
-  reasons, profile lineage, and the admission decision as Go types, and gate the result.
+This stage holds no plan folder, so this README has no siblings to map.

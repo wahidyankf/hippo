@@ -17,11 +17,12 @@ that request also directs this plan's quality gate, its execution, and its relea
 **Workaround, recorded.** Re-running the gate sometimes passes, and the convention counts "a retry that reliably
 succeeds" as a workaround. Here the retry is not reliable: the host's sustained load averages of 34–47 are the condition
 that produces the failure. The owner's request is what the convention accepts in place of a blocking defect, as in
-[the v0.8.4 fix](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md).
+[the v0.8.4 fix](../2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md).
 
 **Release.** This fix ships in `v0.8.5`, which the in-flight plan
-[strict Go linting and domain modeling](../strict-go-linting-and-domain-modeling/README.md) cuts in its Unit 7. This
-plan releases nothing of its own unless that cut happens without the fix (see [Phase 5](#phase-5-release-through-v085)).
+[strict Go linting and domain modeling](../2026-10-07__strict-go-linting-and-domain-modeling/README.md) cuts in its
+Unit 7. This plan releases nothing of its own unless that cut happens without the fix (see
+[Phase 5](#phase-5-release-through-v085)).
 
 Line numbers in this plan are at `db9632a`, the trunk commit that landed it and the one it executes from.
 
