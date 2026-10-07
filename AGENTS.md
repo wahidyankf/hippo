@@ -1,10 +1,8 @@
 # HIPPO Contributor Rules
 
-This file is an index. Every rule lives in [`repo-governance/`](repo-governance/README.md); this file states none of its
-own.
+This file indexes the rules in [`repo-governance/`](repo-governance/README.md); it states none.
 
-For required English in artifacts and clear English agent replies, follow
-[Language](repo-governance/conventions/language.md).
+Follow [Language](repo-governance/conventions/language.md) for artifacts and English replies.
 
 New here? Start with [the vision](repo-governance/vision/README.md).
 
