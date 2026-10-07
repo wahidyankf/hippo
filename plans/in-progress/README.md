@@ -17,5 +17,8 @@ that already exists, with both stage indexes updated in that one change.
 
 - [Fix: Cancelled waiter cleanup flakes under load](fix-cancelled-waiter-cleanup-flake/README.md) — the cancelled
   waiter's cleanup never refuses a free coordination lock, and its scenario tolerates a loaded host.
+- [Fix: Stable-warning run test finds no summary](fix-stable-warning-run-test-finds-no-summary/README.md) — the
+  stable-warning run test dates its samples from the wall clock, so the run's evidence cleanup never archives the
+  summary it reads.
 - [Strict Go linting and domain modeling](strict-go-linting-and-domain-modeling/README.md) — carry outcomes, internal
   reasons, profile lineage, and the admission decision as Go types, and gate the result.
