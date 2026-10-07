@@ -23,3 +23,7 @@
 coverage.out
 *.prof
 *.pprof
+
+# Command Code personal project state
+/.commandcode/settings.local.json
+/.commandcode/taste/
