@@ -17,6 +17,10 @@ then verifies the archive rather than assuming it.
 ## Completed Plans
 
 - 2026-10-07 —
+  [Fix: Stable-Warning Run Test Finds No Summary](2026-10-07__fix-stable-warning-run-test-finds-no-summary/README.md):
+  the stable-warning run test dates its samples from the wall clock, so the run's evidence cleanup never archives the
+  summary it reads; test-only.
+- 2026-10-07 —
   [Fix: Cancelled Waiter Cleanup Flakes Under Load](2026-10-07__fix-cancelled-waiter-cleanup-flake/README.md): the
   cancelled waiter's cleanup never refuses a free coordination lock, and its scenario tolerates a loaded host; released
   as v0.8.5.
@@ -62,6 +66,8 @@ then verifies the archive rather than assuming it.
   is the delivery record for the distinct-root coordination lock test flake fix.
 - [Fix: Linux available memory counts page cache](2026-10-02__fix-linux-available-memory-counts-page-cache/README.md) is
   the delivery record for the v0.8.3 page-cache fix.
+- [Fix: Stable-Warning Run Test Finds No Summary](2026-10-07__fix-stable-warning-run-test-finds-no-summary/README.md) is
+  the delivery record for the stable-warning run test fix.
 - [Gate shell static analysis](2026-09-26__gate-shell-static-analysis/README.md) is the delivery record for the
   shell-lint gate.
 - [Isolate test coordination state](2026-09-26__isolate-test-coordination-state/README.md) is the delivery record for
