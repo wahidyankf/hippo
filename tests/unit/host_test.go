@@ -11,7 +11,9 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/wahidyankf/hippo/internal/host"
+	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
+
+	"github.com/wahidyankf/hippo/internal/adapters/host"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -82,7 +84,7 @@ func TestCPUParsersAndEvidenceRoot(t *testing.T) {
 		t.Fatalf("unexpected empty process CPU %v", value)
 	}
 
-	if root := host.DefaultEvidenceRoot(map[string]string{"HIPPO_ROOT": "/generic/root"}); root != "/generic/root" {
+	if root := resourceconfig.DefaultEvidenceRoot(map[string]string{"HIPPO_ROOT": "/generic/root"}); root != "/generic/root" {
 		t.Fatalf("unexpected root %q", root)
 	}
 }

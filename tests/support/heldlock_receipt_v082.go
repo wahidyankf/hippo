@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/guard"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -129,7 +129,7 @@ func (driver *Driver) signalHeldLockWaiterV082() error {
 	}
 	ctx, interrupt := context.WithCancelCause(context.Background())
 	defer interrupt(nil)
-	timer := time.AfterFunc(heldLockSignalDelay, func() { interrupt(status.Interruption{Signal: syscall.SIGINT}) })
+	timer := time.AfterFunc(heldLockSignalDelay, func() { interrupt(status.Interruption{Signal: int(syscall.SIGINT)}) })
 	defer timer.Stop()
 	driver.runInterruptible(ctx, arguments, &sequenceCollector{samples: driver.samples}, func(time.Duration) {})
 

@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/evidence"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -50,7 +52,7 @@ func readOwnerDocument(t *testing.T, path string) map[string]any {
 
 func TestHeavyLeaseLifecycleAndInheritance(t *testing.T) {
 	root := t.TempDir()
-	session, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
+	session, err := runtimewiring.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
 	if err != nil || session == nil || session.Inherited {
 		t.Fatalf("acquire failed: session=%+v error=%v", session, err)
 	}
@@ -58,12 +60,12 @@ func TestHeavyLeaseLifecycleAndInheritance(t *testing.T) {
 	if !guard.InheritedSession(root, session.Token) || guard.InheritedSession(root, "") || guard.InheritedSession(root, "wrong") {
 		t.Fatal("inheritance validation failed")
 	}
-	inherited, err := guard.AcquireSession(context.Background(), root, session.Token, "ephemeral", 0)
+	inherited, err := runtimewiring.AcquireSession(context.Background(), root, session.Token, "ephemeral", 0)
 	if err != nil || inherited == nil || !inherited.Inherited {
 		t.Fatalf("inherit failed: %+v %v", inherited, err)
 	}
 
-	deferred, err := guard.AcquireSession(context.Background(), root, "wrong", "ephemeral", 0)
+	deferred, err := runtimewiring.AcquireSession(context.Background(), root, "wrong", "ephemeral", 0)
 	if err != nil || deferred != nil {
 		t.Fatalf("second owner was not deferred: %+v %v", deferred, err)
 	}
@@ -88,7 +90,7 @@ func TestCoordinationModeLifecycleAcrossConcurrentServices(t *testing.T) {
 	var wait sync.WaitGroup
 	for range owners {
 		wait.Go(func() {
-			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
+			session, err := runtimewiring.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
 			if err != nil {
 				errorsFound <- err
 
@@ -173,7 +175,7 @@ func TestCoordinationMarkerRejectsIncompatibleOrMalformedState(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, 0)
+			session, err := runtimewiring.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, 0)
 			if err == nil || session != nil {
 				t.Fatalf("incompatible marker was accepted: session=%+v error=%v", session, err)
 			}
@@ -202,7 +204,7 @@ func TestReservationCoordinationRejectsEveryCompatibilityClassAsProtocolMismatch
 
 	for _, class := range []policy.TaskClass{policy.TaskEphemeral, policy.TaskTransactional, policy.TaskService} {
 		t.Run(string(class), func(t *testing.T) {
-			session, err := guard.AcquireSession(context.Background(), root, "", class, 0)
+			session, err := runtimewiring.AcquireSession(context.Background(), root, "", class, 0)
 			if err == nil || session != nil {
 				t.Fatalf("reservation coordination admitted %s: session=%+v error=%v", class, session, err)
 			}
@@ -246,7 +248,7 @@ func TestMalformedHeavyLeaseRemainsFailClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, 0)
+			session, err := runtimewiring.AcquireSession(context.Background(), root, "", policy.TaskEphemeral, 0)
 			if err == nil || session != nil {
 				t.Fatalf("unverifiable heavy lease did not fail closed: session=%+v error=%v", session, err)
 			}
@@ -284,7 +286,7 @@ func TestHeavyLeaseRejectsInvalidReleaseAndReclaimsStaleOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	session, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
+	session, err := runtimewiring.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
 	if err != nil || session == nil {
 		t.Fatalf("stale reclaim failed: %+v %v", session, err)
 	}
@@ -314,20 +316,20 @@ func TestHeavyLeaseRejectsInvalidReleaseAndReclaimsStaleOwner(t *testing.T) {
 
 func TestPortLeaseLifecycleValidationAndStaleRecovery(t *testing.T) {
 	root := t.TempDir()
-	if _, err := guard.AcquirePortLease(root, 10, "owner", 20, 30); err == nil {
+	if _, err := runtimewiring.AcquirePortLease(root, 10, "owner", 20, 30); err == nil {
 		t.Fatal("out-of-range port accepted")
 	}
 
-	if _, err := guard.AcquirePortLease(root, 25, "INVALID", 20, 30); err == nil {
+	if _, err := runtimewiring.AcquirePortLease(root, 25, "INVALID", 20, 30); err == nil {
 		t.Fatal("invalid owner accepted")
 	}
 
-	lease, err := guard.AcquirePortLease(root, 25, "first-owner", 20, 30)
+	lease, err := runtimewiring.AcquirePortLease(root, 25, "first-owner", 20, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := guard.AcquirePortLease(root, 25, "second-owner", 20, 30); err == nil {
+	if _, err := runtimewiring.AcquirePortLease(root, 25, "second-owner", 20, 30); err == nil {
 		t.Fatal("live collision accepted")
 	}
 	invalid := *lease
@@ -360,7 +362,7 @@ func TestPortLeaseLifecycleValidationAndStaleRecovery(t *testing.T) {
 	stale := marshalJSON(t, map[string]any{"schemaVersion": 1, "pid": 2_147_483_647, "port": 26, "owner": "stale"})
 	_ = os.WriteFile(filepath.Join(stalePath, "owner.json"), stale, 0o600)
 
-	replacement, err := guard.AcquirePortLease(root, 26, "replacement", 20, 30)
+	replacement, err := runtimewiring.AcquirePortLease(root, 26, "replacement", 20, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +547,7 @@ func TestEvidenceCleanupBoundsAtomicTemporaryRetentionWithoutApplyingTheInactive
 
 func TestServiceSessionsDoNotHoldTheHeavyLease(t *testing.T) {
 	root := t.TempDir()
-	service, err := guard.AcquireSession(context.Background(), root, "", "service", time.Second)
+	service, err := runtimewiring.AcquireSession(context.Background(), root, "", "service", time.Second)
 	if err != nil || service == nil {
 		t.Fatalf("service acquire failed: session=%+v error=%v", service, err)
 	}
@@ -553,7 +555,7 @@ func TestServiceSessionsDoNotHoldTheHeavyLease(t *testing.T) {
 	if _, statError := os.Stat(filepath.Join(root, "heavy.lock")); !os.IsNotExist(statError) {
 		t.Fatal("a service session took the heavy-work lease")
 	}
-	heavy, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
+	heavy, err := runtimewiring.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
 	if err != nil || heavy == nil {
 		t.Fatalf("heavy work was deferred by a live service: session=%+v error=%v", heavy, err)
 	}
@@ -565,7 +567,7 @@ func TestServiceSessionsDoNotHoldTheHeavyLease(t *testing.T) {
 		t.Fatal("a heavy child could not inherit its own session")
 	}
 
-	second, err := guard.AcquireSession(context.Background(), root, "", "service", time.Second)
+	second, err := runtimewiring.AcquireSession(context.Background(), root, "", "service", time.Second)
 	if err != nil || second == nil {
 		t.Fatalf("a concurrent service was deferred: session=%+v error=%v", second, err)
 	}
@@ -586,12 +588,12 @@ func TestServiceSessionsDoNotHoldTheHeavyLease(t *testing.T) {
 
 func TestHeavyLeaseDeferralDescribesItsHolder(t *testing.T) {
 	root := t.TempDir()
-	holder, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
+	holder, err := runtimewiring.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
 	if err != nil || holder == nil {
 		t.Fatalf("acquire failed: session=%+v error=%v", holder, err)
 	}
 
-	deferred, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", 200*time.Millisecond)
+	deferred, err := runtimewiring.AcquireSession(context.Background(), root, "", "ephemeral", 200*time.Millisecond)
 	if err != nil || deferred != nil {
 		t.Fatalf("second heavy owner was not deferred: %+v %v", deferred, err)
 	}
@@ -649,7 +651,7 @@ func TestExclusiveStatusKeepsRefusingASessionRecordWhoseClassHasNoMember(t *test
 	for name, class := range map[string]any{"batch": "batch", "empty": "", "absent": nil} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
-			session, err := guard.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
+			session, err := runtimewiring.AcquireSession(context.Background(), root, "", policy.TaskService, time.Second)
 			if err != nil || session == nil {
 				t.Fatalf("acquire service session: session=%v error=%v", session != nil, err)
 			}

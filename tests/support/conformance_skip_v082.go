@@ -12,7 +12,7 @@ import (
 func requireConformanceCapacitySkip(string) error {
 	return errors.Join(
 		runGoRegressionV10("./tests/integration", "TestCompiledConformanceCapacitySkipRequiresNewNeverStartedReceipt/verified"),
-		runGoRegressionV10("./internal/conformance", "TestCleanCapacitySkipMatchesWhatHippoEmits"),
+		runGoRegressionV10("./internal/adapters/conformance", "TestCleanCapacitySkipMatchesWhatHippoEmits"),
 	)
 }
 

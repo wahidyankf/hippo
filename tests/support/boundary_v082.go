@@ -11,8 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -66,7 +68,7 @@ func runGuardedAtBoundary(root, configDocument string, samples []policy.Sample, 
 		samples = []policy.Sample{healthySample(time.Now())}
 	}
 	stderr := &bytes.Buffer{}
-	code, _ := (cli.Application{
+	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdin:       strings.NewReader(""),
 		Stdout:      &bytes.Buffer{},
 		Stderr:      stderr,
@@ -279,7 +281,7 @@ func neverStartedReceipts(root string) (int, error) {
 // it leaves the guard as that one internal status, so this is the boundary
 // both shed scenarios cross.
 func requirePressureShedAtBoundary() error {
-	return runGoRegressionV10("./internal/cli", "TestPressureShedNamesItsOwnReason")
+	return runGoRegressionV10("./internal/adapters/cli", "TestPressureShedNamesItsOwnReason")
 }
 
 // requireShedReasonsAtBoundary holds both shed statuses the guard returns to

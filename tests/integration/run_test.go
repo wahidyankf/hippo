@@ -11,8 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/evidence"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -120,7 +123,7 @@ func TestGuardPreservesChildExitAndWritesEvidence(t *testing.T) {
 		integrationSample(base.Add(2 * time.Millisecond)),
 	}}
 
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := support.RunGuard(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", "exit 17"},
 		TaskClass:    "ephemeral",
@@ -145,7 +148,7 @@ func TestGuardReturnsStorageCodeBeforeStartingChild(t *testing.T) {
 	disk := 29 * policy.GiB
 	sample.DiskFreeBytes = &disk
 
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := support.RunGuard(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", "exit 99"},
 		TaskClass:    "ephemeral",
@@ -173,7 +176,7 @@ func TestReservationCoordinationReturnsProtocolMismatchBeforeChildExecution(t *t
 
 	childMarker := filepath.Join(t.TempDir(), "child-started")
 	stderr := &bytes.Buffer{}
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := support.RunGuard(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", `printf started > "$CHILD_MARKER"`},
 		TaskClass:    "ephemeral",
@@ -205,14 +208,14 @@ func TestReservationCoordinationReturnsProtocolMismatchBeforeChildExecution(t *t
 
 func TestInheritedGuardRunsDirectlyAndKeepsPortLease(t *testing.T) {
 	root, portRoot := t.TempDir(), t.TempDir()
-	session, err := guard.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
+	session, err := runtimewiring.AcquireSession(context.Background(), root, "", "ephemeral", time.Second)
 	if err != nil || session == nil {
 		t.Fatalf("acquire session: session=%v error=%v", session != nil, err)
 	}
 
 	defer func() { _ = guard.ReleaseSession(root, session) }()
 
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := support.RunGuard(context.Background(), guard.RunConfig{
 		Command:       "/bin/sh",
 		Arguments:     []string{"-c", "exit 0"},
 		TaskClass:     "ephemeral",
@@ -245,7 +248,7 @@ func TestGuardShedsCriticalEphemeralChild(t *testing.T) {
 	critical.MemoryPressureLevel = &level
 	collector := &integrationCollector{samples: []policy.Sample{healthy, healthy, healthy, critical}}
 
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := support.RunGuard(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", "sleep 5"},
 		TaskClass:    "ephemeral",
@@ -283,7 +286,7 @@ func TestGuardInjectsResolvedConcurrencyWithoutOverwritingCaller(t *testing.T) {
 	command := `[ "$HIPPO_PROFILE" = minimal ] && [ "$HIPPO_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 5 ]`
 	environment := []string{"PATH=" + os.Getenv("PATH"), "CALLER_WORKERS=5"}
 
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := support.RunGuard(context.Background(), guard.RunConfig{
 		Command:                "/bin/sh",
 		Arguments:              []string{"-c", command},
 		TaskClass:              "ephemeral",
@@ -313,7 +316,7 @@ func TestGuardExportsChildSessionAndBinary(t *testing.T) {
 	}}
 	command := `[ -n "$HIPPO_SESSION" ] && [ -x "$HIPPO_BIN" ]`
 
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := support.RunGuard(context.Background(), guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", command},
 		TaskClass:    "ephemeral",
@@ -387,7 +390,7 @@ func TestInterruptedGuardSignalsOnceThenForceStops(t *testing.T) {
 	// marks its own completion, which is how the test tells a force-stop from a
 	// child that finished.
 	completed := filepath.Join(childRoot, "completed")
-	_, err := guard.Run(ctx, guard.RunConfig{
+	_, err := support.RunGuard(ctx, guard.RunConfig{
 		Command:      "/bin/sh",
 		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; while [ ! -e "$GUARD_RELEASE_MARKER" ]; do :; done; printf d > "$GUARD_DONE_MARKER"`},
 		TaskClass:    "ephemeral",

@@ -30,13 +30,24 @@ go tool golangci-lint run
 # pass. A false positive is excluded where it stands with a reasoned
 # //nolint:nilaway directive.
 go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...
+# The production graph and negative fixtures cover every supported platform,
+# even when the current host excludes a platform's build-tagged Go files.
+go test -count=1 ./tests/architecture
 # Every package's own tests. The scenario "Every package with tests runs in a
 # gate" fails if a package holding tests falls outside these patterns.
-go test -count=1 ./cmd/... ./internal/... ./tests/support
-# The unit corpus runs once, under coverage: a failing test fails this line.
+go test -count=1 ./cmd/... ./internal/... ./tests/support ./tests/coverage
+# The unit corpus and pure package tests share one measured coverage execution.
+# Explicit leaf directories keep the threshold helper's nonrecursive discovery
+# complete as domain packages acquire new deterministic functions.
 mkdir -p coverage
-go test -count=1 -coverpkg=./internal/policy,./internal/config,./internal/host,./internal/evidence -coverprofile=coverage/unit.out ./tests/unit
-go run ./tests/coverage --profile coverage/unit.out --directories internal/policy,internal/config --files internal/host/collector.go,internal/host/linux_parsers.go,internal/evidence/histogram.go --minimum 99
+go test -count=1 \
+	-coverpkg=./internal/policy,./internal/adapters/config,./internal/adapters/host,./internal/adapters/evidence,./internal/domain/coordination,./internal/domain/evidence,./internal/identity,./internal/status,./internal/application \
+	-coverprofile=coverage/unit.out \
+	./tests/unit ./internal/application ./internal/domain/coordination ./internal/domain/evidence \
+	./internal/identity ./internal/status
+go run ./tests/coverage --profile coverage/unit.out \
+	--directories internal/policy,internal/domain/coordination,internal/domain/evidence,internal/identity,internal/status,internal/application \
+	--files internal/adapters/config/config.go,internal/adapters/host/collector.go,internal/adapters/host/linux_parsers.go --minimum 99
 HIPPO_BDD_ADAPTER=unit go test -count=1 ./tests/bdd
 HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd
 # The end-to-end adapter runs a real binary, and which binary it runs is the
@@ -48,7 +59,7 @@ HIPPO_BDD_ADAPTER=integration go test -count=1 ./tests/bdd
 bdd_temporary=$(mktemp -d "${TMPDIR:-/tmp}/hippo-bdd.XXXXXX")
 trap 'rm -rf -- "$bdd_temporary"' EXIT
 go build -trimpath \
-	-ldflags "-X github.com/wahidyankf/hippo/internal/cli.Version=v0.0.0-test -X github.com/wahidyankf/hippo/internal/cli.Commit=0000000000000000000000000000000000000000" \
+	-ldflags "-X github.com/wahidyankf/hippo/internal/adapters/cli.Version=v0.0.0-test -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit=0000000000000000000000000000000000000000" \
 	-o "$bdd_temporary/hippo" ./cmd/hippo
 HIPPO_BDD_ADAPTER=e2e HIPPO_BIN="$bdd_temporary/hippo" go test -count=1 ./tests/bdd
 

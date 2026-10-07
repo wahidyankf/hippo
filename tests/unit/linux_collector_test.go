@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/adapters/host"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 

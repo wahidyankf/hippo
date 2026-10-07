@@ -103,7 +103,7 @@ for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
 	(
 		cd "$source_root"
 		CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -p=1 -trimpath -buildvcs=true \
-			-ldflags "-s -w -X github.com/wahidyankf/hippo/internal/cli.Version=$version -X github.com/wahidyankf/hippo/internal/cli.Commit=$commit" \
+			-ldflags "-s -w -X github.com/wahidyankf/hippo/internal/adapters/cli.Version=$version -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit=$commit" \
 			-o "$binary" ./cmd/hippo
 	)
 	# The archiver writes the one member as root-owned mode 755 whatever the

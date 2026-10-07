@@ -18,12 +18,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/evidence"
-	"github.com/wahidyankf/hippo/internal/guard"
-	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/host"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	releaseguard "github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/policy"
-	releaseguard "github.com/wahidyankf/hippo/internal/release"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -147,10 +150,12 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
-	mode               string
-	samples            []policy.Sample
-	assessment         policy.Assessment
-	admitted, accepted bool
+	architectureGraphError   error
+	architectureFixtureError error
+	mode                     string
+	samples                  []policy.Sample
+	assessment               policy.Assessment
+	admitted, accepted       bool
 	// admission is the path DecideAdmission took for the scenario's samples, which
 	// the scenarios that assert why work was not admitted read, so a rule broken
 	// inside the decision fails them even where the profile resolution says the same.
@@ -598,7 +603,7 @@ func (driver *Driver) runGuardedShellUnder(resourcePolicy policy.Policy, script 
 	}
 
 	stderr := &bytes.Buffer{}
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := RunGuard(context.Background(), guard.RunConfig{
 		Command:      shellPath,
 		Arguments:    []string{"-c", script},
 		TaskClass:    taskClassEphemeral,
@@ -680,7 +685,7 @@ func (driver *Driver) inspectGuardedEnvironment() error {
 	)
 	environment := append([]string{}, driver.childEnvironment...)
 	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout:      stdout,
 		Stderr:      stderr,
 		Environment: environment,
@@ -720,7 +725,7 @@ func (driver *Driver) requestInvalidConcurrencyMappings() {
 	driver.invalidMappingsRejected = true
 
 	for _, name := range []string{"9INVALID", "HIPPO_SESSION"} {
-		code, err := guard.Run(context.Background(), guard.RunConfig{
+		code, err := RunGuard(context.Background(), guard.RunConfig{
 			Command:                shellPath,
 			Arguments:              []string{"-c", childStartedScript},
 			TaskClass:              taskClassEphemeral,
@@ -771,7 +776,7 @@ func (driver *Driver) copyGuardedStreams() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	environment := append([]string{}, driver.childEnvironment...)
 	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdin:       strings.NewReader(driver.childInput),
 		Stdout:      stdout,
 		Stderr:      stderr,
@@ -811,7 +816,7 @@ func (driver *Driver) emptyCoordinationRoot() error {
 }
 
 func (driver *Driver) acquireExclusiveCompatibility() error {
-	session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
+	session, err := runtimewiring.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
 	if err != nil {
 		return err
 	}
@@ -881,7 +886,7 @@ func (driver *Driver) requestEveryCompatibilityClass() error {
 	}
 
 	for _, class := range classes {
-		session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", class, 0)
+		session, err := runtimewiring.AcquireSession(context.Background(), driver.leaseRoot, "", class, 0)
 		if session != nil {
 			_ = guard.ReleaseSession(driver.leaseRoot, session)
 		}
@@ -1005,7 +1010,7 @@ func (driver *Driver) liveLease() error {
 	driver.leaseRoot = root
 	driver.leaseHolder = os.Getpid()
 
-	holder, err := guard.AcquireSession(context.Background(), root, "", taskClassEphemeral, time.Second)
+	holder, err := runtimewiring.AcquireSession(context.Background(), root, "", taskClassEphemeral, time.Second)
 	if err != nil {
 		return err
 	}
@@ -1019,7 +1024,7 @@ func (driver *Driver) liveLease() error {
 }
 
 func (driver *Driver) waitLease() error {
-	second, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, 200*time.Millisecond)
+	second, err := runtimewiring.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, 200*time.Millisecond)
 	if err != nil {
 		return err
 	}
@@ -1061,7 +1066,7 @@ func (driver *Driver) liveServiceLease() error {
 
 	driver.leaseRoot = root
 
-	service, err := guard.AcquireSession(context.Background(), root, "", "service", time.Second)
+	service, err := runtimewiring.AcquireSession(context.Background(), root, "", "service", time.Second)
 	if err != nil {
 		return err
 	}
@@ -1075,7 +1080,7 @@ func (driver *Driver) liveServiceLease() error {
 }
 
 func (driver *Driver) heavyRequestsLease() error {
-	heavy, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
+	heavy, err := runtimewiring.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
 	if err != nil {
 		return err
 	}
@@ -1101,7 +1106,7 @@ func (driver *Driver) twoServiceSessions() error {
 	driver.leaseRoot = root
 
 	for range 2 {
-		service, acquireError := guard.AcquireSession(context.Background(), root, "", "service", time.Second)
+		service, acquireError := runtimewiring.AcquireSession(context.Background(), root, "", "service", time.Second)
 		if acquireError != nil {
 			return acquireError
 		}
@@ -1138,7 +1143,7 @@ func (driver *Driver) inherited() error {
 		return err
 	}
 
-	session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
+	session, err := runtimewiring.AcquireSession(context.Background(), driver.leaseRoot, "", taskClassEphemeral, time.Second)
 	if err != nil {
 		return err
 	}
@@ -1337,7 +1342,7 @@ func (driver *Driver) interruptGuard() error {
 	// marks its own completion, which is how the scenario tells a force-stop from
 	// a child that finished.
 	completed := filepath.Join(driver.leaseRoot, "completed")
-	_, err := guard.Run(ctx, guard.RunConfig{
+	_, err := RunGuard(ctx, guard.RunConfig{
 		Command:      shellPath,
 		Arguments:    []string{"-c", `trap 'printf x >> "$GUARD_TERM_MARKER"' TERM; printf r > "$GUARD_READY_MARKER"; while [ ! -e "$GUARD_RELEASE_MARKER" ]; do :; done; printf d > "$GUARD_DONE_MARKER"`},
 		TaskClass:    taskClassEphemeral,
@@ -1418,7 +1423,7 @@ func (driver *Driver) loseHostEvidence() error {
 		beforeFailure: childPIDReadiness(pidPath, interruptReadinessWait),
 	}
 
-	code, runError := guard.Run(context.Background(), guard.RunConfig{
+	code, runError := RunGuard(context.Background(), guard.RunConfig{
 		Command: shellPath,
 		// The delayed PID write outlasts the first supervision sample plus the
 		// termination grace, so only the readiness barrier keeps this Given true.
@@ -1472,7 +1477,7 @@ func (driver *Driver) requireReapedBeforeRelease() error {
 		return fmt.Errorf("inspect heavy lease after child reaping: %w", err)
 	}
 
-	session, err := guard.AcquireSession(context.Background(), driver.leaseRoot, "", policy.TaskEphemeral, 0)
+	session, err := runtimewiring.AcquireSession(context.Background(), driver.leaseRoot, "", policy.TaskEphemeral, 0)
 	if err != nil {
 		return err
 	}
@@ -1796,7 +1801,7 @@ func (driver *Driver) observeDegradedWarning() error {
 
 	stderr := &bytes.Buffer{}
 
-	code, runError := guard.Run(context.Background(), guard.RunConfig{
+	code, runError := RunGuard(context.Background(), guard.RunConfig{
 		Command:                shellPath,
 		Arguments:              []string{"-c", `[ "$HIPPO_CONCURRENCY" = 1 ] && [ "$TOOL_WORKERS" = 1 ] && [ "$CALLER_WORKERS" = 1 ]; sleep 5`},
 		TaskClass:              taskClassEphemeral,
@@ -1882,7 +1887,7 @@ func (driver *Driver) jsonStatus() error {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	var stdout, stderr bytes.Buffer
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout:    &stdout,
 		Stderr:    &stderr,
 		Collector: collector,
@@ -1902,7 +1907,7 @@ func (driver *Driver) jsonVersion() error {
 	}
 
 	var stdout bytes.Buffer
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout:  &stdout,
 		Stderr:  &bytes.Buffer{},
 		Version: "v0.0.0-test",
@@ -1963,7 +1968,7 @@ func (driver *Driver) runCLI(arguments ...string) error {
 	}
 
 	var stdout, stderr bytes.Buffer
-	exitCode, err := (cli.Application{
+	exitCode, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}).Run(context.Background(), arguments)
@@ -2085,7 +2090,7 @@ func (driver *Driver) invalidRun() error {
 		return nil
 	}
 
-	_, err := (cli.Application{
+	_, err := bootstrap.WithDefaults(cli.Application{
 		Stdout:    &bytes.Buffer{},
 		Stderr:    &bytes.Buffer{},
 		Collector: &sequenceCollector{},
@@ -2194,7 +2199,7 @@ func (driver *Driver) assessSummary() error {
 		return nil
 	}
 
-	_, err := releaseguard.AssessFile(driver.summaryPath)
+	_, err := AssessReleaseFile(driver.summaryPath)
 	driver.accepted = err == nil
 
 	return nil
@@ -2224,7 +2229,7 @@ func (driver *Driver) assessSummaryInput() error {
 		driver.runBinaryWithInput(driver.childInput, arguments...)
 	} else {
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-		code, err := (cli.Application{
+		code, err := bootstrap.WithDefaults(cli.Application{
 			Stdin:  strings.NewReader(driver.childInput),
 			Stdout: stdout,
 			Stderr: stderr,
@@ -2276,7 +2281,7 @@ func (driver *Driver) monitorJSON() error {
 	collector := &sequenceCollector{samples: driver.samples, cancel: cancel, cancelAfter: len(driver.samples)}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout:    stdout,
 		Stderr:    stderr,
 		Collector: collector,
@@ -2331,7 +2336,7 @@ func (driver *Driver) releasePathsWithoutEndpoints() error {
 
 func runReleaseMonitorCLI(arguments []string, standardOutput io.Writer) (int, string, error) {
 	standardError := &bytes.Buffer{}
-	application := cli.Application{
+	application := bootstrap.WithDefaults(cli.Application{
 		Stdout:      standardOutput,
 		Stderr:      standardError,
 		Environment: []string{},
@@ -2349,9 +2354,9 @@ func runReleaseMonitorCLI(arguments []string, standardOutput io.Writer) (int, st
 			config.RoutedHealth = func(context.Context) (int, float64) { return 200, 75 }
 			config.LoadAverage = func(context.Context) float64 { return 1.5 }
 
-			return releaseguard.RunMonitor(monitorContext, config)
+			return RunReleaseMonitor(monitorContext, config)
 		},
-	}
+	})
 
 	code, err := application.Run(context.Background(), arguments)
 
@@ -2455,7 +2460,7 @@ func (driver *Driver) requireRawStandardOutput() error {
 	if len(records) != 1 {
 		return fmt.Errorf("raw output records=%d output=%q", len(records), driver.output)
 	}
-	if _, err := releaseguard.AssessFile(driver.releaseSummaryPath); err != nil {
+	if _, err := AssessReleaseFile(driver.releaseSummaryPath); err != nil {
 		return err
 	}
 
@@ -2604,7 +2609,7 @@ func (driver *Driver) runReleaseMonitoring(ctx context.Context) {
 		collector = &sequenceCollector{samples: []policy.Sample{healthySample(base)}}
 	}
 	stderr := &bytes.Buffer{}
-	code, _ := (cli.Application{
+	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout:      &bytes.Buffer{},
 		Stderr:      stderr,
 		Environment: []string{},
@@ -3033,6 +3038,10 @@ func (driver *Driver) requirePinnedNilAway() error {
 		return errors.New("NilAway runs before golangci-lint")
 	}
 
+	if !validArchitectureGateOrder(driver.lintCommand) {
+		return errors.New("production import check must execute all graph and fixture tests after NilAway and before package tests")
+	}
+
 	modulePins, err := os.ReadFile(filepath.Join(toolRoot(), "go.mod"))
 	if err != nil {
 		return err
@@ -3234,9 +3243,7 @@ func (driver *Driver) inspectContributorEnforcement() error {
 		!strings.Contains(prePushHook, "npm exec -- nx") &&
 		!strings.Contains(prePushHook, "npx nx") &&
 		!strings.Contains(manifest, `"nx":`)
-	driver.coreCoverage = strings.Contains(quick, "--minimum 99") &&
-		strings.Contains(quick, "internal/policy,./internal/config,./internal/host") &&
-		strings.Contains(quick, "internal/host/collector.go,internal/host/linux_parsers.go")
+	driver.coreCoverage = validCoreCoverageSelectors(quick)
 
 	return nil
 }
@@ -3634,7 +3641,7 @@ func (driver *Driver) statusWithConfig() {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	stdout := &bytes.Buffer{}
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout:    stdout,
 		Stderr:    &bytes.Buffer{},
 		Collector: collector,
@@ -3759,4 +3766,92 @@ func (driver *Driver) requireApplicationLayout() error {
 		return errors.New("HIPPO is not a standalone Go module with co-owned specifications")
 	}
 	return nil
+}
+
+// validCoreCoverageSelectors verifies executed selectors, not promises in comments.
+func validCoreCoverageSelectors(script string) bool {
+	coverageCommand, thresholdCommand := "", ""
+	for line := range strings.SplitSeq(strings.ReplaceAll(script, "\\\n", " "), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "go test ") && strings.Contains(line, "-coverprofile=coverage/unit.out") {
+			if coverageCommand != "" {
+				return false
+			}
+			coverageCommand = line
+		}
+		if strings.HasPrefix(line, "go run ./tests/coverage ") {
+			if thresholdCommand != "" {
+				return false
+			}
+			thresholdCommand = line
+		}
+	}
+	if coverageCommand == "" || thresholdCommand == "" {
+		return false
+	}
+	for _, command := range []string{coverageCommand, thresholdCommand} {
+		if strings.ContainsAny(command, "|&;") || strings.Contains(command, "||") {
+			return false
+		}
+	}
+	packages := selectorFlag(coverageCommand, "-coverpkg=")
+	directories := selectorFlag(thresholdCommand, "--directories")
+	files := selectorFlag(thresholdCommand, "--files")
+	for _, path := range []string{"internal/policy", "internal/domain/coordination", "internal/domain/evidence", "internal/identity", "internal/status", "internal/application"} {
+		if !csvSelectorContains(packages, "./"+path) || !csvSelectorContains(directories, path) {
+			return false
+		}
+	}
+	for _, path := range []string{"internal/adapters/config/config.go", "internal/adapters/host/collector.go", "internal/adapters/host/linux_parsers.go"} {
+		if !csvSelectorContains(files, path) {
+			return false
+		}
+	}
+	for _, path := range []string{"./internal/adapters/config", "./internal/adapters/host", "./internal/adapters/evidence"} {
+		if !csvSelectorContains(packages, path) {
+			return false
+		}
+	}
+	fields := strings.Fields(coverageCommand)
+	return slices.Contains(fields, "./tests/unit") && slices.Contains(fields, "./internal/application") &&
+		slices.Contains(fields, "./internal/domain/coordination") && slices.Contains(fields, "./internal/domain/evidence") &&
+		slices.Contains(fields, "./internal/identity") && slices.Contains(fields, "./internal/status") &&
+		selectorFlag(thresholdCommand, "--minimum") == "99"
+}
+
+func selectorFlag(command, name string) string {
+	fields := strings.Fields(command)
+	for index, field := range fields {
+		if strings.HasSuffix(name, "=") && strings.HasPrefix(field, name) {
+			return strings.TrimPrefix(field, name)
+		}
+		if field == name && index+1 < len(fields) {
+			return fields[index+1]
+		}
+	}
+	return ""
+}
+
+func csvSelectorContains(value, path string) bool {
+	return slices.Contains(strings.Split(value, ","), path)
+}
+
+func validArchitectureGateOrder(script string) bool {
+	nilaway, architecture, packages := -1, -1, -1
+	for index, line := range strings.Split(strings.ReplaceAll(script, "\\\n", " "), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "go tool nilaway ") {
+			nilaway = index
+		}
+		if line == "go test -count=1 ./tests/architecture" {
+			if architecture >= 0 {
+				return false
+			}
+			architecture = index
+		}
+		if strings.HasPrefix(line, "go test -count=1 ./cmd/...") {
+			packages = index
+		}
+	}
+	return nilaway >= 0 && nilaway < architecture && architecture < packages
 }

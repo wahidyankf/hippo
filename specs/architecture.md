@@ -81,53 +81,57 @@ command runs as a distinct child process group so interruption and pressure shed
 
 ## Component View
 
-Each row is one dependency, grouped by the component it starts from: the command tree loads, collects, and dispatches;
-the policy engine assesses both guards; both guards write evidence.
+The command boundary projects parsed arguments into application requests. Application use cases own the execution order
+and consume ports they define. Pure domain values and reducers own policy, coordination, and evidence decisions.
+Bootstrap supplies concrete adapters once per invocation.
 
 ```text
-Process entry
-  +-- delegates -----> Command tree
-
-Command tree
-  +-- loads ---------> Config loader ---- resolves ---> Policy engine
-  +-- collects ------> Host collector --- samples ----> Policy engine
-  +-- maps streams --> Execution guard -- writes -----> Evidence store
-  +-- selects sink --> Release guard ---- writes -----> Evidence store
-
-Policy engine
-  +-- assesses ------> Execution guard
-  +-- assesses ------> Release guard
+Process entry ---> Bootstrap composition ---> CLI command boundary
+                          |                         |
+                          | supplies adapters       | requests and renders
+                          v                         v
+                    IO adapters <--- ports --- Application use cases
+                          |                         |
+                          | effects                 | decisions
+                          v                         v
+                    Host and storage          Pure domain
 ```
 
 Every component above sits inside the `Go CLI process` container.
 
-- **Process entry** maps the operating-system argument vector to the application's exit code.
-- **Command tree** owns Cobra commands, flags, validation, stdin/stdout selection, and dependency injection. It reads
-  the global `--output` and `--color` only before `--`, so a guarded command's arguments never shape HIPPO's diagnostic,
-  and a command that defines its own flag of the same name owns it. Requested help wins over the rest of the line:
-  `--help` or `-h` before `--` prints that command's help to stdout and exits `0`, even beside a flag it cannot parse or
-  a value it would refuse, while the same mistake without it exits `2` naming `hippo.args.invalid`.
-- **Config loader and profiles** resolve configuration precedence, select schema-1 exclusive, schema-2 reservation, or
-  schema-3 adaptive coordination, validate tiers, promotion, caps, and owner shares, and preserve compiled safety
-  floors.
-- **Host collector** normalizes macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence into portable
-  samples.
-- **Policy engine and profiles** classify evidence, choose an adaptive development profile, key every profile rule on
-  the built-in lineage a profile inherits through `extends`, decide the admission path once for `run`, `status`, and the
-  behaviour driver, and preserve strict transaction and release envelopes.
-- **Execution guard** owns coordination mode, atomic vector and FIFO mutations, liveness identities, compatibility and
-  port leases, controlling-terminal ownership, child-process lifecycle and streams, fixed generic concurrency mapping,
-  targeted pressure shedding, and bounded evidence retention.
-- **Release guard** owns consecutive release admission, health sampling, file or caller-owned stream sinks, summary
-  schemas, and final overlap assessment.
-- **Evidence store** owns live-writer admission, raw chunk rotation, fixed-memory quantiles, safe labels, daily gzip
-  compaction, bounded history queries, promotion evidence, safety receipts, and expiry.
+- **Process entry and bootstrap** translate signals into portable cancellation and construct configuration, host,
+  runtime, health, and evidence capabilities. Build identity selects the isolated Linux collector only in test builds.
+- **CLI boundary** owns Cobra commands, argument validation, request projection, presentation, and exit diagnostics.
+  Help and diagnostic precedence remain part of the public contract. CLI code constructs no concrete service adapters.
+- **Application** owns guarded-run preparation, host admission, queue retries and deadlines, queue heartbeats,
+  launch-once supervision, own-owner observation before sampling, remote victim release waits, stop/finalize/release
+  ordering, status, history, watch, monitor, release checks and monitoring, and conformance phase ordering. Its
+  consumer-owned ports expose portable values, opaque tokens, and callback capabilities.
+- **Coordination domain** owns strict wire values, checked vector accounting, FIFO enqueue and head allocation,
+  conservative owner limits, and victim election. These reducers perform no filesystem or process effects.
+- **Evidence domain** owns outcomes, fixed-memory histograms, lifetime and release aggregation, history matching,
+  promotion eligibility, and summary validation. Storage adapters preserve the existing schema and wire bytes.
+- **Policy, identity, and status** own portable host samples, collectors, profile resolution, admission decisions, safe
+  labels, and named failures. Portable interruption values retain the numeric signal and its display name.
+- **Configuration and host adapters** discover local paths, read and decode strict configuration and identity files, and
+  normalize macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence.
+- **Runtime adapter** keeps coordination locks, identity descriptors, ledger effects, compatibility leases, port
+  identities, launcher handshakes, child process groups, streams, and controlling-terminal transfer together. Each
+  admission or port attempt performs one atomic effect transaction; application code owns acquisition retries. Unknown
+  retirement retains accounting and abandons only the guard's descriptor.
+- **Evidence and health adapters** perform private chunk rotation, atomic summary publication, safety receipts,
+  retention and compaction, bounded history reads, and endpoint and process observations.
+- **Conformance adapter** supplies checkout, binary identity, invocation, receipt, and deferral-fixture effects;
+  application code owns phase concurrency, two-invocation verification, and bounded reconciliation.
 
-The `internal/policy` package owns the shared typed samples, collectors, task classes, decisions, thresholds, and
-profile resolution. Execution, platform collection, and release monitoring depend directly on that package instead of a
-forwarding facade or consumer-specific application types. Long-running operations receive caller-owned contexts; only
-the process entry translates operating-system signals into cancellation, and that cancellation names the signal so an
-interrupted invocation exits `128+N` unless a started child's status or a classified HIPPO failure explains its end.
+Production dependencies point inward: application imports pure packages, domain imports no adapters, and adapters
+implement application-owned ports. Only the CLI imports Cobra. Bootstrap imports the concrete adapters; inward code
+never imports bootstrap. The architecture check parses every production Go file, including both platform variants, and
+negative fixtures prove that forbidden dependencies are rejected.
+
+Long-running operations receive caller-owned contexts. Only the signal boundary translates operating-system signals into
+cancellation, so an interrupted invocation exits `128+N` unless a started child's status or a classified HIPPO failure
+explains its end. Application code receives neither files, process handles, process groups, nor framework types.
 
 ## Guarded Execution Dynamic View
 
@@ -135,7 +139,7 @@ A guarded run, top to bottom: the caller's request is admitted through the coord
 sampling, and the caller receives the child's status or a classified HIPPO failure. Dashed arrows are replies.
 
 ```text
-Caller           CLI and config                  Host and policy           Coordination store        Child group
+Caller           Application use cases                  Host and policy           Coordination store        Child group
    |                    |                               |                           |                     |
    | run request        |                               |                           |                     |
    |------------------->|                               |                           |                     |

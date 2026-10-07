@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/conformance"
+	"github.com/wahidyankf/hippo/internal/adapters/conformance"
 	"github.com/wahidyankf/hippo/tests/support"
 	"golang.org/x/sys/unix" //nolint:depguard // Manifest identity fixtures require direct kernel metadata and flock probes.
 )
@@ -60,14 +60,14 @@ func TestConformanceManifestRejectsMalformedAndAmbiguousInputs(t *testing.T) {
 	if err := os.WriteFile(unknownPath, []byte(`{"schemaVersion":1,"unknown":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := conformance.Run(context.Background(), unknownPath, &bytes.Buffer{}); err == nil {
+	if err := support.RunConformance(context.Background(), unknownPath, &bytes.Buffer{}); err == nil {
 		t.Fatal("unknown manifest field was accepted")
 	}
 	duplicatePath := filepath.Join(t.TempDir(), "duplicate.json")
 	if err := os.WriteFile(duplicatePath, []byte(`{"schemaVersion":1,"schemaVersion":1}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := conformance.Run(context.Background(), duplicatePath, &bytes.Buffer{}); err == nil {
+	if err := support.RunConformance(context.Background(), duplicatePath, &bytes.Buffer{}); err == nil {
 		t.Fatal("duplicate manifest field was accepted")
 	}
 
@@ -92,7 +92,7 @@ func TestConformanceManifestRejectsMalformedAndAmbiguousInputs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			manifest := validConformanceManifest(t)
 			mutate(&manifest)
-			if err := conformance.Run(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{}); err == nil {
+			if err := support.RunConformance(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{}); err == nil {
 				t.Fatal("invalid conformance manifest was accepted")
 			}
 		})
@@ -103,7 +103,7 @@ func TestConformanceErrorsDoNotExposeCheckoutPaths(t *testing.T) {
 	manifest := validConformanceManifest(t)
 	privatePath := filepath.Join(t.TempDir(), "private-checkout-name")
 	manifest.Consumers[0].Path = privatePath
-	err := conformance.Run(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{})
+	err := support.RunConformance(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("missing checkout was accepted")
 	}
@@ -163,7 +163,7 @@ func TestConformanceRejectsUnsafeHIPPOBinaryObjects(t *testing.T) {
 			privatePath := filepath.Join(t.TempDir(), "private-binary")
 			manifest.HIPPOBinary = privatePath
 			manifest.HIPPOSHA256 = testCase.create(privatePath)
-			err := conformance.Run(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{})
+			err := support.RunConformance(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{})
 			if err == nil {
 				t.Fatal("unsafe HIPPO binary object was accepted")
 			}
@@ -184,7 +184,7 @@ func TestConformanceRejectsHIPPOBinaryFIFOWithoutBlocking(t *testing.T) {
 	manifest.HIPPOSHA256 = strings.Repeat("0", 64)
 	manifestPath := writeConformanceManifest(t, manifest)
 	done := make(chan error, 1)
-	go func() { done <- conformance.Run(context.Background(), manifestPath, &bytes.Buffer{}) }()
+	go func() { done <- support.RunConformance(context.Background(), manifestPath, &bytes.Buffer{}) }()
 	select {
 	case err := <-done:
 		if err == nil || strings.Contains(err.Error(), privatePath) {
@@ -205,7 +205,7 @@ func TestConformanceStartErrorsDoNotExposeCommandPaths(t *testing.T) {
 	manifest := runnableConformanceManifest(t)
 	privateExecutable := filepath.Join(t.TempDir(), "private-missing-command")
 	manifest.Consumers[0].Gates = []conformance.Command{{Arguments: []string{privateExecutable}}}
-	err := conformance.Run(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{})
+	err := support.RunConformance(context.Background(), writeConformanceManifest(t, manifest), &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("missing absolute command was accepted")
 	}

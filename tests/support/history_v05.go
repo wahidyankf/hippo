@@ -13,9 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/evidence"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -40,7 +43,7 @@ func (driver *Driver) labeledReservationOwnerV05() error {
 		Maximum:   guard.ReservationVector{CPU: 4, MemoryBytes: 6 * policy.GiB},
 		Tier:      standardTierName,
 	}
-	session, err := guard.AcquireReservationWithOptions(
+	session, err := runtimewiring.AcquireReservationWithOptions(
 		context.Background(), driver.leaseRoot, "", policy.TaskEphemeral, "balanced", "hash", plan, 2, time.Minute,
 		guard.ReservationAdmissionOptions{Metadata: guard.ReservationMetadata{
 			Source: hippoFixtureName, Tags: map[string]string{"checkout": worktreeTagValue}, Tier: standardTierName,
@@ -58,7 +61,7 @@ func (driver *Driver) labeledReservationOwnerV05() error {
 
 func (driver *Driver) filteredLabeledStatusV05() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 		Collector: &sequenceCollector{samples: driver.samples}, Sleep: func(time.Duration) {},
 	}).Run(context.Background(), []string{
@@ -126,7 +129,7 @@ func (driver *Driver) labeledHistoryV05() error {
 
 func (driver *Driver) filteredHistoryV05() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, historyWindow, "--source", hippoFixtureName, jsonFlag})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
@@ -167,13 +170,13 @@ func (driver *Driver) jsonWatchV05() error {
 	defer interrupt(nil)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	sleeps := 0
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 		Collector: &sequenceCollector{samples: driver.samples},
 		Sleep: func(time.Duration) {
 			sleeps++
 			if sleeps == 2 {
-				interrupt(status.Interruption{Signal: syscall.SIGINT})
+				interrupt(status.Interruption{Signal: int(syscall.SIGINT)})
 			}
 		},
 	}).Run(ctx, []string{"watch", jsonFlag, "--interval", "1s"})
@@ -259,7 +262,7 @@ func (driver *Driver) corruptHistoryArchive() error {
 
 func (driver *Driver) queryHistory() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := (cli.Application{
+	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, historyWindow})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
@@ -333,7 +336,7 @@ func (driver *Driver) requestJSONHistory() error {
 		return driver.runBinaryInRoot(driver.leaseRoot, arguments...)
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := (cli.Application{
+	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + driver.leaseRoot},
 	}).Run(context.Background(), arguments)
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()

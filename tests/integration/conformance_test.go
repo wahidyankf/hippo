@@ -16,8 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/conformance"
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	"github.com/wahidyankf/hippo/internal/adapters/conformance"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/tests/support"
 )
@@ -185,7 +187,7 @@ func TestCompiledConformanceScrubsCallerReservationEnvironment(t *testing.T) {
 		Requested: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 		Allocated: guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
 	}
-	caller, err := guard.AcquireReservation(
+	caller, err := runtimewiring.AcquireReservation(
 		context.Background(), manifest.SharedRoot, "", policy.TaskService, "balanced", "caller", plan, 20, 0,
 	)
 	if err != nil {
@@ -442,8 +444,25 @@ func TestCompiledConformanceCompletedLeaderRetiresDescendant(t *testing.T) {
 			if err := command.Start(); err != nil {
 				t.Fatal(err)
 			}
-			childPID := waitForConformancePID(t, childPIDPath)
-			err := command.Wait()
+			runnerDone := make(chan error, 1)
+			go func() { runnerDone <- command.Wait() }()
+			observation, pidError := observeConformancePID(childPIDPath, runnerDone, &output, time.Now().Add(3*time.Second))
+			if pidError != nil {
+				if !observation.runnerExited {
+					cleanupError := stopConformanceRunner(conformanceRunnerControl{
+						terminate: func() error { return command.Process.Signal(syscall.SIGTERM) },
+						kill:      command.Process.Kill,
+						done:      runnerDone,
+					}, 8*time.Second, 2*time.Second)
+					pidError = errors.Join(pidError, cleanupError)
+				}
+				t.Fatal(pidError)
+			}
+			childPID := observation.pid
+			err := observation.runnerError
+			if !observation.runnerExited {
+				err = <-runnerDone
+			}
 			if err == nil || !strings.Contains(output.String(), "checkout changed") {
 				_ = syscall.Kill(childPID, syscall.SIGKILL)
 				t.Fatalf("completed leader reconciled before late mutation: %s: %v", output.String(), err)
@@ -729,7 +748,7 @@ func TestCompiledConformanceSetupErrorsStayPrivate(t *testing.T) {
 		t.Run(fixture.name, func(t *testing.T) {
 			root := t.TempDir()
 			manifestPath := fixture.prepare(t, root)
-			directError := conformance.Run(context.Background(), manifestPath, &bytes.Buffer{})
+			directError := support.RunConformance(context.Background(), manifestPath, &bytes.Buffer{})
 			if directError == nil || !strings.Contains(directError.Error(), fixture.category) || strings.Contains(directError.Error(), root) {
 				t.Fatalf("direct setup error was not private: %v", directError)
 			}
@@ -791,4 +810,42 @@ func TestCompiledConformanceCancellationPreventsNextBootstrapStart(t *testing.T)
 	if !strings.Contains(message, "checkout changed") || strings.Contains(message, root) {
 		t.Fatalf("compiled cancellation did not privately reconcile checkout state: %s", message)
 	}
+}
+
+func TestConformanceApplicationRunsTwoIdenticalDeferralInvocations(t *testing.T) {
+	root := t.TempDir()
+	// This private admission fixture has exactly the two outcomes the declared
+	// consumer probe must distinguish; it does not write a live ledger protocol.
+	binary := filepath.Join(root, "admission-fixture")
+	fixture := `#!/bin/sh
+if [ -f "$HIPPO_ROOT/conformance-capacity-held" ]; then
+ printf 'first:never-started:124\n'
+ exit 124
+fi
+printf 'second:admitted:0\n'
+exit 0
+`
+	if err := os.WriteFile(binary, []byte(fixture), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest, path := compiledConformanceManifest(t, root, binary)
+	probe := `"$HIPPO_BIN"; first=$?
+if [ "$first" -ne 124 ]; then exit 1; fi
+if ! grep -q '"state":"never-started"' "$HIPPO_ROOT/conformance-never-started-receipt.json"; then exit 1; fi
+while [ -f "$HIPPO_ROOT/conformance-capacity-held" ]; do sleep 0.01; done
+"$HIPPO_BIN"
+`
+	manifest.Consumers[0].DeferralRetryProbe = conformance.Command{Arguments: []string{"/bin/sh", "-c", probe}}
+	writeCompiledConformanceManifest(t, path, manifest)
+	var output bytes.Buffer
+	if err := support.RunConformance(context.Background(), path, &output); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(output.String(), "first:never-started:124") != 1 || strings.Count(output.String(), "second:admitted:0") != 1 {
+		t.Fatalf("expected exactly two identical invocations, got %q", output.String())
+	}
+	if !strings.Contains(output.String(), "retried a capacity deferral") || !strings.Contains(output.String(), "unchanged checkouts") {
+		t.Fatalf("missing conformance verdict: %q", output.String())
+	}
+	t.Logf("two-invocation trace: %s", output.String())
 }

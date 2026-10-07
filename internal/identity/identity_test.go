@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wahidyankf/hippo/internal/identity"
+	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
 )
 
 func TestLoadAndMerge(t *testing.T) {
@@ -24,7 +24,7 @@ func TestLoadAndMerge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := identity.Load(path, "", []string{"surface=plan", "runner=codex", "runner=terra"})
+	got, err := resourceconfig.LoadIdentity(path, "", []string{"surface=plan", "runner=codex", "runner=terra"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestLoadAndMerge(t *testing.T) {
 func TestOverrideSourceWithoutFile(t *testing.T) {
 	t.Parallel()
 
-	got, err := identity.Load(filepath.Join(t.TempDir(), "missing.json"), "fixture-source", []string{"group=local"})
+	got, err := resourceconfig.LoadIdentity(filepath.Join(t.TempDir(), "missing.json"), "fixture-source", []string{"group=local"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestRejectsInvalidIdentity(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := identity.Load(filepath.Join(t.TempDir(), "missing.json"), test.source, test.tags)
+			_, err := resourceconfig.LoadIdentity(filepath.Join(t.TempDir(), "missing.json"), test.source, test.tags)
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
 				t.Fatalf("error = %v, want containing %q", err, test.contains)
 			}
@@ -94,7 +94,7 @@ func TestRejectsDuplicateAndOversizedFile(t *testing.T) {
 			if err := os.WriteFile(path, []byte(test.data), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := identity.Load(path, "", nil); err == nil {
+			if _, err := resourceconfig.LoadIdentity(path, "", nil); err == nil {
 				t.Fatal("expected invalid identity")
 			}
 		})

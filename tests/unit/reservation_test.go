@@ -15,7 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
+
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -32,7 +36,7 @@ func TestMalformedCompatibilitySessionFailsClosedWithoutMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, 0,
 	)
@@ -197,7 +201,7 @@ func reservationPolicy() guard.ReservationPolicy {
 
 func TestAutomaticAndExplicitReservationPlanning(t *testing.T) {
 	for profile, expectedCPU := range map[policy.ProfileName]int{"balanced": 2, "constrained": 4, "minimal": 8} {
-		plan, err := guard.PlanReservation(reservationSample(), reservationResolution(profile), reservationPolicy(), 0, 0)
+		plan, err := coordination.PlanReservation(reservationSample(), reservationResolution(profile), reservationPolicy(), 0, 0)
 		if err != nil {
 			t.Fatalf("%s planning failed: %v", profile, err)
 		}
@@ -206,7 +210,7 @@ func TestAutomaticAndExplicitReservationPlanning(t *testing.T) {
 		}
 	}
 
-	plan, err := guard.PlanReservation(reservationSample(), reservationResolution("balanced"), reservationPolicy(), 1, 256*policy.MiB)
+	plan, err := coordination.PlanReservation(reservationSample(), reservationResolution("balanced"), reservationPolicy(), 1, 256*policy.MiB)
 	if err != nil || plan.Requested.CPU != 1 || plan.Requested.MemoryBytes != 256*policy.MiB {
 		t.Fatalf("explicit floor vector = %+v, %v", plan, err)
 	}
@@ -214,14 +218,14 @@ func TestAutomaticAndExplicitReservationPlanning(t *testing.T) {
 		cpu    int
 		memory int64
 	}{{-1, 256 * policy.MiB}, {1, 255 * policy.MiB}, {9, policy.GiB}, {1, 29 * policy.GiB}} {
-		if _, planError := guard.PlanReservation(reservationSample(), reservationResolution("balanced"), reservationPolicy(), request.cpu, request.memory); !errors.Is(planError, guard.ErrReservationReplan) {
+		if _, planError := coordination.PlanReservation(reservationSample(), reservationResolution("balanced"), reservationPolicy(), request.cpu, request.memory); !errors.Is(planError, guard.ErrReservationReplan) {
 			t.Fatalf("unsafe vector (%d,%d) returned %v", request.cpu, request.memory, planError)
 		}
 	}
 }
 
 func TestTierReservationPlanningAndIdleBurst(t *testing.T) {
-	tiers := guard.DefaultResourceTiers()
+	tiers := coordination.DefaultResourceTiers()
 	settings := reservationPolicy()
 	settings.MaxCPU = 8
 	settings.MaxMemoryBytes = 16 * policy.GiB
@@ -250,18 +254,18 @@ func TestTierReservationPlanningAndIdleBurst(t *testing.T) {
 			wait:    4 * time.Hour,
 		},
 	} {
-		plan, wait, err := guard.PlanTierReservation(sample, resolution, settings, name, 0, 0)
+		plan, wait, err := coordination.PlanTierReservation(sample, resolution, settings, name, 0, 0)
 		if err != nil || plan.Minimum != expected.minimum || plan.Maximum != expected.maximum || wait != expected.wait {
 			t.Fatalf("%s plan = %+v wait=%s error=%v", name, plan, wait, err)
 		}
 	}
 
-	plan, _, err := guard.PlanTierReservation(sample, resolution, settings, "heavy", 0, 0)
+	plan, _, err := coordination.PlanTierReservation(sample, resolution, settings, "heavy", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	session, err := guard.AcquireReservation(context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, 2, 0)
+	session, err := runtimewiring.AcquireReservation(context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, 2, 0)
 	if err != nil || session.Allocation != (guard.ReservationVector{CPU: 8, MemoryBytes: 16 * policy.GiB}) ||
 		session.Requested != (guard.ReservationVector{CPU: 4, MemoryBytes: 8 * policy.GiB}) {
 		t.Fatalf("idle heavy allocation = %+v error=%v", session, err)
@@ -271,7 +275,7 @@ func TestTierReservationPlanningAndIdleBurst(t *testing.T) {
 	if err = guard.ReleaseReservation(root, session); err != nil {
 		t.Fatal(err)
 	}
-	session, err = guard.AcquireReservationWithOptions(
+	session, err = runtimewiring.AcquireReservationWithOptions(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, 2, 0,
 		guard.ReservationAdmissionOptions{Metadata: guard.ReservationMetadata{Source: "hippo", Tier: "heavy"}},
 	)
@@ -300,7 +304,7 @@ func fixedPlan(cpu int, memory int64, capacityCPU int, capacityMemory int64) gua
 
 func acquireReservation(t *testing.T, root string, class policy.TaskClass, plan guard.ReservationPlan) *guard.Session {
 	t.Helper()
-	session, err := guard.AcquireReservation(context.Background(), root, "", class, "balanced", "", plan, 20, 0)
+	session, err := runtimewiring.AcquireReservation(context.Background(), root, "", class, "balanced", "", plan, 20, 0)
 	if err != nil || session == nil {
 		t.Fatalf("acquire reservation: session=%+v error=%v", session, err)
 	}
@@ -328,7 +332,7 @@ func TestReservationLedgerCountsEveryClassAndReusesInheritance(t *testing.T) {
 	if err != nil || totals.ActiveOwners != 3 || totals.Service != 1 || totals.Ephemeral != 1 || totals.Transactional != 1 || totals.Allocated.CPU != 3 {
 		t.Fatalf("unexpected totals %+v error=%v", totals, err)
 	}
-	inherited, err := guard.AcquireReservation(context.Background(), root, sessions[1].Token, policy.TaskEphemeral, "minimal", "", fixedPlan(4, policy.GiB, 4, policy.GiB), 20, 0)
+	inherited, err := runtimewiring.AcquireReservation(context.Background(), root, sessions[1].Token, policy.TaskEphemeral, "minimal", "", fixedPlan(4, policy.GiB, 4, policy.GiB), 20, 0)
 	if err != nil || inherited == nil || !inherited.Inherited || inherited.Allocation != plan.Allocated {
 		t.Fatalf("inheritance expanded or failed: %+v error=%v", inherited, err)
 	}
@@ -349,7 +353,7 @@ func TestSchemaThreeMetadataSurvivesSchemaTwoLedgerRewrite(t *testing.T) {
 		Tier:      "standard",
 	}
 	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
-	session, err := guard.AcquireReservationWithOptions(
+	session, err := runtimewiring.AcquireReservationWithOptions(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "hash", plan, 2, 90*time.Minute,
 		guard.ReservationAdmissionOptions{
 			Metadata: guard.ReservationMetadata{
@@ -386,7 +390,7 @@ func TestAdmissionDeadlineWritesNeverStartedReceipt(t *testing.T) {
 	plan := fixedPlan(1, 256*policy.MiB, 1, 256*policy.MiB)
 	owner := acquireReservation(t, root, policy.TaskEphemeral, plan)
 	defer func() { _ = guard.ReleaseReservation(root, owner) }()
-	_, err := guard.AcquireReservationWithOptions(
+	_, err := runtimewiring.AcquireReservationWithOptions(
 		context.Background(), root, "", policy.TaskTransactional, "balanced", "", plan, 2, 0,
 		guard.ReservationAdmissionOptions{Metadata: guard.ReservationMetadata{
 			Source: "hippo", Tags: map[string]string{"checkout": "worktree"}, Tier: "light",
@@ -420,7 +424,7 @@ func TestBoundedWaitDefersOnCapacityWhenBudgetIsNearlySpent(t *testing.T) {
 	started := time.Now()
 	deadline := started.Add(wait)
 	clock, parked := started, 0
-	_, err := guard.AcquireReservationWithOptions(
+	_, err := runtimewiring.AcquireReservationWithOptions(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, wait,
 		guard.ReservationAdmissionOptions{
@@ -466,7 +470,7 @@ func TestHeldCoordinationLockWithRefusedReceiptReportsTheRefusal(t *testing.T) {
 	}
 	defer func() { _ = os.Chmod(receipts, 0o700) }()
 
-	session, err := guard.AcquireReservationWithOptions(
+	session, err := runtimewiring.AcquireReservationWithOptions(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, 20*time.Millisecond,
 		guard.ReservationAdmissionOptions{Metadata: guard.ReservationMetadata{Source: "fixture"}},
@@ -486,7 +490,7 @@ func TestReservationAdmissionIsAtomicAndFIFO(t *testing.T) {
 	largeResult := make(chan *guard.Session, 1)
 	largeError := make(chan error, 1)
 	go func() {
-		session, err := guard.AcquireReservation(
+		session, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 			fixedPlan(2, 512*policy.MiB, 3, 768*policy.MiB), 20, 500*time.Millisecond,
 		)
@@ -506,7 +510,7 @@ func TestReservationAdmissionIsAtomicAndFIFO(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	small, err := guard.AcquireReservation(
+	small, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, "balanced", "",
 		fixedPlan(1, 256*policy.MiB, 3, 768*policy.MiB), 20, 0,
 	)
@@ -537,7 +541,7 @@ func TestReservationAdmissionArithmeticCannotOverflow(t *testing.T) {
 	})
 	defer func() { _ = guard.ReleaseReservation(root, owner) }()
 	minimum := guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB}
-	candidate, err := guard.AcquireReservation(
+	candidate, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		guard.ReservationPlan{Capacity: maximum, Requested: minimum, Allocated: minimum}, 20, 0,
 	)
@@ -557,7 +561,7 @@ func TestReservationOwnerLimitIsConservativeAcrossLiveOwnersAndWaiters(t *testin
 	strictResult := make(chan *guard.Session, 1)
 	strictError := make(chan error, 1)
 	go func() {
-		session, err := guard.AcquireReservation(
+		session, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, 1, time.Second,
 		)
 		strictResult <- session
@@ -575,7 +579,7 @@ func TestReservationOwnerLimitIsConservativeAcrossLiveOwnersAndWaiters(t *testin
 		}
 		time.Sleep(time.Millisecond)
 	}
-	loose, err := guard.AcquireReservation(
+	loose, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskTransactional, "balanced", "", plan, 20, 0,
 	)
 	if loose != nil || !errors.Is(err, guard.ErrReservationDeferred) {
@@ -589,7 +593,7 @@ func TestReservationOwnerLimitIsConservativeAcrossLiveOwnersAndWaiters(t *testin
 		t.Fatalf("strict waiter was not admitted: session=%+v error=%v", strict, err)
 	}
 	defer func() { _ = guard.ReleaseReservation(root, strict) }()
-	loose, err = guard.AcquireReservation(
+	loose, err = runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskTransactional, "balanced", "", plan, 20, 0,
 	)
 	if loose != nil || !errors.Is(err, guard.ErrReservationDeferred) {
@@ -618,7 +622,7 @@ func TestCPUAndMemoryExhaustionNeverPartiallyAllocate(t *testing.T) {
 			root := t.TempDir()
 			owner := acquireReservation(t, root, policy.TaskService, testCase.owner)
 			defer func() { _ = guard.ReleaseReservation(root, owner) }()
-			other, err := guard.AcquireReservation(
+			other, err := runtimewiring.AcquireReservation(
 				context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 				testCase.other, 20, 0,
 			)
@@ -769,7 +773,7 @@ func TestALedgerShedCauseOutsideStorageAndPressureFailsAdmissionClosed(t *testin
 		t.Fatal(err)
 	}
 
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		fixedPlan(1, 256*policy.MiB, 4, policy.GiB), 20, 0,
 	)
@@ -844,7 +848,7 @@ func TestAutomaticOwnerSharesDefaultByLineage(t *testing.T) {
 		for _, name := range []policy.ProfileName{"local-profile", "balanced"} {
 			resolution := policy.Resolution{ResolvedProfile: name, Lineage: row.lineage, MemoryReserve: 4 * policy.GiB}
 			settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: 20, OwnerShares: map[policy.ProfileName]int{}}
-			plan, err := guard.PlanReservation(reservationSample(), resolution, settings, 0, 0)
+			plan, err := coordination.PlanReservation(reservationSample(), resolution, settings, 0, 0)
 			wantCPU := (8 + row.shares - 1) / row.shares
 			if err != nil || plan.Requested.CPU != wantCPU ||
 				plan.Requested.MemoryBytes != (28*policy.GiB+int64(row.shares)-1)/int64(row.shares) {
@@ -857,7 +861,7 @@ func TestAutomaticOwnerSharesDefaultByLineage(t *testing.T) {
 func TestAConfiguredOwnerShareOutranksTheLineageDefault(t *testing.T) {
 	resolution := policy.Resolution{ResolvedProfile: "local-profile", Lineage: policy.LineageBalanced, MemoryReserve: 4 * policy.GiB}
 	settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: 20, OwnerShares: map[policy.ProfileName]int{"local-profile": 2}}
-	plan, err := guard.PlanReservation(reservationSample(), resolution, settings, 0, 0)
+	plan, err := coordination.PlanReservation(reservationSample(), resolution, settings, 0, 0)
 	if err != nil || plan.Requested.CPU != 4 {
 		t.Errorf("a profile configured for two shares planned %+v (%v), want four CPUs", plan.Requested, err)
 	}

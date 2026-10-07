@@ -617,9 +617,11 @@ func requireV04ReleaseInventory(root string) error {
 		return err
 	}
 	for _, required := range []string{
-		"conformance.manifest.json.example", "cmd/hippo-conformance/main.go", "internal/conformance/conformance.go",
-		"internal/conformance/conformance_test.go", "internal/guard/lifetime.go", "internal/guard/reservation.go",
-		"internal/guard/run_test.go", "internal/guard/terminal.go", "internal/policy/units.go",
+		"conformance.manifest.json.example", "cmd/hippo-conformance/main.go", "internal/adapters/conformance/conformance.go",
+		"internal/adapters/conformance/environment.go", "internal/application/conformance.go", "internal/adapters/cli/conformance.go",
+		"internal/adapters/conformance/conformance_test.go", "internal/adapters/runtime/lifetime.go", "internal/adapters/runtime/reservation.go",
+		"internal/domain/coordination/reservation.go", "internal/domain/coordination/transitions.go", "internal/application/admission.go", "internal/application/run.go",
+		"internal/adapters/runtime/run_test.go", "internal/adapters/runtime/terminal.go", "internal/policy/units.go",
 		"specs/behaviours/conformance.feature", "specs/behaviours/reservations.feature", "specs/behaviours/terminal.feature",
 		"tests/integration/conformance_test.go", "tests/integration/pty_test.go", "tests/integration/reservation_test.go",
 		"tests/support/blockers_v04.go", "tests/support/pending_v04.go", "tests/support/release_v04.go",

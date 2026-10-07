@@ -40,9 +40,9 @@ Not adopted:
 
 - **Test Boundaries and Gates.** Its fast gate runs no integration or end-to-end suite; the stricter quick gate here
   runs all three behaviour adapters, per [quality gates](../../quality-gates.md).
-- **Test Doubles, Test Data Isolation, and Git Fixture Isolation.** Each rests on owners absent here — hexagonal ports,
-  browser and identity fixtures, and a six-layer fixture Git rule the existing fixtures do not yet meet — each awaits
-  adoption with any fixture repair.
+- **Test Doubles, Test Data Isolation, and Git Fixture Isolation.** These packs await explicit adoption with any fixture
+  repair; application ports do not adopt their shared contracts. Browser and identity fixtures and the six-layer fixture
+  Git rule remain outside current adoption.
 - **A human reference page under `docs/`.**
   [Documentation architecture](../../../conventions/documentation-architecture.md) keeps contributor rules out of
   `docs/`; the [stack index](README.md) serves instead.

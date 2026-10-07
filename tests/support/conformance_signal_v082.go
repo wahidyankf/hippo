@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/conformance"
+	"github.com/wahidyankf/hippo/internal/adapters/conformance"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -73,14 +73,14 @@ func (driver *Driver) signalConformanceRunV082(name string) error {
 	defer interrupt(nil)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	done := make(chan int, 1)
-	go func() { done <- conformance.Main(ctx, []string{driver.interruption.command}, stdout, stderr) }()
+	go func() { done <- MainConformance(ctx, []string{driver.interruption.command}, stdout, stderr) }()
 	if !driver.waitForGate() {
 		interrupt(nil)
 		<-done
 
 		return fmt.Errorf("the conformance gate never started: %q", stderr.String())
 	}
-	interrupt(status.Interruption{Signal: signalNamed(name)})
+	interrupt(status.Interruption{Signal: int(signalNamed(name))})
 	driver.exitCode = <-done
 	driver.output, driver.errorOutput = stdout.String(), stderr.String()
 

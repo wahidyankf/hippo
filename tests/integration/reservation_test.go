@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/guard"
+	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
+
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -86,7 +88,7 @@ func TestCompiledReservationRejectsHIPPOConcurrencyMappingBeforeChild(t *testing
 func TestReservationRecoversOwnerWhosePIDWasReused(t *testing.T) {
 	if os.Getenv("HIPPO_STALE_RESERVATION_HELPER") == "1" {
 		root := os.Getenv("HIPPO_STALE_RESERVATION_ROOT")
-		session, err := guard.AcquireReservation(
+		session, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 			integrationReservationPlan(4, policy.GiB), 20, 0,
 		)
@@ -130,7 +132,7 @@ func TestReservationRecoversOwnerWhosePIDWasReused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskTransactional, "minimal", "",
 		integrationReservationPlan(4, policy.GiB), 20, 0,
 	)
@@ -144,7 +146,7 @@ func TestReservationRecoversOwnerWhosePIDWasReused(t *testing.T) {
 
 func TestOnlyOneConcurrentOwnerWinsTheLastVectorSlot(t *testing.T) {
 	root := t.TempDir()
-	owner, err := guard.AcquireReservation(
+	owner, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, "balanced", "",
 		integrationReservationPlan(3, 768*policy.MiB), 20, 0,
 	)
@@ -160,7 +162,7 @@ func TestOnlyOneConcurrentOwnerWinsTheLastVectorSlot(t *testing.T) {
 	for range contenders {
 		group.Go(func() {
 			<-start
-			session, acquireError := guard.AcquireReservation(
+			session, acquireError := runtimewiring.AcquireReservation(
 				context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 				integrationReservationPlan(1, 256*policy.MiB), 20, 100*time.Millisecond,
 			)
@@ -202,14 +204,14 @@ func TestOnlyOneConcurrentOwnerWinsTheLastVectorSlot(t *testing.T) {
 func TestConcurrentVictimSelectionAndReleaseKeepsLedgerConsistent(t *testing.T) {
 	for iteration := range 20 {
 		root := t.TempDir()
-		service, err := guard.AcquireReservation(
+		service, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskService, "balanced", "",
 			integrationReservationPlan(1, 256*policy.MiB), 20, 0,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ephemeral, err := guard.AcquireReservation(
+		ephemeral, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 			integrationReservationPlan(1, 256*policy.MiB), 20, 0,
 		)
@@ -255,14 +257,14 @@ func TestConcurrentVictimSelectionAndReleaseKeepsLedgerConsistent(t *testing.T) 
 func TestConcurrentVictimSelectorsCannotCascadeBeforeOwnedRelease(t *testing.T) { //nolint:gocognit // The race regression keeps both selectors, owner observation, and post-release election in one lifecycle.
 	for iteration := range 25 {
 		root := t.TempDir()
-		service, err := guard.AcquireReservation(
+		service, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskService, "balanced", "",
 			integrationReservationPlan(1, 256*policy.MiB), 20, 0,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ephemeral, err := guard.AcquireReservation(
+		ephemeral, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 			integrationReservationPlan(1, 256*policy.MiB), 20, 0,
 		)
@@ -339,7 +341,7 @@ func TestConcurrentVictimSelectorsCannotCascadeBeforeOwnedRelease(t *testing.T) 
 
 func TestRemoteObservationTreatsReleasedOwnerAsCompleteWithoutSignaling(t *testing.T) {
 	root := t.TempDir()
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		integrationReservationPlan(1, 256*policy.MiB), 20, 0,
 	)
@@ -366,7 +368,7 @@ func TestRemoteObservationTreatsReleasedOwnerAsCompleteWithoutSignaling(t *testi
 	if err = guard.ReleaseReservation(root, session); err != nil {
 		t.Fatal(err)
 	}
-	if err = guard.WaitPressureVictimRelease(root, victim, 20*time.Millisecond); err != nil {
+	if err = runtimewiring.WaitPressureVictimRelease(root, victim, 20*time.Millisecond); err != nil {
 		t.Fatalf("released ownership did not complete remote observation: %v", err)
 	}
 	select {
@@ -378,7 +380,7 @@ func TestRemoteObservationTreatsReleasedOwnerAsCompleteWithoutSignaling(t *testi
 
 func TestRemoteSelectorNeverSignalsUnresponsiveOwner(t *testing.T) {
 	root := t.TempDir()
-	session, err := guard.AcquireReservation(
+	session, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
 		integrationReservationPlan(1, 256*policy.MiB), 20, 0,
 	)
@@ -402,7 +404,7 @@ func TestRemoteSelectorNeverSignalsUnresponsiveOwner(t *testing.T) {
 	if err != nil || !selected {
 		t.Fatalf("select victim: selected=%v error=%v", selected, err)
 	}
-	if err = guard.WaitPressureVictimRelease(root, victim, 20*time.Millisecond); err == nil {
+	if err = runtimewiring.WaitPressureVictimRelease(root, victim, 20*time.Millisecond); err == nil {
 		t.Fatal("unresponsive remote owner unexpectedly completed bounded observation")
 	}
 	if err = syscall.Kill(command.Process.Pid, 0); err != nil {

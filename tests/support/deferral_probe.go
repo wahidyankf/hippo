@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wahidyankf/hippo/internal/conformance"
+	"github.com/wahidyankf/hippo/internal/adapters/conformance"
 )
 
 // Each probe stands in for how a consumer reacts to a saturated coordination
@@ -99,7 +99,7 @@ func (driver *Driver) runDeferralProbeConformance() error {
 	}
 
 	output := &bytes.Buffer{}
-	driver.deferralProbeError = conformance.Run(context.Background(), manifestPath, output)
+	driver.deferralProbeError = RunConformance(context.Background(), manifestPath, output)
 	driver.output = output.String()
 
 	return nil

@@ -13,8 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/cli"
-	"github.com/wahidyankf/hippo/internal/host"
+	"github.com/wahidyankf/hippo/internal/bootstrap"
+
+	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/host"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
@@ -87,7 +89,7 @@ func (driver *Driver) failBeforeLaunchV082(failure string) error {
 		if err := driver.lockDirectory(filepath.Join(driver.interruption.root, "receipts")); err != nil {
 			return err
 		}
-		sleep = func(time.Duration) { interrupt(status.Interruption{Signal: syscall.SIGTERM}) }
+		sleep = func(time.Duration) { interrupt(status.Interruption{Signal: int(syscall.SIGTERM)}) }
 	default:
 		collector = &launchBreaker{sample: sample, payload: payload}
 	}
@@ -264,7 +266,7 @@ func (driver *Driver) sampleAfterLaunchV082() error {
 		"--", shellPath, "-c", `printf started > "$CHILD_MARKER"; sleep 30`,
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := (cli.Application{
+	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 		Collector: collector, Sleep: func(time.Duration) {},
 	}).Run(context.Background(), arguments)

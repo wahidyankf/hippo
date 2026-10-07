@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wahidyankf/hippo/internal/config"
-	"github.com/wahidyankf/hippo/internal/guard"
+	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
+
+	"github.com/wahidyankf/hippo/internal/adapters/config"
+	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -178,7 +180,7 @@ func (driver *Driver) guardUnder(resolution policy.Resolution) error {
 		samples: driver.samples, then: last, base: time.Unix(0, 0), step: time.Second, stall: driver.readingStall,
 	}
 
-	code, runError := guard.Run(context.Background(), guard.RunConfig{
+	code, runError := RunGuard(context.Background(), guard.RunConfig{
 		Command:                shellPath,
 		Arguments:              []string{"-c", `[ "$HIPPO_CONCURRENCY" = 1 ]`},
 		TaskClass:              policy.TaskEphemeral,
@@ -281,7 +283,7 @@ func (driver *Driver) hostWithProfileOfNoOwnerShare(profile string) error {
 // owner share map, which is the case a profile's lineage has to answer.
 func (driver *Driver) planAutomaticReservation() error {
 	settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: ownerShareLimit, OwnerShares: map[policy.ProfileName]int{}}
-	driver.automaticPlan, driver.automaticPlanError = guard.PlanReservation(
+	driver.automaticPlan, driver.automaticPlanError = coordination.PlanReservation(
 		driver.samples[0], driver.resolution, settings, 0, 0,
 	)
 
@@ -444,7 +446,7 @@ func (driver *Driver) superviseLineageChild(script string) error {
 
 	completed := filepath.Join(driver.leaseRoot, "completed")
 	stderr := &bytes.Buffer{}
-	code, err := guard.Run(context.Background(), guard.RunConfig{
+	code, err := RunGuard(context.Background(), guard.RunConfig{
 		Command:                shellPath,
 		Arguments:              []string{"-c", script},
 		TaskClass:              driver.lineage.taskClass,

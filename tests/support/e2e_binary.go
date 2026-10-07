@@ -70,8 +70,8 @@ func e2eBinary(inherited string) (string, func(), error) {
 	}
 	// The same flags and bounded concurrency as tests/e2e/run.sh.
 	build := exec.Command(goBinary, "build", "-p=1", "-trimpath", "-ldflags", //nolint:gosec // HIPPO_GO_BINARY is the harness input naming the Go toolchain, as tests/e2e/run.sh reads it.
-		"-X github.com/wahidyankf/hippo/internal/cli.Version="+testBuildVersion+
-			" -X github.com/wahidyankf/hippo/internal/cli.Commit="+strings.Repeat("0", 40),
+		"-X github.com/wahidyankf/hippo/internal/adapters/cli.Version="+testBuildVersion+
+			" -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit="+strings.Repeat("0", 40),
 		"-o", binary, "./cmd/hippo")
 	build.Dir = toolRoot()
 	build.Env = append(os.Environ(), "GOMAXPROCS=2")
