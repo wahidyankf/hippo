@@ -4,7 +4,8 @@ This file indexes the rules in [`repo-governance/`](repo-governance/README.md); 
 
 Follow [Language](repo-governance/conventions/language.md) for artifacts and English replies.
 
-New here? Start with [the vision](repo-governance/vision/README.md).
+New here? Start with [the vision](repo-governance/vision/README.md) and the
+[related repositories](docs/README.md#project-context).
 
 ## The Product
 
@@ -84,7 +85,7 @@ merge needs its posted `pass` for the exact head, which the `leak-review` status
 [working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub
 [no faster than three minutes](repo-governance/conventions/github-polling.md).
 
-Releases: [release cut](repo-governance/workflows/maintenance/release-cut.md). A published tag is never replaced.
+Releases: [release cut](repo-governance/workflows/maintenance/release-cut.md).
 
 ## Harnesses
 
