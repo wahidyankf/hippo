@@ -1,6 +1,6 @@
 # Strict Go Linting and Domain Modeling
 
-Status: In progress — authored 2026-10-06 from the idea brief filed 2026-10-03; execution started 2026-10-06.
+Status: Done (2026-10-07) — authored 2026-10-06 from the idea brief filed 2026-10-03; released as v0.8.5.
 
 HIPPO carries several domain concepts as strings, integers, and booleans: a run's outcome, the five internal reasons
 behind exit `124` and `125`, a profile's identity and lineage, and the path admission takes. No tool can say when a case
@@ -136,8 +136,8 @@ defects; and repinning consumers.
 ## Dependencies
 
 - [Repo-grounded] The v0.8.4 fix
-  ([its record](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md)) is on `main`; this
-  plan builds on its lineage attribute and its configured-catalog scenarios.
+  ([its record](../2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md)) is on `main`; this plan
+  builds on its lineage attribute and its configured-catalog scenarios.
 - [Repo-grounded] NilAway publishes no tags, only pseudo-versions; the latest, `v0.0.0-20260918162853-acb8859b9031`,
   requires Go 1.26.0 or later, and `go.mod` names `go 1.26.1`.
 - [Judgment call] Each consumer repins `v0.8.5` in its own repository through its own route; that follows this plan and

@@ -17,13 +17,13 @@ that request also directs this plan's quality gate, its execution, and its relea
 **Workaround, recorded.** Re-running the gate sometimes passes, and the convention counts "a retry that reliably
 succeeds" as a workaround. Here the retry is not reliable: the host's sustained load is the condition that produces the
 failure. The owner's request is what the convention accepts in place of a blocking defect, as in
-[the v0.8.4 fix](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md) and the sibling
-plan `fix-cancelled-waiter-cleanup-flake`.
+[the v0.8.4 fix](../2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md) and the sibling plan
+`fix-cancelled-waiter-cleanup-flake`.
 
 **Release.** The change is test-only, so it carries no release content of its own: no `CHANGELOG.md` entry and no tag.
 It must merge before the in-flight plan
-[strict Go linting and domain modeling](../strict-go-linting-and-domain-modeling/README.md) cuts `v0.8.5` in its Unit 7,
-so that cut's full gate runs with it (see [Phase 5](#phase-5-release-through-v085)).
+[strict Go linting and domain modeling](../2026-10-07__strict-go-linting-and-domain-modeling/README.md) cuts `v0.8.5` in
+its Unit 7, so that cut's full gate runs with it (see [Phase 5](#phase-5-release-through-v085)).
 
 Line numbers in this plan are at `4cd530a`, the trunk commit that landed it and the one it executes from, unless a
 sentence names another commit or tag. The files they cite are identical at `c109c4d`, where the defect was diagnosed.
@@ -214,8 +214,8 @@ binary is unchanged. Earlier fixture repairs of the same class — `4f7b15c`, `5
 - `4f7b15c`, "test(support): let controlled evidence alone decide fixture admission" — the same defect in three other
   fixtures, its stall-based RED, and the convention this fixture could not adopt.
 - `9a3c142` (#126), "fix(guard): key degraded admission and its shed exemption on lineage", and its plan,
-  [the v0.8.4 fix](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md) — where the
-  fixture and its advancing collector came from.
+  [the v0.8.4 fix](../2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md) — where the fixture and
+  its advancing collector came from.
 
 ### Specification Changes
 

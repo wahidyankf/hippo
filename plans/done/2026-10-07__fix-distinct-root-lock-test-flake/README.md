@@ -18,14 +18,14 @@ directs this plan's quality gate, its execution, and its release.
 **Workaround, recorded.** Re-running the gate sometimes passes, and the convention counts "a retry that reliably
 succeeds" as a workaround. Here the retry is not reliable: the host's sustained load is the condition that produces the
 failure. The owner's request is what the convention accepts in place of a blocking defect, as in
-[the v0.8.4 fix](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md) and the sibling
-plans [`fix-cancelled-waiter-cleanup-flake`](../fix-cancelled-waiter-cleanup-flake/README.md) and
-[`fix-degraded-lineage-scenario-flake`](../../done/2026-10-07__fix-degraded-lineage-scenario-flake/README.md).
+[the v0.8.4 fix](../2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md) and the sibling plans
+[`fix-cancelled-waiter-cleanup-flake`](../2026-10-07__fix-cancelled-waiter-cleanup-flake/README.md) and
+[`fix-degraded-lineage-scenario-flake`](../2026-10-07__fix-degraded-lineage-scenario-flake/README.md).
 
 **Release.** The change is test-only, so it carries no release content of its own: no `CHANGELOG.md` entry and no tag.
 It must merge before the in-flight plan
-[strict Go linting and domain modeling](../strict-go-linting-and-domain-modeling/README.md) cuts `v0.8.5` in its Unit 7,
-so that cut's full gate runs with it (see [Phase 5](#phase-5-release-through-v085)).
+[strict Go linting and domain modeling](../2026-10-07__strict-go-linting-and-domain-modeling/README.md) cuts `v0.8.5` in
+its Unit 7, so that cut's full gate runs with it (see [Phase 5](#phase-5-release-through-v085)).
 
 Line numbers in this plan are at `4cd530a`, the trunk commit it was written from, unless a sentence names another commit
 or tag.
@@ -589,7 +589,7 @@ Between unit 2's merge and unit 4, the record is this file on `origin/main`, wit
   result and the Phase 5 provision result), against the Delivery rule that every command runs directly, because the
   workstation's outer guard wraps dependency installs. **Resolved (2026-10-07):** discarded; the rule concerns HIPPO's
   own gates, which all ran directly, and the same observation was discarded in
-  [the configured-profiles fix](../../done/2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md).
+  [the configured-profiles fix](../2026-10-03__fix-configured-profiles-starve-under-macos-warning/README.md).
 
 ## Directory Map
 

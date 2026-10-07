@@ -2255,17 +2255,34 @@ dispatched to `swe-releaser`. The owner authorized this release on 2026-10-06 (D
 
 Branch `worktree/strict-go-linting-and-domain-modeling-record`, a docs-only pull request (D15).
 
-- [ ] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-25]`
-- [ ] `[AI]` Move the plan with `git mv` to `plans/done/YYYY-MM-DD__strict-go-linting-and-domain-modeling/`, using the
+- [x] `[AI]` Create the branch with the starting commands; proof: `git branch --show-current` prints it. `[AC-25]`
+  - Result: (2026-10-07) `worktree/strict-go-linting-and-domain-modeling-record` from `origin/main` at `456d24b`, the
+    tagged commit; it carries the Unit 7 record, the learnings routing, and the execution check, rebased onto each
+    bug-fix plan's archival merge.
+- [x] `[AI]` Move the plan with `git mv` to `plans/done/YYYY-MM-DD__strict-go-linting-and-domain-modeling/`, using the
       completion date, and update `plans/in-progress/README.md` and `plans/done/README.md`; proof: one copy exists and
       `git grep -n 'in-progress/strict-go-linting'` prints nothing outside `plans/done/`. `[AC-25]`
-- [ ] `[AI]` Run `npm run test:quick`, `./rhino md internal-link validate`, and
+  - Result: (2026-10-07) moved with `git mv` to `plans/done/2026-10-07__strict-go-linting-and-domain-modeling/`, with
+    both stage indexes updated in the same change; the archived bug-fix plans' links to this plan and to each other now
+    name their archived copies. `git grep -n 'in-progress/strict-go-linting' -- ':!plans/done'` prints nothing.
+- [x] `[AI]` Run `npm run test:quick`, `./rhino md internal-link validate`, and
       `./rhino governance directory-map validate` from the archived state; proof: all exit `0`. `[AC-25]`
+  - Result: (2026-10-07) from the archived state at 02:30Z, load averages near 5.6: `npm run test:quick` exited `0` with
+    selected production line coverage 99.38% (955/961); `./rhino md internal-link validate` checked 1215 links and
+    `./rhino governance directory-map validate` 56 directories, each with no findings, exit `0`.
 - [ ] `[AI]` Land it through the same landing steps as each unit; proof: the merge commit and `0 0` recorded in the pull
       request body, since they post-date the archived copy. `[AC-25]`
+  - Carried by the archival pull request (2026-10-07), which records its merge commit and `0 0` in its body after the
+    merge, since the archived copy cannot hold them. Deviation from D15, recorded at the execution check (F1): besides
+    documents, the pull request carries comment-only edits to four `tests/support` Go files from knowledge capture, with
+    no behaviour change.
 - [ ] `[AI]` Run [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md): the
       worktree, every unit branch locally and on `origin`, and the release output directory; proof:
       `git -C ../.. worktree list` and `git -C ../.. branch -a` show neither the worktree nor any branch in the
       Execution Checkout table, recorded in the pull request. `[AC-25]`
+  - Carried by the archival pull request (2026-10-07): right after its merge the worktree, with its ignored `local-tmp/`
+    (the release output directory, the manual-test session, and the quality ledgers), and the record branch are removed,
+    and the proof is posted there. Every other branch in the Execution Checkout table is already gone locally and on
+    `origin`.
 
 [go-gates]: ../../../repo-governance/development/quality/stacks/repository-adapter/001-go-analysis-gates.md

@@ -472,3 +472,13 @@ one durable owner or discard it with a reason. -->
   direction not to stop for permission. Routing candidate: `tech-docs/001-domain-types.md` Conditions, in Unit 8.
   **Resolution** (2026-10-07): already owned by `CHANGELOG.md` `v0.8.5`, Fixed: "Where a profile's name and lineage
   disagree, lineage decides", naming both narrowings.
+
+- (2026-10-07, after the execution check) **Unit 5 shipped a test that failed from the next UTC day.**
+  `TestARunSparesAStableWarningByThePolicyItAdmitsAgainst`, added in Unit 5 (`3eedac4`), dated its samples from a fixed
+  2026-10-06 instant, so from 2026-10-07T00:00Z the run's own evidence cleanup archived its summary before the test read
+  it, failing every pull request's `Quality gate` (first on #151). Every gate this plan ran passed on 2026-10-06, so
+  nothing here could have seen it. **Resolution** (2026-10-07): owned by the bug-fix plan [for the stable-warning run
+  test][stable-warning-fix], landed with its fix as #152, which promoted the rule to
+  `repo-governance/development/test-driven-development.md`, "Time in Fixtures".
+
+[stable-warning-fix]: ../2026-10-07__fix-stable-warning-run-test-finds-no-summary/README.md

@@ -16,6 +16,9 @@ then verifies the archive rather than assuming it.
 
 ## Completed Plans
 
+- 2026-10-07 — [Strict Go linting and domain modeling](2026-10-07__strict-go-linting-and-domain-modeling/README.md):
+  outcomes, internal reasons, profile lineage, and the admission decision are Go types, gated by NilAway, stricter lint
+  settings, and a domain literal analysis; released as v0.8.5.
 - 2026-10-07 —
   [Fix: Stable-Warning Run Test Finds No Summary](2026-10-07__fix-stable-warning-run-test-finds-no-summary/README.md):
   the stable-warning run test dates its samples from the wall clock, so the run's evidence cleanup never archives the
@@ -76,3 +79,5 @@ then verifies the archive rather than assuming it.
   record for the synthetic identity fixture.
 - [Repair supervision readiness race](2026-09-26__repair-supervision-readiness-race/README.md) is the delivery record
   for the PID readiness barrier.
+- [Strict Go linting and domain modeling](2026-10-07__strict-go-linting-and-domain-modeling/README.md) is the delivery
+  record for the v0.8.5 domain types and their gates.
