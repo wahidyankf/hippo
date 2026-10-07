@@ -420,8 +420,8 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
   - Result: (2026-10-07) `a4cf8c8` `test(guard): date the stable-warning samples from the wall clock`, one file changed
     (6 insertions, 6 deletions), through the pre-commit and `commit-msg` gates (`public-safety-tree`, `format-staged`,
     `public-safety-message`, `commit-message`) with no bypass. `git log --oneline origin/main..HEAD` listed it above the
-    plan commit `9055566`, and `git status --porcelain` printed nothing. Hashes in this record are as committed; a
-    rebase in the item that follows the record would rewrite them, and the last record commit would then restate them.
+    plan commit `9055566`, and `git status --porcelain` printed nothing. `origin/main` did not move, so no rebase
+    rewrote any hash recorded here.
 
 ### Phase 3: Review and Documentation
 
@@ -468,15 +468,30 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
     line coverage 99.38% (955/961 statements), `golangci-lint` `0 issues.`, every package `ok`, ending with
     `No vulnerabilities found.`; `git status --porcelain` printed nothing afterwards. No other test failed, so the
     item's unrelated-failure fallback did not trigger.
-- [ ] `[AI]` Commit the execution record so far as a `docs(plans)` commit, then `git fetch origin` and
+- [x] `[AI]` Commit the execution record so far as a `docs(plans)` commit, then `git fetch origin` and
       `git rebase origin/main`, reading the whole incoming diff, and rerun the _Stable-warning test_ and the _Full gate_
       if the rebase brought commits; a conflict stops the work for the owner, per integration path; proof:
       `git status --porcelain` prints nothing before the rebase, and the reruns exit `0`. `[AC-08]`
-- [ ] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
+  - Result: (2026-10-07, 01:15Z) the record so far was committed as `916ef2a` on a clean tree (`git status --porcelain`
+    printed nothing before the fetch). `git fetch origin` exited `0` and `origin/main` stayed at `0761ebf`, so
+    `git rev-list --left-right --count HEAD...origin/main` read `3 0` (three commits ahead, none behind): there was no
+    incoming diff to read, no rebase ran, and the reruns the item names for a rebase that brings commits did not apply.
+    The _Stable-warning test_ and _Full gate_ results above stand for the unchanged code, since the only commit after
+    `a4cf8c8` changes this plan.
+- [x] `[AI]` Confirm the change stays inside its boundary; proof: `git diff --name-only origin/main...HEAD` prints only
       the paths in [File Impact](#file-impact). `[AC-07]`
-- [ ] `[AI]` Commit the rest of the execution record as the branch's last commit, a `docs(plans)` commit; proof:
+  - Result: (2026-10-07, 01:16Z) `git diff --name-only origin/main...HEAD`, against `origin/main` at `0761ebf` with head
+    `916ef2a`, prints `internal/guard/run_test.go`, `plans/in-progress/README.md`, and this README: exactly the File
+    Impact paths. `git grep -n stableWarningStart -- '*.go'` prints nothing, and the same diff restricted to `cmd`,
+    `specs`, `docs`, `tests`, `README.md`, and `CHANGELOG.md`, and to non-test files under `internal`, prints nothing.
+- [x] `[AI]` Commit the rest of the execution record as the branch's last commit, a `docs(plans)` commit; proof:
       `git log --format=%s origin/main..HEAD` lists the plan commit last (oldest) and `git status --porcelain` prints
       nothing. `[AC-10]`
+  - Result: (2026-10-07, 01:17Z) committed as
+    `docs(plans): record fix-stable-warning-run-test-finds-no-summary's pre-landing checks` on a clean tree, as the
+    branch's head. `git log --format=%s origin/main..HEAD` lists that commit, the record so far (`916ef2a`), the fix
+    (`a4cf8c8`), and the plan commit (`9055566`) last, as the oldest, and `git status --porcelain` printed nothing after
+    it. The commit cannot hold its own hash; unit 2 records it.
 
 ### Phase 5: Land and Record
 
