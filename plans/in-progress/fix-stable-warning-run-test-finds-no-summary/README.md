@@ -533,11 +533,19 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
 
 ### Phase 6: Close
 
-- [ ] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
+- [x] `[AI]` Route each learning below to its durable owner, or discard it with a reason; proof: each entry names its
       owner or its reason. `[AC-10]`
-- [ ] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md), then commit
+  - Result: (2026-10-07) one entry, promoted at the execution check to `test-driven-development.md`, "Time in Fixtures".
+- [x] `[AI]` Run the [execution check](../../../repo-governance/workflows/plan/plan-execution-check.md), then commit
       Phase 6's record as `docs(plans): record fix-stable-warning-run-test-finds-no-summary's execution check`; proof:
       its verdict line recorded here, and `git status --porcelain` prints nothing after the commit. `[AC-10]`
+  - Result: (2026-10-07)
+    `plan-execution-check: PASS_WITH_FINDINGS (1 run, 3 LOW, 1 repaired, AC-10 closed by archival)`, at `964079d` with
+    the routing edit. EC-01 (LOW: the learning cited Root Cause for the other fixtures, which Duplicate Check records)
+    is repaired here, and EC-06 (informational: the second fixed-date defect, after #90, with no governance rule) is
+    promoted. EC-02 (the leak review was posted before `Quality gate` finished, every merge precondition holding at the
+    merge) and EC-03 (the pull-request body omits the rejected alternatives the plan records) need no repair on a merged
+    pull request; EC-04 and EC-05 are informational.
 
 ### Archival
 
@@ -552,7 +560,13 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
 
 ## Learnings
 
-None yet.
+- (2026-10-07) A fixture that dates evidence with a fixed calendar date passes only until the code under test ages that
+  evidence against the wall clock: here the run's own cleanup archived a summary dated before its day, so the test began
+  failing the day after it was written, on every runner at once. **Resolved (2026-10-07):** promoted to
+  [test-driven development](../../../repo-governance/development/test-driven-development.md), "Time in Fixtures",
+  through Rules Propagation at the execution check (EC-06: the second defect of this kind, after #90; no rule covered it
+  and none conflicts). The fix's comment on `stableWarningRunCollector.start` holds this instance, and the other 31
+  fixed-date fixtures pass one fixed `now` to both their samples and their cleanup clock, as Duplicate Check records.
 
 ## Directory Map
 
