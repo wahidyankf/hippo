@@ -11,6 +11,8 @@ unpublished — deleting it later removes it from the tip and from nowhere else.
 - Absolute local paths. `/Users/<name>/...` names a person and a machine layout in one string.
 - Private infrastructure values: internal hostnames, ports behind a boundary, tailnet names, cloud account or project
   identifiers.
+- Private repository identifiers, with one exception: the name `ose-private` and its GitHub URL, public by the
+  maintainer's 2026-10-07 decision. Its contents, paths, and internals stay private.
 - Real host evidence captured from a workstation. HIPPO reads memory pressure, CPU counts, and process tables; a sample
   committed as a fixture describes the machine it came from.
 
