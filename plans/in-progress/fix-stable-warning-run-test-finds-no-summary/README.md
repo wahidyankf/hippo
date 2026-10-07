@@ -374,52 +374,100 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
     all repaired; cycle 2 held every repair and left PQC-08 (MEDIUM: the _Full gate_ item's fallback for an unrelated
     failure assumes another fix can merge first, which this defect prevents) open. If that fallback triggers, the
     executor stops for the owner.
-- [ ] `[AI]` Commit this file and the index entry alone as the branch's first commit,
+- [x] `[AI]` Commit this file and the index entry alone as the branch's first commit,
       `docs(plans): plan the fix for the stable-warning run test's missing summary`; proof:
       `git log --oneline origin/main..HEAD` lists exactly that commit, `git show --name-only --format= HEAD` prints only
       the two paths, and `git status --porcelain` prints nothing. `[AC-07]` `[AC-10]`
+  - Result: (2026-10-07) committed as `9055566`, the branch's first commit, on `origin/main` at `0761ebf`. Checked at
+    the start of execution, before any other commit: `git log --oneline origin/main..HEAD` listed exactly that commit,
+    `git show --name-only --format= HEAD` printed `plans/in-progress/README.md` and this README and nothing else, and
+    `git status --porcelain` printed nothing.
 
 ### Phase 2: The Collector Dates Samples From the Wall Clock
 
-- [ ] `[AI]` RED: run the _Stable-warning test_ without an overlay; then, in a _Scratch_, write the _Probe copy_ and the
+- [x] `[AI]` RED: run the _Stable-warning test_ without an overlay; then, in a _Scratch_, write the _Probe copy_ and the
       _Back-day copy_ with an overlay each and run the _Stable-warning test_ with each; proof: without an overlay, 3 of
       3 fail at `run_test.go:263` with `summary paths=[] error=<nil>, want one summary`; with the probe, each failure
       also logs `history/2026-10-06.jsonl.gz`; with the back-day overlay, 3 of 3 pass; `git status --porcelain` prints
       nothing; the _Scratch_ is removed. `[AC-01]`
-- [ ] `[AI]` GREEN: in `internal/guard/run_test.go`, replace lines 200–228 with the block under [Solution](#solution)
+  - Result: (2026-10-07, 00:57Z, load average 9.03 at the start) without an overlay, the _Stable-warning test_ exited
+    `1` with 3 of 3 `--- FAIL` (0.03–0.04 s), each at `run_test.go:263` with
+    `summary paths=[] error=<nil>, want one summary`. With the _Probe copy_'s overlay, 3 of 3 `--- FAIL` (0.04–0.05 s),
+    each logging `probe: archives=[…/history/2026-10-06.jsonl.gz]` beside the same message (the probe's two inserted
+    lines move it to line 265). With the _Back-day copy_'s overlay, 3 of 3 `--- PASS` (0.04 s). Every run used raw `-v`
+    output through `rtk proxy go test`. `git status --porcelain` printed nothing; the _Scratch_ was removed (`test ! -e`
+    exits `0`).
+- [x] `[AI]` GREEN: in `internal/guard/run_test.go`, replace lines 200–228 with the block under [Solution](#solution)
       and line 245 with the construction given there, changing nothing else; proof: the _Stable-warning test_ passes 3
       of 3 with no `--- FAIL`, and `git grep -n stableWarningStart -- '*.go'` prints nothing (this plan's own text still
       names it, and is not searched). `[AC-02]` `[AC-07]`
-- [ ] `[AI]` REFACTOR: confirm the comment on `start` states why it is the wall clock; proof:
+  - Result: (2026-10-07, 00:57Z) the block under [Solution](#solution) now stands from the comment
+    `// stableWarningRunCollector samples` to the closing brace of `Collect`, and `diff` of those lines against the
+    plan's block printed nothing; line 245 holds the construction given there; nothing else changed (`git diff --stat`:
+    6 insertions, 6 deletions, one file). The _Stable-warning test_ passed 3 of 3 (0.03–0.04 s) with no `--- FAIL`, and
+    `git grep -n stableWarningStart -- '*.go'` printed nothing (exit `1`).
+- [x] `[AI]` REFACTOR: confirm the comment on `start` states why it is the wall clock; proof:
       `go tool golangci-lint run ./internal/guard/...` prints `0 issues.`, `gofmt -l internal/guard` prints nothing,
       `go vet ./internal/guard` exits `0`, and the _Stable-warning test_ still passes 3 of 3. `[AC-07]`
-- [ ] `[AI]` Commit `internal/guard/run_test.go` alone as
+  - Result: (2026-10-07, 00:57Z) the comment on `start` says it is the wall clock when the test starts, never a fixed
+    date, because the run's evidence cleanup archives a summary dated before its own day and the test reads the loose
+    summary the run left. `go tool golangci-lint run ./internal/guard/...` exited `0` and printed `0 issues.` (with its
+    usual warning that `nilaway` is an unknown `//nolint` linter, which predates this change); `gofmt -l internal/guard`
+    printed nothing; `go vet ./internal/guard` exited `0`; the _Stable-warning test_ passed 3 of 3.
+- [x] `[AI]` Commit `internal/guard/run_test.go` alone as
       `test(guard): date the stable-warning samples from the wall clock`; proof: `git log --oneline origin/main..HEAD`
       lists it after the plan commit, and `git status --porcelain` prints nothing. `[AC-07]`
+  - Result: (2026-10-07) `a4cf8c8` `test(guard): date the stable-warning samples from the wall clock`, one file changed
+    (6 insertions, 6 deletions), through the pre-commit and `commit-msg` gates (`public-safety-tree`, `format-staged`,
+    `public-safety-message`, `commit-message`) with no bypass. `git log --oneline origin/main..HEAD` listed it above the
+    plan commit `9055566`, and `git status --porcelain` printed nothing. Hashes in this record are as committed; a
+    rebase in the item that follows the record would rewrite them, and the last record commit would then restate them.
 
 ### Phase 3: Review and Documentation
 
-- [ ] `[AI]` Break tests: in a _Scratch_, write the _Later-day_, _Fixed-date_, _Unspared_, and _Resolution-policy_
+- [x] `[AI]` Break tests: in a _Scratch_, write the _Later-day_, _Fixed-date_, _Unspared_, and _Resolution-policy_
       copies with an overlay each (the last two list `run.go` only), and run the _Stable-warning test_ with each; proof,
       each recorded here: later-day passes 3 of 3; fixed-date fails 3 of 3 with
       `summary paths=[] error=<nil>, want one summary`; unspared and resolution-policy each fail 3 of 3 with
       `a stable warning shed the child it spares:`; `git status --porcelain` prints nothing; the _Scratch_ is removed.
       `[AC-03]` `[AC-04]` `[AC-05]` `[AC-06]`
-- [ ] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
+  - Result: (2026-10-07, 00:58Z) each overlay was built from the committed files and run as the _Stable-warning test_
+    with `-overlay`, 3 runs. _Later-day copy_: 3 of 3 `--- PASS` (0.03–0.04 s). _Fixed-date copy_: 3 of 3 `--- FAIL`
+    (0.03–0.04 s), each at `run_test.go:263` with `summary paths=[] error=<nil>, want one summary`. _Unspared copy_ and
+    _Resolution-policy copy_ (each `run.go` only, line 1097): each 3 of 3 `--- FAIL` (0.01–0.02 s), each at
+    `run_test.go:261` with
+    `a stable warning shed the child it spares: code=0 error=stopped: pressure shed after 2 samples`.
+    `git status --porcelain` printed nothing; the _Scratch_ was removed (`test ! -e` exits `0`).
+- [x] `[AI]` Run [docs propagation](../../../repo-governance/workflows/quality/docs-propagation.md) and record that no
       page describes this test and that `CHANGELOG.md` gets no entry; proof:
       `git grep -n -e ARunSparesAStableWarning -e stableWarningRunCollector -- README.md docs specs CHANGELOG.md`
       `repo-governance` prints nothing, and `git diff --name-only origin/main...HEAD -- README.md docs specs tests`
       `CHANGELOG.md` prints nothing. `[AC-07]` `[AC-09]`
+  - Result: (2026-10-07, 00:59Z) no page describes this test: the `git grep -n` of the test's name and the collector's
+    name over `README.md docs specs CHANGELOG.md repo-governance` printed nothing (exit `1`), and
+    `git diff --name-only origin/main...HEAD -- README.md docs specs tests CHANGELOG.md` printed nothing. The removed
+    name `stableWarningStart` appears in the tracked tree only in this plan's own text, and the test's name appears
+    elsewhere only in the linting plan's `delivery.md`, line 1651, which stays true because the test keeps its name. Per
+    [Release content](#solution) the test-only change is true to the shipped binary, so `CHANGELOG.md` gets no entry.
+    Status `no-change`: nothing stale, nothing removed, no command in an affected document to run.
 
 ### Phase 4: Verification
 
-- [ ] `[AI]` Run both forms of the _Repeated test_, recording `uptime` before each; proof: each exits `0`, with 30 and
+- [x] `[AI]` Run both forms of the _Repeated test_, recording `uptime` before each; proof: each exits `0`, with 30 and
       10 `--- PASS` lines and no `--- FAIL`. Fallback, decided now: one failure stops the plan before landing; its
       output is recorded here, the cause it shows replaces the matching part of [Root Cause](#root-cause), and nothing
       lands until a new RED proves that cause. `[AC-02]`
-- [ ] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` A failure
+  - Result: (2026-10-07, at `a4cf8c8`, run directly) `-count=30` at 00:59Z, `uptime` before: load averages 4.67 5.38
+    5.64: exit `0`, 30 `--- PASS` lines, 0 `--- FAIL`, `ok` in 1.092 s. `-race -count=10`, `uptime` before: load
+    averages 4.46 5.32 5.62: exit `0`, 10 `--- PASS` lines, 0 `--- FAIL`, `ok` in 1.685 s. The fallback did not trigger.
+- [x] `[AI]` Run the _Full gate_ on the branch head; proof: exit `0`, ending with `No vulnerabilities found.` A failure
       in another test is recorded here and filed as its own bug-fix plan under the owner's standing direction; this plan
       lands only after that fix merges and a rebase onto it reruns the _Full gate_ clean. `[AC-08]`
+  - Result: (2026-10-07) `GOFLAGS=-timeout=30m npm test` at `a4cf8c8`, run directly and never under `./hippo`, from
+    00:59:30Z to 01:13:47Z (about 14 minutes; load averages 4.08 5.21 5.57 at the start), exit `0`: selected production
+    line coverage 99.38% (955/961 statements), `golangci-lint` `0 issues.`, every package `ok`, ending with
+    `No vulnerabilities found.`; `git status --porcelain` printed nothing afterwards. No other test failed, so the
+    item's unrelated-failure fallback did not trigger.
 - [ ] `[AI]` Commit the execution record so far as a `docs(plans)` commit, then `git fetch origin` and
       `git rebase origin/main`, reading the whole incoming diff, and rerun the _Stable-warning test_ and the _Full gate_
       if the rebase brought commits; a conflict stops the work for the owner, per integration path; proof:
