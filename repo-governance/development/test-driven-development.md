@@ -19,6 +19,13 @@ pull-request body carries them — see [pull request body](../conventions/pull-r
 Where the change is to a gate or a script rather than to the binary, the RED is a deliberate mutation: remove the fix,
 run the check, see it fail, restore. A mutation that leaves the check green means the check does not cover the change.
 
+## Time in Fixtures
+
+A fixture that dates evidence the code under test ages against the wall clock takes its dates from the clock that code
+reads, never from a fixed calendar date: a fixed date passes until that day is past, then fails on every runner at once.
+Where the test needs a fixed instant, it hands the same instant to the code's clock. No gate checks this; it rests on
+review.
+
 ## Coverage
 
 Deterministic production core coverage stays at or above **99%**, measured in the same run that executes the unit
