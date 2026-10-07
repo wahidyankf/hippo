@@ -197,15 +197,15 @@ func TestADeferralWhoseSummaryCannotBeWrittenReportsTheFailedWrite(t *testing.T)
 	}
 }
 
-// stableWarningStart is when stableWarningRunCollector's first sample was
-// taken, by the collector's own clock rather than the test's.
-var stableWarningStart = time.Date(2026, 10, 6, 8, 0, 0, 0, time.UTC)
-
 // stableWarningRunCollector samples a host that admits the run at once and then
 // holds a macOS memory warning steady, one second apart by its own clock, so
 // a one-second trend window is full from the first warning sample, with no
 // waiting. Its child exits on the sample numbered finishAfter.
 type stableWarningRunCollector struct {
+	// start dates the first sample. It is the wall clock when the test starts,
+	// never a fixed date: the run's evidence cleanup archives a summary dated
+	// before its own day, and the test reads the loose summary the run left.
+	start       time.Time
 	calls       int
 	finishAfter int
 	exited      chan error
@@ -215,7 +215,7 @@ func (collector *stableWarningRunCollector) Collect(
 	ctx context.Context, previous policy.CPUState, diskPath string,
 ) (policy.Reading, error) {
 	reading, err := (&controlledRunCollector{}).Collect(ctx, previous, diskPath)
-	reading.Sample.MeasuredAt = stableWarningStart.Add(time.Duration(collector.calls) * time.Second).Format(time.RFC3339Nano)
+	reading.Sample.MeasuredAt = collector.start.Add(time.Duration(collector.calls) * time.Second).Format(time.RFC3339Nano)
 	if collector.calls > 0 {
 		reading.Sample.MemoryPressureLevel = new(2)
 	}
@@ -242,7 +242,7 @@ func TestARunSparesAStableWarningByThePolicyItAdmitsAgainst(t *testing.T) {
 	settings.ConsecutiveCPUSamples = 1
 	unsparing := settings
 	unsparing.WarningAdmissionMemoryBytes = 64 * policy.GiB
-	collector := &stableWarningRunCollector{finishAfter: 20, exited: make(chan error, 1)}
+	collector := &stableWarningRunCollector{start: time.Now().UTC(), finishAfter: 20, exited: make(chan error, 1)}
 	code, err := Run(context.Background(), RunConfig{
 		Command: "true", TaskClass: policy.TaskEphemeral, EvidenceRoot: root,
 		Collector: collector, Policy: settings,
