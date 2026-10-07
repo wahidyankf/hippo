@@ -1,6 +1,6 @@
 # Fix: Stable-Warning Run Test Finds No Summary
 
-Status: In progress — authored 2026-10-07.
+Status: Done (2026-10-07)
 
 Since 2026-10-07T00:00Z the unit test `TestARunSparesAStableWarningByThePolicyItAdmitsAgainst` fails on every run with
 "summary paths=[] error=<nil>, want one summary". Its collector dates every sample from a fixed instant on 2026-10-06,
@@ -549,14 +549,20 @@ interrupted item is removed and the item rerun. Between unit 1's merge and unit 
 
 ### Archival
 
-- [ ] `[AI]` Move this folder with `git mv` to `plans/done/<completion date>__<this slug>/`, update
+- [x] `[AI]` Move this folder with `git mv` to `plans/done/<completion date>__<this slug>/`, update
       `plans/in-progress/README.md` and `plans/done/README.md` in the same change, commit it as
       `docs(plans): archive the stable-warning run test fix plan`, and land it with _Land_; proof:
       `git status --porcelain` prints nothing before _Land_, then the merge commit, posted on the archival pull request,
       and no copy left under `plans/in-progress/`. `[AC-10]`
+  - Result: (2026-10-07) moved with `git mv` to `plans/done/2026-10-07__fix-stable-warning-run-test-finds-no-summary/`
+    on `worktree/fix-stable-warning-run-test-finds-no-summary-record`, with the in-progress and done indexes updated in
+    the same change. An archived file cannot record its own merge, so the merge commit is posted on the archival pull
+    request.
 - [ ] `[AI]` Run [dev artifact clean-up](../../../repo-governance/workflows/maintenance/dev-artifact-clean-up.md) for
       the record worktree right after that merge; proof, posted on the archival pull request: `git worktree list` omits
       it, no local or remote `worktree/fix-stable-warning-*` branch remains, and _Reconcile_ reads `0 0`. `[AC-10]`
+  - Carried by the archival pull request (2026-10-07): the record worktree and its branch are removed right after its
+    merge, and the proof is posted there, since the archived copy cannot hold it.
 
 ## Learnings
 
