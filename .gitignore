@@ -28,3 +28,7 @@ coverage.out
 /.serena/*
 !/.serena/project.yml
 !/.serena/README.md
+
+# Command Code local personal state
+/.commandcode/taste/
+/.commandcode/settings.local.json
