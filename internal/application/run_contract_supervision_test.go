@@ -167,7 +167,8 @@ func checkRunContractSampleRetentionAndContendedMetadata(t *testing.T, mode stri
 		if mode == "transactional" && call > 1 {
 			criticalRunContractReading(reading)
 		}
-		if call == 5 {
+		// Cancellation must not compete with an unrelated synthetic healthy completion.
+		if call == 5 && mode != "reservation-cancelled-peak" {
 			fixture.done <- application.ChildCompletion{}
 		}
 	}
