@@ -23,3 +23,8 @@
 coverage.out
 *.prof
 *.pprof
+
+# Track Serena project policy; keep generated and personal state local.
+/.serena/*
+!/.serena/project.yml
+!/.serena/README.md

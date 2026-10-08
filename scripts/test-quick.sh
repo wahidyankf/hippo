@@ -21,6 +21,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 # dispatcher that invoked it.
 ./scripts/check-worktree-layout.sh
 ./scripts/format-check.sh
+# Keep native policy transport covered on the same surfaces as this quick gate.
+bash .commandcode/hooks/agent-policy-selector.test.sh
 go test -run '^$' ./...
 go tool golangci-lint run
 # NilAway follows nil flow across functions and packages, which golangci-lint's

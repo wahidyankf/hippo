@@ -8,6 +8,7 @@ node_modules/
 .claude/skills/
 .codex/agents/
 .opencode/agents/
+.commandcode/agents/
 
 # Fixture data whose bytes are the fixture; a reformat changes what the suite tests.
 # See specs/fixtures/README.md.
