@@ -9,8 +9,11 @@ Proving the roster still reconciles — and that the check would notice if it di
 ```
 
 It validates the full declared adapter tree without writing it. The generated catalog and provenance artifacts record
-the canonical sources and their digests. A configuration with fewer than the required three profiles is refused before
-validation.
+the canonical sources and their digests. The renderer accepts any nonempty declared profile set; an empty set is refused
+before validation. This repository declares its approved four-harness roster in `repo-config.yml`.
+
+Audit explicit leaf selections against the canonical metadata and confirm main-session-only roles remain reachable under
+the [coding-harness contract](../../conventions/coding-harness-contract.md#session-coordination).
 
 ## Proving the Check Works
 
