@@ -23,6 +23,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 ./scripts/format-check.sh
 # Keep native policy transport covered on the same surfaces as this quick gate.
 bash .commandcode/hooks/agent-policy-selector.test.sh
+bash .commandcode/hooks/git-fixture-isolation.test.sh
 go test -run '^$' ./...
 go tool golangci-lint run
 # NilAway follows nil flow across functions and packages, which golangci-lint's
