@@ -13,3 +13,8 @@ Change the canonical definitions or profile instead of editing generated routes.
 - [Hooks](hooks/README.md) — Its transport and selector regression.
 
 Personal approval defaults and FERRET capture belong to global configuration.
+
+## Local Personal State
+
+`taste/` and `settings.local.json` are ignored local state. Keep personal taste data and local settings untracked.
+Shared repository policy stays in [`settings.json`](settings.json).

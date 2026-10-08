@@ -6,7 +6,7 @@ cd "$repo_root"
 
 # Private configuration and generated state must be ignored at their exact
 # repository-relative locations.
-for ignored in hippo.local.json .env .env.local .cache/example dist/example coverage/example local-tmp/example generated-reports/example node_modules/example .husky/_/example; do
+for ignored in hippo.local.json .env .env.local .cache/example dist/example coverage/example local-tmp/example generated-reports/example node_modules/example .husky/_/example .commandcode/taste/example .commandcode/settings.local.json; do
 	git check-ignore --quiet "$ignored"
 done
 
@@ -34,7 +34,7 @@ for tracked in conformance.manifest.json.example cmd/hippo-conformance/main.go i
 	test -f "$tracked"
 done
 
-tracked_artifacts=$(git ls-files '.env' '.env.*' '.cache/**' 'dist/**' 'coverage/**' 'local-tmp/**' 'generated-reports/**' 'node_modules/**' '.husky/_/**' '*.test')
+tracked_artifacts=$(git ls-files '.env' '.env.*' '.cache/**' 'dist/**' 'coverage/**' 'local-tmp/**' 'generated-reports/**' 'node_modules/**' '.husky/_/**' '*.test' '.commandcode/taste/**' '.commandcode/settings.local.json')
 if [ -n "$tracked_artifacts" ]; then
 	echo "generated or private artifacts are tracked:" >&2
 	echo "$tracked_artifacts" >&2

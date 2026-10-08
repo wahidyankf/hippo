@@ -3681,6 +3681,8 @@ func (driver *Driver) inspectArtifactPolicy() {
 		"generated-reports/example",
 		"node_modules/example",
 		"example.test",
+		".commandcode/taste/example",
+		".commandcode/settings.local.json",
 	}
 
 	driver.privateArtifacts = true
@@ -3703,6 +3705,8 @@ func (driver *Driver) inspectArtifactPolicy() {
 		"generated-reports/**",
 		"node_modules/**",
 		"*.test",
+		".commandcode/taste/**",
+		".commandcode/settings.local.json",
 	)
 	tracked.Dir = root
 	trackedOutput, trackedError := tracked.Output()
