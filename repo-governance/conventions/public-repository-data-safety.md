@@ -50,3 +50,12 @@ private. Where a path cannot be shown safely, say so rather than inventing outpu
 
 Treat it as disclosed. Rotate the credential, then remove it. Rewriting history is not a remedy on a public repository
 and the ruleset refuses the force push it would need.
+
+## Agent Tool Access
+
+Agent tools must not directly read, write, or edit `.env*` files, except `.env.example`. Paths under `secrets/` and
+`credentials/` are also protected. The repository owns these restrictions.
+[`.agents/agent-policy.json`](../../.agents/agent-policy.json) declares the path patterns for
+`scripts/agent-policy-hook.sh`; the tracked `.serena/project.yml` excludes the same paths from semantic indexing. Claude
+Code, OpenCode, and Command Code native bindings enforce their own physical checkout; neutral routing covers
+cross-repository operations. Compute-admission exemptions do not waive these restrictions.

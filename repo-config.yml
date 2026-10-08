@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.11.0/schemas/repo-config/v2.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.12.0/schemas/repo-config/v2.schema.json
 # HIPPO owns this consumer policy. RHINO owns the schema and renderer; the
 # repository declares only its lifecycle, canonical harness, and validators.
 
@@ -99,6 +99,66 @@ harness:
               field: tools,
               absent-members: [Write, Edit],
             }
+          # Serena base mappings: ose-rules@cc58f5227238d01995cb581857a91d12170e1ade; local overlays retained.
+          - when: requires
+            capability: repository-read
+            field: tools
+            members:
+              - mcp__serena__activate_project
+              - mcp__serena__initial_instructions
+              - mcp__serena__get_current_config
+              - mcp__serena__get_symbols_overview
+              - mcp__serena__find_symbol
+              - mcp__serena__find_referencing_symbols
+              - mcp__serena__find_implementations
+              - mcp__serena__find_declaration
+              - mcp__serena__get_diagnostics_for_file
+              - mcp__serena__get_diagnostics_for_symbol
+              - mcp__serena__search_for_pattern
+              - mcp__serena__read_memory
+              - mcp__serena__list_memories
+          - when: requires
+            capability: repository-write
+            field: tools
+            members:
+              - mcp__serena__replace_symbol_body
+              - mcp__serena__insert_after_symbol
+              - mcp__serena__insert_before_symbol
+              - mcp__serena__rename_symbol
+              - mcp__serena__safe_delete_symbol
+              - mcp__serena__replace_content
+              - mcp__serena__replace_in_files
+              - mcp__serena__create_text_file
+              - mcp__serena__delete_lines
+              - mcp__serena__replace_lines
+              - mcp__serena__insert_at_line
+              - mcp__serena__write_memory
+              - mcp__serena__delete_memory
+              - mcp__serena__rename_memory
+              - mcp__serena__edit_memory
+              - mcp__serena__execute_shell_command
+              - mcp__serena__remove_project
+          - when: constrains
+            capability: read-only
+            field: disallowedTools
+            members:
+              - mcp__serena__replace_symbol_body
+              - mcp__serena__insert_after_symbol
+              - mcp__serena__insert_before_symbol
+              - mcp__serena__rename_symbol
+              - mcp__serena__safe_delete_symbol
+              - mcp__serena__replace_content
+              - mcp__serena__replace_in_files
+              - mcp__serena__create_text_file
+              - mcp__serena__delete_lines
+              - mcp__serena__replace_lines
+              - mcp__serena__insert_at_line
+              - mcp__serena__write_memory
+              - mcp__serena__delete_memory
+              - mcp__serena__rename_memory
+              - mcp__serena__edit_memory
+              - mcp__serena__execute_shell_command
+              - mcp__serena__remove_project
       skill-adapter:
         path: ".claude/skills/{name}/SKILL.md"
         format: front-matter
@@ -198,7 +258,189 @@ harness:
               entries: { edit: deny },
             }
           - { when: no-dispatches, field: permission, entries: { task: deny } }
-
+    - id: commandcode
+      supports:
+        capabilities:
+          - repository-read
+          - repository-write
+          - shell
+          - network
+          - subagent
+        constraints:
+          - read-only
+          - inline-result-only
+        routes:
+          - canonical-import
+        identities:
+          - description
+      agent-adapter:
+        path: .commandcode/agents/{name}.md
+        format: front-matter
+        route-field: body
+        route: |-
+          Before acting, read the complete canonical agent definition at the repository-root path
+          {path} and follow it as authoritative.
+          If it cannot be read, stop and report the missing path.
+        identity:
+          name: name
+          description: description
+        agents:
+          - ci-checker
+          - ci-fixer
+          - docs-checker
+          - docs-fixer
+          - harness-checker
+          - harness-fixer
+          - plan-checker
+          - plan-execution-checker
+          - plan-fixer
+          - plan-maker
+          - pr-review-checker
+          - pr-review-fixer
+          - rules-checker
+          - rules-fixer
+          - specs-checker
+          - specs-fixer
+          - swe-architect
+          - swe-debugger
+          - swe-developer
+          - swe-releaser
+          - swe-reviewer
+          - swe-usability-tester
+        absent:
+          - model
+          - featureModels
+          - effort
+          - reasoningEffort
+        translations:
+          - when: always
+            field: tools
+            members:
+              - read_file
+          - when: always
+            field: disallowedTools
+            members:
+              - agent
+              - agent_output
+          - when: requires
+            capability: repository-read
+            field: tools
+            members:
+              - read_directory
+              - grep
+              - glob
+          - when: requires
+            capability: repository-write
+            field: tools
+            members:
+              - write_file
+              - edit_file
+          - when: requires
+            capability: shell
+            field: tools
+            members:
+              - shell_command
+              - run_command
+              - kill_shell
+          - when: requires
+            capability: network
+            field: tools
+            members:
+              - web_search
+              - web_fetch
+          - when: constrains
+            capability: read-only
+            field: disallowedTools
+            members:
+              - write_file
+              - edit_file
+          - when: denies
+            capability: repository-read
+            field: disallowedTools
+            members:
+              - read_file
+              - read_directory
+              - grep
+              - glob
+          - when: denies
+            capability: repository-write
+            field: disallowedTools
+            members:
+              - write_file
+              - edit_file
+          - when: denies
+            capability: shell
+            field: disallowedTools
+            members:
+              - shell_command
+              - run_command
+              - kill_shell
+          - when: denies
+            capability: network
+            field: disallowedTools
+            members:
+              - web_search
+              - web_fetch
+          # Serena base mappings: ose-rules@cc58f5227238d01995cb581857a91d12170e1ade; local overlays retained.
+          - when: requires
+            capability: repository-read
+            field: tools
+            members:
+              - mcp__serena__activate_project
+              - mcp__serena__initial_instructions
+              - mcp__serena__get_current_config
+              - mcp__serena__get_symbols_overview
+              - mcp__serena__find_symbol
+              - mcp__serena__find_referencing_symbols
+              - mcp__serena__find_implementations
+              - mcp__serena__find_declaration
+              - mcp__serena__get_diagnostics_for_file
+              - mcp__serena__get_diagnostics_for_symbol
+              - mcp__serena__search_for_pattern
+              - mcp__serena__read_memory
+              - mcp__serena__list_memories
+          - when: requires
+            capability: repository-write
+            field: tools
+            members:
+              - mcp__serena__replace_symbol_body
+              - mcp__serena__insert_after_symbol
+              - mcp__serena__insert_before_symbol
+              - mcp__serena__rename_symbol
+              - mcp__serena__safe_delete_symbol
+              - mcp__serena__replace_content
+              - mcp__serena__replace_in_files
+              - mcp__serena__create_text_file
+              - mcp__serena__delete_lines
+              - mcp__serena__replace_lines
+              - mcp__serena__insert_at_line
+              - mcp__serena__write_memory
+              - mcp__serena__delete_memory
+              - mcp__serena__rename_memory
+              - mcp__serena__edit_memory
+              - mcp__serena__execute_shell_command
+              - mcp__serena__remove_project
+          - when: constrains
+            capability: read-only
+            field: disallowedTools
+            members:
+              - mcp__serena__replace_symbol_body
+              - mcp__serena__insert_after_symbol
+              - mcp__serena__insert_before_symbol
+              - mcp__serena__rename_symbol
+              - mcp__serena__safe_delete_symbol
+              - mcp__serena__replace_content
+              - mcp__serena__replace_in_files
+              - mcp__serena__create_text_file
+              - mcp__serena__delete_lines
+              - mcp__serena__replace_lines
+              - mcp__serena__insert_at_line
+              - mcp__serena__write_memory
+              - mcp__serena__delete_memory
+              - mcp__serena__rename_memory
+              - mcp__serena__edit_memory
+              - mcp__serena__execute_shell_command
+              - mcp__serena__remove_project
 policies:
   markdown:
     metadata:
@@ -425,7 +667,9 @@ gates:
       command:
         executable: ./rhino
         args:
-          [{ literal: harness }, { literal: adapters }, { literal: validate }]
+          - literal: harness
+          - literal: adapters
+          - literal: validate
       run-on: { pre-push: {}, pull-request: {}, main: {} }
     - id: internal-links
       type: check
