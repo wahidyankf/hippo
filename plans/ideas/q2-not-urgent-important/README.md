@@ -8,5 +8,7 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 ## Directory Map
 
+- [Complete fixture isolation and executable proofs](complete-fixture-isolation-and-executable-proofs.md) — preserved
+  fixture-standard WIP and its remaining verification gaps, deferred separately from completed Command Code support.
 - [Warning deferral and cross-owner shed sightings](warning-deferral-and-cross-owner-shed-sightings.md) — transactional
   hooks blocked by a persistent macOS warning, and a shed that names a disk floor the shed run did not cross.
