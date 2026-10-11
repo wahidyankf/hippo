@@ -147,3 +147,73 @@ func TestPublicTUILedgerRejectsWrongPublicIdentityFIFOAndVectors(t *testing.T) {
 		t.Fatal("caller mutation changed immutable expected fixture inputs")
 	}
 }
+
+func TestMixedPublicOwnerBudgetUsesDeclaredHostParallelism(t *testing.T) {
+	for _, host := range []struct {
+		name        string
+		parallelism int
+		cpuCapacity int
+	}{
+		{"five-CPU-host-fits-both-declared-owners", 5, 4},
+		{"eight-CPU-host-reserves-one", 8, 7},
+		{"nine-CPU-host-reaches-configured-cap", 9, 8},
+		{"sixteen-CPU-host-keeps-configured-cap", 16, 8},
+	} {
+		t.Run(host.name, func(t *testing.T) {
+			declared := coordination.ReservationTotals{
+				SchemaVersion: 5, Mode: reservationMode, ActiveOwners: 2,
+				Capacity:  coordination.ReservationVector{CPU: host.cpuCapacity, MemoryBytes: 8 * policy.GiB},
+				Allocated: coordination.ReservationVector{CPU: 4, MemoryBytes: 2 * policy.GiB},
+			}
+			if err := validateMixedPublicOwnerBudget(declared, host.parallelism); err != nil {
+				t.Fatalf("declared host/configuration budget rejected: %v", err)
+			}
+			for _, fault := range []struct {
+				name   string
+				change func(*coordination.ReservationTotals)
+			}{
+				{"schema", func(actual *coordination.ReservationTotals) { actual.SchemaVersion = 4 }},
+				{"mode", func(actual *coordination.ReservationTotals) { actual.Mode = exclusiveMode }},
+				{"owner-count", func(actual *coordination.ReservationTotals) { actual.ActiveOwners = 3 }},
+				{"waiter-count", func(actual *coordination.ReservationTotals) { actual.WaitingOwners = 1 }},
+				{"CPU-capacity-too-high", func(actual *coordination.ReservationTotals) { actual.Capacity.CPU++ }},
+				{"CPU-capacity-too-low", func(actual *coordination.ReservationTotals) { actual.Capacity.CPU-- }},
+				{"memory-capacity", func(actual *coordination.ReservationTotals) { actual.Capacity.MemoryBytes++ }},
+				{"CPU-allocation", func(actual *coordination.ReservationTotals) { actual.Allocated.CPU++ }},
+				{"memory-allocation", func(actual *coordination.ReservationTotals) { actual.Allocated.MemoryBytes++ }},
+			} {
+				t.Run(fault.name, func(t *testing.T) {
+					actual := declared
+					fault.change(&actual)
+					if err := validateMixedPublicOwnerBudget(actual, host.parallelism); err == nil {
+						t.Fatal("altered real-owner budget/count/schema/vector accepted")
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestMixedPublicOwnerBudgetRejectsHostsBelowDeclaredOwnerCapacity(t *testing.T) {
+	for _, host := range []struct {
+		parallelism int
+		safeCPU     int
+	}{
+		{0, 1}, {1, 1}, {2, 1}, {3, 2}, {4, 3},
+	} {
+		t.Run(fmt.Sprintf("%d-logical-CPUs", host.parallelism), func(t *testing.T) {
+			for _, cpuCapacity := range []int{host.safeCPU, 8} {
+				t.Run(fmt.Sprintf("%d-declared-capacity", cpuCapacity), func(t *testing.T) {
+					actual := coordination.ReservationTotals{
+						SchemaVersion: 5, Mode: reservationMode, ActiveOwners: 2,
+						Capacity:  coordination.ReservationVector{CPU: cpuCapacity, MemoryBytes: 8 * policy.GiB},
+						Allocated: coordination.ReservationVector{CPU: 4, MemoryBytes: 2 * policy.GiB},
+					}
+					if err := validateMixedPublicOwnerBudget(actual, host.parallelism); err == nil {
+						t.Fatal("host unable to admit two declared two-CPU owners accepted, including manufactured capacity")
+					}
+				})
+			}
+		})
+	}
+}

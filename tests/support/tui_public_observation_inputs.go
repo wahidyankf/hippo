@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 
 	evidenceadapter "github.com/wahidyankf/hippo/internal/adapters/evidence"
@@ -273,8 +274,8 @@ func (fixture *PublicTUILedger) AdoptMixedOwners(ctx context.Context, ids []stri
 		return err
 	}
 	vector := coordination.ReservationVector{CPU: 2, MemoryBytes: policy.GiB}
-	if actual.SchemaVersion != 5 || actual.Mode != reservationMode || actual.ActiveOwners != 2 || actual.WaitingOwners != 0 || actual.Capacity != (coordination.ReservationVector{CPU: 8, MemoryBytes: 8 * policy.GiB}) || actual.Allocated != (coordination.ReservationVector{CPU: 4, MemoryBytes: 2 * policy.GiB}) {
-		return fmt.Errorf("real mixed commands changed declared input counts/budget: %+v", actual)
+	if err := validateMixedPublicOwnerBudget(actual, runtime.NumCPU()); err != nil {
+		return err
 	}
 	for index, runID := range ids {
 		found := matchesMixedPublicOwner(actual.Owners, runID, vector)
@@ -305,6 +306,22 @@ func (fixture *PublicTUILedger) AdoptMixedOwners(ctx context.Context, ids []stri
 		}
 	}
 	return fixture.VerifyLiveness(ctx)
+}
+
+// validateMixedPublicOwnerBudget checks real owners against independently declared
+// host/configuration inputs, before their snapshot is adopted as a preservation baseline.
+func validateMixedPublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
+	// Public reservation policy retains one safety unit (at least one CPU),
+	// while this fixture's explicit configuration caps the epoch at eight.
+	capacity := coordination.ReservationVector{CPU: min(8, max(1, logicalCPUs-1)), MemoryBytes: 8 * policy.GiB}
+	allocated := coordination.ReservationVector{CPU: 4, MemoryBytes: 2 * policy.GiB}
+	if capacity.CPU < allocated.CPU {
+		return fmt.Errorf("mixed public owners require at least five logical CPUs for two declared two-CPU owners: host has %d", logicalCPUs)
+	}
+	if actual.SchemaVersion != 5 || actual.Mode != reservationMode || actual.ActiveOwners != 2 || actual.WaitingOwners != 0 || actual.Capacity != capacity || actual.Allocated != allocated {
+		return fmt.Errorf("real mixed commands changed declared input counts/budget: %+v", actual)
+	}
+	return nil
 }
 
 // RequireOwnerRetired verifies that the named fixture owner no longer exists.
