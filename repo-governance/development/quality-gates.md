@@ -1,7 +1,5 @@
 # Quality Gates
 
-What runs, where, and in what order.
-
 ## Locally
 
 Hooks run `./rhino gate run --surface <hook>`; [`repo-config.yml`](../../repo-config.yml) declares their gates;
