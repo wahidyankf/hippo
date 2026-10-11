@@ -80,6 +80,9 @@ type PublicTUIHostProbe struct {
 	reply, readingReply          PublicTUIHostReply
 	trace                        PublicTUIHostProbeTrace
 	reading, commandIndex        int
+	darwinParent                 int
+	darwinHelpers                map[int]struct{}
+	darwinPending                *publicHostRequest
 	gates                        map[int]*publicHostGate
 	changed, stopping            chan struct{}
 	done                         []chan struct{}
@@ -595,14 +598,27 @@ func (probe *PublicTUIHostProbe) acceptDarwinLocked(request publicHostRequest) (
 		reading, gate, err := probe.beginLocked(request.Name, request)
 		if err == nil {
 			probe.commandIndex = 0
+			probe.darwinParent = request.ParentPID
+			probe.darwinHelpers = map[int]struct{}{}
+			probe.retainDarwinRequestLocked(request)
 		}
 		return reading, gate, err
 	}
 	if probe.trace.Active != 1 || index != probe.commandIndex {
 		return 0, nil, errors.New("public host probe command is out of order")
 	}
+	if request.ParentPID != probe.darwinParent || probe.darwinPending != nil {
+		return 0, nil, errors.New("public host probe continuation is not owned")
+	}
+	probe.retainDarwinRequestLocked(request)
 	probe.eventLocked(probe.reading, request.Name, tuiStartPhase, request)
 	return probe.reading, nil, nil
+}
+
+func (probe *PublicTUIHostProbe) retainDarwinRequestLocked(request publicHostRequest) {
+	request.Arguments = slices.Clone(request.Arguments)
+	probe.darwinHelpers[request.PID] = struct{}{}
+	probe.darwinPending = &request
 }
 
 func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
@@ -704,6 +720,10 @@ func (probe *PublicTUIHostProbe) darwinGate(gate *publicHostGate, acknowledgemen
 func (probe *PublicTUIHostProbe) completeDarwin(reading int, request publicHostRequest, phase string) {
 	probe.mu.Lock()
 	defer probe.mu.Unlock()
+	if reading != probe.reading || probe.darwinPending == nil || !publicHostSameRequest(*probe.darwinPending, request) {
+		return
+	}
+	probe.darwinPending = nil
 	probe.eventLocked(reading, request.Name, phase, request)
 	if phase != "output-ack" || probe.commandIndex == len(publicHostDarwinCommands)-1 {
 		probe.trace.Active = 0
@@ -711,6 +731,54 @@ func (probe *PublicTUIHostProbe) completeDarwin(reading int, request publicHostR
 	} else {
 		probe.commandIndex++
 	}
+}
+
+func publicHostSameRequest(first, second publicHostRequest) bool {
+	return first.Nonce == second.Nonce && first.Executable == second.Executable &&
+		first.PID == second.PID && first.ParentPID == second.ParentPID && first.Name == second.Name &&
+		first.RaceOptions == second.RaceOptions && slices.Equal(first.Arguments, second.Arguments)
+}
+
+// RetireDarwinReading records an incomplete cohort only after the peer observes
+// its original parent and every accepted helper absent. The controller must
+// separately qualify the exact parent's real Wait before requesting retirement.
+func (probe *PublicTUIHostProbe) RetireDarwinReading(ctx context.Context, reading, parentPID int) error {
+	return probe.retireDarwinReading(ctx, reading, parentPID, func(pid int) error { return syscall.Kill(pid, 0) })
+}
+
+func (probe *PublicTUIHostProbe) retireDarwinReading(ctx context.Context, reading, parentPID int, inspect func(int) error) error {
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if probe.platform != darwinPlatform || probe.closing || probe.trace.Active != 1 || reading != probe.reading ||
+		parentPID < 1 || parentPID != probe.darwinParent || len(probe.darwinHelpers) == 0 || probe.darwinPending != nil ||
+		len(probe.trace.Events) >= 8192 {
+		return errors.New("incomplete public host cohort retirement is not owned")
+	}
+	for _, pid := range probe.connections {
+		if _, accepted := probe.darwinHelpers[pid]; accepted {
+			return errors.New("public host cohort handler is still pending")
+		}
+	}
+	helpers := slices.Sorted(maps.Keys(probe.darwinHelpers))
+	for _, pid := range append([]int{parentPID}, helpers...) {
+		err := inspect(pid)
+		if err == nil {
+			return fmt.Errorf("public host cohort PID %d is still live", pid)
+		}
+		if !errors.Is(err, syscall.ESRCH) {
+			return fmt.Errorf("public host cohort PID %d absence is unproven: %w", pid, err)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	probe.eventLocked(reading, "cohort", "retired-incomplete", publicHostRequest{ParentPID: parentPID})
+	probe.trace.Active = 0
+	probe.commandIndex = 0
+	return nil
 }
 
 func (probe *PublicTUIHostProbe) darwinReplyLocked(request publicHostRequest) string {
