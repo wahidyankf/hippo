@@ -90,7 +90,7 @@ public_host_helper_prepare() {
 		>"$public_host_helper_owned_directory/nonstandard-packages.txt"
 	while IFS= read -r public_host_helper_package; do
 		case "$public_host_helper_package" in
-		'' | github.com/wahidyankf/hippo/tests/support/hostprobe | github.com/wahidyankf/hippo/tests/support/hostprobe.test | 'github.com/wahidyankf/hippo/tests/support/hostprobe [github.com/wahidyankf/hippo/tests/support/hostprobe.test]') ;;
+		'' | github.com/wahidyankf/hippo/tests/support/hostprobe | github.com/wahidyankf/hippo/tests/support/hostprobe.test | 'github.com/wahidyankf/hippo/tests/support/hostprobe [github.com/wahidyankf/hippo/tests/support/hostprobe.test]' | 'github.com/wahidyankf/hippo/tests/support/hostprobe_test [github.com/wahidyankf/hippo/tests/support/hostprobe.test]') ;;
 		*)
 			echo "public host helper dependency escaped stdlib boundary: $public_host_helper_package" >&2
 			return 1
