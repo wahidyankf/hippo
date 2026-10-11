@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -153,6 +154,9 @@ func awaitBDDNativeTransportFrame(ctx context.Context, observation bddNativeTran
 		}
 		if frame.OverflowWrites != 0 {
 			return frame, errors.New("actual renderer wrote outside the viewport")
+		}
+		if err := ctx.Err(); err != nil {
+			return frame, err
 		}
 		if predicate(frame) {
 			return frame, nil
@@ -315,4 +319,204 @@ func TestBDDNativeTransportAwaitRejectsAlreadyPublishedFailure(t *testing.T) {
 	if !errors.Is(err, original) || predicates != 0 {
 		t.Fatalf("prepublished failure was not refused before predicate: %v; predicates=%d", err, predicates)
 	}
+}
+
+type bddNativeSamplingObservation struct {
+	bddNativePublicationObservation
+
+	outputEOF bool
+}
+
+func (observation *bddNativeSamplingObservation) Result() support.NativeTUIResult {
+	return support.NativeTUIResult{OutputEOF: observation.outputEOF}
+}
+
+type bddNativeSamplingCase struct {
+	name                                       string
+	expired, missing, postError, overflow, eof bool
+	width                                      int
+	delay                                      time.Duration
+	published, wantError                       error
+	accepted                                   bool
+}
+
+func (test bddNativeSamplingCase) observation(t *testing.T, published error) *bddNativeSamplingObservation {
+	t.Helper()
+	width := test.width
+	if width == 0 {
+		width = 40
+	}
+	screen := tui.NewBDDNativeTransportScreen(width, 16)
+	content := "\x1b[?1049h\x1b[HHIPPO | Help\r\nEnter c:"
+	if test.missing {
+		content = "\x1b[?1049h\x1b[HHIPPO | Help\r\nEnter"
+	}
+	if test.overflow {
+		content += "\x1b[1;41HX"
+	}
+	if err := screen.Feed([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	observation := &bddNativeSamplingObservation{bddNativePublicationObservation: bddNativePublicationObservation{screen: screen, published: test.published}, outputEOF: test.eof}
+	observation.beforeSnapshot = func() {
+		if test.delay != 0 {
+			time.Sleep(test.delay)
+		}
+		if test.postError {
+			observation.published = published
+		}
+	}
+	return observation
+}
+
+func TestBDDNativeTransportSamplingDeadlineAndRefusals(t *testing.T) {
+	published := errors.New("published renderer failure")
+	for _, test := range []bddNativeSamplingCase{
+		{name: "matching within original500ms", accepted: true},
+		{name: "already expired matching", expired: true, wantError: context.DeadlineExceeded},
+		{name: "matching snapshot after505ms", delay: 505 * time.Millisecond, wantError: context.DeadlineExceeded},
+		{name: "required label never arrives", missing: true, wantError: context.DeadlineExceeded},
+		{name: "already published error", published: published, wantError: published},
+		{name: "error published at snapshot", postError: true, wantError: published},
+		{name: "overflow before matching", overflow: true},
+		{name: "EOF before required label", eof: true, missing: true},
+		{name: "wrong geometry", width: 39, eof: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			observation := test.observation(t, published)
+			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+			defer cancel()
+			if test.expired {
+				cancel()
+				ctx, cancel = context.WithDeadline(t.Context(), time.Now().Add(-time.Millisecond))
+				defer cancel()
+			}
+			predicates := 0
+			frame, err := awaitBDDNativeTransportFrame(ctx, observation, func(frame tui.BDDNativeTransportFrame) bool {
+				predicates++
+				content := strings.Join(frame.Rows, "\n")
+				return frame.Width == 40 && frame.Height == 16 && frame.Alternate && strings.Contains(content, "HIPPO | Help") && strings.Contains(content, "Enter") && strings.Contains(content, "c:")
+			})
+			if (err == nil) != test.accepted {
+				t.Fatalf("accepted=%t want=%t error=%v; frame=%+v", err == nil, test.accepted, err, frame)
+			}
+			if test.wantError != nil && !errors.Is(err, test.wantError) {
+				t.Fatalf("lost refusal identity: %v; want %v", err, test.wantError)
+			}
+			if (test.expired || test.delay != 0 || errors.Is(test.wantError, published) || test.overflow) && predicates != 0 {
+				t.Fatalf("refused publication reached predicate %d times", predicates)
+			}
+		})
+	}
+}
+
+type bddNativeCallerSampling struct {
+	screen       *tui.BDDNativeTransportScreen
+	publication  []byte
+	published    error
+	snapshots    int
+	publications int
+}
+
+func (observation *bddNativeCallerSampling) OutputError() error { return observation.published }
+
+func (observation *bddNativeCallerSampling) Snapshot() tui.BDDNativeTransportFrame {
+	observation.snapshots++
+	if observation.snapshots == 2 && observation.publication != nil {
+		observation.published = observation.screen.Feed(observation.publication)
+		observation.publications++
+		observation.publication = nil
+	}
+	return observation.screen.Snapshot()
+}
+
+func (*bddNativeCallerSampling) Result() support.NativeTUIResult { return support.NativeTUIResult{} }
+
+func samplingCallerFrame(t *testing.T, title, content string) *tui.BDDNativeTransportScreen {
+	t.Helper()
+	screen := tui.NewBDDNativeTransportScreen(40, 16)
+	if err := screen.Feed([]byte("\x1b[?1049h\x1b[2J\x1b[H" + title + "\r\n" + content)); err != nil {
+		t.Fatal(err)
+	}
+	return screen
+}
+
+func requireSamplingCaller(t *testing.T, help bool) {
+	t.Helper()
+	title, anchor, required := "HIPPO | Capacity detail", "Disk free:", "Reservation accounting"
+	if help {
+		title, anchor, required = "HIPPO | Help", "Enter: open selected job detail", "c:"
+	}
+	observation := &bddNativeCallerSampling{}
+	initial := samplingCallerFrame(t, title, "Tab or n\r\nShift-Tab or p\r\nDown or j\r\nUp or k\r\nb:\r\nr refresh\r\n? help\r\nq quit")
+	state := &nativeBDDInteraction{fixture: &nativeBDDViewports{width: 40, height: 16}, kind: "sampling-caller", frames: []tui.BDDNativeTransportFrame{initial.Snapshot()}, samplingObservation: observation}
+	var batches []int
+	var primaryFrame tui.BDDNativeTransportFrame
+	total, quit := 0, 0
+	advancedWithoutLabel := false
+	state.samplingKey = func(ctx context.Context, value []byte) error {
+		deadline, bounded := ctx.Deadline()
+		if !bounded || ctx.Err() != nil || time.Until(deadline) > 500*time.Millisecond || len(value) > 64 || strings.Trim(string(value), "j") != "" {
+			return errors.New("caller changed its original key deadline or byte batch")
+		}
+		if total == 8 {
+			primaryFrame = state.frames[len(state.frames)-1]
+			accepted := strings.Join(primaryFrame.Rows, "\n")
+			advancedWithoutLabel = !strings.Contains(accepted, required) || observation.publications != 1
+			t.Logf("actual caller accepted frame before next keys: required=%q publications=%d frame=%+v", required, observation.publications, primaryFrame)
+			observation.publication = nil
+		}
+		batches = append(batches, len(value))
+		total += len(value)
+		switch {
+		case total == 8:
+			observation.screen = samplingCallerFrame(t, title, anchor)
+			observation.publication = []byte("\x1b[2J\x1b[H" + title + "\r\n" + anchor + "\r\n" + required)
+		case !help && total == 18:
+			observation.screen = samplingCallerFrame(t, title, "Waiting request:")
+		default:
+			end := "process RSS or CPU usage."
+			if help {
+				end = "Host prefixes"
+			}
+			observation.screen = samplingCallerFrame(t, title, end)
+		}
+		return nil
+	}
+	state.samplingQuit = func() error {
+		quit++
+		t.Logf("actual help caller quit after accepted frame: required=%q frame=%+v", required, primaryFrame)
+		return nil
+	}
+	var err error
+	if help {
+		err = state.requireHelp()
+	} else {
+		err = state.capacityEvidence()
+	}
+	if advancedWithoutLabel {
+		t.Errorf("actual caller advanced to next keys before accepting current %q frame", required)
+	}
+	if observation.publications != 1 {
+		t.Errorf("actual caller accepted former anchor without waiting for current %q", required)
+	}
+	if err != nil {
+		t.Fatalf("actual caller failed: %v", err)
+	}
+	wantBatches, wantQuit := []int{8, 10, 64, 64, 64, 8}, 0
+	if help {
+		wantBatches, wantQuit = []int{8, 64, 64, 64, 8}, 1
+	}
+	if !slices.Equal(batches, wantBatches) || quit != wantQuit {
+		t.Fatalf("actual caller changed key batches or quit: keys=%v quit=%d", batches, quit)
+	}
+	t.Logf("actual caller original key batches=%v quit=%d", batches, quit)
+}
+
+func TestBDDNativeSamplingCapacityCallerWaitsForAccounting(t *testing.T) {
+	requireSamplingCaller(t, false)
+}
+
+func TestBDDNativeSamplingHelpCallerWaitsForCapacityKey(t *testing.T) {
+	requireSamplingCaller(t, true)
 }
