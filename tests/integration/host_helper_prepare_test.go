@@ -21,19 +21,23 @@ func TestPublicHostHelperPreparationExternalTestDependencyBoundary(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, foreign := range []bool{false, true} {
-		name := "same-package-external-test"
-		if foreign {
-			name = "foreign-dependency"
-		}
-		t.Run(name, func(t *testing.T) {
-			root := publicHostHelperModuleFixture(t, foreign)
-			helperParent := t.TempDir()
+	for _, test := range []struct {
+		name         string
+		foreign      bool
+		linkedParent bool
+	}{
+		{name: "same-package-external-test"},
+		{name: "foreign-dependency", foreign: true},
+		{name: "symlink-temp-parent", linkedParent: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := publicHostHelperModuleFixture(t, test.foreign)
+			helperParent := publicHostHelperTempParent(t, test.linkedParent)
 			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 			defer cancel()
 			command := publicHostHelperPreparationCommand(ctx, root, helperParent, prepare, goBinary)
 			output, runError := command.CombinedOutput()
-			if foreign {
+			if test.foreign {
 				if runError == nil || !strings.Contains(string(output), "public host helper dependency escaped stdlib boundary: example.invalid/foreign") {
 					t.Fatalf("foreign helper dependency was not refused: %v\n%s", runError, output)
 				}
@@ -46,6 +50,19 @@ func TestPublicHostHelperPreparationExternalTestDependencyBoundary(t *testing.T)
 			}
 		})
 	}
+}
+
+func publicHostHelperTempParent(t *testing.T, linked bool) string {
+	t.Helper()
+	parent := t.TempDir()
+	if !linked {
+		return parent
+	}
+	alias := filepath.Join(t.TempDir(), "helper-parent-link")
+	if err := os.Symlink(parent, alias); err != nil {
+		t.Fatal(err)
+	}
+	return alias
 }
 
 func publicHostHelperModuleFixture(t *testing.T, foreign bool) string {
@@ -82,6 +99,11 @@ func publicHostHelperPreparationCommand(ctx context.Context, root, helperParent,
 trap public_host_helper_cleanup EXIT
 public_host_helper_prepare "$2"
 test -x "$HIPPO_PUBLIC_HOST_HELPER"
+physical_directory=$(CDPATH='' cd -- "$(dirname -- "$HIPPO_PUBLIC_HOST_HELPER")" && pwd -P)
+if [ "$HIPPO_PUBLIC_HOST_HELPER" != "$physical_directory/hostprobe" ]; then
+  printf '%s\n' 'helper path is not canonical' >&2
+  exit 1
+fi
 printf 'prepared\n'
 `, "helper-preparation-fixture", prepare, root)
 	command.Dir = root
