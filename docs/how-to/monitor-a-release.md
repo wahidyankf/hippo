@@ -5,6 +5,10 @@ evidence stayed inside the release envelope.
 
 Release monitoring is strict: it requires explicit local health and routed endpoints, and it will not guess them.
 
+**Verification note:** deployment, host-admission, streaming, environment and assessment examples below have not been
+exercised against the current build. They require controlled deployment endpoints and matching release evidence. The
+argument-refusal examples have been checked with the stated configuration and environment prerequisites.
+
 ## Gate a release before starting
 
 ```sh
@@ -37,6 +41,10 @@ hippo release monitor \
 
 `--output`, `--summary`, and `--deployment-root` are mandatory, and so are both `--health-url` and `--routed-origin`:
 
+These refusal examples assume valid configuration and unset `HIPPO_ROUTED_ORIGIN` and `HIPPO_HEALTH_URL` defaults. To
+use built-in defaults, also unset `HIPPO_CONFIG` and `HIPPO_DEFAULT_CONFIG` and run in a directory without
+`hippo.local.json`. An explicit `--health-url` overrides the environment default.
+
 ```console
 $ hippo release monitor --health-url http://127.0.0.1:8080/health --routed-origin https://service.example
 hippo: [hippo.args.invalid] output, summary, and deployment root are required
@@ -44,7 +52,8 @@ hippo: [hippo.args.invalid] output, summary, and deployment root are required
 $ hippo release monitor --output samples.jsonl --summary summary.json --deployment-root .
 hippo: [hippo.args.invalid] HTTP(S) health URL is required for release monitoring
 
-$ hippo release monitor ... --health-url http://127.0.0.1:8080/health
+$ hippo release monitor --output samples.jsonl --summary summary.json --deployment-root . \
+  --health-url http://127.0.0.1:8080/health
 hippo: [hippo.args.invalid] bare HTTPS routed origin is required for release monitoring
 ```
 
@@ -113,7 +122,7 @@ hippo release monitor \
 Asking for both at once fails immediately:
 
 ```console
-$ hippo release monitor --output - --summary - ...
+$ hippo release monitor --output - --summary -
 hippo: [hippo.args.invalid] raw evidence and summary cannot both use standard output
 ```
 

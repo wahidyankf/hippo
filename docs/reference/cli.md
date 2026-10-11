@@ -6,6 +6,10 @@ with no generator behind it; run `hippo <command> --help` to confirm against the
 The TUI and `run --label` additions below describe unreleased source. Their help and interactive behavior have not yet
 been checked against the final release build. The v0.8.5 installation pin does not establish their availability.
 
+**Verification note:** version, host-state, guarded-workload, release-fixture and completion examples below have not
+been exercised against the current build; they require a matching release, controlled state or an isolated destination.
+The stdout-conflict and missing-`--` refusal examples have been checked.
+
 ## Command tree
 
 `hippo` has nine commands; `release` holds three subcommands of its own.
@@ -371,7 +375,7 @@ for `SIGINT` and `143` for `SIGTERM`.
 mixed on one stream:
 
 ```console
-$ hippo release monitor --output - --summary - ...
+$ hippo release monitor --output - --summary -
 hippo: [hippo.args.invalid] raw evidence and summary cannot both use standard output
 $ echo $?
 2
