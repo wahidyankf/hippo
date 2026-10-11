@@ -31,7 +31,7 @@ These names mean one thing everywhere and are never reused for anything else.
 | `-h`, `--help` | Print usage to standard output and exit `0`                    |
 | `--version`    | Print the tool's name and version to standard output, exit `0` |
 | `--output`     | Select an output format                                        |
-| `--color`      | Control escape emission: `auto`, `always`, or `never`          |
+| `--color`      | Select [terminal styling](007-terminal-and-environment.md)     |
 | `--no-input`   | Never prompt                                                   |
 | `--`           | End of options                                                 |
 

@@ -201,3 +201,94 @@ Feature: Guarded process execution
     Given a shared root that admits an owner whose child fails
     When that owner runs with a budget to wait for admission
     Then the child runs once and its failing exit code is reported unchanged
+
+  @tui-label
+  Scenario: Explicit display labels are visible before reservation ownership is published
+    Given an admitted reservation run explicitly labeled build-web
+    When its owned reservation token becomes visible
+    Then its full run ID has a display annotation labeled build-web
+    And the annotation contains no command arguments or working directory
+
+  @tui-label
+  Scenario: Queued work publishes its display label before admission
+    Given exhausted reservation capacity and a run explicitly labeled test-web
+    When that run becomes a registered waiter
+    Then its full waiter run ID has a display annotation labeled test-web
+    And the queue retains its original resource demand and FIFO position
+
+  @tui-label
+  Scenario: A default display label uses only the executable basename
+    Given a guarded command whose executable is /usr/bin/printf and whose argument contains private text
+    When the run registers without an explicit display label
+    Then its annotation label is printf and contains neither the argument nor executable directory
+
+  @tui-label
+  Scenario Outline: Invalid explicit display labels fail before registration
+    Given an isolated shared root with no owned run or display annotation
+    When run is requested with an explicit <label> display label
+    Then it exits 2 naming hippo.args.invalid before registering or launching
+    And the shared root has no new run or annotation
+
+    Examples:
+      | label                   |
+      | empty                   |
+      | 65 ASCII characters     |
+      | a forward slash         |
+      | a backward slash        |
+      | a control character     |
+      | dot-dot                 |
+
+  @tui-label
+  Scenario: Exclusive owners publish the same advisory label metadata
+    Given an exclusive compatibility run explicitly labeled build-web
+    When its owned session becomes visible
+    Then its full session run ID has a display annotation labeled build-web
+    And exclusive coordination and session schema remain unchanged
+
+  @tui-label
+  Scenario: Inherited runs preserve the original owner's display label
+    Given a valid inherited session whose owner is labeled parent-build
+    When a nested guarded command requests a different display label
+    Then the inherited owner remains labeled parent-build
+    And the nested run creates no replacement annotation
+
+  @tui-label
+  Scenario Outline: Owned display annotations retire with their owned tokens
+    Given a registered labeled run that reaches <ending>
+    When its owned token is removed under the coordination lock
+    Then its matching display annotation is removed
+    And no other owner's display annotation changes
+
+    Examples:
+      | ending                 |
+      | child completion       |
+      | cancellation in queue  |
+      | admission deferral     |
+      | confirmed forced stop  |
+
+  @tui-label
+  Scenario Outline: Advisory annotation failures preserve guarded run outcomes
+    Given a labeled guarded run whose annotation <operation> fails
+    When that guarded run completes
+    Then its admission resources child status and release outcome remain unchanged
+    And the annotation failure is reported without private paths
+
+    Examples:
+      | operation |
+      | write     |
+      | removal   |
+
+  @tui-label
+  Scenario: Annotation cleanup requires positive stale ownership evidence
+    Given one proven stale owner and one live owner with display annotations
+    And an annotation whose token is temporarily absent from the ledger
+    When locked coordination reconciliation performs annotation cleanup
+    Then only the proven stale owner's annotation is removed
+    And the live and unproven annotations remain unchanged
+
+  @tui-label
+  Scenario: Mixed versions coordinate without requiring display metadata
+    Given old and current owners sharing unchanged coordination schemas
+    When current observation reads the owners and their queued work
+    Then owners without display annotations remain visible with unavailable labels
+    And admission accounting and FIFO ordering remain unchanged

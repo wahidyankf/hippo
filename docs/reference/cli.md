@@ -3,15 +3,19 @@
 Complete command and flag inventory for the `hippo` executable. Maintained by hand from the binary's own help output,
 with no generator behind it; run `hippo <command> --help` to confirm against the version you have installed.
 
+The TUI and `run --label` additions below describe unreleased source. Their help and interactive behavior have not yet
+been checked against the final release build. The v0.8.5 installation pin does not establish their availability.
+
 ## Command tree
 
-`hippo` has eight commands; `release` holds three subcommands of its own.
+`hippo` has nine commands; `release` holds three subcommands of its own.
 
 ```text
 hippo
 +-- version
 +-- status
 +-- watch
++-- tui
 +-- history
 +-- monitor
 +-- run
@@ -27,6 +31,7 @@ hippo
 | `hippo version`         | Print build version information                  |
 | `hippo status`          | Inspect current resource evidence                |
 | `hippo watch`           | Watch resource, admission, and queue transitions |
+| `hippo tui`             | Inspect work and capacity interactively          |
 | `hippo history`         | Query bounded shared run summaries               |
 | `hippo monitor`         | Monitor resource-state transitions               |
 | `hippo run`             | Run a command under resource supervision         |
@@ -42,7 +47,8 @@ Every command accepts these, placed before or after the command name.
 
 - `--color <when>`
   - Default: `auto`
-  - Meaning: Colour the diagnostic line: `always`, `never`, or `auto` (see [Colour](./environment-variables.md#colour))
+  - Meaning: Colour diagnostics and decorate the TUI: `always`, `never`, or `auto`; see
+    [Colour](./environment-variables.md#colour)
 - `--output <form>`
   - Default: `text`
   - Meaning: Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr
@@ -60,7 +66,7 @@ The root command also accepts `--version`, which prints the same text as `hippo 
 
 ## Shared flags
 
-`status`, `watch`, `monitor`, `run`, and every `release` subcommand accept these.
+`status`, `watch`, `tui`, `monitor`, `run`, and every `release` subcommand accept these.
 
 | Flag               | Default | Meaning                                                                              |
 | ------------------ | ------- | ------------------------------------------------------------------------------------ |
@@ -142,6 +148,36 @@ one is being collected.
 | `--source <label>`      | unset   | Filter owner and waiter rows by source             |
 | `--tag <key=value>`     | none    | Filter rows by a label; repeatable, all must match |
 
+## `hippo tui`
+
+Interactive observation of running jobs, the registered FIFO queue, and machine capacity. It creates no job or
+reservation, and quitting the dashboard does not stop guarded work. See
+[How to monitor work with the TUI](../how-to/monitor-work-with-the-tui.md) for layouts and keys.
+
+| Flag                    | Default | Meaning                                          |
+| ----------------------- | ------- | ------------------------------------------------ |
+| `--interval <duration>` | `5s`    | Delay after collection finishes; minimum `1s`    |
+| `--disk-path <path>`    | `.`     | Path whose free space is measured                |
+| `--source <label>`      | unset   | Filter owner and waiter rows by source           |
+| `--tag <key=value>`     | none    | Filter rows by a tag; repeatable, all must match |
+
+The shared `--config` and `--profile` flags also apply. Source and tag validation follows `status`; filters change
+visible rows while resource totals and FIFO positions stay global. Collection retains two host readings one second
+apart. Refresh requests during collection coalesce into one immediate follow-up; automatic refresh waits until the
+configured delay after completion. A failed refresh retains the last successful snapshot marked stale, or shows
+unavailable values if none has succeeded.
+
+Both stdin and stdout must be terminals, and `TERM=dumb` is refused. Unusable terminal streams or an interval below `1s`
+are usage mistakes (`2`, `hippo.args.invalid`); use `status` or `watch` for redirected output. Help exits `0` without
+opening the terminal. `q` exits `0`; Ctrl-C or SIGINT exits `130`, and SIGTERM exits `143` when no classified failure
+takes precedence. Terminal initialization, output, or restoration failure uses `125`, `hippo.supervision.failed`.
+Terminal lifecycle acceptance against the final build remains pending.
+
+There is no `--json` or `--jsonl` display mode. Global `--output json` adds only the existing failure body on stderr
+after terminal restoration; it does not select JSON frames. `--color` controls optional decoration using the same
+[styling policy](./environment-variables.md#colour) as diagnostics. Required terminal controls and text state markers
+remain when decoration is disabled.
+
 ## `hippo history`
 
 Reads current and daily compacted summaries from the shared root. It never emits commands, arguments, working
@@ -221,6 +257,9 @@ hippo run [flags] -- <command> [arguments...]
 - `--source <label>`
   - Default: identity
   - Meaning: Override the discovered `hippo.identity.json` source
+- `--label <text>`
+  - Default: sanitized executable basename
+  - Meaning: Private display context for the live run; independent of source and tags
 - `--tag <key=value>`
   - Default: identity
   - Meaning: Override/add a privacy-safe label; repeatable, last duplicate wins
@@ -243,6 +282,14 @@ hippo run [flags] -- <command> [arguments...]
 - `--lease-max <n>`
   - Default: `0`
   - Meaning: Maximum allowed leased port; refused without `--lease-port`
+
+An explicit `--label` must have 1–64 ASCII characters, begin with a letter or digit, and contain only letters, digits,
+spaces, `.`, `_`, `:`, `@`, `+`, or `-`. Path separators, `..`, controls, and escapes are refused before queue
+registration (`2`, `hippo.args.invalid`), including an explicitly empty label. Without the flag, HIPPO uses only the
+executable basename, sanitizes and truncates it, and falls back to `command` if nothing safe remains. It never derives a
+label from arguments, script bodies, working directories, or environment values. Keep private data out of labels.
+Missing or unusable display records do not change accounting; inherited runs keep the owner's label. See the private
+[display annotation](./state-root.md#display-annotations) boundary.
 
 The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A normal child exit code is
 passed through unchanged. Under reservation coordination (schema 2 or 3), capacity waiting creates one FIFO identity and

@@ -133,6 +133,10 @@ func everyLeafCommand() [][]string {
 }
 
 func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
+	return driver.attemptUsageContext(context.Background(), arguments)
+}
+
+func (driver *Driver) attemptUsageContext(ctx context.Context, arguments []string) (usageAttempt, error) {
 	root, err := driver.temporaryRoot()
 	if err != nil {
 		return usageAttempt{}, err
@@ -142,7 +146,7 @@ func (driver *Driver) attemptUsage(arguments []string) (usageAttempt, error) {
 	// watch and monitor run until cancelled once they accept their arguments,
 	// so an invocation that should have been refused and was not would hang
 	// the suite. The bound turns that into an ordinary failed assertion.
-	ctx, cancel := context.WithTimeout(context.Background(), usageAttemptBound)
+	ctx, cancel := context.WithTimeout(ctx, usageAttemptBound)
 	defer cancel()
 	if driver.mode == contract.E2E {
 		command := exec.CommandContext(ctx, driver.binary, arguments...)

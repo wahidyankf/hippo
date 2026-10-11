@@ -18,9 +18,9 @@ the body, never a new number.
 | ------- | ------------------------------------------------------------------------------------ |
 | `0`     | The work completed and the result is affirmative                                     |
 | `1`     | The work completed and the result is negative — no match, nothing to do              |
-| `2`     | The work did not complete: bad usage, bad configuration, or internal failure         |
-| `124`   | A bounded wait elapsed before the work finished                                      |
-| `125`   | The environment refused; the work never started                                      |
+| `2`     | The invocation was unusable, or an internal failure prevented completion             |
+| `124`   | A HIPPO limit stopped the work, including a bounded wait                             |
+| `125`   | HIPPO could not perform its job before, during, or after payload execution           |
 | `126`   | A child was found but could not be executed                                          |
 | `127`   | A child was not found                                                                |
 | `128+N` | The process was terminated by signal `N`; `130` is an interrupt, `141` a closed pipe |
@@ -40,17 +40,23 @@ a problem.
 
 ## The Supervisor Tier
 
-`124`, `125`, `126`, and `127` belong to a program that starts another program. A tool that starts no child process
-returns none of them, and a caller may read their absence as meaning exactly that.
+HIPPO adopts the supervisor vocabulary across its product commands, including inspection and interactive monitoring.
+Preserve these published mappings rather than narrowing the copied generic contract to child-launch failures. Reason:
+existing callers depend on guard failures after launch and non-timeout limits, and this adoption changes no observable
+behavior.
 
-- `124` is a timeout: a bounded wait elapsed. It is the retryable status, because contention is the usual cause.
-- `125` is a refusal before launch: an unsupported platform, a malformed pin, a precondition unmet. Retrying changes
-  nothing.
+- Return `124` for HIPPO limits, including capacity, storage, pressure, release-envelope, and FIFO deadline conditions.
+- Return `125` when HIPPO cannot perform its job, including unreadable or unresolvable configuration and supervision
+  failures before, during, or after payload execution.
 - `126` and `127` distinguish a child that exists but cannot run from one that is absent, which is the difference
   between a permission or format problem and a missing dependency.
 
-A supervisor passes a child's own status through unchanged when the child ran. It substitutes its own status only when
-the child never produced one.
+Pass a guarded child's own status through unchanged when HIPPO successfully supervises it. A HIPPO limit or failure
+instead reports HIPPO's status and reason. Neither `124` nor `125` alone proves that no payload started or that retry is
+safe; the receipt state and reason decide recovery, per the [public contract](../../development/public-contract.md).
+
+Enforcement: existing status mapping and CLI reason contracts discriminate these mappings; executing behavior adapters
+verify the public boundary, per [quality gates](../../development/quality-gates.md).
 
 ## An Internal Crash Is a Failure to Complete
 

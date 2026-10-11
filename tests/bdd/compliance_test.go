@@ -1,7 +1,6 @@
 package bdd_test
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -10,25 +9,6 @@ import (
 )
 
 var _ contract.Driver = (*support.Driver)(nil)
-
-func TestFeatureCompliance(t *testing.T) {
-	requested := os.Getenv("HIPPO_BDD_ADAPTER")
-
-	if requested != "" {
-		adapter, err := contract.AdapterByName(requested)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		verifyAdapter(t, adapter)
-
-		return
-	}
-
-	for _, adapter := range contract.Adapters() {
-		t.Run(adapter.Name, func(t *testing.T) { verifyAdapter(t, adapter) })
-	}
-}
 
 func TestScenarioWithoutActionAndOutcomeIsRejected(t *testing.T) {
 	err := contract.ValidateScenarioStructure("incomplete", []string{"Context", "Context"})
@@ -148,19 +128,6 @@ func TestExemptionRequiresBoundaryAndReason(t *testing.T) {
 	}})
 	requireErrorContaining(t, errorsFound, "has no boundary")
 	requireErrorContaining(t, errorsFound, "has no reason")
-}
-
-func verifyAdapter(t *testing.T, adapter contract.Adapter) {
-	t.Helper()
-	driver := support.NewDriver(adapter)
-	defer driver.Close()
-
-	if !contract.SuiteOptions(adapter).Strict {
-		t.Fatalf("%s adapter is not strict", adapter.Name)
-	}
-	if err := contract.Verify(adapter, driver.Bindings()); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func testBinding(pattern string) contract.StepBinding {

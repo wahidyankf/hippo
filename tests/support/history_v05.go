@@ -179,7 +179,7 @@ func (driver *Driver) jsonWatchV05() error {
 				interrupt(status.Interruption{Signal: int(syscall.SIGINT)})
 			}
 		},
-	}).Run(ctx, []string{"watch", jsonFlag, "--interval", "1s"})
+	}).Run(ctx, []string{watchCommandName, jsonFlag, intervalFlagName, "1s"})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
 	return err
@@ -190,7 +190,7 @@ func (driver *Driver) requireJSONWatchV05() error {
 		return fmt.Errorf("watch exit=%d stderr=%s, want 130 and no diagnostic", driver.exitCode, driver.errorOutput)
 	}
 	trimmed := strings.TrimSpace(driver.output)
-	if strings.Count(trimmed, "\n") != 0 || !strings.Contains(trimmed, `"schemaVersion":5`) {
+	if strings.Count(trimmed, "\n") != 0 || !strings.Contains(trimmed, `"`+schemaVersionField+`":5`) {
 		return fmt.Errorf("unexpected watch snapshots: %q", driver.output)
 	}
 
@@ -316,7 +316,7 @@ func (driver *Driver) writeRecordedSummary(runID, class, outcome string) error {
 	}
 	driver.leaseRoot = root
 	encoded, err := json.Marshal(map[string]any{
-		"schemaVersion": 5, "runId": runID, "source": hippoFixtureName,
+		schemaVersionField: 5, tuiRunIDField: runID, "source": hippoFixtureName,
 		"taskClass": class, "resourceTier": standardTierName, "outcome": outcome,
 		"finishedAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})

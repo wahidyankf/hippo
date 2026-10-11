@@ -34,7 +34,7 @@ func TestHexagonalSelectorsRejectStaleAndNonexecutingPromises(t *testing.T) {
 		{"old config package", "./internal/adapters/config,", "./internal/config,"},
 		{"old parser file", "internal/adapters/host/linux_parsers.go", "internal/host/linux_parsers.go"},
 		{"domain directory missing", "internal/domain/coordination,internal/domain/evidence", "internal/domain/evidence"},
-		{"application tests missing", "./tests/unit ./internal/application ", "./tests/unit "},
+		{"application tests missing", "./internal/adapters/tui ./internal/application ", "./internal/adapters/tui "},
 		{"threshold reduced", "--minimum 99", "--minimum 98"},
 		{"coverage command commented", "go test -count=1 \\\n", "# go test -count=1 \\\n"},
 		{"threshold failure swallowed", "--minimum 99", "--minimum 99 || true"},
@@ -82,8 +82,11 @@ func TestHexagonalEveryDomainLeafIsInMeasuredCoverage(t *testing.T) {
 			threshold = line
 		}
 	}
-	root := toolRoot()
-	err := filepath.WalkDir(filepath.Join(root, "internal", "domain"), func(path string, entry fs.DirEntry, walkError error) error {
+	root, err := toolRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = filepath.WalkDir(filepath.Join(root, "internal", "domain"), func(path string, entry fs.DirEntry, walkError error) error {
 		if walkError != nil {
 			return walkError
 		}

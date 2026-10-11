@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 // ExclusiveStatus reads live schema-one compatibility ownership without
-// pruning or otherwise mutating the shared coordination root.
+// pruning ownership, while retiring only proven-stale advisory display data.
 func ExclusiveStatus(ctx context.Context, root string) (ReservationTotals, error) {
 	totals := ReservationTotals{SchemaVersion: 5, Mode: coordinationModeExclusive}
 	present, err := exclusiveMarkerPresent(root)
@@ -29,6 +30,7 @@ func ExclusiveStatus(ctx context.Context, root string) (ReservationTotals, error
 	if err != nil || !present {
 		return totals, err
 	}
+	housekeepDisplayLocked(root, time.Now())
 
 	owners, err := liveExclusiveSessionOwners(root)
 	if err != nil {

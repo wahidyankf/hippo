@@ -126,7 +126,7 @@ func (driver *Driver) prepareCorruptReservationLedgerV04(kind string) error {
 	if err := driver.preparePendingV04(); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(driver.evidenceRoot, "coordination-mode.json"), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(driver.evidenceRoot, coordinationModeMarker), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
 		return err
 	}
 	data, err := json.Marshal(corruptReviewLedger(kind))
@@ -824,7 +824,7 @@ func (driver *Driver) corruptStatusCoordinationV04() error {
 	if err := driver.preparePendingV04(); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(driver.evidenceRoot, "coordination-mode.json"), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(driver.evidenceRoot, coordinationModeMarker), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(driver.evidenceRoot, "reservations.json"), []byte("corrupt-ledger\n"), 0o600); err != nil {

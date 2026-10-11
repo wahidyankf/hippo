@@ -1,70 +1,80 @@
 ---
 description: >-
-  Records the Go analysis gates beyond golangci-lint's defaults: nilness, exhaustive map checks, scoped exhaustruct_v5,
-  the pinned NilAway run and its exclusions, the domain literal analysis and its no-finding rule, and gochecksumtype's
-  target.
+  Records nilness, exhaustive maps, scoped exhaustruct_v5, pinned NilAway/exclusions, no-finding domain literal
+  analysis, and gochecksumtype targets beyond golangci-lint defaults.
 when_to_use: >-
-  Use when changing `.golangci.yml`, the NilAway line in `scripts/test-quick.sh`, a `//nolint:nilaway` directive, or the
-  domain literal analysis.
+  Use when changing `.golangci.yml`, the NilAway line in `scripts/test-quick.sh`, a `//nolint:nilaway` or `#nosec G702`
+  directive, or the domain literal analysis.
 ---
 
 # Go Analysis Gates
 
-The [repository adapter](../repository-adapter.md)'s `golang-standards.md` gates decision, in full. Each entry reads
-decision: choice — reason. Commands live where they run, in [`.golangci.yml`](../../../../../.golangci.yml) and
-[`scripts/test-quick.sh`](../../../../../scripts/test-quick.sh); versions live in [`go.mod`](../../../../../go.mod).
+Go choices/reasons under [repository adapter](../repository-adapter.md). Commands:
+[`.golangci.yml`](../../../../../.golangci.yml), [`scripts/test-quick.sh`](../../../../../scripts/test-quick.sh);
+versions: [`go.mod`](../../../../../go.mod).
 
 ## golangci-lint Settings
 
-- linters: every one enabled, after `gofumpt` and `goimports` — stronger than the standard; each disabled linter carries
-  its reason in `.golangci.yml`
-- `govet`: `nilness` enabled — it is not among govet's default analyzers, and a pointer dereferenced where it is known
-  to be nil is a defect
-- `exhaustive`: `switch` and `map` — a map keyed by an enumerated type names every member, so a new member needs a
-  decision, as the `retryable` map in `internal/status/status.go` shows
-- `exhaustruct_v5`: `explicit-mode: true` with one `enforce-patterns` regex per closed domain struct, matched against
-  the full `import/path.TypeName` — a missing field in such a literal forges a value; without explicit mode every
-  literal is checked, and the fixture brittleness that keeps `exhaustruct` disabled returns
-- `gochecksumtype`: enabled with no `//sumtype:decl` target — every domain concept is a scalar enum, which `exhaustive`
-  reaches; the first sealed interface is checked with no configuration change
+- linters: all enabled after `gofumpt`/`goimports`, stronger than the standard; disabled linters state reasons in
+  `.golangci.yml`.
+- `govet`: nondefault `nilness` detects dereferences of known-nil pointers.
+- `exhaustive`: `switch`/`map` require every enum member, forcing decisions on additions; see `retryable` in
+  `internal/status/status.go`.
+- `exhaustruct_v5`: `explicit-mode: true`; one `enforce-patterns` regex per closed domain struct matches full
+  `import/path.TypeName`. Missing fields forge values; checking every literal would restore the fixture brittleness
+  behind disabled `exhaustruct`.
+- `gochecksumtype`: enabled without `//sumtype:decl` targets: domain concepts are scalar enums covered by `exhaustive`.
+  The first sealed interface needs no configuration change.
+- `depguard`: versioned Tea/Lipgloss roots and Bubbles components stay TUI-only:
+  [Code Clarity](../../../code-clarity.md). Exact x/ansi root serves only TUI text and
+  `tests/host/evidence-verifier/*.go` native cells. Other restrictions remain.
+  - Native support permits exact `golang.org/x/sys/unix` only in `tests/support/tui_arguments.go`,
+    `tests/support/tui_public_interactive_inputs.go`, `tests/support/tui_transport_native.go`, and
+    `tests/support/tui_transport_native_darwin.go`: real terminal/FD state requires the pinned kernel API. Their strict
+    binding retains the support allowlist; other support, x/sys packages, Charm and production permissions stay
+    unchanged.
+- `ireturn`: only exact `Update`/Tea.Model in `internal/adapters/tui/model.go` is excluded because the pinned external
+  consumer requires that interface. Helpers/constructors/other files stay concrete:
+  [Lint Strictness](../../checks/lint-strictness.md).
+- `G702`: exactly three inline `#nosec G702` waivers under [Lint Strictness](../../checks/lint-strictness.md); other
+  calls remain checked:
+  - [`invokeCompiledTUI`](../../../../../tests/e2e/tui_contract_test.go): stamped harness selection.
+  - [Old executable](../../../../../internal/adapters/tui/bdd_public_mixed_owners_external_test.go): authenticated
+    absolute regular executable; pinned SHA/strict release receipt; separate argv/context.
+  - [PS wrapper](../../../../../internal/adapters/tui/bdd_public_ps_startup_diagnostic_external_test.go): probe-owned
+    0700 wrapper; quoted authenticated helper, fixed argv, finite context/Wait.
 
 ## NilAway
 
-- runner: `go.uber.org/nilaway/cmd/nilaway` in `go.mod`'s `tool` block, by pseudo-version because it publishes no tags,
-  run directly after golangci-lint — it follows nil flow across functions and packages, which per-function `nilness`
-  cannot, and it is not a golangci-lint linter
-- pin changes: reviewed in `go.mod`'s diff — minimal version selection lets a tool pin raise shared modules, and the
-  first NilAway pin raised the production `golang.org/x/sys`, per
-  [Dependency Selection](../../../dependency-selection.md)
-- output: plain, never `-json` — it exits `3` on a diagnostic and `1` when loading fails, and either stops the gate;
-  `-json` exits `0` with findings
-- scope: `-include-pkgs` names this module — dependencies are not this repository's to fix
-- exclusions: an inline `//nolint:nilaway // <reason>`, never `-exclude-errors-in-files` — the waiver sits where it
-  applies, per [Lint Strictness](../../checks/lint-strictness.md). `nolintlint` accepts it, and golangci-lint warns
-  `Found unknown linters in //nolint directives: nilaway` on every run without failing.
-  - NilAway scopes a directive to the syntax node it attaches to: a comment trailing an `if` line's `{` misses that
-    line, and a comment line directly above the statement covers it.
-  - NilAway reports one conflict per nil source, so an exclusion also hides every later unguarded read of that source. A
-    change touching an excluded source is reviewed for new reads, because the gate stays quiet about them.
-  - No gate reports a stale directive: `nolintlint` cannot tell whether NilAway still needs it, so review removes one
-    whose finding is gone.
+- runner: `go.uber.org/nilaway/cmd/nilaway` in `go.mod`'s `tool` block, pseudo-versioned because it has no tags. Run
+  directly after golangci-lint. Unlike per-function `nilness`, it follows nil flow across functions/packages; it is not
+  a golangci-lint linter.
+- pins: review `go.mod` diffs. Minimal version selection can raise shared modules; the first pin raised production
+  `golang.org/x/sys`: [Dependency Selection](../../../dependency-selection.md).
+- output: plain; diagnostic exit `3`/loading failure `1` stop the gate. Never `-json`, which exits `0` with findings.
+- scope: `-include-pkgs` names this module; dependencies are not ours to fix.
+- exclusions: inline `//nolint:nilaway // <reason>`, never `-exclude-errors-in-files`, colocates waivers:
+  [Lint Strictness](../../checks/lint-strictness.md). `nolintlint` accepts them; golangci-lint's
+  `Found unknown linters in //nolint directives: nilaway` warning never fails the run.
+  - Syntax-node scope: trailing an `if` line's `{` misses that line; directly above the statement covers it.
+  - One conflict per nil source means exclusions hide later unguarded reads. Review changed excluded sources for new
+    reads; the gate stays silent.
+  - No stale-directive gate exists: `nolintlint` cannot judge continued need; review removes resolved waivers.
 
-The two exclusions, both false positives that tests beside them failed to reach:
+Both false-positive exclusions escaped adjacent tests:
 
-- `internal/adapters/runtime/exclusive_status.go`, `ExclusiveStatus`, result 0 of `liveExclusiveHeavyOwner`: a nil owner
-  comes only with `live` false or an error, and both return first; NilAway does not correlate the three results. Tests:
+- `internal/adapters/runtime/exclusive_status.go`, `ExclusiveStatus`, result 0 of `liveExclusiveHeavyOwner`: nil means
+  `live` false or error; both return first. NilAway cannot correlate three results. Tests:
   `internal/adapters/runtime/exclusive_status_test.go`.
-- `internal/adapters/runtime/lease.go`, `DescribeHeavyLease`, result 0 of `readLeaseOwner`: a nil owner comes only with
-  an error, which the guarded condition tests first; NilAway loses that once `err` is reassigned. Tests:
-  `tests/integration/lease_evidence_test.go`.
+- `internal/adapters/runtime/lease.go`, `DescribeHeavyLease`, result 0 of `readLeaseOwner`: nil requires error, checked
+  first by the guard. Reassigning `err` loses NilAway's correlation. Tests: `tests/integration/lease_evidence_test.go`.
 
 ## Domain Literal Analysis
 
-- form: a repository Go test on the standard library alone,
-  [`domain_literals.go`](../../../../../tests/support/domain_literals.go), bound to "Production code compares no domain
-  value with a literal" in [`quality-gates.feature`](../../../../../specs/behaviours/quality-gates.feature) — no private
-  golangci-lint build and no new test-support dependency
-- reach: non-test files under `cmd/` and `internal/` built on the running platform; its header comment states both rules
-  and the name list — platform-specific collection lives in `internal/adapters/host` and carries no domain name
-- findings: none — the scenario fails on any; a violation is fixed where it stands, and no allowlist, waiver, or
-  exemption exists
+- form: standard-library repository Go test [`domain_literals.go`](../../../../../tests/support/domain_literals.go),
+  bound to "Production code compares no domain value with a literal" in
+  [`quality-gates.feature`](../../../../../specs/behaviours/quality-gates.feature). No private golangci-lint build or
+  new test-support dependency.
+- reach: running-platform non-test `cmd/`/`internal/` files. Its header records both rules/name list. Platform-specific
+  collection in `internal/adapters/host` contains no domain name.
+- findings: zero required; fix violations in place. No allowlist, waiver or exemption.

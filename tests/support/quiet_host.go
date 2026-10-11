@@ -1,6 +1,7 @@
 package support
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/wahidyankf/hippo/internal/policy"
+	"github.com/wahidyankf/hippo/tests/contract"
 )
 
 // darwinPlatform is the platform whose host probes a caller replaces
@@ -49,11 +51,11 @@ var quietLinuxEvidence = map[string]string{
 var quietHostProbes = map[string]string{
 	"ps": `if [ "$*" = "-A -o %cpu=" ]; then echo 0.0; exit 0; fi
 exec /bin/ps "$@"`,
-	"memory_pressure": `if [ "$*" = "-Q" ]; then echo "System-wide memory free percentage: 80%"; exit 0; fi
+	darwinMemoryPressureTool: `if [ "$*" = "-Q" ]; then echo "System-wide memory free percentage: 80%"; exit 0; fi
 exec /usr/bin/memory_pressure "$@"`,
-	"vm_stat": `printf '%s\n' "Mach Virtual Memory Statistics: (page size of 16384 bytes)" \
+	darwinVMStatTool: `printf '%s\n' "Mach Virtual Memory Statistics: (page size of 16384 bytes)" \
 	"Pages stored in compressor: 0." "Pages occupied by compressor: 0." "Swapins: 0." "Swapouts: 0."`,
-	"sysctl": `if [ "$1" = "-n" ] && [ "$#" -eq 2 ]; then
+	darwinSysctlTool: `if [ "$1" = "-n" ] && [ "$#" -eq 2 ]; then
 	case "$2" in
 	vm.swapusage) echo "total = 1024.00M  used = 0.00M  free = 1024.00M  (encrypted)"; exit 0 ;;
 	kern.memorystatus_vm_pressure_level) echo 1; exit 0 ;;
@@ -103,6 +105,15 @@ func (driver *Driver) quietHostEnvironment(environment []string) ([]string, erro
 	}
 
 	return append(result, "PATH="+directory+string(os.PathListSeparator)+path), nil
+}
+
+// PrepareNativeAnnotationEnvironment reuses this native driver's owned quiet host fixture.
+// Annotation subjects retain actual CLI/runtime ownership and process behavior.
+func (driver *Driver) PrepareNativeAnnotationEnvironment(environment []string) ([]string, error) {
+	if driver.mode == contract.Unit {
+		return nil, errors.New("native annotation environment cannot replace Unit")
+	}
+	return driver.quietHostEnvironment(environment)
 }
 
 // quietLinuxEnvironment publishes a quiet Linux evidence root and names it in

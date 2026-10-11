@@ -24,8 +24,9 @@ the tool** — a repository that edits its validator to pass is a repository who
 A gate that reports "checked 0 files, no findings" has not passed; it has looked at nothing. Every RHINO command reports
 what it inspected for exactly this reason, and a count that drops without explanation is a finding of its own.
 
-A green compliance run is not a green suite. `tests/bdd` resolves bindings; the executing adapters run scenarios. Naming
-which one produced the green is part of reporting the result.
+A green compliance run is not a green suite. The
+[compliance check](behaviour-driven-development.md#what-the-compliance-check-does-not-do) resolves bindings; the
+executing adapters run scenarios. Naming which one produced the green is part of reporting the result.
 
 ## Reporting
 

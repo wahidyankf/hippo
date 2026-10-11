@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -13,25 +14,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
+	"github.com/wahidyankf/hippo/internal/identity"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"golang.org/x/sys/unix"
 )
-
-// leaseOwner is a lease or session record. Its class is read tolerantly, as the
-// record a later version wrote: the record is refused afterwards, where a record
-// must carry a class this version has a member for, and described as recorded
-// where it only has to be named.
-type leaseOwner struct {
-	SchemaVersion  int                      `json:"schemaVersion"`
-	PID            int                      `json:"pid"`
-	Token          string                   `json:"token,omitempty"`
-	Port           int                      `json:"port,omitempty"`
-	Owner          string                   `json:"owner,omitempty"`
-	Class          policy.RecordedTaskClass `json:"class,omitzero"`
-	IdentityDevice uint64                   `json:"identityDevice,omitempty"`
-	IdentityInode  uint64                   `json:"identityInode,omitempty"`
-}
 
 // Session identifies an owned or inherited guarded session.
 type Session struct {
@@ -42,6 +30,7 @@ type Session struct {
 	Allocation   ReservationVector
 	WaitDuration time.Duration
 	identityLock *os.File
+	advisories   *application.DisplayAdvisories
 }
 
 // SerializesHeavyWork reports whether class competes for the single heavy-work lease.
@@ -82,12 +71,12 @@ func readLeaseOwner(path string) (*leaseOwner, error) {
 }
 
 func writeLeaseOwner(path string, owner leaseOwner) error {
-	data, err := json.Marshal(owner)
+	data, err := owner.Encode()
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(path, "owner.json"), append(data, '\n'), 0o600)
+	return os.WriteFile(filepath.Join(path, "owner.json"), data, 0o600)
 }
 
 func token() (string, error) {
@@ -137,11 +126,11 @@ func writeSessionRecord(root string, owner leaseOwner) (string, error) {
 		return "", err
 	}
 
-	data, err := json.Marshal(owner)
+	data, err := owner.Encode()
 	if err != nil {
 		return "", err
 	}
-	if err = os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+	if err = os.WriteFile(path, data, 0o600); err != nil {
 		return "", err
 	}
 
@@ -352,12 +341,12 @@ func heavyLeaseHeld(lockPath string) (bool, error) {
 	return alive, nil
 }
 
-func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, bool, error) {
+func acquireHeavySessionLocked(root string, class policy.TaskClass, label identity.DisplayLabel, advisories *application.DisplayAdvisories) (*Session, bool, error) {
 	lockPath := filepath.Join(root, "heavy.lock")
 
 	for range 2 {
 		if err := os.Mkdir(lockPath, 0o700); err == nil {
-			session, registerError := registerSession(root, lockPath, class)
+			session, registerError := registerSession(root, lockPath, class, label, advisories)
 			if registerError != nil {
 				_ = os.RemoveAll(lockPath)
 				_ = removeExclusiveMarkerIfIdle(root)
@@ -385,7 +374,7 @@ func acquireHeavySessionLocked(root string, class policy.TaskClass) (*Session, b
 	return nil, true, nil
 }
 
-func acquireSessionLocked(root, inheritedToken string, class policy.TaskClass) (*Session, bool, error) {
+func acquireSessionLocked(root, inheritedToken string, class policy.TaskClass, label identity.DisplayLabel, state *admissionState) (*Session, bool, error) {
 	if err := pruneSessionRecords(root); err != nil {
 		return nil, false, err
 	}
@@ -405,17 +394,19 @@ func acquireSessionLocked(root, inheritedToken string, class policy.TaskClass) (
 	}
 
 	if InheritedSession(root, inheritedToken) {
-		return &Session{
-			Inherited: true,
-			Token:     inheritedToken,
-		}, false, nil
+		var session *Session
+		err := application.RegisterDisplay(
+			application.DisplayRegistration{RunID: inheritedToken, Label: label, Kind: application.DisplayExclusiveRegistration, Ownership: application.DisplayOwnershipInherited},
+			displayRegistrationEffects(root, func() error { session = &Session{Inherited: true, Token: inheritedToken}; return nil }), state.displayAdvisories(),
+		)
+		return session, false, err
 	}
 
 	if SerializesHeavyWork(class) {
-		return acquireHeavySessionLocked(root, class)
+		return acquireHeavySessionLocked(root, class, label, state.displayAdvisories())
 	}
 
-	session, err := registerSession(root, "", class)
+	session, err := registerSession(root, "", class, label, state.displayAdvisories())
 	if err != nil {
 		_ = removeExclusiveMarkerIfIdle(root)
 	}
@@ -424,7 +415,7 @@ func acquireSessionLocked(root, inheritedToken string, class policy.TaskClass) (
 }
 
 // registerSession mints one session, recording it on the heavy lease when lockPath is set.
-func registerSession(root, lockPath string, class policy.TaskClass) (*Session, error) {
+func registerSession(root, lockPath string, class policy.TaskClass, label identity.DisplayLabel, advisories *application.DisplayAdvisories) (*Session, error) {
 	value, tokenError := token()
 	if tokenError != nil {
 		return nil, tokenError
@@ -441,29 +432,26 @@ func registerSession(root, lockPath string, class policy.TaskClass) (*Session, e
 
 		return nil, identityError
 	}
-	owner := leaseOwner{
-		SchemaVersion:  1,
-		PID:            os.Getpid(),
-		Token:          value,
-		Class:          policy.RecordedClass(class),
-		IdentityDevice: identityDevice,
-		IdentityInode:  identityInode,
-	}
-	if lockPath != "" {
-		if writeError := writeLeaseOwner(lockPath, owner); writeError != nil {
-			_ = identity.Close()
-			_ = removeReservationIdentity(root, value)
-
-			return nil, writeError
-		}
-	}
-
-	recordPath, recordError := writeSessionRecord(root, owner)
-	if recordError != nil {
+	owner := NewExclusiveSessionRecord(os.Getpid(), value, class, identityDevice, identityInode)
+	var recordPath string
+	registrationError := application.RegisterDisplay(
+		application.DisplayRegistration{RunID: value, Label: label, Kind: application.DisplayExclusiveRegistration, Ownership: application.DisplayOwnershipOwned},
+		displayRegistrationEffects(root, func() error {
+			if lockPath != "" {
+				if err := writeLeaseOwner(lockPath, owner); err != nil {
+					return err
+				}
+			}
+			var err error
+			recordPath, err = writeSessionRecord(root, owner)
+			return err
+		}), advisories,
+	)
+	if registrationError != nil {
 		_ = identity.Close()
 		_ = removeReservationIdentity(root, value)
 
-		return nil, recordError
+		return nil, registrationError
 	}
 
 	return &Session{
@@ -471,22 +459,42 @@ func registerSession(root, lockPath string, class policy.TaskClass) (*Session, e
 		Token:        value,
 		RecordPath:   recordPath,
 		identityLock: identity,
+		advisories:   advisories,
 	}, nil
 }
 
 // ReleaseSession removes only the session record and heavy-work lease owned by session.
-func ReleaseSession(root string, session *Session) (returnError error) {
-	if session == nil || session.Inherited {
+func ReleaseSession(root string, session *Session) error {
+	return ReleaseSessionContext(context.Background(), root, session)
+}
+
+// ReleaseSessionContext retires the owned session using the caller's context
+// values and the existing bounded cleanup wait, even after caller cancellation.
+func ReleaseSessionContext(ctx context.Context, root string, session *Session) (returnError error) {
+	if session == nil {
 		return nil
 	}
+	if session.Inherited {
+		return application.RetireDisplay(application.DisplayRetirement{RunID: session.Token, Ownership: application.DisplayOwnershipInherited}, application.DisplayRetirementEffects{}, session.advisories)
+	}
 
-	coordinationLock, err := lockCoordinationForRelease(root)
+	coordinationLock, err := lockCoordinationForReleaseContext(ctx, root)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		returnError = errors.Join(returnError, releaseCoordinationLock(coordinationLock))
-	}()
+	defer func() { returnError = errors.Join(returnError, releaseCoordinationLock(coordinationLock)) }()
+	return application.RetireDisplay(
+		application.DisplayRetirement{RunID: session.Token, Ownership: application.DisplayOwnershipOwned},
+		displayRetirementEffects(root, func() (application.DisplayRetirementResult, error) {
+			authenticated := session.identityLock != nil
+			err := releaseSessionOwnershipLocked(root, session)
+			return application.DisplayRetirementResult{Confirmed: authenticated && err == nil}, err
+		}), session.advisories,
+	)
+}
+
+func releaseSessionOwnershipLocked(root string, session *Session) error {
+	var err error
 
 	if session.RecordPath != "" {
 		expectedRecord, valid := sessionRecordPath(root, session.Token)

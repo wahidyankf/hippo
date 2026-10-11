@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"github.com/wahidyankf/hippo/internal/domain/evidence"
-	"github.com/wahidyankf/hippo/internal/identity"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -34,6 +34,7 @@ type ObservationServices struct {
 	Evidence      ObservationHistory
 	Clock         ObservationClock
 	Environment   map[string]string
+	Annotations   DisplayAnnotations
 }
 
 // StatusRequest is a validated-at-entry status observation request.
@@ -201,54 +202,61 @@ func (services ObservationServices) Snapshot(ctx context.Context, root, mode str
 	return services.Runtime.Snapshot(ctx, root, mode)
 }
 
-// Observe runs one complete two-sample status observation.
+// Observe projects the shared two-sample observation into the stable status schema.
 func (services ObservationServices) Observe(ctx context.Context, request StatusRequest) (StatusView, int, error) {
-	// A malformed filter is the caller's mistake, found before anything is
-	// read, exactly as run and history report their own malformed filters.
-	if err := identity.ValidateOverrides(request.Source, nil); err != nil {
-		return StatusView{}, 0, status.Fail(status.CodeArgsInvalid, "--source: %v", err)
-	}
-	filterTags, filterError := identity.ParseTags(request.Tags)
-	if filterError != nil {
-		return StatusView{}, 0, status.Fail(status.CodeArgsInvalid, "--tag: %v", filterError)
-	}
-	configuration, configError := services.Configuration.Load(request.ConfigPath, services.Environment)
-	if configError != nil {
-		return StatusView{}, 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
-	}
-	first, err := services.Collector.Collect(ctx, nil, request.DiskPath)
+	prepared, err := PrepareObservation(request)
 	if err != nil {
-		return StatusView{}, 1, err
+		return StatusView{}, 0, err
 	}
+	snapshot, code, err := services.ObserveSnapshot(ctx, prepared)
+	return snapshot.Status, code, err
+}
+
+// ObserveSnapshot reloads configuration and performs the shared observation workflow.
+func (services ObservationServices) ObserveSnapshot(ctx context.Context, request ObservationRequest) (ObservationSnapshot, int, error) {
+	configuration, configError := services.Configuration.Load(request.configPath, services.Environment)
+	if configError != nil {
+		return ObservationSnapshot{}, 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
+	}
+	first, err := services.Collector.Collect(ctx, nil, request.diskPath)
+	if err != nil {
+		return ObservationSnapshot{}, 1, err
+	}
+
+	first.Sample = cloneObservationSample(first.Sample)
+	first.CPUState = slices.Clone(first.CPUState)
 
 	if err := services.Clock.Wait(ctx, time.Second); err != nil {
-		return StatusView{}, 1, err
+		return ObservationSnapshot{}, 1, err
 	}
 
-	second, err := services.Collector.Collect(ctx, first.CPUState, request.DiskPath)
+	second, err := services.Collector.Collect(ctx, first.CPUState, request.diskPath)
 	if err != nil {
-		return StatusView{}, 1, err
+		return ObservationSnapshot{}, 1, err
 	}
 
-	resolution, resolveError := configuration.Catalog.Resolve(request.RequestedProfile, policy.TaskEphemeral, second.Sample)
+	second.Sample = cloneObservationSample(second.Sample)
+
+	resolution, resolveError := configuration.Catalog.Resolve(request.requestedProfile, policy.TaskEphemeral, second.Sample)
 	if resolveError != nil {
-		return StatusView{}, 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
+		return ObservationSnapshot{}, 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
 
 	resolution, assessment, decisionError := decideStatus(resolution, first.Sample, second.Sample)
 	if decisionError != nil {
-		return StatusView{}, 0, decisionError
+		return ObservationSnapshot{}, 0, decisionError
 	}
 	root := services.Configuration.StateRoot(services.Environment)
 	promotion, promotionError := services.EvaluatePromotion(root, configuration.Coordination, assessment, services.Clock.Now())
 	if promotionError != nil {
-		return StatusView{}, 1, fmt.Errorf("evaluate owner promotion: %w", promotionError)
+		return ObservationSnapshot{}, 1, fmt.Errorf("evaluate owner promotion: %w", promotionError)
 	}
 
 	totals, snapshotError := services.Snapshot(ctx, root, configuration.Coordination.Mode)
 	if snapshotError != nil {
 		code, failure := CoordinationFailure("read coordination status", snapshotError)
-		return StatusView{}, code, failure
+		return ObservationSnapshot{}, code, failure
 	}
-	return StatusView{Sample: second.Sample, SchemaVersion: 5, Resource: assessment, Profile: resolution, Coordination: FilterCoordinationRows(totals, request.Source, filterTags), Promotion: promotion, ConfigHash: configuration.Hash}, 0, nil
+	view := StatusView{Sample: second.Sample, SchemaVersion: 5, Resource: assessment, Profile: resolution, Coordination: FilterCoordinationRows(totals, request.source, request.tags), Promotion: promotion, ConfigHash: configuration.Hash}
+	return services.projectObservation(ctx, root, view), 0, nil
 }

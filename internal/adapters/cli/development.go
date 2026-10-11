@@ -85,6 +85,6 @@ func runArgumentMistake(options runOptions) error {
 
 func (application Application) run(ctx context.Context, options runOptions) (int, error) {
 	return application.RunEntry.Execute(ctx, app.RunRequest{
-		Command: options.command, Class: options.class, ConfigPath: options.configPath, RequestedProfile: options.requestedProfile(), WorkingDir: options.workingDir, DiskPath: options.diskPath, LeasePort: options.leasePort, LeaseOwner: options.leaseOwner, LeaseMinimum: options.leaseMinimum, LeaseMaximum: options.leaseMaximum, ReserveCPU: options.reserveCPU, ReserveMemoryMiB: options.reserveMemoryMiB, ResourceTier: options.resourceTier, Source: options.source, Tags: options.tags, ConcurrencyEnvironment: options.concurrencyEnvironment, WaitForAdmission: options.waitForAdmission, ObserveChild: options.observeChild,
+		Command: options.command, Class: options.class, ConfigPath: options.configPath, RequestedProfile: options.requestedProfile(), WorkingDir: options.workingDir, DiskPath: options.diskPath, LeasePort: options.leasePort, LeaseOwner: options.leaseOwner, LeaseMinimum: options.leaseMinimum, LeaseMaximum: options.leaseMaximum, ReserveCPU: options.reserveCPU, ReserveMemoryMiB: options.reserveMemoryMiB, ResourceTier: options.resourceTier, Source: options.source, Label: options.label, LabelSet: options.labelSet, Tags: options.tags, ConcurrencyEnvironment: options.concurrencyEnvironment, WaitForAdmission: options.waitForAdmission, ObserveChild: options.observeChild,
 	})
 }

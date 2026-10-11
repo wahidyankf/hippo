@@ -22,32 +22,33 @@ $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make tes
 
 ## ✨ Highlights
 
-- **Cross-repository coordination.** Every checkout on one laptop shares one CPU-and-memory budget instead of each
-  assuming it owns the machine.
+- **Cross-repository coordination.** All checkouts share one CPU-and-memory budget.
 - **Works with any build tool.** `--concurrency-env BUILD_WORKERS` writes HIPPO's allocation into the variable your tool
   already reads. No build system is compiled into HIPPO.
-- **Invisible when healthy.** Your command keeps its stdin, stdout, stderr, and exit code. A healthy run prints nothing
-  extra.
-- **Safe by construction.** A guard signals only the process group it started. Pressure shedding works by marking a
-  victim and waiting for that victim's own guard to act.
+- **Invisible when healthy.** Your command keeps stdin, stdout, stderr, and its exit code; HIPPO prints nothing extra.
+- **Safe by construction.** A guard signals only the child group it started. Shedding marks a victim and awaits its
+  guard.
 - **Fails closed.** Unreadable shared state fails without retry and keeps its bytes untouched.
 - **A stable exit contract.** `124` a limit stopped the work, `125` HIPPO failed to start or supervise it, `126` and
   `127` the command cannot be run, `2` the invocation cannot be used — the numbers `timeout` and POSIX shells use. Each
   failure names a reason: `hippo: [hippo.area.reason]`. Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters, promotion state, and
   bounded run outcomes without exposing commands or paths.
+- **Interactive monitoring (unreleased).** `hippo tui` shows running jobs, queue positions, and capacity with keyboard
+  navigation and a compact layout for narrow terminals. See
+  [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md). Final interactive verification is pending;
+  the v0.8.5 installation pin below does not provide this feature.
 - **Burst-safe activation.** Simultaneous repository clients wait through brief coordination contention after launch
   instead of cutting an already started payload.
 - **No daemon.** One short-lived process per guarded command, plus files in a shared state root.
 
 ## 🤔 Why
 
-Build tools commonly size themselves as if they own the host. Concurrent repositories then swap and slow the editor too.
-Fixed low parallelism wastes an idle machine; high parallelism restores the contention. `nice` and cgroups shape work
-already running but do not decide whether it should start.
+Build tools assume they own the host; concurrent repositories cause swapping and slow the editor. Low parallelism wastes
+idle capacity; high parallelism restores contention. `nice` and cgroups shape running work, not admission.
 
-HIPPO admits work against one shared ledger and exports its allocation through ordinary environment variables, so build
-tools need no HIPPO-specific integration.
+HIPPO admits against a shared ledger and exports allocation through environment variables; build tools need no special
+integration.
 
 Longer version: [Why HIPPO exists](./docs/explanation/why-hippo-exists.md).
 
@@ -81,9 +82,7 @@ From a source checkout, the tracked `./hippo` bootstrap compiles the CLI once an
 
 ## 🚀 Quick start
 
-Ask what the host looks like:
-
-The status line is wrapped to fit; HIPPO prints it as one line.
+Inspect the host. The example status wraps to fit; HIPPO prints one line.
 
 ```console
 $ hippo status --disk-path .
@@ -91,8 +90,7 @@ state=normal reason=normal profile=balanced concurrency=11 swap=active available
   owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
-Guard a command. Schema 3 requires a resource tier. Everything after `--` belongs to the child, so its flags are never
-parsed as HIPPO's:
+Guard a command. Schema 3 requires a resource tier; arguments after `--` belong to the child:
 
 ```console
 $ hippo run --class ephemeral --resource-tier light --disk-path . -- sh -c 'echo build-started; echo build-finished'
@@ -178,9 +176,8 @@ Released tags are immutable: never rebuilt or replaced.
 **External contributions are currently closed** while the engineering patterns stabilize. Forks remain welcome under the
 MIT license.
 
-Contributor rules live in [`repo-governance/`](./repo-governance/README.md), one document each with the reason it
-exists. `AGENTS.md` indexes them and states none itself, and `CLAUDE.md` holds one import directive, so there is a
-single instruction body rather than two that drift.
+[`repo-governance/`](./repo-governance/README.md) records each contributor rule and its reason. `AGENTS.md` only indexes
+them; `CLAUDE.md` has one import directive, keeping one instruction body.
 
 ## 🌙 Part of Open Sharia Enterprise
 
@@ -188,8 +185,7 @@ HIPPO is one of seven **`ose-projects`** repositories, with `ose-public`, `rhino
 `py-typekit`, and [`ose-private`](https://github.com/wahidyankf/ose-private) (Private). The label is navigation only —
 see [project context](./docs/README.md#project-context) for each one's link and relationship.
 
-HIPPO compiles in no OSE-specific defaults and works entirely on its own — consumers supply their own commands, paths,
-ports, and health endpoints.
+HIPPO has no OSE-specific defaults; consumers supply commands, paths, ports, and health endpoints.
 
 ## 🛠️ Development
 

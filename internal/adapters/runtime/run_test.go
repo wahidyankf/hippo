@@ -36,6 +36,128 @@ const forcedStopExitCode = 137
 // the lifetime under test ever started.
 const evidenceDecidesAdmission = time.Hour
 
+func TestContextualReleaseRetainsBoundedOwnershipCleanup(t *testing.T) {
+	for _, kind := range []string{"session", "reservation"} {
+		for _, variant := range []string{"legacy", "explicit", "cancelled", "expired"} {
+			t.Run(kind+"/"+variant, func(t *testing.T) {
+				requireContextualReleaseOwnership(t, kind, variant)
+			})
+		}
+	}
+}
+
+func requireContextualReleaseOwnership(t *testing.T, kind, variant string) {
+	t.Helper()
+	root := t.TempDir()
+	session := acquireContextualReleaseOwner(t, root, kind)
+	t.Cleanup(func() {
+		if session.identityLock != nil {
+			if err := releaseReservationOrSession(root, session, kind); err != nil {
+				t.Error(err)
+			}
+		}
+	})
+	lock, err := lockCoordinationForRelease(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var released <-chan error
+	if variant == "legacy" {
+		released = startLegacyOwnedRelease(root, session, kind)
+	} else {
+		released = startContextualOwnedRelease(t, root, session, kind, variant)
+	}
+	// An already cancelled caller must not abandon the real bounded retirement
+	// while another actual operation owns the coordination lock.
+	probe := time.NewTimer(20 * time.Millisecond)
+	var premature error
+	finished := false
+	select {
+	case premature = <-released:
+		finished = true
+	case <-probe.C:
+	}
+	probe.Stop()
+	if err := releaseCoordinationLock(lock); err != nil {
+		t.Error(err)
+	}
+	if finished {
+		t.Fatalf("cleanup returned before its real lock was released: %v", premature)
+	}
+	bound := time.NewTimer(time.Second)
+	defer bound.Stop()
+	select {
+	case err = <-released:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-bound.C:
+		t.Fatal("cleanup exceeded the existing finite coordination allowance")
+	}
+	if session.identityLock != nil || InheritedSession(root, session.Token) {
+		t.Fatal("released owner retained its liveness identity")
+	}
+	totals, err := ReservationStatus(t.Context(), root)
+	if err != nil || totals.ActiveOwners != 0 {
+		t.Fatalf("retired root still has ownership: %+v error=%v", totals, err)
+	}
+}
+
+func startLegacyOwnedRelease(root string, session *Session, kind string) <-chan error {
+	released := make(chan error, 1)
+	go func() { released <- releaseReservationOrSession(root, session, kind) }()
+	return released
+}
+
+func startContextualOwnedRelease(t *testing.T, root string, session *Session, kind, variant string) <-chan error {
+	t.Helper()
+	parent, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	if variant == "cancelled" {
+		cancel()
+	}
+	if variant == "expired" {
+		var expire context.CancelFunc
+		parent, expire = context.WithDeadline(parent, time.Now().Add(-time.Second))
+		t.Cleanup(expire)
+	}
+	released := make(chan error, 1)
+	go func() {
+		if kind == "reservation" {
+			released <- ReleaseReservationContext(parent, root, session)
+			return
+		}
+		released <- ReleaseSessionContext(parent, root, session)
+	}()
+	return released
+}
+
+func acquireContextualReleaseOwner(t *testing.T, root, kind string) *Session {
+	t.Helper()
+	var session *Session
+	var err error
+	if kind == "reservation" {
+		plan := ReservationPlan{
+			Capacity:  ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
+			Requested: ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB},
+		}
+		session, err = AcquireReservation(t.Context(), root, "", policy.TaskEphemeral, "minimal", "context-release", plan, 1, 0)
+	} else {
+		session, err = AcquireSession(t.Context(), root, "", policy.TaskEphemeral, time.Second)
+	}
+	if err != nil || session == nil {
+		t.Fatalf("acquire actual cleanup owner: %v", err)
+	}
+	return session
+}
+
+func releaseReservationOrSession(root string, session *Session, kind string) error {
+	if kind == "reservation" {
+		return ReleaseReservation(root, session)
+	}
+	return ReleaseSession(root, session)
+}
+
 type controlledRunCollector struct{}
 
 func (*controlledRunCollector) Collect(context.Context, policy.CPUState, string) (policy.Reading, error) {

@@ -45,7 +45,11 @@ func acceptsSaturatedDeferralV04(declared bool, exitCode int, output []byte, chi
 }
 
 func (driver *Driver) inspectLoadedGate() error {
-	data, err := os.ReadFile(filepath.Join(toolRoot(), "scripts", "test-loaded.sh"))
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
+	data, err := os.ReadFile(filepath.Join(repository, "scripts", "test-loaded.sh"))
 	if err != nil {
 		return err
 	}
@@ -54,7 +58,7 @@ func (driver *Driver) inspectLoadedGate() error {
 	driver.saturationReaders = nil
 
 	for _, directory := range []string{"cmd", "internal"} {
-		if err := filepath.WalkDir(filepath.Join(toolRoot(), directory), driver.recordSaturationReader); err != nil {
+		if err := filepath.WalkDir(filepath.Join(repository, directory), driver.recordSaturationReader); err != nil {
 			return err
 		}
 	}
@@ -63,6 +67,10 @@ func (driver *Driver) inspectLoadedGate() error {
 }
 
 func (driver *Driver) recordSaturationReader(path string, entry fs.DirEntry, walkError error) error {
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	if walkError != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") {
 		return walkError
 	}
@@ -73,7 +81,7 @@ func (driver *Driver) recordSaturationReader(path string, entry fs.DirEntry, wal
 	}
 
 	if bytes.Contains(source, []byte(loadSaturatedVariable)) {
-		relative, relativeError := filepath.Rel(toolRoot(), path)
+		relative, relativeError := filepath.Rel(repository, path)
 		if relativeError != nil {
 			return relativeError
 		}

@@ -439,7 +439,7 @@ func (driver *Driver) endReleaseCaptureV082(end string) error {
 			return nil
 		},
 	}).Run(ctx, []string{
-		"release", monitorCommandName, "--output", filepath.Join(root, "raw.jsonl"),
+		"release", monitorCommandName, outputFlag, filepath.Join(root, "raw.jsonl"),
 		"--summary", filepath.Join(root, "summary.json"), "--deployment-root", root,
 		"--health-url", "http://127.0.0.1:9/health", "--routed-origin", "https://example.test",
 		"--duration-ms", duration,

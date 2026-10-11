@@ -40,7 +40,8 @@ defaults.
 ## Container View
 
 The shell bootstrap builds, caches, and execs the Go CLI, which reads configuration, owns the state store, collects host
-evidence, starts and signals the child group, and probes health endpoints.
+evidence, starts and signals the child group, probes health endpoints, and presents interactive observations through the
+caller's terminal.
 
 ```text
 +-----------------+  caches builds       +-----------------------+
@@ -61,13 +62,17 @@ evidence, starts and signals the child group, and probes health endpoints.
 |                 |  starts and signals  +-----------------------+
 |                 |--------------------->| Child process group   |
 |                 |                      +-----------------------+
+|                 |  interacts           +-----------------------+
+|                 |--------------------->| Operator terminal     |
+|                 |                      +-----------------------+
 |                 |  probes              +-----------------------+
 |                 |--------------------->| Health endpoints      |
 +-----------------+                      +-----------------------+
 ```
 
 `Shell bootstrap`, `Go CLI process`, `Build cache`, `Local configuration`, and `Runtime state store` are inside the
-HIPPO system boundary; `Host operating system`, `Child process group`, and `Health endpoints` are outside it.
+HIPPO system boundary; `Host operating system`, `Child process group`, `Operator terminal`, and `Health endpoints` are
+outside it.
 
 The POSIX shell bootstrap hashes the Go sources and module metadata, serializes compilation, retains a bounded platform
 cache, and then replaces itself with the compiled executable. Tagged-release consumers may invoke a verified binary
@@ -78,12 +83,14 @@ collects host and process evidence through operating-system interfaces, and stor
 evidence records in a shared per-user state root. HIPPO instances launched by different repositories coordinate through
 that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded
 command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
+`hippo tui` uses the same Go process for interactive observation; it introduces no daemon, separate runtime container,
+job, or resource reservation. The TUI source is unreleased, and final terminal/native acceptance remains pending.
 
 ## Component View
 
 The command boundary projects parsed arguments into application requests. Application use cases own the execution order
 and consume ports they define. Pure domain values and reducers own policy, coordination, and evidence decisions.
-Bootstrap supplies concrete adapters once per invocation.
+Bootstrap supplies concrete adapters once per invocation, including the interactive TUI presentation adapter.
 
 ```text
 Process entry ---> Bootstrap composition ---> CLI command boundary
@@ -95,18 +102,29 @@ Process entry ---> Bootstrap composition ---> CLI command boundary
                           | effects                 | decisions
                           v                         v
                     Host and storage          Pure domain
+
+CLI command boundary ---> TUI presentation ---> Application observations
+                          |                     |
+                          | terminal effects    | snapshots through callback
+                          v                     v
+                    Operator terminal     Application-owned values
 ```
 
 Every component above sits inside the `Go CLI process` container.
 
 - **Process entry and bootstrap** translate signals into portable cancellation and construct configuration, host,
-  runtime, health, and evidence capabilities. Build identity selects the isolated Linux collector only in test builds.
-- **CLI boundary** owns Cobra commands, argument validation, request projection, presentation, and exit diagnostics.
-  Help and diagnostic precedence remain part of the public contract. CLI code constructs no concrete service adapters.
+  runtime, health, evidence, and TUI capabilities. Build identity selects the isolated Linux collector only in test
+  builds.
+- **CLI boundary** owns Cobra commands, argument validation, request projection, noninteractive presentation, and exit
+  diagnostics. It dispatches TUI sessions through a composed callback after validation and terminal checks. Help and
+  diagnostic precedence remain part of the public contract. CLI code constructs no concrete service adapters.
+- **TUI adapter** owns responsive views, keyboard navigation, selection, viewport scrolling, stale-data markers, refresh
+  scheduling, and terminal lifecycle. A worker invokes the supplied observation callback; the event loop never collects
+  host evidence or reads private state directly. Bubble Tea, Bubbles, and Lip Gloss remain inside this adapter.
 - **Application** owns guarded-run preparation, host admission, queue retries and deadlines, queue heartbeats,
   launch-once supervision, own-owner observation before sampling, remote victim release waits, stop/finalize/release
-  ordering, status, history, watch, monitor, release checks and monitoring, and conformance phase ordering. Its
-  consumer-owned ports expose portable values, opaque tokens, and callback capabilities.
+  ordering, shared status/TUI observations, history, watch, monitor, release checks and monitoring, and conformance
+  phase ordering. Consumer-owned ports expose portable values, opaque tokens, and callback capabilities.
 - **Coordination domain** owns strict wire values, checked vector accounting, FIFO enqueue and head allocation,
   conservative owner limits, and victim election. These reducers perform no filesystem or process effects.
 - **Evidence domain** owns outcomes, fixed-memory histograms, lifetime and release aggregation, history matching,
@@ -132,6 +150,36 @@ negative fixtures prove that forbidden dependencies are rejected.
 Long-running operations receive caller-owned contexts. Only the signal boundary translates operating-system signals into
 cancellation, so an interrupted invocation exits `128+N` unless a started child's status or a classified HIPPO failure
 explains its end. Application code receives neither files, process handles, process groups, nor framework types.
+
+## Interactive Observation Dynamic View
+
+The TUI consumes an application-owned observation callback returning an `ObservationSnapshot`, rather than parsing CLI
+JSON. Bootstrap composes that callback with the same observation services used by status and watch.
+
+```text
+CLI validation --> TUI event loop --refresh--> One worker --callback--> Application observation
+                       ^     |                    |                          |
+                       |     +<------ Result -----+<------ Snapshot ---------+
+                       |     |
+                 Refresh     +--keys/resize--> Terminal view
+                       |
+                Runner scheduler (delay after collection completes)
+```
+
+Application observation reloads configuration, collects two host readings one second apart, resolves policy, reads
+promotion evidence and coordination, and projects ordered rows with explicit availability. Its snapshot clones maps,
+slices, and optional metric values before crossing the asynchronous boundary. The stable `StatusView` remains the public
+status/watch JSON projection; display annotations belong only to the interactive snapshot.
+
+The runner permits one collection at a time. Navigation and resize continue during collection; repeated refresh requests
+coalesce into one immediate follow-up. Otherwise the next collection starts after the configured interval following
+completion. Failed collection keeps the last good snapshot marked stale, with sample age and a fixed safe error summary;
+before the first success, values stay unavailable. A successful collection replaces that state.
+
+The runner owns cancellation, the worker, the refresh scheduler, event delivery, and terminal restoration. Exit joins
+that work before returning to CLI diagnostics and does not cancel guarded jobs. Operating-system signal ownership stays
+at the process boundary; Bubble Tea's signal handler is disabled. Source and test presence do not establish that final
+PTY restoration or native host acceptance has passed.
 
 ## Guarded Execution Dynamic View
 

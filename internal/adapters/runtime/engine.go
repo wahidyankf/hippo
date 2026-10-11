@@ -157,6 +157,9 @@ func (engine *Engine) Release(config application.RunConfig, lease *application.L
 		return nil
 	}
 	session := engine.leases[lease.Token]
+	if session != nil && session.advisories != nil {
+		defer session.advisories.Report(config.Stderr)
+	}
 	for id, workload := range engine.workloads {
 		if workload.leaseID == lease.Token {
 			workload.closeBridge()
@@ -275,6 +278,7 @@ func (*Engine) Snapshot(ctx context.Context, root, mode string) (coordination.Re
 		return totals, refusedEvidenceWrite("reading coordination evidence", err)
 	}
 	if !present {
+		housekeepIdleDisplay(ctx, root)
 		return totals, nil
 	}
 	if active != "reservation" {
