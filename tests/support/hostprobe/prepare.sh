@@ -73,7 +73,7 @@ public_host_helper_prepare() {
 	fi
 	public_host_helper_go=${HIPPO_GO_BINARY:-go}
 	public_host_helper_owned_directory=$(mktemp -d "${HIPPO_E2E_TEMP_PARENT:-${TMPDIR:-/tmp}}/hippo-host-helper.XXXXXX")
-	public_host_helper_owned_directory=$(CDPATH='' cd -- "$public_host_helper_owned_directory" && pwd)
+	public_host_helper_owned_directory=$(CDPATH='' cd -- "$public_host_helper_owned_directory" && pwd -P)
 	public_host_helper_sources "$1" >"$public_host_helper_owned_directory/source-before.sha256"
 	"$public_host_helper_go" version >"$public_host_helper_owned_directory/go-version.stdout"
 	public_host_helper_tool=$(command -v "$public_host_helper_go")
