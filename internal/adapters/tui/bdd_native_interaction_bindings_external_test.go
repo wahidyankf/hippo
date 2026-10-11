@@ -16,7 +16,7 @@ import (
 )
 
 // Only observer inputs and physical keys cross this original scenario boundary.
-// All observations below come from the genuine renderer's decoded PTY cells.
+// Native bindings observe the genuine renderer's decoded PTY cells.
 type nativeBDDInteraction struct {
 	fixture  *nativeBDDViewports
 	kind     string
@@ -24,6 +24,12 @@ type nativeBDDInteraction struct {
 	selected string
 	key      string
 	frames   []tui.BDDNativeTransportFrame
+
+	// Per-instance effects let the sampler regression drive these actual callers;
+	// native bindings leave them nil and use the original transport lifecycle.
+	samplingKey         func(context.Context, []byte) error
+	samplingObservation bddNativeTransportObservation
+	samplingQuit        func() error
 }
 
 func (fixture *nativeBDDViewports) interactionHandler(pattern string) any {
@@ -61,11 +67,12 @@ func (fixture *nativeBDDViewports) interactionHandler(pattern string) any {
 		`^a populated TUI$`:         state.prepareHelp,
 		`^keyboard help is opened$`: state.openHelp,
 		`^every section selection detail capacity back refresh help and quit action has a documented usable key$`: state.requireHelp,
-		`^a populated TUI with a selected run ID$`:                                                                state.prepareIgnored,
-		`^no job action or TUI quit occurs and selection is unchanged$`:                                           state.requireIgnored,
-		`^color is disabled and the TUI has selected waiting stale and error states$`:                             state.prepareNoColor,
-		`^the dashboard and details are rendered$`:                                                                state.renderNoColor,
-		`^text markers distinguish those states without ANSI styling$`:                                            state.requireNoColor,
+
+		`^a populated TUI with a selected run ID$`:                                    state.prepareIgnored,
+		`^no job action or TUI quit occurs and selection is unchanged$`:               state.requireIgnored,
+		`^color is disabled and the TUI has selected waiting stale and error states$`: state.prepareNoColor,
+		`^the dashboard and details are rendered$`:                                    state.renderNoColor,
+		`^text markers distinguish those states without ANSI styling$`:                state.requireNoColor,
 	}
 	return handlers[pattern]
 }
@@ -99,12 +106,16 @@ func (state *nativeBDDInteraction) prepare(kind string, snapshot application.Obs
 }
 
 func (state *nativeBDDInteraction) await(title string, tokens ...string) error {
-	if state.fixture.transport == nil || state.fixture.screen == nil {
-		return errors.New("native interaction transport was not prepared")
+	observation := state.samplingObservation
+	if observation == nil {
+		if state.fixture.transport == nil || state.fixture.screen == nil {
+			return errors.New("native interaction transport was not prepared")
+		}
+		observation = bddNativeTransportCapture{transport: state.fixture.transport, screen: state.fixture.screen}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	frame, err := awaitBDDNativeTransportFrame(ctx, bddNativeTransportCapture{transport: state.fixture.transport, screen: state.fixture.screen}, func(frame tui.BDDNativeTransportFrame) bool {
+	frame, err := awaitBDDNativeTransportFrame(ctx, observation, func(frame tui.BDDNativeTransportFrame) bool {
 		if !frame.Alternate || frame.Width != state.fixture.width || frame.Height != state.fixture.height || frame.OverflowWrites != 0 {
 			return false
 		}
@@ -152,7 +163,7 @@ func (state *nativeBDDInteraction) resize(width, height int) error {
 }
 
 func (state *nativeBDDInteraction) keyBytes(value string) error {
-	if state.kind == "" || state.fixture.transport == nil {
+	if state.kind == "" || (state.fixture.transport == nil && state.samplingKey == nil) {
 		return errors.New("native interaction key has no prepared session")
 	}
 	if value == "" {
@@ -160,10 +171,14 @@ func (state *nativeBDDInteraction) keyBytes(value string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
+	sendKey := state.samplingKey
+	if sendKey == nil {
+		sendKey = state.fixture.transport.SendKey
+	}
 	// Keep one original action deadline while respecting SendKey's byte limit.
 	for len(value) != 0 {
 		count := min(64, len(value))
-		if err := state.fixture.transport.SendKey(ctx, []byte(value[:count])); err != nil {
+		if err := sendKey(ctx, []byte(value[:count])); err != nil {
 			return err
 		}
 		value = value[count:]
@@ -224,15 +239,18 @@ func (state *nativeBDDInteraction) openCapacity() error {
 }
 
 func (state *nativeBDDInteraction) capacityEvidence() error {
-	for _, stop := range []struct{ keys, token string }{
-		{strings.Repeat("j", 8), "Disk free:"},
-		{strings.Repeat("j", 10), "Waiting request:"},
-		{strings.Repeat("j", 200), "process RSS or CPU usage."},
+	for _, stop := range []struct {
+		keys   string
+		tokens []string
+	}{
+		{strings.Repeat("j", 8), []string{"Disk free:", "Reservation accounting"}},
+		{strings.Repeat("j", 10), []string{"Waiting request:"}},
+		{strings.Repeat("j", 200), []string{"process RSS or CPU usage."}},
 	} {
 		if err := state.keyBytes(stop.keys); err != nil {
 			return err
 		}
-		if err := state.await("HIPPO | Capacity detail", stop.token); err != nil {
+		if err := state.await("HIPPO | Capacity detail", stop.tokens...); err != nil {
 			return err
 		}
 	}
@@ -583,7 +601,7 @@ func (state *nativeBDDInteraction) requireHelp() error {
 	if err := state.keyBytes(strings.Repeat("j", 8)); err != nil {
 		return err
 	}
-	if err := state.await("HIPPO | Help", "Enter: open selected job detail"); err != nil {
+	if err := state.await("HIPPO | Help", "Enter: open selected job detail", "c:"); err != nil {
 		return err
 	}
 	if err := state.keyBytes(strings.Repeat("j", 200)); err != nil {
@@ -594,6 +612,9 @@ func (state *nativeBDDInteraction) requireHelp() error {
 	}
 	if err := state.requireText("Tab or n", "Shift-Tab or p", "Down or j", "Up or k", "Enter", "c:", "b:", "r refresh", "? help", "q quit"); err != nil {
 		return err
+	}
+	if state.samplingQuit != nil {
+		return state.samplingQuit()
 	}
 	return state.fixture.quit()
 }
