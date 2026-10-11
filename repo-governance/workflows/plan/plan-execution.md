@@ -10,7 +10,8 @@ four: every verdict is advisory, so a `FAIL` or `BLOCKED` row has an owner and d
 1. **Read the plan before the checklist.** `delivery.md` is written to be executable, not to be self-explanatory. The
    other five documents hold why each item exists.
 2. **Confirm the execution checkout.** Which working copy, which branch or worktree, which delivery mode. Executing in
-   the wrong checkout is recoverable; noticing late is expensive.
+   the wrong checkout is recoverable; noticing late is expensive. Before starting plan execution or creating a new
+   worktree, sync the execution checkout from the latest origin/main.
 3. **Work items in order.** An item blocked by something outside the plan is recorded as blocked, with what would
    unblock it, rather than skipped silently.
 4. **Resolve each item atomically.** Tick the checkbox, record the result, and move on — in that order, as one step. A
@@ -27,7 +28,8 @@ four: every verdict is advisory, so a `FAIL` or `BLOCKED` row has an owner and d
 ## Exit
 
 Every substantive checklist item is terminal, `learnings.md` holds what execution discovered, and the execution check
-has recorded a verdict.
+has recorded a verdict. Never require a full E2E run as a completion condition for plan execution or a plan phase;
+full E2E is a separately batched set.
 
 ## Pause Safety
 

@@ -18,7 +18,10 @@ proves nothing the unit adapter did not.
 
 ## Placement
 
-Compiled end-to-end behaviour runs in the full gate, never in the quick gate. `pre-push` must stay fast enough that
+Compiled end-to-end behaviour runs in the full gate, never in the quick gate. Run the full E2E suite on its
+scheduled CI workflow (CRON) by default in every repository that has E2E; keep local E2E selective to the touched flow.
+The nightly loaded-host workflow runs the release gate, including E2E, under synthetic load. `pre-push` must stay fast
+enough that
 nobody looks for a way around it — a slow hook is a hook that gets bypassed, and
 [push hook verification](../conventions/push-hook-verification.md) exists because that bypass is prohibited.
 
