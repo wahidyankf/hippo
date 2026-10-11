@@ -7,8 +7,12 @@ import (
 )
 
 func runArchitecture(ctx context.Context, selected string) error {
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	command := exec.CommandContext(ctx, "go", "test", "-count=1", "./tests/architecture", "-run", selected)
-	command.Dir = toolRoot()
+	command.Dir = repository
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("architecture %s: %w\n%s", selected, err, output)

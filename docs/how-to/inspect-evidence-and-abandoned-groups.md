@@ -67,8 +67,11 @@ Five questions this answers:
 All zeroes means an idle epoch, not a broken one. A live exclusive compatibility session appears as a legacy owner even
 though it has no reservation vector or queue position.
 
-If `status --json` returns an **error** instead of totals, the coordination state is corrupt. HIPPO reports that rather
-than fabricating zero totals, because a zero total would silently license every waiting task to start at once.
+If `status --json` returns an **error** instead of totals, inspect its named reason before diagnosing corruption.
+Invalid flags or configuration, unavailable host evidence, or a coordination lock that cannot be written can also fail
+status; see [Exit codes](../reference/exit-codes.md#error-codes). When coordination state cannot be read or decoded,
+HIPPO reports that failure rather than fabricating zero totals, because a zero total would silently license every
+waiting task to start at once.
 
 ## Find the evidence for one run
 

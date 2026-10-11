@@ -11,8 +11,9 @@
 3. **Prove the binding failure.** Run the adapters and see the scenario reported as undefined. A scenario that was never
    red proves only that it is bound.
 4. **Bind it.** Register the steps in the driver.
-5. **Prove it fails at an executing boundary.** Binding compliance is not execution: `tests/bdd` resolves patterns, and
-   the unit, integration, and E2E adapters run them. A mutation that leaves the first green and the second red is the
+5. **Prove it fails at an executing boundary.** Binding compliance is not execution: the
+   [compliance check](behaviour-driven-development.md#what-the-compliance-check-does-not-do) resolves patterns, and the
+   unit, integration, and E2E adapters run them. A mutation that leaves the first green and the second red is the
    difference this step exists to catch.
 6. **Write the code.** Then green.
 7. **Synchronize the C4 views** with the final as-built boundaries — see

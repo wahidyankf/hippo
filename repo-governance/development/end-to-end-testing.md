@@ -18,9 +18,13 @@ proves nothing the unit adapter did not.
 
 ## Placement
 
-Compiled end-to-end behaviour runs in the full gate, never in the quick gate. `pre-push` must stay fast enough that
-nobody looks for a way around it — a slow hook is a hook that gets bypassed, and
+Run the canonical executing E2E corpus and compiled-only public suites only in the full gate. Ordinary quick support
+controls may acquire and use a temporary stamped candidate; that fixture does not execute an E2E journey. `pre-push`
+must stay fast enough that nobody looks for a way around it — a slow hook is a hook that gets bypassed, and
 [push hook verification](../conventions/push-hook-verification.md) exists because that bypass is prohibited.
+
+This adapts the `ose-rules` end-to-end standard to HIPPO's quick/full gates: private fixture controls retain candidate
+acquisition while public journeys stay out of hooks.
 
 ## Exemptions
 

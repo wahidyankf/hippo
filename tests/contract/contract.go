@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -302,6 +301,19 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release workflow requires the peeled tag to equal the event commit", Boundary: releaseWorkflowBoundary, Reason: "requires isolated event and peeled-tag commit identities"},
 		{Scenario: "Release workflows disable implicit Go module caching", Boundary: releaseWorkflowBoundary, Reason: "workflow setup-go caching configuration is outside the compiled binary boundary"},
 		{Scenario: "CI validates assets against the exact build commit", Boundary: releaseWorkflowBoundary, Reason: "CI workflow commit propagation is outside the compiled binary boundary"},
+		// These six reviewed boundaries retain the original R256B model/refusal scope.
+		{Scenario: "TUI verification retains model terminal and host boundaries", Boundary: repositoryConfigBoundary, Reason: "requires inspection of repository gate wiring outside the compiled public binary boundary"},
+		{Scenario: "Display annotations do not change public status or watch comparison", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
+		{Scenario: "Completed observations remain unchanged when source values are reused", Boundary: "observation value ownership", Reason: "requires reusing and mutating collector and coordination values in process to inspect the completed observation's independently owned values"},
+		{Scenario: "Unknown sample time remains unavailable", Boundary: hostEvidenceBoundary, Reason: "requires absent or malformed synthetic host measurement times; the E2E transport refuses private model fallback"},
+		{Scenario: "Missing host readings are distinct from accounting zero", Boundary: hostEvidenceBoundary, Reason: "requires synthetic unavailable optional host readings alongside known zero reservation demand; the E2E transport refuses private model fallback"},
+		{Scenario: "Synthetic unsafe display text cannot escape its cell budget", Boundary: "terminal text fixture", Reason: "requires synthetic Unicode and ANSI/control model inputs; the E2E transport refuses private model fallback"},
+		// The acceptance owner deferred exactly six forced public terminal-fault rows
+		// for this release. Unit/Integration retain all predicates; ordinary compiled
+		// readonly-output regressions do not establish public failure/report ordering.
+		{Scenario: "Terminal failures restore ownership before reporting failure", Boundary: "compiled terminal fault causality", Reason: "requires forcing startup, input-read, live-output-write and restoration failures at precise lifecycle points not supplied by safe public-binary fixtures; deferred for this release while Unit/Integration retain fault, restoration, ordering and join assertions"},
+		{Scenario: "A classified terminal failure takes precedence over an interruption", Boundary: "compiled terminal fault and interruption precedence", Reason: "requires a public restoration failure concurrent with interruption, which safe public-binary fixtures do not supply; deferred for this release while Unit/Integration retain exit-125 precedence and restoration-before-report assertions"},
+		{Scenario: "Global JSON output formats a TUI refusal after terminal restoration", Boundary: "compiled terminal restoration-before-report ordering", Reason: "ordinary compiled readonly-output failure proves JSON classification and post-Wait restoration, not restoration before report emission; deferred for this release while Unit/Integration retain the original ordering and JSON assertions"},
 	},
 }
 
@@ -341,52 +353,13 @@ func AdapterByName(name string) (Adapter, error) {
 
 // SuiteOptions returns strict Godog options shared by compliance and execution.
 func SuiteOptions(adapter Adapter) *godog.Options {
-	tags := ""
-	if adapter.ExemptionTag != "" {
-		tags = "~" + adapter.ExemptionTag
-	}
-
-	return &godog.Options{
-		Format: "progress",
-		Paths:  []string{FeaturePath},
-		Tags:   tags,
-		Strict: true,
-	}
+	return SuiteOptionsAt(adapter, FeaturePath)
 }
 
 // Run executes the canonical corpus through one strict adapter.
 func Run(t *testing.T, adapter Adapter, driver Driver) {
 	t.Helper()
-	defer driver.Close()
-
-	bindings := driver.Bindings()
-	if err := Verify(adapter, bindings); err != nil {
-		t.Fatal(err)
-	}
-
-	options := SuiteOptions(adapter)
-	options.TestingT = t
-	initialize := func(scenarioContext *godog.ScenarioContext) {
-		scenarioContext.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-			driver.Reset()
-
-			return ctx, nil
-		})
-
-		for _, binding := range bindings {
-			scenarioContext.Step(binding.Pattern, binding.Handler)
-		}
-	}
-
-	status := godog.TestSuite{
-		Name:                "hippo-" + adapter.Name,
-		ScenarioInitializer: initialize,
-		Options:             options,
-	}.Run()
-
-	if status != 0 {
-		t.Fatalf("%s behavior suite exited %d", adapter.Name, status)
-	}
+	RunAt(t, adapter, driver, FeaturePath)
 }
 
 // ValidateScenarioStructure requires an explicit action and outcome.
@@ -531,9 +504,9 @@ type corpusInspection struct {
 	astScenarios    int
 }
 
-func countDiskFeatures() (int, error) {
+func countDiskFeaturesAt(featurePath string) (int, error) {
 	count := 0
-	err := filepath.WalkDir(FeaturePath, func(path string, entry fs.DirEntry, walkError error) error {
+	err := filepath.WalkDir(featurePath, func(path string, entry fs.DirEntry, walkError error) error {
 		if walkError != nil {
 			return walkError
 		}
@@ -648,34 +621,5 @@ func combineErrors(errorsFound []error) error {
 
 // Verify validates the recursive corpus, bindings, structure, and one adapter policy.
 func Verify(adapter Adapter, bindings []StepBinding) error {
-	corpusOptions := &godog.Options{Paths: []string{FeaturePath}, Strict: true}
-	features, err := (godog.TestSuite{Options: corpusOptions}).RetrieveFeatures()
-	if err != nil {
-		return fmt.Errorf("retrieve behavior corpus: %w", err)
-	}
-
-	diskFeatures, err := countDiskFeatures()
-	if err != nil {
-		return fmt.Errorf("walk behavior corpus: %w", err)
-	}
-	if diskFeatures == 0 || len(features) != diskFeatures {
-		return fmt.Errorf("parsed %d of %d canonical behavior features", len(features), diskFeatures)
-	}
-
-	inspection := corpusInspection{}
-
-	for _, feature := range features {
-		mergeInspection(&inspection, inspectFeature(feature.Uri, feature.Feature, feature.Pickles))
-	}
-
-	if inspection.astScenarios == 0 || len(inspection.scenarios) == 0 {
-		inspection.structuralError = append(inspection.structuralError, errors.New("behavior corpus has no scenarios"))
-	}
-	inspection.structuralError = append(inspection.structuralError, ValidateBindings(bindings, inspection.steps)...)
-	inspection.structuralError = append(inspection.structuralError, ValidateExemptions(adapter, inspection.scenarios)...)
-	if runnableScenarios(adapter, inspection.scenarios) == 0 {
-		inspection.structuralError = append(inspection.structuralError, fmt.Errorf("%s adapter runs no scenarios", adapter.Name))
-	}
-
-	return combineErrors(inspection.structuralError)
+	return VerifyAt(adapter, bindings, FeaturePath)
 }

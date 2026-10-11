@@ -8,6 +8,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	evidencedomain "github.com/wahidyankf/hippo/internal/domain/evidence"
+	"github.com/wahidyankf/hippo/internal/identity"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -15,6 +16,7 @@ import (
 // RunConfig describes one guarded child process and its resource policy.
 type RunConfig struct {
 	Command                               string
+	Label                                 identity.DisplayLabel
 	Arguments                             []string
 	TaskClass                             policy.TaskClass
 	WorkingDirectory                      string

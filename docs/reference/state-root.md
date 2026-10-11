@@ -19,18 +19,19 @@ raw samples and summaries instead — see [JSON schemas](./json-schemas.md).
 
 ### Coordination
 
-| File                                    | Purpose                                                             |
-| --------------------------------------- | ------------------------------------------------------------------- |
-| `coordination.lock`                     | Short advisory lock protecting coordination and session mutations   |
-| `coordination-mode.json`                | Schema-1 active mode marker: `exclusive` or `reservation`           |
-| `reservations.json`                     | Schema-2 vectors, FIFO waiters, owners, and numeric shedding cause  |
-| `owner-metadata/<token>.json`           | Schema-1 safe labels, tier bounds, registration time, and deadline  |
-| `reservation-identities/<token>.lock`   | Advisory liveness proof resistant to stale or reused PIDs           |
-| `reservation-identities/<token>.anchor` | Same-inode recovery anchor for a live reservation identity          |
-| `heavy.lock/owner.json`                 | Exclusive heavy-work owner retained for the guarded child lifecycle |
-| `sessions/<token>.json`                 | Private inheritable live-session record                             |
-| `.coordination-mode-*.tmp`              | Protected atomic-write staging for the active mode marker           |
-| `.reservations-*.tmp`                   | Protected atomic-write staging for the reservation ledger           |
+| File                                    | Purpose                                                              |
+| --------------------------------------- | -------------------------------------------------------------------- |
+| `coordination.lock`                     | Short advisory lock protecting coordination and session mutations    |
+| `coordination-mode.json`                | Schema-1 active mode marker: `exclusive` or `reservation`            |
+| `reservations.json`                     | Schema-2 vectors, FIFO waiters, owners, and numeric shedding cause   |
+| `owner-metadata/<token>.json`           | Strict schema-1 source/tags, tier bounds, registration, and deadline |
+| `run-display/<token>.json`              | Separate private schema-1 display label for a live run               |
+| `reservation-identities/<token>.lock`   | Advisory liveness proof resistant to stale or reused PIDs            |
+| `reservation-identities/<token>.anchor` | Same-inode recovery anchor for a live reservation identity           |
+| `heavy.lock/owner.json`                 | Exclusive heavy-work owner retained for the guarded child lifecycle  |
+| `sessions/<token>.json`                 | Private inheritable live-session record                              |
+| `.coordination-mode-*.tmp`              | Protected atomic-write staging for the active mode marker            |
+| `.reservations-*.tmp`                   | Protected atomic-write staging for the reservation ledger            |
 
 `reservations.json` and `coordination-mode.json` exist only while an epoch is live. An idle root legitimately has
 neither.
@@ -43,6 +44,27 @@ coordination. See [Exit codes](./exit-codes.md#error-codes).
 Port leases taken with `run --lease-port` are not kept in the state root. They live in `hippo-port-leases` under the
 temporary directory (`TMPDIR`, else `/tmp`), and a write refused there before launch names `hippo.lease.unwritable`
 instead.
+
+### Display annotations
+
+The unreleased TUI reads optional display context from `run-display/<token>.json`. Each schema-1 record contains exactly
+`schemaVersion`, `runId`, and `label`, with a complete run ID matching its filename. Reads are bounded at 512 bytes.
+Publication is atomic through a private `0700` directory and `0600` file. Labels follow the
+[`run --label` validation and basename fallback](./cli.md#hippo-run); they never include captured arguments or paths.
+
+This advisory record is separate from strict `owner-metadata`, the reservation ledger, and public status JSON. Older
+binaries ignore its directory; no new field is added to their existing records. Missing, invalid, unsupported-version,
+or unreadable annotations make display context unavailable without replacing known accounting with zeroes. Annotation
+publication or removal failure produces an advisory and does not change admission, child lifecycle, or the established
+status exit result.
+
+Only a newly owned run publishes its annotation. An inherited session keeps the enclosing owner's label and cannot
+overwrite or retire it. Removal follows confirmed owned-token retirement. Under the coordination lock, housekeeping
+prunes supported, validated annotations only after a complete liveness census proves their tokens nonlive, plus
+recognized expired regular annotation temporaries. It does not follow symlinks. Unsupported, invalid, unreadable, or
+unverifiably live annotations remain; retained unknown state has no unconditional storage bound.
+
+Final mixed-version and native lifecycle acceptance against the release build remains pending.
 
 ### Evidence
 
@@ -76,7 +98,8 @@ sessions
 ```
 
 The other directories appear only once something writes them: `owner-metadata/` when reservation mode admits an owner,
-`receipts/` when a receipt is written, and `raw/` and `history/` when a previous day's completed streams are compacted.
+`run-display/` when a display annotation is published, `receipts/` when a receipt is written, and `raw/` and `history/`
+when a previous day's completed streams are compacted.
 
 ## Evidence budget
 

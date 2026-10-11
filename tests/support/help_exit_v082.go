@@ -19,10 +19,14 @@ var helpExitLine = regexp.MustCompile(`^\s+([0-9]+)\s+(.+)$`)
 // publishes and open with the meaning the reference gives it, and every
 // published status must have its line.
 func (driver *Driver) requireHelpExitBlockMatchesReference() error {
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}
-	document, err := os.ReadFile(filepath.Join(toolRoot(), "docs", "reference", "exit-codes.md"))
+	document, err := os.ReadFile(filepath.Join(repository, "docs", "reference", "exit-codes.md"))
 	if err != nil {
 		return err
 	}

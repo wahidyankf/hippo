@@ -2,18 +2,20 @@ package support
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/wahidyankf/hippo/tests/contract"
 )
 
 // testBuildVersion is the version every harness-built binary carries.
-// tests/e2e/run.sh and the quick gate stamp the same value, with an all-zero
+// tests/e2e/run.sh and RunCompiled stamp the same value, with an all-zero
 // commit, and the scenario "Version identifies the exact build" requires it.
 const testBuildVersion = "v0.0.0-test"
 
@@ -57,12 +59,31 @@ func e2eBinary(inherited string) (string, func(), error) {
 	if inherited != "" && requireTestStamp(inherited) == nil {
 		return inherited, func() {}, nil
 	}
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return "", func() {}, rootError
+	}
 	parent := os.Getenv("HIPPO_E2E_TEMP_PARENT")
 	directory, err := os.MkdirTemp(parent, "hippo-e2e-")
 	if err != nil {
 		return "", func() {}, err
 	}
 	cleanup := func() { _ = os.RemoveAll(directory) } //nolint:gosec // The directory is the one MkdirTemp just created for this build.
+	// Register the acquired path first: failed resolution still owns cleanup.
+	canonical, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	if !filepath.IsAbs(canonical) || filepath.Clean(canonical) != canonical {
+		cleanup()
+		return "", func() {}, fmt.Errorf("candidate build directory is not a clean absolute path: %s", canonical)
+	}
+	if err := validateOwnedCandidateDirectory(canonical); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	directory = canonical
 	binary := filepath.Join(directory, "hippo")
 	goBinary := os.Getenv("HIPPO_GO_BINARY")
 	if goBinary == "" {
@@ -73,7 +94,7 @@ func e2eBinary(inherited string) (string, func(), error) {
 		"-X github.com/wahidyankf/hippo/internal/adapters/cli.Version="+testBuildVersion+
 			" -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit="+strings.Repeat("0", 40),
 		"-o", binary, "./cmd/hippo")
-	build.Dir = toolRoot()
+	build.Dir = repository
 	build.Env = append(os.Environ(), "GOMAXPROCS=2")
 	if output, buildError := build.CombinedOutput(); buildError != nil {
 		cleanup()
@@ -82,6 +103,35 @@ func e2eBinary(inherited string) (string, func(), error) {
 	}
 
 	return binary, cleanup, nil
+}
+
+func validateOwnedCandidateDirectory(canonical string) error {
+	resolved, err := filepath.EvalSymlinks(canonical)
+	if err != nil {
+		return err
+	}
+	if resolved != canonical {
+		return errors.New("candidate build directory contains a symlink")
+	}
+	root, err := os.OpenRoot(canonical)
+	if err != nil {
+		return err
+	}
+	info, statError := root.Lstat(".")
+	if err := errors.Join(statError, root.Close()); err != nil {
+		return err
+	}
+	if info == nil {
+		return errors.New("candidate build directory inspection returned no identity")
+	}
+	if !info.IsDir() || info.Mode().Perm() != 0o700 {
+		return errors.New("candidate build directory is not private and owned")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || int64(stat.Uid) != int64(os.Getuid()) {
+		return errors.New("candidate build directory has a foreign owner")
+	}
+	return nil
 }
 
 func (driver *Driver) e2eBinaryBindings() []contract.StepBinding {

@@ -23,6 +23,8 @@ type RunConfiguration interface {
 // RunRequest carries parsed guarded-work arguments.
 type RunRequest struct {
 	Command                                                            []string
+	Label                                                              string
+	LabelSet                                                           bool
 	Class                                                              policy.TaskClass
 	ConfigPath, WorkingDir, DiskPath, LeaseOwner, ResourceTier, Source string
 	RequestedProfile                                                   policy.ProfileName
@@ -87,9 +89,9 @@ func admissionWaitConflict(schemaVersion int, resourceTier string, wait time.Dur
 	}
 }
 
-// runIdentity resolves the labels a run carries. A run that needs no identity
-// — no labels asked for, no identity file present, schema below 3 — is
-// unlabeled rather than refused.
+// runIdentity resolves the source and tags a run carries. A run that needs no identity
+// — no source or tags requested, no identity file present, schema below 3 — is
+// unlabeled rather than refused. Display labels do not participate in this identity.
 func (application RunEntryServices) runIdentity(options RunRequest, schemaVersion int) (identity.Value, error) {
 	identityPresent := application.Configuration.IdentityPresent(environmentMap(application.Environment), options.WorkingDir)
 	if schemaVersion < 3 && options.Source == "" && len(options.Tags) == 0 && !identityPresent {
@@ -115,7 +117,15 @@ func (application RunEntryServices) runIdentity(options RunRequest, schemaVersio
 }
 
 // Execute prepares policy, identity, promotion and allocation before running one workload.
-func (application RunEntryServices) Execute(ctx context.Context, options RunRequest) (int, error) { //nolint:cyclop,funlen,gocognit // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
+func (application RunEntryServices) Execute(ctx context.Context, options RunRequest) (int, error) {
+	label, labelError := prepareRunDisplay(options)
+	if labelError != nil {
+		return 0, labelError
+	}
+	return application.executePrepared(ctx, options, label)
+}
+
+func (application RunEntryServices) executePrepared(ctx context.Context, options RunRequest, label identity.DisplayLabel) (int, error) { //nolint:cyclop,funlen,gocognit // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
 	if options.WorkingDir != "" {
 		absolute, err := application.Configuration.AbsolutePath(options.WorkingDir)
 		if err != nil {
@@ -249,6 +259,7 @@ func (application RunEntryServices) Execute(ctx context.Context, options RunRequ
 
 	config := RunConfig{
 		Command:                options.Command[0],
+		Label:                  label,
 		Arguments:              options.Command[1:],
 		TaskClass:              taskClass,
 		WorkingDirectory:       options.WorkingDir,
@@ -280,4 +291,19 @@ func (application RunEntryServices) Execute(ctx context.Context, options RunRequ
 		ObserveChildStatus:            options.ObserveChild,
 	}
 	return application.Run.Run(ctx, config)
+}
+
+func prepareRunDisplay(options RunRequest) (identity.DisplayLabel, error) {
+	if options.LabelSet {
+		label, err := identity.ParseDisplayLabel(options.Label)
+		if err != nil {
+			return identity.DisplayLabel{}, status.Failure{Code: status.CodeArgsInvalid, Field: "--label", Message: "--label: " + err.Error()}
+		}
+		return label, nil
+	}
+	command := ""
+	if len(options.Command) > 0 {
+		command = options.Command[0]
+	}
+	return ResolveDisplayLabel(command, identity.DisplayLabel{}), nil
 }

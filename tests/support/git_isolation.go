@@ -104,9 +104,13 @@ func (driver *Driver) requireNamedRepositoryUnchanged() error {
 }
 
 func (driver *Driver) inspectGateScriptIsolation() error {
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	driver.gateScripts = make(map[string]string, len(gateScriptNames))
 	for _, name := range gateScriptNames {
-		data, err := os.ReadFile(filepath.Join(toolRoot(), name))
+		data, err := os.ReadFile(filepath.Join(repository, name))
 		if err != nil {
 			return err
 		}

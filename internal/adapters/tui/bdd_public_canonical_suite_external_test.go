@@ -1,0 +1,57 @@
+package tui_test
+
+import "testing"
+
+// Execute all non-exempt original public TUI rows after complete registry verification.
+// Six owner-approved terminal-fault rows remain required at Unit/Integration.
+func TestTUIBDDPublicCanonicalSuite(t *testing.T) {
+	runPublicCanonicalSelection(t, "~@e2e-exempt && @tui-cli,~@e2e-exempt && @tui-compatibility,~@e2e-exempt && @tui-gates,~@e2e-exempt && @tui-keys-01,~@e2e-exempt && @tui-keys-02,~@e2e-exempt && @tui-keys-03,~@e2e-exempt && @tui-keys-04,~@e2e-exempt && @tui-keys-05,~@e2e-exempt && @tui-keys-06,~@e2e-exempt && @tui-label,~@e2e-exempt && @tui-label-01,~@e2e-exempt && @tui-label-02,~@e2e-exempt && @tui-refresh-01,~@e2e-exempt && @tui-refresh-02,~@e2e-exempt && @tui-refresh-03,~@e2e-exempt && @tui-refresh-04,~@e2e-exempt && @tui-refresh-05,~@e2e-exempt && @tui-refresh-06,~@e2e-exempt && @tui-refresh-07,~@e2e-exempt && @tui-refresh-08,~@e2e-exempt && @tui-refresh-09,~@e2e-exempt && @tui-resources-01,~@e2e-exempt && @tui-resources-02,~@e2e-exempt && @tui-snapshot-01,~@e2e-exempt && @tui-snapshot-02,~@e2e-exempt && @tui-snapshot-03,~@e2e-exempt && @tui-snapshot-04,~@e2e-exempt && @tui-snapshot-05,~@e2e-exempt && @tui-snapshot-06,~@e2e-exempt && @tui-snapshot-07,~@e2e-exempt && @tui-synthetic-text,~@e2e-exempt && @tui-terminal,~@e2e-exempt && @tui-views-01,~@e2e-exempt && @tui-views-02,~@e2e-exempt && @tui-views-03,~@e2e-exempt && @tui-views-04,~@e2e-exempt && @tui-views-05,~@e2e-exempt && @tui-views-06,~@e2e-exempt && @tui-views-07", map[string]int{
+		"Explicit display labels are visible before reservation ownership is published": 1,
+		"Queued work publishes its display label before admission":                      1,
+		"A default display label uses only the executable basename":                     1,
+		"Invalid explicit display labels fail before registration":                      6,
+		"Exclusive owners publish the same advisory label metadata":                     1,
+		"Inherited runs preserve the original owner's display label":                    1,
+		"Owned display annotations retire with their owned tokens":                      4,
+		"Advisory annotation failures preserve guarded run outcomes":                    2,
+		"Annotation cleanup requires positive stale ownership evidence":                 1,
+		"Mixed versions coordinate without requiring display metadata":                  1,
+		"TUI help exposes observation options without opening a terminal":               1,
+		"Invalid TUI options are rejected before observation and terminal entry":        6,
+		"Source validation precedes tag validation for TUI requests":                    1,
+		"TUI refuses unsupported terminal surfaces before observation":                  3,
+		"Terminal capability inspection failures are supervision failures":              1,
+		"Quit works from every TUI surface":                                             5,
+		"TUI interruption preserves the signal status and terminal state":               3,
+		"TUI observation preserves running identities and FIFO demand":                  1,
+		"TUI filtering retains global accounting and original queue positions":          1,
+		"TUI observation uses the current shared status evidence":                       1,
+		"An idle TUI does not create coordination ownership":                            1,
+		"Exclusive monitoring names its unregistered queue limitation":                  1,
+		"Legacy reservation rows retain known allocation vectors":                       1,
+		"Annotations join only the complete live job identity":                          1,
+		"Unusable annotations leave live accounting intact":                             7,
+		"Default refresh starts five seconds after completion":                          1,
+		"Repeated refresh requests coalesce while observation is busy":                  1,
+		"Navigation and resize remain usable during collection":                         1,
+		"Initial observation failure does not invent empty accounting":                  1,
+		"Failed refresh preserves the last good snapshot as stale":                      1,
+		"Successful refresh clears stale and error markers":                             1,
+		"Sample age advances without collecting again":                                  1,
+		"Exiting a busy TUI ignores late observations":                                  1,
+		"Reservation resources are named separately from host utilization":              1,
+		"Each viewport uses a bounded appropriate layout":                               10,
+		"Too-small view recovers without losing live selection":                         1,
+		"Untrusted display text cannot escape its cell budget":                          1,
+		"Large lists scroll while retaining the selected identity":                      1,
+		"A disappearing selection moves to the nearest surviving row":                   1,
+		"A disappeared detail remains navigable":                                        1,
+		"Empty panels have no false selection":                                          1,
+		"Dashboard keyboard actions reach their declared destination":                   11,
+		"Detail and help scroll and return without a focus trap":                        15,
+		"Manual refresh is reachable from every view":                                   5,
+		"Help explains every product function using modifier-free keys":                 1,
+		"Unrelated keys do not capture host navigation":                                 8,
+		"No-color output retains every state distinction":                               1,
+	}, 119, 420)
+}

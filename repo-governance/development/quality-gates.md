@@ -4,63 +4,94 @@ What runs, where, and in what order.
 
 ## Locally
 
-Each hook runs `./rhino gate run --surface <hook>`; [`repo-config.yml`](../../repo-config.yml) declares the gates each
-surface runs, and `./rhino gate list` prints them.
+Hooks run `./rhino gate run --surface <hook>`; [`repo-config.yml`](../../repo-config.yml) declares their gates;
+`./rhino gate list` lists them.
 
-- **`commit-msg`** — the public-safety message screen, then commitlint through `scripts/check-commit-message.sh`:
-  Conventional Commits, on every commit.
-- **`pre-commit`** — the public-safety tree screen, then `scripts/format-staged.sh`: `goimports` and `gofumpt` over
-  staged Go, `shfmt` over staged shell, Prettier over staged JSON, Markdown, and YAML.
-- **`pre-push`** — the public-safety range screen (commit by commit), `shell-lint`, the quick gate, repository
-  configuration, and the documentation gates, unguarded.
-- **`shell-lint`** — on `pre-push` and in the pull-request replay: the checksum-pinned ShellCheck at
-  `--severity=warning` over every shell file `scripts/shell-files.sh` lists, the same list the format check hands
-  `shfmt`.
+- **`commit-msg`**: public-safety message screen, then `scripts/check-commit-message.sh` commitlint: Conventional
+  Commits on every commit.
+- **`pre-commit`**: public-safety tree screen, then `scripts/format-staged.sh`: staged Go `goimports`/`gofumpt`, shell
+  `shfmt`, JSON/Markdown/YAML Prettier.
+- **`pre-push`**: public-safety range screen per commit, `shell-lint`, quick gate, repository configuration and
+  documentation gates, unguarded.
+- **`shell-lint`**: pre-push/PR replay runs checksum-pinned ShellCheck `--severity=warning` on every
+  `scripts/shell-files.sh` entry; formatting uses that same list for `shfmt`.
 
-Install them with `npm ci`. A worktree whose hooks never ran pushes unverified work — see
-[integration path](../conventions/integration-path.md).
+`npm ci` installs hooks. Unrun hooks mean unverified pushes: [integration path](../conventions/integration-path.md).
 
 ## The Quick Gate
 
-`scripts/test-quick.sh`, in order: the worktree layout check, formatting, whole-module compilation, strict lint,
-NilAway, the production-import check and its negative fixtures under `tests/architecture`, the tests of every package
-under `./cmd/...` and `./internal/...` plus `tests/support` and `tests/coverage`; the `tests/unit` corpus and the
-application, coordination-domain, evidence-domain, identity, and status package tests together under deterministic core
-coverage at 99%, the three behaviour adapters serially, and artifact policy. The domain literal analysis runs as a
-behaviour scenario in the corpus and the adapters. The
-[repository adapter](quality/stacks/repository-adapter/001-go-analysis-gates.md) records these analysis gates.
-Documentation hygiene is not in it; it runs as its own gates on the same surfaces.
+`scripts/test-quick.sh` must retain this order: layout, formatting, whole-module compilation, strict lint, NilAway,
+import graph/negative fixtures, package tests, deterministic coverage, serial compliance, artifact policy. Retain all
+cmd/internal/support/coverage/host tests, contract self-tests and `tests/bdd` negatives.
 
-Every package holding a `_test.go` file must be run by a `go test` pattern in `scripts/test-quick.sh`,
-`scripts/test.sh`, or `tests/e2e/run.sh`; the compile-only `-run '^$'` line does not count. The scenario "Every package
-with tests runs in a gate" holds that list complete, so a new package cannot land with tests that never execute.
+Ordinary support `TestMain` uses `RunCompiled`: it keeps an inherited `HIPPO_BIN` carrying the test stamp, or builds a
+temporary candidate from the current tree and removes it afterwards. This setup also runs when `-run '^$'` selects no
+tests. These private fixture controls follow [E2E placement](end-to-end-testing.md#placement); acquiring their candidate
+does not execute the canonical E2E corpus.
 
-Order is deliberate. The cheapest failure to read comes first, so a formatting mistake does not cost a coverage run to
-discover.
+Ordinary selection excludes four [BDD suite host](behaviour-driven-development.md#suite-host) entries and exactly five
+compiled-only entries: `TestTUIBDDPublicCanonicalSuite`, `TestTUIBDDPublicObservationCanonical`,
+`TestTUIBDDPublicSessionHolderSignals`, `TestTUIBDDPublicPSHelperStartupDiagnostic`,
+`TestTUIBDDPublicStatusPostQueryStackDiagnostic`. Anchor exact names; execute other direct TUI tests. Coverage retains
+`TestUnitBehaviours`, excludes the other eight entries and runs relocated Unit once alongside existing `tests/unit` and
+pure-package selectors. Retain `-coverpkg` denominator, leaf selectors, exclusions, 99% floor and executing domain
+literal analysis.
+
+Run full-registry compliance serially, Unit then Integration then E2E:
+
+```sh
+HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
+HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
+HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
+```
+
+Static compliance does not execute scenarios or start a compiled candidate. Mode/selector registrations and
+discriminating fixtures exist; execution and final acceptance remain open, with existing obligations until replacements
+execute. See [analysis adoption](quality/stacks/repository-adapter/001-go-analysis-gates.md); documentation hygiene runs
+separately on the same surfaces.
+
+Every `_test.go` package must execute via a `go test` pattern in `scripts/test-quick.sh`, `scripts/test.sh`, or
+`tests/e2e/run.sh`; compile-only `-run '^$'` does not count. "Every package with tests runs in a gate" keeps that
+inventory complete. Cheapest failures precede coverage to avoid wasted runs.
 
 ## The Full Gate
 
-`scripts/test.sh` adds the integration adapter, compiled end-to-end behaviour, a race-detected pass over every
-`./cmd/...` and `./internal/...` package, `tests/support`, and the unit and integration corpora, and `govulncheck`. It
-is the release gate, and CI runs it on `ubuntu-24.04` and `macos-15`.
+`scripts/test.sh` must retain existing `tests/integration` plus relocated `TestIntegrationBehaviours`, explicitly
+`HIPPO_BDD_SUITE=integration`. `tests/e2e/run.sh` must retain direct E2E plus relocated `TestE2EBehaviours`, explicitly
+`HIPPO_BDD_SUITE=e2e`, against one temporary stamped candidate. Run `TestTUIBDDPublicCanonicalSuite`,
+`TestTUIBDDPublicObservationCanonical`, `TestTUIBDDPublicSessionHolderSignals` serially with explicit E2E suite/adapter,
+that candidate and prepared helper. Each entry runs once, without skips; retain the full corpus and every non-exempt
+canonical public row. Owner-approved terminal-fault E2E deferrals in [BDD](behaviour-driven-development.md#suite-host)
+retain six rows/29 steps at Unit/Integration. `TestTUIBDDPublicSessionHolderSignals` also requires compiled
+`readonly-output/plain` and `readonly-output/global-json` regressions alongside every other gate.
 
-Both gates keep Go's default ten-minute per-package test timeout, sized for an idle machine. On a loaded workstation
-`tests/unit` alone has run for over seven minutes, so a local run there raises it, for example with
-`GOFLAGS=-timeout=30m`; `scripts/test-loaded.sh` sets its own, `HIPPO_LOAD_TEST_TIMEOUT` defaulting to 60 minutes. No
-gate checks this: it depends on whoever runs the gate.
+[Immutable old-release preparation](../../tests/e2e/README.md) precedes public execution. PS-startup/post-query
+diagnostics use exact task selection and satisfy no acceptance scenario.
+
+Race retains cmd/internal/support/unit/integration patterns, adds contract self-tests/relocated Unit and explicitly
+selects relocated Integration. Retain `govulncheck`. Selector fixtures must fail on removal of any host, mode, coverage,
+Integration/E2E, race or serial compliance registration. Preserve host/artifact/release inventory. Full remains the
+release gate on `ubuntu-24.04`/`macos-15`.
+
+The [terminal contract](../conventions/command-line-interface/007-terminal-and-environment.md) requires genuine PTY
+lifecycle and separate native host proof; fake callbacks do not establish terminal restoration.
+
+Both gates retain Go's default ten-minute per-package idle-machine timeout. Loaded `tests/unit` has exceeded seven
+minutes: raise it locally, e.g. `GOFLAGS=-timeout=30m`. `scripts/test-loaded.sh` instead uses `HIPPO_LOAD_TEST_TIMEOUT`,
+default 60 minutes. This operator choice has no gate check.
+
+Reviewers compare this document, BDD owner and actual scripts to distinguish static compliance from executing suites; no
+summary-text check enforces that distinction.
 
 ## In CI
 
-[`pr-quality-gate.yml`](../../.github/workflows/pr-quality-gate.yml) mirrors every hook contract and absorbs everything
-the retired `ci.yml` ran. Its aggregate check, `Quality gate`, treats a skipped or cancelled job as failure, because a
-skipped required check never reports at all. The ruleset requires it and the `leak-review` status that
-[`leak-review.yml`](../../.github/workflows/leak-review.yml) publishes from the posted
-[leak review](../workflows/quality/pr-leak-review/003-enforcement.md). Workflow storage stays inside the free allowance:
+[`pr-quality-gate.yml`](../../.github/workflows/pr-quality-gate.yml) mirrors hooks and retired `ci.yml`. Its aggregate
+`Quality gate` fails skipped/cancelled jobs because skipped required checks never report. The ruleset requires it and
+`leak-review`, published by [`leak-review.yml`](../../.github/workflows/leak-review.yml) from the posted
+[leak review](../workflows/quality/pr-leak-review/003-enforcement.md). Keep storage within the free allowance:
 [GitHub Actions storage](github-actions-storage.md).
 
 ## Never Nx
 
-This repository does not use Nx and must not acquire it. `npm run test:quick` and `npm test` are the two entry points,
-and both call a shell script directly.
-
-Failures are repaired at the cause. See [push hook verification](../conventions/push-hook-verification.md).
+Never adopt Nx. `npm run test:quick` and `npm test` directly invoke shell scripts. Repair failure causes:
+[push hook verification](../conventions/push-hook-verification.md).

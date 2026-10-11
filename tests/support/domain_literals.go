@@ -492,7 +492,11 @@ func readDomainSources(root string, pkg listedPackage) (map[string]string, error
 }
 
 func (driver *Driver) runDomainLiteralAnalysis() error {
-	findings, err := analyzeDomainLiterals(toolRoot())
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
+	findings, err := analyzeDomainLiterals(repository)
 	if err != nil {
 		return err
 	}

@@ -84,11 +84,6 @@ func coordinationProtocolMismatch(reason string) error {
 	return fmt.Errorf("%w: %s; drain or upgrade the incompatible client before retrying", ErrCoordinationProtocolMismatch, reason)
 }
 
-type coordinationMarker struct {
-	SchemaVersion int    `json:"schemaVersion"`
-	Mode          string `json:"mode"`
-}
-
 func coordinationMarkerPath(root string) string {
 	return filepath.Join(root, "coordination-mode.json")
 }
@@ -248,7 +243,13 @@ func acquireCoordinationLock(ctx context.Context, root string, wait time.Duratio
 }
 
 func lockCoordinationForRelease(root string) (*os.File, error) {
-	return acquireCoordinationLock(context.Background(), root, coordinationLifecycleWait)
+	return lockCoordinationForReleaseContext(context.Background(), root)
+}
+
+func lockCoordinationForReleaseContext(ctx context.Context, root string) (*os.File, error) {
+	// Retirement must survive caller cancellation while retaining its context
+	// values and the same finite coordination-lock allowance as legacy release.
+	return acquireCoordinationLock(context.WithoutCancel(ctx), root, coordinationLifecycleWait)
 }
 
 func lockCoordinationForActivation(root string) (*os.File, error) {
@@ -359,7 +360,11 @@ func writeCoordinationMarker(root string, marker coordinationMarker) (returnErro
 	if err = temporary.Chmod(0o600); err != nil {
 		return err
 	}
-	if err = json.NewEncoder(temporary).Encode(marker); err != nil {
+	data, err := marker.Encode()
+	if err != nil {
+		return err
+	}
+	if _, err = temporary.Write(data); err != nil {
 		return err
 	}
 	if err = temporary.Sync(); err != nil {
@@ -375,10 +380,7 @@ func ensureExclusiveCoordination(root string) error {
 		return err
 	}
 	if !present {
-		return writeCoordinationMarker(root, coordinationMarker{
-			SchemaVersion: coordinationSchemaVersion,
-			Mode:          coordinationModeExclusive,
-		})
+		return writeCoordinationMarker(root, NewExclusiveCoordinationMarker())
 	}
 	if marker.Mode == coordinationModeReservation {
 		return coordinationProtocolMismatch("reservation mode is active")
