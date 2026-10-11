@@ -2,16 +2,92 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
 )
+
+func TestRecorderMatchingCaptureDeadline(t *testing.T) {
+	for _, late := range []bool{false, true} {
+		t.Run(fmt.Sprintf("capture-after-deadline-%t", late), func(t *testing.T) {
+			directory := t.TempDir()
+			for _, name := range []string{"captures", "events"} {
+				if err := os.Mkdir(filepath.Join(directory, name), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, after := "Running run-A\n", "Queue wait-A\n"
+			beforePath, receiptPath := filepath.Join(directory, "before.txt"), filepath.Join(directory, "input.txt")
+			document := evidenceDocument{Host: hostTmux, Target: hostTarget{Socket: "hippo-tui-fixture", Pane: "%1", OwnerToken: strings.Repeat("a", 32)}, Candidate: recordedCandidate{BinarySHA256: digest("candidate")}}
+			receipt := fmt.Sprintf("origin=host-native-input\nhost=tmux\nstep=40x16-tab\ninput=tab\npane=%%1\nownerToken=%s\nviewport=40x16\nbinarySHA256=%s\ncommand=controlled input receipt\nstatus=0\nbeforeCaptureSHA256=%s\ncaptureSHA256=%s\n", document.Target.OwnerToken, document.Candidate.BinarySHA256, digest(before), digest(after))
+			for name, content := range map[string]string{beforePath: before, receiptPath: receipt} {
+				if err := os.WriteFile(name, []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			limit := time.Second
+			if late {
+				limit = time.Millisecond
+			}
+			options := cliOptions{evidence: directory, step: "40x16-tab", expect: "Queue wait-A", beforeCapture: beforePath, inputReceipt: receiptPath, wait: limit}
+			calls := 0
+			wait := func(ctx context.Context, supplied time.Duration, host string, target hostTarget, step recordedStep) ([]byte, error) {
+				if supplied != limit || host != document.Host || target != document.Target {
+					t.Fatal("original wait limit or owned capture target changed")
+				}
+				bounded, cancel := context.WithTimeout(ctx, supplied)
+				defer cancel()
+				return pollCapture(bounded, host, target, step, func(actual context.Context, _ string, _ hostTarget) ([]byte, error) {
+					calls++
+					if actual != bounded {
+						t.Fatal("capture lost the original bounded context")
+					}
+					if late {
+						<-actual.Done()
+						if actual.Err() != context.DeadlineExceeded {
+							t.Fatal("late matching capture did not cross the original deadline")
+						}
+					}
+					return []byte(after), nil
+				})
+			}
+			err := driveStep(context.Background(), options, &document, wait)
+			if calls != 1 || len(document.Steps) != 1 {
+				t.Fatalf("actual capture/action path was not executed exactly once: calls%d steps%d", calls, len(document.Steps))
+			}
+			step := document.Steps[0]
+			afterPath := filepath.Join(directory, "captures", "40x16-tab.txt")
+			if late {
+				if err == nil || !strings.Contains(err.Error(), "timed out") {
+					t.Errorf("matching capture after original deadline was accepted: %v", err)
+				}
+				if step.Outcome != "failed" || step.Capture != (artifact{}) {
+					t.Errorf("late action or accepted capture was retained incorrectly: %+v", step)
+				}
+				if _, err := os.Stat(afterPath); !os.IsNotExist(err) {
+					t.Errorf("accepted aftercapture was published after deadline: %v", err)
+				}
+				return
+			}
+			if err != nil || step.Outcome != "captured" || step.Capture.SHA256 != digest(after) {
+				t.Fatalf("matching in-time capture was refused: %v %+v", err, step)
+			}
+			data, err := os.ReadFile(afterPath)
+			if err != nil || string(data) != after {
+				t.Fatalf("in-time aftercapture bytes were not retained: %v %q", err, data)
+			}
+		})
+	}
+}
 
 func TestEvidenceAcceptsCompleteRecordedSequences(t *testing.T) {
 	for _, host := range []string{"tmux", "neovim", "wezterm"} {

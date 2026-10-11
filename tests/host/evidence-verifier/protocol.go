@@ -46,7 +46,7 @@ func continueRecording(ctx context.Context, options cliOptions) error {
 			return err
 		}
 	case options.step != "":
-		if err := driveStep(ctx, options, &document); err != nil {
+		if err := driveStep(ctx, options, &document, waitCapture); err != nil {
 			return errors.Join(err, publishDocument(options.evidence, document))
 		}
 	default:
@@ -64,7 +64,9 @@ func reportClose(err error) {
 	}
 }
 
-func driveStep(ctx context.Context, options cliOptions, document *evidenceDocument) error {
+type captureWait func(context.Context, time.Duration, string, hostTarget, recordedStep) ([]byte, error)
+
+func driveStep(ctx context.Context, options cliOptions, document *evidenceDocument, wait captureWait) error {
 	plan := sequence(document.Host)
 	index := len(document.Steps)
 	if index >= len(plan) || plan[index].id != options.step {
@@ -78,7 +80,7 @@ func driveStep(ctx context.Context, options cliOptions, document *evidenceDocume
 	}
 	planned := plan[index]
 	step := recordedStep{ID: planned.id, Input: planned.input, Width: planned.width, Height: planned.height, Expected: options.expect, Outcome: "captured", ExpectedExit: planned.exit}
-	step, err := captureStep(ctx, options, document, planned, step)
+	step, err := captureStep(ctx, options, document, planned, step, wait)
 	if err != nil {
 		step.Outcome = "failed"
 	}
@@ -86,7 +88,7 @@ func driveStep(ctx context.Context, options cliOptions, document *evidenceDocume
 	return err
 }
 
-func captureStep(ctx context.Context, options cliOptions, document *evidenceDocument, planned plannedStep, step recordedStep) (recordedStep, error) {
+func captureStep(ctx context.Context, options cliOptions, document *evidenceDocument, planned plannedStep, step recordedStep, wait captureWait) (recordedStep, error) {
 	before, err := sourceCapture(ctx, options.beforeCapture, document.Host, document.Target)
 	if err != nil {
 		return step, err
@@ -111,7 +113,7 @@ func captureStep(ctx context.Context, options cliOptions, document *evidenceDocu
 			err = verifyCaptureCells(string(after), step.Width, step.Height)
 		}
 	} else {
-		after, err = waitCapture(ctx, options.wait, document.Host, document.Target, step)
+		after, err = wait(ctx, options.wait, document.Host, document.Target, step)
 	}
 	if err != nil {
 		return step, err
@@ -156,10 +158,14 @@ func sourceCapture(ctx context.Context, file, host string, target hostTarget) ([
 func waitCapture(ctx context.Context, limit time.Duration, host string, target hostTarget, step recordedStep) ([]byte, error) {
 	bounded, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
+	return pollCapture(bounded, host, target, step, captureTarget)
+}
+
+func pollCapture(bounded context.Context, host string, target hostTarget, step recordedStep, capture func(context.Context, string, hostTarget) ([]byte, error)) ([]byte, error) {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		capture, err := captureTarget(bounded, host, target)
+		capture, err := capture(bounded, host, target)
 		if err != nil {
 			if errors.Is(bounded.Err(), context.DeadlineExceeded) {
 				return nil, fmt.Errorf("visible predicate wait timed out; action is not passed: %w", err)
@@ -169,6 +175,9 @@ func waitCapture(ctx context.Context, limit time.Duration, host string, target h
 		if strings.Contains(string(capture), step.Expected) {
 			if err := verifyCaptureCells(string(capture), step.Width, step.Height); err != nil {
 				return nil, err
+			}
+			if err := bounded.Err(); err != nil {
+				return nil, fmt.Errorf("visible predicate wait timed out; action is not passed: %w", err)
 			}
 			return capture, nil
 		}
