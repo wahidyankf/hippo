@@ -2,6 +2,10 @@
 
 The cycle, and the evidence each step owes.
 
+Follow
+[Focused Runs and Regression Gates](../../development/test-driven-development.md#focused-runs-and-regression-gates) for
+local selections, execution evidence, and complete boundary verification.
+
 ## RED
 
 Write the failing test. **Run it, and read what it said.** Capture the output — the message, the boundary, the assertion

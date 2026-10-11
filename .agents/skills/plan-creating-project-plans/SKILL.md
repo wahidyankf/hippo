@@ -83,3 +83,7 @@ Items shipping executable behaviour follow the test-first grammar recorded under
 Under the split cycle, red, green, and refactor are separate items naming test path, command, and expected result,
 repeated per behaviour. Under either choice the item names the test before the production path, as
 [Test-Driven Development](../../../repo-governance/development/test-driven-development.md) requires.
+
+Apply [Focused Runs and Regression Gates][focused-runs] when writing test commands and phase or PR verification items.
+
+[focused-runs]: ../../../repo-governance/development/test-driven-development.md#focused-runs-and-regression-gates
