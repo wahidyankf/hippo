@@ -36,7 +36,7 @@ func (driver *Driver) liveExclusiveStatusOwner() error {
 	driver.exclusiveStatusSession = session
 	driver.exclusiveStatusState = map[string][]byte{}
 	for _, path := range []string{
-		filepath.Join(driver.evidenceRoot, "coordination-mode.json"),
+		filepath.Join(driver.evidenceRoot, coordinationModeMarker),
 		filepath.Join(driver.evidenceRoot, "heavy.lock", "owner.json"),
 		session.RecordPath,
 	} {
@@ -110,8 +110,8 @@ func (driver *Driver) invalidExclusiveStatusOwner(state string) error {
 		return err
 	}
 	contents := map[string][]byte{
-		"malformed": []byte("{\"schemaVersion\":1\n"),
-		"future":    []byte("{\"schemaVersion\":2}\n"),
+		tuiMalformedAnnotation: []byte("{\"schemaVersion\":1\n"),
+		"future":               []byte("{\"schemaVersion\":2}\n"),
 	}[state]
 	if contents == nil {
 		return fmt.Errorf("unknown invalid compatibility state %q", state)

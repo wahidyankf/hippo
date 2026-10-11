@@ -28,21 +28,26 @@ const probeOutputVariable = "ISOLATION_PROBE_OUTPUT"
 // existing directory while the tests ran.
 const rootExistsKey = "probe.root-exists"
 
-// This package isolates itself exactly as the packages that start the product do.
+// Isolation report children exercise RunIsolated without changing fake inputs.
+// Ordinary support tests also execute the product, so own a stamped candidate.
 func TestMain(m *testing.M) {
-	os.Exit(support.RunIsolated(m))
+	if os.Getenv(probeOutputVariable) != "" {
+		os.Exit(support.RunIsolated(m))
+	}
+	os.Exit(support.RunCompiled(m))
 }
 
 func TestRunIsolatedRemovesInheritedCoordination(t *testing.T) {
 	inheritedRoot := t.TempDir()
 	report := runIsolationProbe(t, map[string]string{
-		"HIPPO_CONFIG":  "fixture-config.json",
-		"HIPPO_SESSION": "fixture-session",
-		"HIPPO_PROFILE": "fixture-profile",
-		"HIPPO_ROOT":    inheritedRoot,
+		"HIPPO_CONFIG":             "fixture-config.json",
+		"HIPPO_SESSION":            "fixture-session",
+		"HIPPO_PROFILE":            "fixture-profile",
+		"HIPPO_UNDECLARED_ARCHIVE": "/fixture/unknown-release.tar.gz",
+		"HIPPO_ROOT":               inheritedRoot,
 	})
 
-	for _, name := range []string{"HIPPO_CONFIG", "HIPPO_SESSION", "HIPPO_PROFILE"} {
+	for _, name := range []string{"HIPPO_CONFIG", "HIPPO_SESSION", "HIPPO_PROFILE", "HIPPO_UNDECLARED_ARCHIVE"} {
 		if value, found := report[name]; found {
 			t.Errorf("%s reached the tests as %q, want it removed", name, value)
 		}
@@ -65,11 +70,19 @@ func TestRunIsolatedRemovesInheritedCoordination(t *testing.T) {
 
 func TestRunIsolatedKeepsHarnessInputs(t *testing.T) {
 	inputs := map[string]string{
-		"HIPPO_BIN":             "/fixture/bin/hippo",
-		"HIPPO_BDD_ADAPTER":     "e2e",
-		"HIPPO_E2E_TEMP_PARENT": "/fixture/tmp",
-		"HIPPO_GO_BINARY":       "/fixture/bin/go",
-		"HIPPO_LOAD_SATURATED":  "1",
+		"HIPPO_BIN":                         "/fixture/bin/hippo",
+		"HIPPO_BDD_ADAPTER":                 "e2e",
+		"HIPPO_E2E_TEMP_PARENT":             "/fixture/tmp",
+		"HIPPO_E2E_OLD_ARCHIVE":             "/fixture/hippo-v0.8.4.tar.gz",
+		"HIPPO_E2E_V085_ARCHIVE":            "/fixture/hippo-v0.8.5.tar.gz",
+		"HIPPO_GO_BINARY":                   "/fixture/bin/go",
+		"HIPPO_LOAD_SATURATED":              "1",
+		"HIPPO_PUBLIC_OLD_BIN":              "/fixture/bin/old-hippo",
+		"HIPPO_PUBLIC_OLD_BIN_SHA256":       "owned-old-executable-digest",
+		"HIPPO_PUBLIC_OLD_VERSION_RECEIPT":  "/fixture/old-version.stdout.raw",
+		"HIPPO_PUBLIC_V085_BIN":             "/fixture/bin/v085-hippo",
+		"HIPPO_PUBLIC_V085_BIN_SHA256":      "owned-v085-executable-digest",
+		"HIPPO_PUBLIC_V085_VERSION_RECEIPT": "/fixture/v085-version.stdout.raw",
 	}
 	report := runIsolationProbe(t, inputs)
 

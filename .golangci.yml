@@ -9,6 +9,10 @@ formatters:
     gofumpt:
       extra:
         group-params: true
+  exclusions:
+    paths:
+      # Ignored local scratch preserves historical fixture bytes; repository Go source remains checked.
+      - ^local-tmp/
 
 linters:
   default: all
@@ -55,6 +59,7 @@ linters:
             - $all
             - "!$test"
             - "!**/tests/**/*.go"
+            - "!**/internal/adapters/tui/*.go"
           allow:
             - $gostd
             - github.com/spf13/cobra
@@ -64,11 +69,71 @@ linters:
           files:
             - $test
             - "**/tests/**/*.go"
+            - "!**/internal/adapters/tui/*.go"
+            - "!**/tests/host/evidence-verifier/*.go"
+            - "!**/tests/support/tui_arguments.go"
+            - "!**/tests/support/tui_public_interactive_inputs.go"
+            - "!**/tests/support/tui_transport_native.go"
+            - "!**/tests/support/tui_transport_native_darwin.go"
           allow:
             - $gostd
             - github.com/cucumber/godog
             - github.com/cucumber/messages/go/v34
             - github.com/wahidyankf/hippo
+        # These four terminal/FD fixtures inspect real kernel state; no other support import gains this capability.
+        native-terminal-support:
+          list-mode: strict
+          files:
+            - "**/tests/support/tui_arguments.go"
+            - "**/tests/support/tui_public_interactive_inputs.go"
+            - "**/tests/support/tui_transport_native.go"
+            - "**/tests/support/tui_transport_native_darwin.go"
+          allow:
+            - $gostd
+            - github.com/cucumber/godog
+            - github.com/cucumber/messages/go/v34
+            - github.com/wahidyankf/hippo
+            - golang.org/x/sys/unix$
+        # This host proof tool needs native capture cells; no other host package or framework is adopted here.
+        host-evidence-verifier:
+          list-mode: strict
+          files:
+            - "**/tests/host/evidence-verifier/*.go"
+          allow:
+            - $gostd
+            - github.com/cucumber/godog
+            - github.com/cucumber/messages/go/v34
+            - github.com/wahidyankf/hippo
+            - github.com/charmbracelet/x/ansi$
+        # Code Clarity confines the adopted versioned frameworks to this adapter; other imports stay restricted.
+        tui-production:
+          list-mode: strict
+          files:
+            - "**/internal/adapters/tui/*.go"
+            - "!$test"
+          allow:
+            - $gostd
+            - github.com/spf13/cobra
+            - github.com/wahidyankf/hippo
+            - golang.org/x/sys
+            - charm.land/bubbletea/v2$
+            - charm.land/lipgloss/v2$
+            - charm.land/bubbles/v2/
+            # Strip/Truncate supply the renderer's missing text operations; only this utility root is adopted.
+            - github.com/charmbracelet/x/ansi$
+        tui-test-support:
+          list-mode: strict
+          files:
+            - "**/internal/adapters/tui/*_test.go"
+          allow:
+            - $gostd
+            - github.com/cucumber/godog
+            - github.com/cucumber/messages/go/v34
+            - github.com/wahidyankf/hippo
+            - charm.land/bubbletea/v2$
+            - charm.land/lipgloss/v2$
+            - charm.land/bubbles/v2/
+            - github.com/charmbracelet/x/ansi$
     exhaustive:
       # A map keyed by an enumerated type must name every member, as a switch over it must.
       check:
@@ -134,6 +199,12 @@ linters:
       - path: ^internal/adapters/runtime/lease\.go$
         linters:
           - nilnil
+
+      # Tea's consumer interface mandates this return; helpers and other files still return concrete types.
+      - path: '^internal/adapters/tui/model\.go$'
+        text: '^Update returns interface \(charm\.land/bubbletea/v2\.Model\)$'
+        linters:
+          - ireturn
 
 issues:
   max-issues-per-linter: 0

@@ -32,14 +32,15 @@ Kept under local owners, linked wherever the catalog linked its own:
 [end-to-end testing](../../end-to-end-testing.md), [quality gates](../../quality-gates.md),
 [software quality enforcement](../../software-quality-enforcement.md),
 [specification maintenance](../../specification-maintenance.md), [public contract](../../public-contract.md),
+[HIPPO CLI adoption](../../../conventions/command-line-interface/007-terminal-and-environment.md),
 [code clarity](../../code-clarity.md), [dependency selection](../../dependency-selection.md), and
 [docs propagation](../../../workflows/quality/docs-propagation.md). One rule lives in one document here, per
 [rules](../../../conventions/rules.md).
 
 Not adopted:
 
-- **Test Boundaries and Gates.** Its fast gate runs no integration or end-to-end suite; the stricter quick gate here
-  runs all three behaviour adapters, per [quality gates](../../quality-gates.md).
+- **Test Boundaries and Gates.** Local [quality gates](../../quality-gates.md) owns static compliance and
+  executing-suite placement.
 - **Test Doubles, Test Data Isolation, and Git Fixture Isolation.** These packs await explicit adoption with any fixture
   repair; application ports do not adopt their shared contracts. Browser and identity fixtures and the six-layer fixture
   Git rule remain outside current adoption.
@@ -72,11 +73,12 @@ Grouped by the source that leaves the choice open; each entry reads decision: ch
   - task runner: plain scripts behind `npm run test:quick` and `npm test` — this repository never acquires Nx
 - `golang-standards.md`
   - assertions: the `testing` package only — no assertion dependency
-  - integration selection: a separate test directory per boundary under `tests/` — the layer is visible by path
-  - unit test placement: deviation: most unit tests live in `tests/unit` — one corpus runs through three boundary
-    adapters
-  - race detection: deviation: the full gate's race pass, not the coverage run — keeps the quick gate fast enough never
-    to be bypassed
+  - integration selection: deviation: [whole-corpus host](../../behaviour-driven-development.md#suite-host) uses
+    explicit modes; ordinary tests remain `tests/integration` — private TUI access
+  - unit test placement: deviation: most ordinary tests live in `tests/unit`; whole corpus uses that host — private
+    seams
+  - race detection: deviation: [full gate](../../quality-gates.md#the-full-gate) retains existing patterns and relocated
+    Unit/Integration — quick remains fast
   - gates: every golangci-lint linter, NilAway, and the domain literal analysis — stronger than the standard, per
     [Go Analysis Gates](repository-adapter/001-go-analysis-gates.md)
   - context parameter: deviation: `noctx` disabled — host probes and supervised process groups have no request context

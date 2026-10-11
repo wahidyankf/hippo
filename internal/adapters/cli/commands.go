@@ -84,6 +84,8 @@ type runOptions struct {
 	reserveMemoryMiB       int64
 	resourceTier           string
 	source                 string
+	label                  string
+	labelSet               bool
 	tags                   []string
 	concurrencyEnvironment []string
 	waitForAdmission       time.Duration
@@ -180,6 +182,7 @@ func (application Application) rootCommand(execution *commandExecution) *cobra.C
 		application.versionCommand(execution),
 		application.statusCommand(execution),
 		application.watchCommand(execution),
+		application.tuiCommand(execution),
 		application.historyCommand(execution),
 		application.monitorCommand(execution),
 		application.runCommand(execution),
@@ -373,6 +376,7 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 		Args:  requireGuardedCommand,
 		RunE: func(command *cobra.Command, arguments []string) error {
 			options.command = append([]string{}, arguments...)
+			options.labelSet = command.Flags().Changed("label")
 			options.observeChild = func(childStatus int) { execution.childStatus = &childStatus }
 
 			return executeHandler(command, execution, func() (int, error) {
@@ -400,6 +404,7 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 	command.Flags().Int64Var(&options.reserveMemoryMiB, "reserve-memory-mib", 0, "fixed memory reservation in MiB; zero selects an automatic fair share")
 	command.Flags().StringVar(&options.resourceTier, "resource-tier", "", "resource tier: light, standard, or heavy")
 	command.Flags().StringVar(&options.source, "source", "", "privacy-safe source label overriding hippo.identity.json")
+	command.Flags().StringVar(&options.label, "label", "", "privacy-safe display label; defaults to executable basename")
 	command.Flags().StringArrayVar(&options.tags, "tag", nil, "privacy-safe key=value label; repeatable")
 	command.Flags().DurationVar(
 		&options.waitForAdmission,

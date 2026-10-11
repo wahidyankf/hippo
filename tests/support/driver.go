@@ -152,6 +152,11 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 type Driver struct {
 	architectureGraphError   error
 	architectureFixtureError error
+	tuiCLI                   *tuiCLIState
+	tuiArguments             *tuiArgumentState
+	tuiObservation           *tuiObservationState
+	tuiGates                 *tuiGateState
+	annotationRun            *annotationRunState
 	mode                     string
 	samples                  []policy.Sample
 	assessment               policy.Assessment
@@ -320,7 +325,7 @@ func healthySample(at time.Time) policy.Sample {
 		SwapIns:                             new(int64(10)),
 		SwapOuts:                            new(int64(20)),
 		SwapFreeBytes:                       new(2 * policy.GiB),
-		SwapState:                           "idle",
+		SwapState:                           tuiIdleState,
 	}
 }
 
@@ -372,10 +377,6 @@ func (driver *Driver) cleanup() {
 // Close removes temporary scenario resources.
 func (driver *Driver) Close() {
 	driver.cleanup()
-}
-
-func toolRoot() string {
-	return filepath.Clean(filepath.Join("..", ".."))
 }
 
 func environmentWith(values map[string]string) []string {
@@ -565,10 +566,14 @@ func (driver *Driver) temporaryRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	ownedDirectory, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		return "", errors.Join(err, os.RemoveAll(directory))
+	}
 
-	driver.temporaryPaths = append(driver.temporaryPaths, directory)
+	driver.temporaryPaths = append(driver.temporaryPaths, ownedDirectory)
 
-	return directory, nil
+	return ownedDirectory, nil
 }
 
 func fastBehaviourPolicy() policy.Policy {
@@ -830,7 +835,7 @@ func (driver *Driver) acquireExclusiveCompatibility() error {
 }
 
 func (driver *Driver) requireExclusiveCoordination() error {
-	data, err := os.ReadFile(filepath.Join(driver.leaseRoot, "coordination-mode.json"))
+	data, err := os.ReadFile(filepath.Join(driver.leaseRoot, coordinationModeMarker))
 	if err != nil {
 		return fmt.Errorf("read coordination marker: %w", err)
 	}
@@ -855,7 +860,7 @@ func (driver *Driver) releaseFinalCoordinationSession() error {
 	}
 	driver.heavySession = nil
 
-	if _, err := os.Stat(filepath.Join(driver.leaseRoot, "coordination-mode.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(driver.leaseRoot, coordinationModeMarker)); err == nil {
 		return errors.New("coordination marker remained after final release")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("inspect coordination marker after final release: %w", err)
@@ -872,7 +877,7 @@ func (driver *Driver) reservationCoordination() error {
 	driver.coordinationMarker = []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n")
 
 	return os.WriteFile(
-		filepath.Join(driver.leaseRoot, "coordination-mode.json"),
+		filepath.Join(driver.leaseRoot, coordinationModeMarker),
 		driver.coordinationMarker,
 		0o600,
 	)
@@ -990,7 +995,7 @@ func (driver *Driver) requireEveryCoordinationOwnerDeferred() error {
 }
 
 func (driver *Driver) requireReservationCoordinationUnchanged() error {
-	data, err := os.ReadFile(filepath.Join(driver.leaseRoot, "coordination-mode.json"))
+	data, err := os.ReadFile(filepath.Join(driver.leaseRoot, coordinationModeMarker))
 	if err != nil {
 		return err
 	}
@@ -2015,7 +2020,7 @@ func (driver *Driver) rootHelp() error {
 }
 
 func (driver *Driver) requireHelp() error {
-	commands := []string{"completion", historyCommandName, monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName, "watch"}
+	commands := []string{"completion", historyCommandName, monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName, watchCommandName}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}
@@ -2285,7 +2290,7 @@ func (driver *Driver) monitorJSON() error {
 		Stdout:    stdout,
 		Stderr:    stderr,
 		Collector: collector,
-	}).Run(ctx, []string{monitorCommandName, jsonFlag, "--interval", "1ms", diskPathFlag, "."})
+	}).Run(ctx, []string{monitorCommandName, jsonFlag, intervalFlagName, "1ms", diskPathFlag, "."})
 	driver.exitCode = code
 	driver.output = stdout.String()
 	driver.errorOutput = stderr.String()
@@ -2681,7 +2686,11 @@ func (driver *Driver) requireRejected() error {
 }
 
 func (driver *Driver) inspectBuildCaching() error {
-	command := GitCommand(toolRoot(), "check-ignore", "--quiet", "dist/hippo_test_linux_amd64.tar.gz")
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
+	command := GitCommand(repository, "check-ignore", "--quiet", "dist/hippo_test_linux_amd64.tar.gz")
 
 	driver.lifecycleOK = command.Run() == nil
 
@@ -2696,6 +2705,19 @@ func (driver *Driver) requireBuildCacheDisabled() error {
 }
 
 func (driver *Driver) runTemporaryHarness(testExit int) error {
+	realGo := os.Getenv("HIPPO_GO_BINARY")
+	if realGo == "" {
+		realGo = "go"
+	}
+	realGo, err := exec.LookPath(realGo)
+	if err != nil {
+		return fmt.Errorf("resolve temporary E2E harness toolchain: %w", err)
+	}
+
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	temporaryParent, err := os.MkdirTemp("", "hippo-e2e-parent-")
 	if err != nil {
 		return err
@@ -2731,18 +2753,40 @@ case "$1" in
     [ -x "${HIPPO_BIN:-}" ]
     exit "${FAKE_GO_TEST_EXIT:-0}"
     ;;
+  run)
+    # Only the two declared immutable-release receipt validators use real Go.
+    if [ "$#" -eq 4 ] && [ "$2" = -p=1 ] && [ "$3" = ./tests/support/oldidentity ]; then
+      exec ` + shellQuoteV04(realGo) + ` "$@"
+    fi
+    if [ "$#" -eq 5 ] && [ "$2" = -p=1 ] && [ "$3" = ./tests/support/oldidentity ] &&
+      [ "$4" = --v085 ]; then
+      exec ` + shellQuoteV04(realGo) + ` "$@"
+    fi
+    exit 64
+    ;;
   *) exit 64 ;;
 esac
 `
-	if err := os.WriteFile(fakeGo, []byte(program), 0o700); err != nil {
+	// Confine the executable write to the directory this fixture created and owns.
+	fakeRoot, err := os.OpenRoot(fakeDirectory)
+	if err != nil {
+		return err
+	}
+	if err := errors.Join(fakeRoot.WriteFile("go", []byte(program), 0o700), fakeRoot.Close()); err != nil {
 		return err
 	}
 
-	command := exec.Command(filepath.Join(toolRoot(), "tests", e2eMode, "run.sh"))
+	command := exec.Command(filepath.Join(repository, "tests", e2eMode, "run.sh"))
 	command.Env = environmentWith(map[string]string{
 		"FAKE_GO_TEST_EXIT":     strconv.Itoa(testExit),
 		"HIPPO_E2E_TEMP_PARENT": temporaryParent,
 		"HIPPO_GO_BINARY":       fakeGo,
+	})
+	// Each release preparer must establish its own receipt before exporting it.
+	// Inherited exported receipts would mask a broken fake-validator dispatch.
+	command.Env = slices.DeleteFunc(command.Env, func(entry string) bool {
+		return strings.HasPrefix(entry, "HIPPO_PUBLIC_OLD_VERSION_RECEIPT=") ||
+			strings.HasPrefix(entry, "HIPPO_PUBLIC_V085_VERSION_RECEIPT=")
 	})
 
 	output, runError := command.CombinedOutput()
@@ -2832,6 +2876,10 @@ func (driver *Driver) historicalGenerations() error {
 }
 
 func (driver *Driver) runCurrentBootstrap() error {
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	if driver.cacheRoot == "" {
 		return errors.New("bootstrap cache root was not prepared")
 	}
@@ -2845,7 +2893,7 @@ func (driver *Driver) runCurrentBootstrap() error {
 		return err
 	}
 
-	command := exec.Command(filepath.Join(toolRoot(), "hippo"), "release", "assess", "--summary", summaryPath)
+	command := exec.Command(filepath.Join(repository, "hippo"), "release", "assess", "--summary", summaryPath)
 	command.Env = environmentWith(map[string]string{"HIPPO_BUILD_CACHE": driver.cacheRoot})
 
 	output, err := command.CombinedOutput()
@@ -2890,13 +2938,17 @@ func (driver *Driver) requireRetention() error {
 }
 
 func (driver *Driver) inspectLintEnforcement() error {
-	configuration, err := os.ReadFile(filepath.Join(toolRoot(), ".golangci.yml"))
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
+	configuration, err := os.ReadFile(filepath.Join(repository, ".golangci.yml"))
 	if err != nil {
 		return err
 	}
 	driver.lintConfiguration = string(configuration)
 
-	quickData, err := os.ReadFile(filepath.Join(toolRoot(), "scripts", "test-quick.sh"))
+	quickData, err := os.ReadFile(filepath.Join(repository, "scripts", "test-quick.sh"))
 	if err != nil {
 		return err
 	}
@@ -3002,6 +3054,10 @@ func (driver *Driver) requireModuleScopedLint() error {
 // requirePinnedNilAway pins NilAway as a failing quick-gate step: a go.mod tool directive, and an invocation that runs
 // after golangci-lint over the whole module without -json, whose exit status is always zero.
 func (driver *Driver) requirePinnedNilAway() error {
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	command := ""
 
 	for line := range strings.SplitSeq(driver.lintCommand, "\n") {
@@ -3042,7 +3098,7 @@ func (driver *Driver) requirePinnedNilAway() error {
 		return errors.New("production import check must execute all graph and fixture tests after NilAway and before package tests")
 	}
 
-	modulePins, err := os.ReadFile(filepath.Join(toolRoot(), "go.mod"))
+	modulePins, err := os.ReadFile(filepath.Join(repository, "go.mod"))
 	if err != nil {
 		return err
 	}
@@ -3055,6 +3111,10 @@ func (driver *Driver) requirePinnedNilAway() error {
 }
 
 func (driver *Driver) inspectBehaviourCoverage() error {
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
 	driver.strictAdapters = true
 
 	for _, adapter := range contract.Adapters() {
@@ -3077,12 +3137,12 @@ func (driver *Driver) inspectBehaviourCoverage() error {
 		}
 	}
 
-	fullData, err := os.ReadFile(filepath.Join(toolRoot(), "scripts", "test.sh"))
+	fullData, err := os.ReadFile(filepath.Join(repository, "scripts", "test.sh"))
 	if err != nil {
 		return err
 	}
 
-	quickData, err := os.ReadFile(filepath.Join(toolRoot(), "scripts", "test-quick.sh"))
+	quickData, err := os.ReadFile(filepath.Join(repository, "scripts", "test-quick.sh"))
 	if err != nil {
 		return err
 	}
@@ -3163,7 +3223,11 @@ func containsAll(value string, needles ...string) bool {
 }
 
 func (driver *Driver) inspectContributorEnforcement() error {
-	root := toolRoot()
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
+	root := repository
 
 	read := func(parts ...string) (string, error) {
 		data, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
@@ -3291,7 +3355,11 @@ var pinnedValidators = []pinnedValidator{
 }
 
 func (driver *Driver) inspectDocumentationGate() error {
-	root := toolRoot()
+	repository, rootError := toolRoot()
+	if rootError != nil {
+		return rootError
+	}
+	root := repository
 
 	read := func(parts ...string) (string, error) {
 		data, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
@@ -3664,12 +3732,15 @@ func (driver *Driver) requireConfigExit() error {
 	return nil
 }
 
-func repositoryRoot() string {
+func repositoryRoot() (string, error) {
 	return toolRoot()
 }
 
-func (driver *Driver) inspectArtifactPolicy() {
-	root := repositoryRoot()
+func (driver *Driver) inspectArtifactPolicy() error {
+	root, err := repositoryRoot()
+	if err != nil {
+		return err
+	}
 	ignoredPaths := []string{
 		"hippo.local.json",
 		".env",
@@ -3743,6 +3814,7 @@ func (driver *Driver) inspectArtifactPolicy() {
 		!pathExists(filepath.Join(root, "project.json")) &&
 		!pathExists(filepath.Join(root, "nx.json")) &&
 		pathExists(filepath.Join(root, "specs", "behaviours"))
+	return nil
 }
 
 func pathExists(path string) bool {
@@ -3793,28 +3865,15 @@ func validCoreCoverageSelectors(script string) bool {
 	if coverageCommand == "" || thresholdCommand == "" {
 		return false
 	}
-	for _, command := range []string{coverageCommand, thresholdCommand} {
-		if strings.ContainsAny(command, "|&;") || strings.Contains(command, "||") {
-			return false
-		}
+	calls, valid := gateTestCommands(coverageCommand)
+	if !valid || len(calls) != 1 || calls[0].suite != "" || calls[0].adapter != "" ||
+		!slices.Contains(calls[0].args, "./internal/adapters/tui") ||
+		!gateOrdinarySelection(calls[0].args, gateMeasuredEntries()) ||
+		strings.ContainsAny(thresholdCommand, "|&;") {
+		return false
 	}
-	packages := selectorFlag(coverageCommand, "-coverpkg=")
-	directories := selectorFlag(thresholdCommand, "--directories")
-	files := selectorFlag(thresholdCommand, "--files")
-	for _, path := range []string{"internal/policy", "internal/domain/coordination", "internal/domain/evidence", "internal/identity", "internal/status", "internal/application"} {
-		if !csvSelectorContains(packages, "./"+path) || !csvSelectorContains(directories, path) {
-			return false
-		}
-	}
-	for _, path := range []string{"internal/adapters/config/config.go", "internal/adapters/host/collector.go", "internal/adapters/host/linux_parsers.go"} {
-		if !csvSelectorContains(files, path) {
-			return false
-		}
-	}
-	for _, path := range []string{"./internal/adapters/config", "./internal/adapters/host", "./internal/adapters/evidence"} {
-		if !csvSelectorContains(packages, path) {
-			return false
-		}
+	if !validCoverageTargets(coverageCommand, thresholdCommand) {
+		return false
 	}
 	fields := strings.Fields(coverageCommand)
 	return slices.Contains(fields, "./tests/unit") && slices.Contains(fields, "./internal/application") &&
@@ -3858,4 +3917,26 @@ func validArchitectureGateOrder(script string) bool {
 		}
 	}
 	return nilaway >= 0 && nilaway < architecture && architecture < packages
+}
+
+func validCoverageTargets(coverageCommand, thresholdCommand string) bool {
+	packages := selectorFlag(coverageCommand, "-coverpkg=")
+	directories := selectorFlag(thresholdCommand, "--directories")
+	files := selectorFlag(thresholdCommand, "--files")
+	for _, path := range []string{"internal/policy", "internal/domain/coordination", "internal/domain/evidence", "internal/identity", "internal/status", "internal/application"} {
+		if !csvSelectorContains(packages, "./"+path) || !csvSelectorContains(directories, path) {
+			return false
+		}
+	}
+	for _, path := range []string{"internal/adapters/config/config.go", "internal/adapters/host/collector.go", "internal/adapters/host/linux_parsers.go"} {
+		if !csvSelectorContains(files, path) {
+			return false
+		}
+	}
+	for _, path := range []string{"./internal/adapters/config", "./internal/adapters/host", "./internal/adapters/evidence"} {
+		if !csvSelectorContains(packages, path) {
+			return false
+		}
+	}
+	return true
 }

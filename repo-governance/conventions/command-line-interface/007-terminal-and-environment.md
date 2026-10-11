@@ -1,60 +1,64 @@
 ---
 description: >-
-  Fixes how a tool adapts to a terminal and how the environment suppresses colour, pagers, and progress, including the
-  presence-and-content rule for the colour variable.
+  Fixes HIPPO diagnostic styling precedence and distinguishes optional decoration from required interactive terminal
+  controls and clean machine-readable document bodies.
 when_to_use: >-
-  Use when adding colour, a pager, a progress indicator, hyperlinks, or any behaviour that differs between a terminal
-  and a pipe.
+  Use when adding colour, a pager, a progress indicator, hyperlinks, or interactive terminal behavior.
 ---
 
 # Terminal and Environment
 
-## Adapt the Presentation, Never the Content
+## HIPPO Local Adoption
 
-A tool may present itself differently in a terminal than in a pipe. It may not say something different.
+Preserve HIPPO's published styling policy when adopting interactive monitoring. Reason: existing callers rely on
+explicit forcing and presence-based `NO_COLOR` suppression; an interactive TUI also needs terminal controls when its
+decoration is disabled. This locally adopted contract replaces the copied generic nonempty-variable and blanket
+all-escape rules without changing diagnostic behavior.
 
-Colour, alignment, a pager, a progress indicator, and terminal hyperlinks are presentation and may vary. The data, the
-record count, the field order, and the exit status are content and may not. A caller who pipes a command must receive
-the same answer, in a form a program can read.
+## Diagnostic Styling
 
-## What Suppresses Escapes
+Accept exactly `auto`, `always`, and `never` for `--color`, defaulting to `auto`.
 
-| Condition                           | Required behaviour                                      |
-| ----------------------------------- | ------------------------------------------------------- |
-| Standard output is not a terminal   | No escapes, no progress indicator, no pager             |
-| `NO_COLOR` is set and non-empty     | No escapes, even on a terminal                          |
-| `TERM` is unset or `dumb`           | No escapes, even on a terminal                          |
-| `--color never`                     | No escapes                                              |
-| A machine-readable mode is selected | No escapes, unconditionally, even with `--color always` |
+- Under `always`, enable styling even through a pipe or when `NO_COLOR` is present or `TERM` is empty or `dumb`.
+- Under `never`, disable styling.
+- Under `auto`, enable styling only when `NO_COLOR` is absent, `TERM` is nonempty and not `dumb`, and `HIPPO_COLOR=1`.
 
-`--color` accepts exactly `auto`, `always`, and `never`, and defaults to `auto`. A single boolean negation such as
-`--no-colour` is not sufficient, because it gives a caller no way to **force** colour through a pipe — needed whenever
-output is captured and rendered later.
+Treat any presence of `NO_COLOR`, including an empty value or `0`, as suppressing auto styling. Do not add a TTY probe
+to this diagnostic policy: injected diagnostic writers have no reliable terminal capability. Forward the same policy to
+TUI styling. The flag changes optional decoration, including colour, bold, underline, and hyperlinks; it does not change
+state meaning, field values, or the data a caller receives.
 
-## Presence and Content Are Different Tests
+For base-directory variables, keep the separate unset-or-empty fallback rule in
+[Arguments and Flags](005-arguments-and-flags.md); the `NO_COLOR` presence rule does not govern path defaults.
 
-The colour variable's specification suppresses colour when the variable is _present and not an empty string_, regardless
-of its value. Two consequences follow, and the second is the one tools get wrong:
+Enforcement: existing diagnostic contracts and the TUI colour-forwarding contract distinguish auto suppression from
+explicit forcing, per [quality gates](../../development/quality-gates.md).
 
-- A value of `0` **does** suppress colour. The variable is not a boolean; it is a flag whose presence is the signal.
-- An empty value does **not** suppress colour. A variable set to the empty string is not a request for monochrome, and a
-  shell produces that state easily.
+## Inspection and Interactive Entry
 
-The same distinction governs the base directory variables, whose defaults apply when a variable is either unset or
-empty. One fixture covering both surfaces tests the whole rule.
+Keep ordinary inspection content, record counts, field order, and exit meaning independent of terminal presentation.
+Piped inspection remains readable without cursor movement, an alternate screen, progress indicators, or a pager.
+Optional styling follows the explicit policy above; a pipe alone is not a diagnostic-writer capability probe.
 
-At least one widely used tool documents its colour variable as taking effect when "set to any value", which reads as
-presence alone and diverges from the specification on the empty case. The specification governs; an exemplar is evidence
-of practice, not authority over the source that defines the variable it uses.
+Require both stdin and stdout to be TTYs before entering `hippo tui`. Refuse a non-TTY stream or `TERM=dumb` with usage
+status `2` and `hippo.args.invalid`, directing the caller to status/watch. Parse, validate, and honor help before
+changing terminal mode; help performs no TTY check.
 
-## One Switch for the Whole Escape Surface
+Keep keyboard interaction and required cursor/alternate-screen controls working in a monochrome TUI. Disable only its
+optional decoration; retain text distinctions without relying on colour. Restore owned terminal state before emitting
+failure diagnostics. The TUI has no piped or streaming display mode.
 
-Colour suppression covers every escape the tool emits, not only colour: hyperlinks, cursor movement, alternate screen
-use, and bold or underline included. A tool with one switch per decoration guarantees that some path eventually emits an
-escape into a context that cannot render it, and the caller has no single thing to turn off.
+Enforcement is gated: package tests cover CLI capability checks, while concrete PTY integration/E2E tests must prove
+terminal entry, control emission, and restoration. Concrete runner, terminal-state handling, and PTY test/binding
+implementations are present; required execution and final acceptance, including native host proof, remain open. Fake
+cleanup callbacks establish no raw-mode or alternate-screen proof. [Quality gates](../../development/quality-gates.md)
+declares these executing boundaries.
 
-## Forcing and Piping
+## Actual Machine-Readable Documents
 
-A tool may honour a variable that forces terminal-style output when the stream is redirected, for callers that capture
-and render output later. It is optional. What is not optional is that forcing is explicit: no tool colours a pipe unless
-something asked it to.
+Keep every actual machine-readable document body escape-free even with `--color always`, under
+[Machine-Readable Output](004-machine-readable-output.md).
+
+For `hippo tui`, global `--output json` selects only the existing failure body; it does not select JSON frames or
+suppress interactive controls. Emit that body after terminal restoration. The adjacent human diagnostic retains its
+styling policy; the JSON body remains independently parseable and clean.

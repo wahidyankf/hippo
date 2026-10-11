@@ -35,6 +35,11 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.helpPrecedenceBindings(),
 		driver.coordinationGateBindings(),
 		driver.heldLockBindings(),
+		driver.tuiCLIHelpBindings(),
+		driver.tuiArgumentBindings(),
+		driver.tuiObservationBindings(),
+		driver.tuiGateBindings(),
+		driver.annotationFailureBindings(),
 	)
 }
 

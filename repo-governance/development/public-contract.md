@@ -5,11 +5,10 @@ after stability, a major release.
 
 ## The Contract
 
-- **Exit statuses.** `0` and `1` are a result, affirmative and negative. `2` is an unusable invocation. `124` is a limit
-  stopping the work. `125` is HIPPO unable to do its job, with nothing started. `126` and `127` are a command that
-  cannot be executed and one that is not there. Nothing else is returned except a started child's own status, or `128+N`
-  for a signal. A guarded child's status passes through unchanged, including one that collides with a status HIPPO also
-  uses; HIPPO's own failures always write a `hippo:` line to stderr and a child's never does.
+- **Exit statuses.** Preserve the HIPPO mapping in the
+  [exit status contract](../conventions/command-line-interface/001-exit-status-contract.md). A guarded child's status
+  may collide with a status HIPPO also uses; HIPPO's own failures always write a `hippo:` line to stderr and a child's
+  never does.
 - **Error codes.** Every failure names one `hippo.area.reason` from the published vocabulary, on stderr and, with
   `--output json`, as `error.code`. The status says what a shell should do; the code says what happened.
 - **Evidence readers.** The supported readers and their record shapes. A consumer parsing evidence is a consumer whose

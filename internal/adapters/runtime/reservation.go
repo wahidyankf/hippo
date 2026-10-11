@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/application"
 	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
 
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
@@ -597,20 +598,43 @@ func retainReservationWaiterUntilCleanup(root, value string, identity *os.File) 
 	}()
 }
 
-func removeReservationWaiterAfterCancellation(root, value string, wait time.Duration) (returnError error) {
+func removeReservationWaiterAfterCancellation(root, value string, wait time.Duration) error {
+	return removeReservationWaiterWithAdvisories(root, value, wait, nil)
+}
+
+func removeReservationWaiterWithAdvisories(root, value string, wait time.Duration, advisories *application.DisplayAdvisories) (returnError error) {
 	lock, err := acquireCoordinationLock(context.Background(), root, wait)
 	if err != nil {
 		return err
 	}
 	defer func() { returnError = errors.Join(returnError, releaseCoordinationLock(lock)) }()
-
-	ledger, err := readReservationLedger(root)
-	if err != nil {
-		return err
-	}
-	ledger.Waiters = slices.DeleteFunc(ledger.Waiters, func(waiter reservationWaiter) bool { return waiter.Token == value })
-
-	return writeReservationLedger(root, ledger)
+	return application.RetireDisplay(
+		application.DisplayRetirement{RunID: value, Ownership: application.DisplayOwnershipOwned},
+		displayRetirementEffects(root, func() (application.DisplayRetirementResult, error) {
+			ledger, err := readReservationLedger(root)
+			if err != nil {
+				return application.DisplayRetirementResult{}, err
+			}
+			found := false
+			ledger.Waiters = slices.DeleteFunc(ledger.Waiters, func(waiter reservationWaiter) bool {
+				if waiter.Token == value {
+					found = true
+					return true
+				}
+				return false
+			})
+			if !found {
+				alive, identityError := reservationIdentityAlive(root, value, 0, 0)
+				// Unknown identity retains advisory context without introducing a
+				// new ownership-cleanup failure or changing ledger error precedence.
+				found = identityError == nil && alive
+			}
+			if err = writeReservationLedger(root, ledger); err != nil {
+				return application.DisplayRetirementResult{}, err
+			}
+			return application.DisplayRetirementResult{Confirmed: found}, nil
+		}), advisories,
+	)
 }
 
 // ActivateReservation records the supervised child process group without changing allocation.
@@ -662,8 +686,8 @@ func abandonReservationIdentity(session *Session) error {
 // retainReleaseForReconciliation keeps an unreleasable owner mark alive so a
 // peer completes the release, and reports shared-lock contention as a deferred
 // cleanup rather than a caller failure.
-func retainReleaseForReconciliation(root string, session *Session, lockError error) error {
-	if retainError := retainReservationOwnerUntilRelease(root, session); retainError != nil {
+func retainReleaseForReconciliation(ctx context.Context, root string, session *Session, lockError error) error {
+	if retainError := retainReservationOwnerUntilRelease(ctx, root, session); retainError != nil {
 		return errors.Join(lockError, retainError)
 	}
 	if errors.Is(lockError, errCoordinationDeferred) {
@@ -678,20 +702,43 @@ func ReleaseReservation(root string, session *Session) error {
 	return releaseReservation(root, session, true)
 }
 
-func releaseReservation(root string, session *Session, retainOnFailure bool) (returnError error) {
-	if session == nil || session.Inherited {
+// ReleaseReservationContext retires the owned reservation using the caller's
+// context values and the existing bounded cleanup wait despite cancellation.
+func ReleaseReservationContext(ctx context.Context, root string, session *Session) error {
+	return releaseReservationContext(ctx, root, session, true)
+}
+
+func releaseReservation(root string, session *Session, retainOnFailure bool) error {
+	return releaseReservationContext(context.Background(), root, session, retainOnFailure)
+}
+
+func releaseReservationContext(ctx context.Context, root string, session *Session, retainOnFailure bool) (returnError error) {
+	if session == nil {
 		return nil
 	}
-	lock, err := lockCoordinationForRelease(root)
+	if session.Inherited {
+		return application.RetireDisplay(application.DisplayRetirement{RunID: session.Token, Ownership: application.DisplayOwnershipInherited}, application.DisplayRetirementEffects{}, session.advisories)
+	}
+	lock, err := lockCoordinationForReleaseContext(ctx, root)
 	if err != nil {
 		if !retainOnFailure || session.identityLock == nil {
 			return err
 		}
 
-		return retainReleaseForReconciliation(root, session, err)
+		return retainReleaseForReconciliation(ctx, root, session, err)
 	}
 	defer func() { returnError = errors.Join(returnError, releaseCoordinationLock(lock)) }()
+	return application.RetireDisplay(
+		application.DisplayRetirement{RunID: session.Token, Ownership: application.DisplayOwnershipOwned},
+		displayRetirementEffects(root, func() (application.DisplayRetirementResult, error) {
+			authenticated := session.identityLock != nil
+			err := releaseReservationOwnershipLocked(root, session)
+			return application.DisplayRetirementResult{Confirmed: authenticated && err == nil}, err
+		}), session.advisories,
+	)
+}
 
+func releaseReservationOwnershipLocked(root string, session *Session) error {
 	ledger, err := readReservationLedger(root)
 	if err != nil {
 		return err
@@ -712,7 +759,7 @@ func releaseReservation(root string, session *Session, retainOnFailure bool) (re
 	if err = writeReservationLedger(root, ledger); err != nil {
 		return err
 	}
-	returnError = errors.Join(returnError, releaseReservationIdentity(root, session))
+	returnError := releaseReservationIdentity(root, session)
 	if len(ledger.Owners) == 0 && len(ledger.Waiters) == 0 {
 		returnError = errors.Join(returnError, os.Remove(reservationLedgerPath(root)))
 		if marker, present, markerError := readCoordinationMarker(root); markerError != nil {
@@ -728,10 +775,11 @@ func releaseReservation(root string, session *Session, retainOnFailure bool) (re
 	return returnError
 }
 
-func retainReservationOwnerUntilRelease(root string, session *Session) error {
+func retainReservationOwnerUntilRelease(ctx context.Context, root string, session *Session) error {
 	retained := &Session{Token: session.Token, identityLock: session.identityLock}
 	session.identityLock = nil
 	lockError := ensureReservationIdentityLocked(retained.identityLock)
+	cleanup := context.WithoutCancel(ctx)
 	go func() {
 		for retained.identityLock != nil {
 			if err := ensureReservationIdentityLocked(retained.identityLock); err != nil {
@@ -739,7 +787,7 @@ func retainReservationOwnerUntilRelease(root string, session *Session) error {
 
 				continue
 			}
-			if err := releaseReservation(root, retained, false); err == nil || retained.identityLock == nil {
+			if err := releaseReservationContext(cleanup, root, retained, false); err == nil || retained.identityLock == nil {
 				return
 			}
 			time.Sleep(coordinationPollInterval)
@@ -776,6 +824,7 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 	if err = pruneReservationMetadata(root, ledger); err != nil {
 		return ReservationTotals{}, err
 	}
+	housekeepDisplayLocked(root, time.Now())
 	totals.AbandonedProcessGroups = abandoned
 	totals.Capacity = ledger.Capacity
 	totals.ActiveOwners = len(ledger.Owners)

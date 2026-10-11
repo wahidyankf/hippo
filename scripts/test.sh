@@ -12,10 +12,25 @@ cd "$root"
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 	GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_PREFIX
 
+# External helper compilation runs once before any dependent test process.
+# Admission and finite process-group supervision belong to the gate caller.
+. ./tests/support/hostprobe/prepare.sh
+trap public_host_helper_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+public_host_helper_prepare "$root"
+
 # Extend the quick gate with process boundaries, race detection, and a current
 # vulnerability scan. This is the release gate used by CI on every platform.
 ./scripts/test-quick.sh
-go test -count=1 ./tests/integration
+go test -count=1 ./tests/integration \
+	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'
+HIPPO_BDD_SUITE=integration go test -count=1 -run '^TestIntegrationBehaviours$' ./internal/adapters/tui
 ./tests/e2e/run.sh
-go test -race -count=1 ./cmd/... ./internal/... ./tests/support ./tests/unit ./tests/integration
+go test -race -count=1 ./cmd/... ./internal/... ./tests/support ./tests/support/hostprobe ./tests/support/oldidentity ./tests/unit ./tests/integration \
+	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$'
+go test -race -count=1 ./tests/contract
+HIPPO_BDD_SUITE=unit go test -race -count=1 -run '^TestUnitBehaviours$' ./internal/adapters/tui
+HIPPO_BDD_SUITE=integration go test -race -count=1 -run '^TestIntegrationBehaviours$' ./internal/adapters/tui
 go tool govulncheck ./...

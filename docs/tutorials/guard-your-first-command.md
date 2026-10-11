@@ -45,7 +45,9 @@ guarded command it may use `11` parallel workers. The `owners` and `waiters` fie
 await a reservation; with none running, they read `0`.
 
 **Your numbers will differ**, and that is the point — `concurrency` is derived from your machine, not from a constant.
-If your `state` says `warning` instead of `normal`, that is fine too; the rest of this tutorial still works.
+If your `state` says `warning`, HIPPO may defer guarded work with exit `124` and `hippo.limit.capacity-deferred`;
+eligible ephemeral work on macOS may instead use degraded admission. Wait for `state=normal` before Step 2 to follow the
+expected output below.
 
 ## Step 2: guard a command
 

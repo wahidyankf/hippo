@@ -627,6 +627,19 @@ func requireV04ReleaseInventory(root string) error {
 		"tests/support/blockers_v04.go", "tests/support/pending_v04.go", "tests/support/release_v04.go",
 		"tests/support/review_v04.go", "tests/unit/config_schema2_errors_test.go", "tests/unit/conformance_test.go",
 		"tests/unit/reservation_test.go",
+		"tests/host/README.md", "tests/host/tui-sequence.sh", "tests/host/evidence-verifier/README.md",
+		"tests/host/evidence-verifier/actions.go", "tests/host/evidence-verifier/artifact_binding_test.go",
+		"tests/host/evidence-verifier/candidate.go", "tests/host/evidence-verifier/cells.go", "tests/host/evidence-verifier/cli.go",
+		"tests/host/evidence-verifier/input.go", "tests/host/evidence-verifier/main.go", "tests/host/evidence-verifier/main_test.go",
+		"tests/host/evidence-verifier/native_artifacts.go", "tests/host/evidence-verifier/native_events_test.go",
+		"tests/host/evidence-verifier/observation.go", "tests/host/evidence-verifier/prepare.go",
+		"tests/host/evidence-verifier/protocol.go", "tests/host/evidence-verifier/record.go", "tests/host/evidence-verifier/verify.go",
+		"tests/host/integration/README.md", "tests/host/integration/entrypoints_test.go",
+		"tests/host/integration/finalization_test.go", "tests/host/integration/protocol_test.go",
+		"tests/host/integration/recording_test.go",
+		"tests/contract/corpus.go", "tests/contract/corpus_internal_test.go",
+		"tests/support/repository_paths.go", "tests/support/repository_paths_internal_test.go",
+		"tests/support/repository_paths_refusal_internal_test.go",
 	} {
 		if !bytes.Contains(policy, []byte(required)) {
 			return fmt.Errorf("artifact policy omits version-four path %q", required)
@@ -1330,14 +1343,13 @@ func requireV04ReleasePinnedToolchain(root string) error {
 		if toolchainLine != "" {
 			caseRoot = filepath.Join(root, "toolchain-line")
 		}
-		repository, head, err := cleanReleaseFixtureV04(caseRoot)
+		repository, _, err := cleanReleaseFixtureV04(caseRoot)
 		if err != nil {
 			return err
 		}
-		if toolchainLine != "" {
-			if head, err = pinFixtureToolchainV04(repository, toolchainLine); err != nil {
-				return err
-			}
+		head, err := pinFixtureToolchainV04(repository, toolchainLine)
+		if err != nil {
+			return err
 		}
 		release, err := goModReleaseV04(repository)
 		if err != nil {
@@ -1371,18 +1383,37 @@ func requireV04ReleasePinnedToolchain(root string) error {
 	return nil
 }
 
+// pinFixtureToolchainV04 normalizes only the owned fixture's toolchain directive.
+// An empty value deliberately exercises the go directive without a toolchain pin.
 func pinFixtureToolchainV04(repository, toolchain string) (string, error) {
-	path := filepath.Join(repository, "go.mod")
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	fixtureRoot, err := os.OpenRoot(repository)
 	if err != nil {
 		return "", err
 	}
-	if _, err = fmt.Fprintf(file, "\ntoolchain %s\n", toolchain); err != nil {
-		_ = file.Close()
-
-		return "", err
+	data, err := fixtureRoot.ReadFile("go.mod")
+	if err != nil {
+		return "", errors.Join(err, fixtureRoot.Close())
 	}
-	if err = file.Close(); err != nil {
+	lines := strings.Split(string(data), "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) != 0 && fields[0] == "toolchain" {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	content := strings.Join(kept, "\n")
+	if toolchain != "" {
+		if !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		content += "toolchain " + toolchain + "\n"
+	}
+	if err = fixtureRoot.WriteFile("go.mod", []byte(content), 0o600); err != nil {
+		return "", errors.Join(err, fixtureRoot.Close())
+	}
+	if err = fixtureRoot.Close(); err != nil {
 		return "", err
 	}
 	if _, err = runGitV04(repository, "-c", "user.name=HIPPO fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "-am", "pin fixture toolchain"); err != nil {

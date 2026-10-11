@@ -111,3 +111,12 @@ Feature: HIPPO quality gates
       | no binary                   | a build of the working tree stamped v0.0.0-test |
       | an unstamped build          | a build of the working tree stamped v0.0.0-test |
       | a build stamped v0.0.0-test | that build unchanged                            |
+
+  @e2e-exempt @tui-gates
+  Scenario: TUI verification retains model terminal and host boundaries
+    When TUI verification wiring is inspected
+    Then deterministic TUI model and view tests run in the quick gate
+    And isolated terminal lifecycle tests run in the integration gate
+    And standalone TUI command journeys run in the full gate
+    And real tmux and WezTerm verification remains a separately recorded host proof
+    And no unit scenario is exempted for a terminal or display boundary

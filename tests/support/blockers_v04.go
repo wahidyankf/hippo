@@ -155,7 +155,7 @@ func requireV04UnreadableSessionInventory(root string) error {
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
-	_, markerError := os.Stat(filepath.Join(root, "coordination-mode.json"))
+	_, markerError := os.Stat(filepath.Join(root, coordinationModeMarker))
 	markerPresent := markerError == nil
 	if session != nil {
 		_ = guard.ReleaseReservation(root, session)
@@ -194,7 +194,7 @@ func requireV04FailedStaleHeavyCleanup(root string) error {
 		context.Background(), root, "", policy.TaskEphemeral, profileBalanced, "",
 		v04Plan(1, 256*policy.MiB), 20, 0,
 	)
-	_, markerError := os.Stat(filepath.Join(root, "coordination-mode.json"))
+	_, markerError := os.Stat(filepath.Join(root, coordinationModeMarker))
 	markerPresent := markerError == nil
 	if session != nil {
 		_ = guard.ReleaseReservation(root, session)
@@ -211,7 +211,7 @@ func requireV04FailedStaleHeavyCleanup(root string) error {
 	if err := requireSupervisionFailedAtBoundary(root, ownerPath, before); err != nil {
 		return err
 	}
-	if _, markerError = os.Stat(filepath.Join(root, "coordination-mode.json")); markerError == nil {
+	if _, markerError = os.Stat(filepath.Join(root, coordinationModeMarker)); markerError == nil {
 		return errors.New("the public run wrote a reservation marker after failed stale-heavy cleanup")
 	}
 
@@ -275,7 +275,7 @@ func requireV04SequenceExhaustion(root string) error {
 	if err = os.MkdirAll(staleRoot, 0o700); err != nil {
 		return err
 	}
-	if err = os.WriteFile(filepath.Join(staleRoot, "coordination-mode.json"), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(staleRoot, coordinationModeMarker), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
 		return err
 	}
 	floor := guard.ReservationVector{CPU: 1, MemoryBytes: 256 * policy.MiB}
@@ -938,20 +938,7 @@ func requireV04FailedCancelledWaiterCleanup(root string) error { //nolint:cyclop
 }
 
 func moduleRootV04() (string, error) {
-	directory, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, statError := os.Stat(filepath.Join(directory, "go.mod")); statError == nil {
-			return directory, nil
-		}
-		parent := filepath.Dir(directory)
-		if parent == directory {
-			return "", errors.New("go.mod root is unavailable")
-		}
-		directory = parent
-	}
+	return toolRoot()
 }
 
 func requireV04SupervisorDeathOwnership(root string) error {
@@ -1664,8 +1651,8 @@ func requireV04OrphanedAtomicTempRetention(root string) error {
 		return err
 	}
 	stable := map[string][]byte{
-		"coordination-mode.json": []byte("stable coordination\n"),
-		"reservations.json":      []byte("stable reservations\n"),
+		coordinationModeMarker: []byte("stable coordination\n"),
+		"reservations.json":    []byte("stable reservations\n"),
 	}
 	for name, data := range stable {
 		if err := os.WriteFile(filepath.Join(root, name), data, 0o600); err != nil {
@@ -2533,7 +2520,7 @@ func requireSafeConformanceStartErrorV04(runError error, consumerName, phase str
 		return errors.New("invalid conformance command boundary was accepted")
 	}
 	message := runError.Error()
-	if !strings.Contains(message, consumerName) || !strings.Contains(message, phase) || !strings.Contains(message, "start") {
+	if !strings.Contains(message, consumerName) || !strings.Contains(message, phase) || !strings.Contains(message, tuiStartPhase) {
 		return fmt.Errorf("conformance start error omitted safe consumer/phase/category metadata: %w", runError)
 	}
 	for _, privatePath := range privatePaths {
@@ -2662,7 +2649,7 @@ func (driver *Driver) statusMarkerPrecedenceV04() error {
 			return err
 		}
 	}
-	if err := os.WriteFile(filepath.Join(driver.evidenceRoot, "schema1-reservation", "coordination-mode.json"), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(driver.evidenceRoot, "schema1-reservation", coordinationModeMarker), []byte(reviewReservationMarker+"\n"), 0o600); err != nil {
 		return err
 	}
 	emptyLedger := `{"schemaVersion":2,"capacity":{"cpu":0,"memoryBytes":0},"nextSequence":0,"owners":[],"waiters":[]}`
@@ -2671,7 +2658,7 @@ func (driver *Driver) statusMarkerPrecedenceV04() error {
 	}
 	exclusiveMarker := `{"schemaVersion":1,"mode":"exclusive"}`
 
-	return os.WriteFile(filepath.Join(driver.evidenceRoot, "schema2-exclusive", "coordination-mode.json"), []byte(exclusiveMarker+"\n"), 0o600)
+	return os.WriteFile(filepath.Join(driver.evidenceRoot, "schema2-exclusive", coordinationModeMarker), []byte(exclusiveMarker+"\n"), 0o600)
 }
 
 func (driver *Driver) requestStatusMarkerPrecedenceV04() error {

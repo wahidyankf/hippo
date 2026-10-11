@@ -351,7 +351,7 @@ func requireV04StaleIdentity(root string) error {
 	if err != nil {
 		return err
 	}
-	if err = os.WriteFile(filepath.Join(root, "coordination-mode.json"), []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n"), 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(root, coordinationModeMarker), []byte("{\"schemaVersion\":1,\"mode\":\"reservation\"}\n"), 0o600); err != nil {
 		return err
 	}
 	if err = os.WriteFile(filepath.Join(root, "reservations.json"), append(data, '\n'), 0o600); err != nil {
@@ -619,7 +619,7 @@ func requireV04Retention(root string) error {
 	if err = os.WriteFile(protocolPath, []byte("protocol"), 0o600); err != nil {
 		return err
 	}
-	for _, name := range []string{"coordination.lock", "coordination-mode.json"} {
+	for _, name := range []string{"coordination.lock", coordinationModeMarker} {
 		if err = os.WriteFile(filepath.Join(root, name), []byte("protocol"), 0o600); err != nil {
 			return err
 		}
@@ -629,7 +629,7 @@ func requireV04Retention(root string) error {
 		return err
 	}
 	old := time.Now().Add(-40 * 24 * time.Hour)
-	for _, path := range []string{protocolPath, filepath.Join(root, "coordination.lock"), filepath.Join(root, "coordination-mode.json"), expired} {
+	for _, path := range []string{protocolPath, filepath.Join(root, "coordination.lock"), filepath.Join(root, coordinationModeMarker), expired} {
 		if err = os.Chtimes(path, old, old); err != nil {
 			return err
 		}
