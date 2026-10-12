@@ -132,7 +132,15 @@ Every component above sits inside the `Go CLI process` container.
 - **Policy, identity, and status** own portable host samples, collectors, profile resolution, admission decisions, safe
   labels, and named failures. Portable interruption values retain the numeric signal and its display name.
 - **Configuration and host adapters** discover local paths, read and decode strict configuration and identity files, and
-  normalize macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence.
+  normalize macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence. Linux kernel reads propagate caller
+  cancellation through one owned read-only, nonblocking, close-on-exec descriptor and a synchronous bounded poll loop.
+  The adapter closes that descriptor before returning; the TUI observation worker still joins normally. Explicit context
+  readers take precedence over legacy synchronous readers, whose arbitrary callbacks remain non-preemptible. Optional
+  evidence fallback stops on cancellation. Nonblocking reads do not preempt arbitrary filesystem or device kernel
+  stalls; Darwin collection retains its supervised command probes. The rooted Darwin file adapter checks metadata and
+  uses the same loop for ordinary files. Darwin named pipes use an owned fixed `/bin/cat` process with private streams,
+  actual EOF and a joined `Wait` before returning, because Darwin FIFO readiness misses writer-close events. Context
+  cancellation retires only that reader child and discards partial bytes.
 - **Runtime adapter** keeps coordination locks, identity descriptors, ledger effects, compatibility leases, port
   identities, launcher handshakes, child process groups, streams, and controlling-terminal transfer together. Each
   admission or port attempt performs one atomic effect transaction; application code owns acquisition retries. Unknown

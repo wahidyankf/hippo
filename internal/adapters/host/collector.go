@@ -26,11 +26,15 @@ type CommandRunner func(context.Context, string, ...string) ([]byte, error)
 // FileReader reads one local kernel evidence file.
 type FileReader func(string) ([]byte, error)
 
+// ContextFileReader reads one local kernel evidence file with caller cancellation.
+type ContextFileReader func(context.Context, string) ([]byte, error)
+
 // SystemCollector gathers platform metrics using system calls and local probes.
 type SystemCollector struct {
-	Run      CommandRunner
-	ReadFile FileReader
-	Now      func() time.Time
+	Run             CommandRunner
+	ReadFile        FileReader
+	ReadFileContext ContextFileReader
+	Now             func() time.Time
 }
 
 // Collect gathers one reading of this host. Evidence the host will not give
@@ -41,11 +45,13 @@ type SystemCollector struct {
 // comes back as the context's own error.
 func (collector SystemCollector) Collect(ctx context.Context, previous CPUState, diskPath string) (Reading, error) {
 	reading, err := collector.collect(ctx, previous, diskPath)
+	if cancelled := ctx.Err(); cancelled != nil {
+		// Preserve the existing context classification even if adapter cleanup
+		// joined a close failure; concrete reader callers retain that detail.
+		return Reading{}, cancelled
+	}
 	if err == nil {
 		return reading, nil
-	}
-	if cancelled := ctx.Err(); cancelled != nil {
-		return Reading{}, cancelled
 	}
 
 	return Reading{}, status.Fail(status.CodeHostUnreadable, "collecting host evidence: %v", err)

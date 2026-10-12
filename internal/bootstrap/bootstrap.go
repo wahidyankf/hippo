@@ -38,7 +38,7 @@ func defaultCollector(version string, environment []string) host.SystemCollector
 		return host.SystemCollector{}
 	}
 
-	return host.SystemCollector{ReadFile: host.RootedFileReader(root)}
+	return host.SystemCollector{ReadFileContext: host.RootedContextFileReader(root)}
 }
 
 func environmentMap(environment []string) map[string]string {
