@@ -309,7 +309,10 @@ func mixedCompatibilityNativeMemoryControl(t *testing.T, validate func(coordinat
 func TestMixedV085PublicOwnerBudgetDerivesStandardRAMCapacity(t *testing.T) {
 	for _, variant := range []string{publicTUIMixedVariant, publicTUIMixedV085Variant, publicTUIMixedV084Variant} {
 		t.Run(variant, func(t *testing.T) {
-			directory := t.TempDir()
+			directory, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
 			if err := os.Chmod(directory, 0o700); err != nil {
 				t.Fatal(err)
 			}
@@ -338,6 +341,36 @@ func TestMixedV085PublicOwnerBudgetDerivesStandardRAMCapacity(t *testing.T) {
 			mixedV085StandardRAMControls(t, configured)
 		})
 	}
+}
+
+func TestMixedPublicOwnerBudgetFromSymlinkTemporaryParent(t *testing.T) {
+	parent, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(parent, "private-temp")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(parent, "temporary-alias")
+	if err := os.Symlink(target, alias); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(target, "rejected-root")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := publicTUIOwnedDirectory(root); err != nil {
+		t.Fatalf("canonical owned root rejected: %v", err)
+	}
+	if err := publicTUIOwnedDirectory(filepath.Join(alias, "rejected-root")); err == nil {
+		t.Fatal("ancestor-symlink path bypassed the ownership boundary")
+	}
+	// Go 1.26 uses GOTMPDIR for t.TempDir; ordinary os temporary files use TMPDIR.
+	// Exercise both aliases while the original test retains all three budgets.
+	t.Setenv("GOTMPDIR", alias)
+	t.Setenv("TMPDIR", alias)
+	t.Run("original-budget-model", TestMixedV085PublicOwnerBudgetDerivesStandardRAMCapacity)
 }
 
 func mixedV085StandardRAMControls(t *testing.T, configured configadapter.Result) {
