@@ -22,16 +22,17 @@ import (
 )
 
 const (
-	publicTUIHostVariant   = "host"
-	publicTUILegacyVariant = "legacy"
-	publicTUIMixedVariant  = "mixed"
+	publicTUIHostVariant      = "host"
+	publicTUILegacyVariant    = "legacy"
+	publicTUIMixedVariant     = "mixed"
+	publicTUIMixedV085Variant = "mixed-v085"
 )
 
 // PrepareObservation changes only authentic owned input fixtures. It neither
 // supplies a snapshot nor reads the selected subject's observations.
 func (fixture *PublicTUILedger) PrepareObservation(ctx context.Context, variant, fault string) error {
 	switch variant {
-	case "known", publicTUIHostVariant, "filtered", "mode-disagreement", tuiIdleState, exclusiveMode, publicTUILegacyVariant, "identity", tuiAnnotationFaultVariant, publicTUIMixedVariant, "three", "one", tuiEmptyVariant:
+	case "known", publicTUIHostVariant, "filtered", "mode-disagreement", tuiIdleState, exclusiveMode, publicTUILegacyVariant, "identity", tuiAnnotationFaultVariant, publicTUIMixedVariant, publicTUIMixedV085Variant, "three", "one", tuiEmptyVariant:
 	default:
 		return errors.New("unknown original public observation fixture")
 	}
@@ -39,7 +40,7 @@ func (fixture *PublicTUILedger) PrepareObservation(ctx context.Context, variant,
 		return err
 	}
 	fixture.expected = coordination.ReservationTotals{SchemaVersion: 5, Mode: reservationMode}
-	if variant == tuiIdleState || variant == publicTUIMixedVariant || variant == tuiEmptyVariant {
+	if variant == tuiIdleState || variant == publicTUIMixedVariant || variant == publicTUIMixedV085Variant || variant == tuiEmptyVariant {
 		return nil
 	}
 	if variant == exclusiveMode {
@@ -266,15 +267,25 @@ func (fixture *PublicTUILedger) RequireReadOnly(before map[string]string) error 
 // executables. It never launches an executable or supplies an observation.
 // IDs/PIDs come from each command's owned readiness and actual Process receipt.
 func (fixture *PublicTUILedger) AdoptMixedOwners(ctx context.Context, ids []string, pids []int) error {
-	if fixture.variant != publicTUIMixedVariant || len(ids) != 2 || len(pids) != 2 || ids[0] == ids[1] || pids[0] <= 0 || pids[1] <= 0 || pids[0] == pids[1] {
+	return fixture.adoptMixedOwners(ctx, ids, pids, 2, publicTUIMixedVariant)
+}
+
+// AdoptV085MixedOwners retains the real two-version compatibility fixture with
+// one CPU per owner. The ordinary native/BDD mixed fixture remains two CPUs.
+func (fixture *PublicTUILedger) AdoptV085MixedOwners(ctx context.Context, ids []string, pids []int) error {
+	return fixture.adoptMixedOwners(ctx, ids, pids, 1, publicTUIMixedV085Variant)
+}
+
+func (fixture *PublicTUILedger) adoptMixedOwners(ctx context.Context, ids []string, pids []int, ownerCPU int, variant string) error {
+	if fixture.variant != variant || len(ids) != 2 || len(pids) != 2 || ids[0] == ids[1] || pids[0] <= 0 || pids[1] <= 0 || pids[0] == pids[1] {
 		return errors.New("mixed input requires two distinct real owned executables")
 	}
 	actual, err := runtimeadapter.NewEngine().Snapshot(ctx, fixture.root, reservationMode)
 	if err != nil {
 		return err
 	}
-	vector := coordination.ReservationVector{CPU: 2, MemoryBytes: policy.GiB}
-	if err := validateMixedPublicOwnerBudget(actual, runtime.NumCPU()); err != nil {
+	vector := coordination.ReservationVector{CPU: ownerCPU, MemoryBytes: policy.GiB}
+	if err := validateMixedOwnerBudget(actual, runtime.NumCPU(), ownerCPU); err != nil {
 		return err
 	}
 	for index, runID := range ids {
@@ -299,7 +310,7 @@ func (fixture *PublicTUILedger) AdoptMixedOwners(ctx context.Context, ids []stri
 		}
 	}
 	fixture.expected.WaitingOwners = 3
-	fixture.expected.Waiting = coordination.ReservationVector{CPU: 6, MemoryBytes: 3 * policy.GiB}
+	fixture.expected.Waiting = coordination.ReservationVector{CPU: 3 * ownerCPU, MemoryBytes: 3 * policy.GiB}
 	for _, row := range fixture.expected.Waiters {
 		if err := evidenceadapter.RemoveDisplay(fixture.root, row.RunID); err != nil {
 			return err
@@ -311,12 +322,24 @@ func (fixture *PublicTUILedger) AdoptMixedOwners(ctx context.Context, ids []stri
 // validateMixedPublicOwnerBudget checks real owners against independently declared
 // host/configuration inputs, before their snapshot is adopted as a preservation baseline.
 func validateMixedPublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
+	return validateMixedOwnerBudget(actual, logicalCPUs, 2)
+}
+
+func validateMixedV085PublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
+	return validateMixedOwnerBudget(actual, logicalCPUs, 1)
+}
+
+func validateMixedOwnerBudget(actual coordination.ReservationTotals, logicalCPUs, ownerCPU int) error {
 	// Public reservation policy retains one safety unit (at least one CPU),
 	// while this fixture's explicit configuration caps the epoch at eight.
-	capacity := coordination.ReservationVector{CPU: min(8, max(1, logicalCPUs-1)), MemoryBytes: 8 * policy.GiB}
-	allocated := coordination.ReservationVector{CPU: 4, MemoryBytes: 2 * policy.GiB}
+	memoryCapacity := 8 * policy.GiB
+	if ownerCPU == 1 {
+		memoryCapacity = 3 * policy.GiB
+	}
+	capacity := coordination.ReservationVector{CPU: min(8, max(1, logicalCPUs-1)), MemoryBytes: memoryCapacity}
+	allocated := coordination.ReservationVector{CPU: 2 * ownerCPU, MemoryBytes: 2 * policy.GiB}
 	if capacity.CPU < allocated.CPU {
-		return fmt.Errorf("mixed public owners require at least five logical CPUs for two declared two-CPU owners: host has %d", logicalCPUs)
+		return fmt.Errorf("mixed public owners require at least %d logical CPUs for two declared %d-CPU owners: host has %d", allocated.CPU+1, ownerCPU, logicalCPUs)
 	}
 	if actual.SchemaVersion != 5 || actual.Mode != reservationMode || actual.ActiveOwners != 2 || actual.WaitingOwners != 0 || actual.Capacity != capacity || actual.Allocated != allocated {
 		return fmt.Errorf("real mixed commands changed declared input counts/budget: %+v", actual)
@@ -388,12 +411,22 @@ func (fixture *PublicTUILedger) initializeObservation(variant string) error {
 	if variant == exclusiveMode || variant == "mode-disagreement" {
 		document = boundarySchemaOne
 	}
-	if variant == publicTUIMixedVariant {
+	if variant == publicTUIMixedVariant || variant == publicTUIMixedV085Variant {
 		// Both released and current commands derive the same genuine epoch budget
 		// from public configuration and real host evidence.
-		document = strings.ReplaceAll(interruptionConfig, `"maxMemoryMiB": 16384`, `"maxMemoryMiB": 8192`)
-		document = strings.ReplaceAll(document, `"maximumMemoryMiB": 16384`, `"maximumMemoryMiB": 8192`)
+		memoryMiB := "8192"
+		if variant == publicTUIMixedV085Variant {
+			memoryMiB = "3072"
+		}
+		document = strings.ReplaceAll(interruptionConfig, `"maxMemoryMiB": 16384`, `"maxMemoryMiB": `+memoryMiB)
+		document = strings.ReplaceAll(document, `"maximumMemoryMiB": 16384`, `"maximumMemoryMiB": `+memoryMiB)
 		document = strings.ReplaceAll(document, `"maxActiveOwners": 3`, `"maxActiveOwners": 2`)
+		if variant == publicTUIMixedV085Variant {
+			// Schema three requires every tier to fit the pool, including unused
+			// standard/heavy tiers. Light retains its declared one/two-GiB bounds.
+			document = strings.ReplaceAll(document, `"maximumMemoryMiB": 6144`, `"maximumMemoryMiB": 3072`)
+			document = strings.ReplaceAll(document, `"minimumMemoryMiB": 8192`, `"minimumMemoryMiB": 3072`)
+		}
 	}
 	if err := os.WriteFile(fixture.configuration, []byte(document), 0o600); err != nil {
 		return err

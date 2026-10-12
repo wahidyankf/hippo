@@ -52,6 +52,9 @@ func TestMixedVersionV085DisplayInteroperability(t *testing.T) {
 	}) {
 		return
 	}
+	if !t.Run("input file identity", mixedV085InputFileIdentity) {
+		return
+	}
 	old := os.Getenv("HIPPO_PUBLIC_V085_BIN")
 	current := os.Getenv("HIPPO_BIN")
 	oldDigest := mixedV085ExecutableDigest(t, old)
@@ -95,26 +98,26 @@ func TestMixedVersionV085DisplayInteroperability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fixture.ledger.PrepareObservation(ctx, "mixed", ""); err != nil {
+	if err := fixture.ledger.PrepareObservation(ctx, "mixed-v085", ""); err != nil {
 		t.Fatal(err)
 	}
-	oldOwner := fixture.start(t, ctx, old, false)
+	oldOwner := fixture.start(ctx, t, old, false)
 	schemas, err := fixture.ledger.ProtocolSchemas()
 	if err != nil {
 		t.Fatal(err)
 	}
-	currentOwner := fixture.start(t, ctx, current, true)
+	currentOwner := fixture.start(ctx, t, current, true)
 	fixture.requireSchemas(t, schemas)
-	fixture.requireLabels(t, ctx, oldOwner.token, currentOwner.token, "current-owner")
-	fixture.requireDeclaredOwnerMetadata(t, ctx)
+	fixture.requireLabels(ctx, t, oldOwner.token, currentOwner.token, "current-owner")
+	fixture.requireDeclaredOwnerMetadata(ctx, t)
 	queuedStarted := time.Now()
-	if err := fixture.ledger.AdoptMixedOwners(ctx, []string{oldOwner.token, currentOwner.token}, []int{oldOwner.command.Process.Pid, currentOwner.command.Process.Pid}); err != nil {
+	if err := fixture.ledger.AdoptV085MixedOwners(ctx, []string{oldOwner.token, currentOwner.token}, []int{oldOwner.command.Process.Pid, currentOwner.command.Process.Pid}); err != nil {
 		t.Fatal(err)
 	}
 	fixture.prepareExpectedMetadata(t, queuedStarted, time.Now())
 	// The actual current run publishes its label before this test touches it.
-	fixture.requireLabels(t, ctx, oldOwner.token, currentOwner.token, "current-owner")
-	fixture.requireTransitions(t, ctx, old, current, oldOwner.token, currentOwner.token)
+	fixture.requireLabels(ctx, t, oldOwner.token, currentOwner.token, "current-owner")
+	fixture.requireTransitions(ctx, t, old, current, oldOwner.token, currentOwner.token)
 	// Restore the owned annotation so natural current-owner retirement itself
 	// must remove it; removal above must not be mistaken for cleanup evidence.
 	label, err := identity.ParseDisplayLabel("retirement-owner")
@@ -124,7 +127,7 @@ func TestMixedVersionV085DisplayInteroperability(t *testing.T) {
 	if err := evidenceadapter.WriteDisplay(fixture.root, currentOwner.token, label); err != nil {
 		t.Fatal(err)
 	}
-	fixture.requireLabels(t, ctx, oldOwner.token, currentOwner.token, "retirement-owner")
+	fixture.requireLabels(ctx, t, oldOwner.token, currentOwner.token, "retirement-owner")
 	if mixedV085ExecutableDigest(t, old) != oldDigest || mixedV085ExecutableDigest(t, current) != currentDigest {
 		t.Fatal("selected executable bytes changed during genuine mixed interoperability")
 	}
@@ -167,7 +170,7 @@ func (fixture *mixedV085Fixture) environment(probe *support.PublicTUIHostProbe) 
 	return probe.Environment([]string{"HIPPO_ROOT=" + fixture.root, "HIPPO_IDENTITY=" + fixture.identityPath, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "NO_COLOR=1", "GOMAXPROCS=2"})
 }
 
-func (fixture *mixedV085Fixture) start(t *testing.T, parent context.Context, executable string, current bool) *mixedV085Owner {
+func (fixture *mixedV085Fixture) start(parent context.Context, t *testing.T, executable string, current bool) *mixedV085Owner {
 	t.Helper()
 	directory, err := os.MkdirTemp(fixture.directory, "mixed-v085-owner-")
 	if err != nil {
@@ -178,7 +181,7 @@ func (fixture *mixedV085Fixture) start(t *testing.T, parent context.Context, exe
 	job := &mixedV085Owner{cancel: cancel, done: make(chan struct{}), release: filepath.Join(directory, "release")}
 	fixture.jobs = append(fixture.jobs, job)
 	probe := fixture.probe(ctx, t)
-	arguments := []string{"run", "--config", fixture.ledger.Configuration(), "--cwd", directory, "--disk-path", directory, "--profile", "balanced", "--class", "ephemeral", "--resource-tier", "light", "--source", "owner", "--tag", "role=owner", "--reserve-cpu", "2", "--reserve-memory-mib", "1024"}
+	arguments := []string{"run", "--config", fixture.ledger.Configuration(), "--cwd", directory, "--disk-path", directory, "--profile", "balanced", "--class", "ephemeral", "--resource-tier", "light", "--source", "owner", "--tag", "role=owner", "--reserve-cpu", "1", "--reserve-memory-mib", "1024"}
 	if current {
 		arguments = append(arguments, "--label", "current-owner")
 	}
@@ -186,6 +189,8 @@ func (fixture *mixedV085Fixture) start(t *testing.T, parent context.Context, exe
 	arguments = append(arguments, "--", "/bin/sh", "-c", script)
 	// Both owners use their explicitly selected real binaries. No TestMain build,
 	// integration model, old-version relabeling, or E2E fallback can select them.
+	// #nosec G702 -- Trusted supervisor verifies v0.8.5 provenance and builds/selects the current executable.
+	// Separate argv, fixed payload shell source and finite context/Wait preserve this real-binary boundary.
 	job.command = exec.CommandContext(ctx, executable, arguments...)
 	job.command.Dir = directory
 	job.command.Env = append(fixture.environment(probe), "PUBLIC_OWNER_READY="+ready, "PUBLIC_OWNER_RELEASE="+job.release)
@@ -234,15 +239,15 @@ func (fixture *mixedV085Fixture) start(t *testing.T, parent context.Context, exe
 	}
 }
 
-func (fixture *mixedV085Fixture) requireDeclaredOwnerMetadata(t *testing.T, ctx context.Context) {
+func (fixture *mixedV085Fixture) requireDeclaredOwnerMetadata(ctx context.Context, t *testing.T) {
 	t.Helper()
 	actual, err := runtimeadapter.NewEngine().Snapshot(ctx, fixture.root, "reservation")
 	if err != nil || len(actual.Owners) != len(fixture.jobs) {
 		t.Fatalf("declared mixed owners are not the actual live rows: %+v error=%v", actual, err)
 	}
 	// Independent launch inputs, not values copied from the snapshot adopted
-	// below: explicit overrides fix both light-tier bounds at two CPUs/one GiB.
-	vector := coordination.ReservationVector{CPU: 2, MemoryBytes: 1024 * 1024 * 1024}
+	// below: explicit overrides fix both light-tier bounds at one CPU/one GiB.
+	vector := coordination.ReservationVector{CPU: 1, MemoryBytes: 1024 * 1024 * 1024}
 	for _, job := range fixture.jobs {
 		found := false
 		for _, row := range actual.Owners {
@@ -299,7 +304,7 @@ func (fixture *mixedV085Fixture) prepareExpectedMetadata(t *testing.T, queuedSta
 	}
 	// Schema-five omits an empty abandonedProcessGroups list on the wire.
 	fixture.expected.AbandonedProcessGroups = nil
-	vector := coordination.ReservationVector{CPU: 2, MemoryBytes: 1024 * 1024 * 1024}
+	vector := coordination.ReservationVector{CPU: 1, MemoryBytes: 1024 * 1024 * 1024}
 	for group, rows := range [][]coordination.ReservationEntry{fixture.expected.Owners, fixture.expected.Waiters} {
 		for index := range rows {
 			row := &rows[index]
@@ -346,7 +351,7 @@ func (fixture *mixedV085Fixture) requireWaiterWindow(t *testing.T) {
 func mixedV085MetadataOracleControls(t *testing.T) {
 	t.Helper()
 	started := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
-	vector := coordination.ReservationVector{CPU: 2, MemoryBytes: 1024 * 1024 * 1024}
+	vector := coordination.ReservationVector{CPU: 1, MemoryBytes: 1024 * 1024 * 1024}
 	for _, source := range []string{"owner", "other"} {
 		t.Run(source, func(t *testing.T) {
 			tier, window := "", 30*time.Second
@@ -397,12 +402,14 @@ func mixedV085MetadataOracleControls(t *testing.T) {
 	}
 }
 
-func (fixture *mixedV085Fixture) requireStatus(t *testing.T, parent context.Context, executable string) {
+func (fixture *mixedV085Fixture) requireStatus(parent context.Context, t *testing.T, executable string) {
 	t.Helper()
 	fixture.requireWaiterWindow(t)
 	probe := fixture.probe(parent, t)
 	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
 	defer cancel()
+	// #nosec G702 -- Trusted supervisor verifies v0.8.5 provenance and builds/selects the current executable.
+	// Fixed status argv stays separate; the finite context and Run retain a joined, bounded reader.
 	command := exec.CommandContext(ctx, executable, "status", "--json", "--config", fixture.ledger.Configuration(), "--disk-path", fixture.directory)
 	command.Dir, command.Env = fixture.directory, fixture.environment(probe)
 	command.Stdin = strings.NewReader("")
@@ -438,7 +445,7 @@ func (fixture *mixedV085Fixture) requireStatus(t *testing.T, parent context.Cont
 	t.Logf("mixed real status binary=%s pid=%d exit=%d coordination=%+v collector=%+v", executable, command.Process.Pid, command.ProcessState.ExitCode(), actual.Coordination, trace)
 }
 
-func (fixture *mixedV085Fixture) requireTransitions(t *testing.T, ctx context.Context, old, current, oldToken, currentToken string) {
+func (fixture *mixedV085Fixture) requireTransitions(ctx context.Context, t *testing.T, old, current, oldToken, currentToken string) {
 	t.Helper()
 	schemas, err := fixture.ledger.ProtocolSchemas()
 	if err != nil {
@@ -448,6 +455,39 @@ func (fixture *mixedV085Fixture) requireTransitions(t *testing.T, ctx context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	streams := fixture.requireOwnedStreams(t, before)
+	// Labels change only their sidecar; every persisted coordination and metadata
+	// byte, FIFO position and vector must remain intact through both real readers.
+	for _, label := range []string{"current-owner", "changed-owner", ""} {
+		switch label {
+		case "changed-owner":
+			parsed, err := identity.ParseDisplayLabel(label)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := evidenceadapter.WriteDisplay(fixture.root, currentToken, parsed); err != nil {
+				t.Fatal(err)
+			}
+		case "":
+			if err := evidenceadapter.RemoveDisplay(fixture.root, currentToken); err != nil {
+				t.Fatal(err)
+			}
+		}
+		fixture.requireLabels(ctx, t, oldToken, currentToken, label)
+		for _, executable := range []string{old, current} {
+			fixture.requireStatus(ctx, t, executable)
+		}
+		fixture.requireSchemas(t, schemas)
+		after, err := fixture.ledger.CoordinationTree()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixture.requirePreservedTree(t, before, after, streams)
+	}
+}
+
+func (fixture *mixedV085Fixture) requireOwnedStreams(t *testing.T, before map[string]string) map[string]os.FileInfo {
+	t.Helper()
 	// Each independently launched live owner appends samples in this same root.
 	// Qualify exactly its PID/time-bound stream; unknown paths remain immutable.
 	streams := map[string]os.FileInfo{}
@@ -471,50 +511,29 @@ func (fixture *mixedV085Fixture) requireTransitions(t *testing.T, ctx context.Co
 	if len(streams) != 2 {
 		t.Fatal("mixed live evidence projection requires exactly two distinct owned streams")
 	}
-	// Labels change only their sidecar; every persisted coordination and metadata
-	// byte, FIFO position and vector must remain intact through both real readers.
-	for _, label := range []string{"current-owner", "changed-owner", ""} {
-		if label == "changed-owner" {
-			parsed, err := identity.ParseDisplayLabel(label)
-			if err != nil {
-				t.Fatal(err)
+	return streams
+}
+
+func (fixture *mixedV085Fixture) requirePreservedTree(t *testing.T, before, after map[string]string, streams map[string]os.FileInfo) {
+	t.Helper()
+	for path, content := range before {
+		if original, owned := streams[path]; owned {
+			info, err := os.Lstat(filepath.Join(fixture.root, path))
+			current, present := after[path]
+			if err != nil || !present || !info.Mode().IsRegular() || info.Mode() != original.Mode() || !os.SameFile(original, info) || !strings.HasPrefix(current, content) {
+				t.Fatalf("live owner sample stream lost ownership or append-only bytes: %s", path)
 			}
-			if err := evidenceadapter.WriteDisplay(fixture.root, currentToken, parsed); err != nil {
-				t.Fatal(err)
-			}
-		} else if label == "" {
-			if err := evidenceadapter.RemoveDisplay(fixture.root, currentToken); err != nil {
-				t.Fatal(err)
-			}
+			before[path] = current
+			continue
 		}
-		fixture.requireLabels(t, ctx, oldToken, currentToken, label)
-		for _, executable := range []string{old, current} {
-			fixture.requireStatus(t, ctx, executable)
+		if !strings.HasPrefix(path, "run-display/") && after[path] != content {
+			t.Fatalf("display transition changed persisted coordination/metadata %s", path)
 		}
-		fixture.requireSchemas(t, schemas)
-		after, err := fixture.ledger.CoordinationTree()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for path, content := range before {
-			if original, owned := streams[path]; owned {
-				info, err := os.Lstat(filepath.Join(fixture.root, path))
-				current, present := after[path]
-				if err != nil || !present || !info.Mode().IsRegular() || info.Mode() != original.Mode() || !os.SameFile(original, info) || !strings.HasPrefix(current, content) {
-					t.Fatalf("live owner sample stream lost ownership or append-only bytes: %s", path)
-				}
-				before[path] = current
-				continue
-			}
-			if !strings.HasPrefix(path, "run-display/") && after[path] != content {
-				t.Fatalf("display transition changed persisted coordination/metadata %s", path)
-			}
-		}
-		for path := range after {
-			if !strings.HasPrefix(path, "run-display/") {
-				if _, existed := before[path]; !existed {
-					t.Fatalf("display transition added persisted coordination/metadata %s", path)
-				}
+	}
+	for path := range after {
+		if !strings.HasPrefix(path, "run-display/") {
+			if _, existed := before[path]; !existed {
+				t.Fatalf("display transition added persisted coordination/metadata %s", path)
 			}
 		}
 	}
@@ -540,7 +559,7 @@ func (fixture *mixedV085Fixture) requireSchemas(t *testing.T, expected map[strin
 	}
 }
 
-func (fixture *mixedV085Fixture) requireLabels(t *testing.T, ctx context.Context, old, current, label string) {
+func (fixture *mixedV085Fixture) requireLabels(ctx context.Context, t *testing.T, old, current, label string) {
 	t.Helper()
 	annotations, err := (evidenceadapter.DisplayRepository{}).ReadDisplay(ctx, fixture.root, []string{old, current})
 	if err != nil || annotations[old].Availability != application.DisplayMissing {
@@ -566,6 +585,44 @@ func (fixture *mixedV085Fixture) close(t *testing.T) {
 		result = fixture.ledger.Close(ctx)
 		queuedJoined = fixture.ledger.QueuedActorsJoined()
 	}
+	result = errors.Join(result, fixture.releaseOwners(ctx, queuedJoined))
+	allJoined, joinError := fixture.joinOwners(ctx, t)
+	result = errors.Join(result, joinError)
+	// Finish BOTH owners' raw absence checks above before the first snapshot:
+	// reconciliation for either token can prune the other owner's leftovers.
+	if allJoined {
+		for _, job := range fixture.jobs {
+			if job.command != nil && job.command.Process != nil {
+				result = errors.Join(result, fixture.ledger.RequireOwnerRetired(ctx, job.token))
+			}
+		}
+	}
+	for _, probe := range fixture.probes {
+		result = errors.Join(result, probe.Close(ctx))
+		trace := probe.Trace()
+		if !trace.Closed || trace.Active != 0 {
+			allJoined = false
+			result = errors.Join(result, errors.New("mixed collector fixture remains active or unjoined"))
+		}
+	}
+	// A failed ownership join retains paths for the outer supervisor; never
+	// delete an owned directory while a command or collector still uses it.
+	if allJoined && queuedJoined {
+		result = errors.Join(result, fixture.requireEmptyLedger(ctx))
+		fixture.driver.Close()
+		if fixture.directory != "" {
+			if _, err := os.Lstat(fixture.directory); !errors.Is(err, os.ErrNotExist) {
+				result = errors.Join(result, errors.New("mixed owned directory survived joined cleanup"))
+			}
+		}
+	}
+	if result != nil {
+		t.Error(result)
+	}
+}
+
+func (fixture *mixedV085Fixture) releaseOwners(ctx context.Context, queuedJoined bool) error {
+	var result error
 	// Cancel/join actual waiters first. Releasing both ordinary children then
 	// proves natural retirement without accidentally admitting a queued actor.
 	for _, job := range fixture.jobs {
@@ -597,6 +654,12 @@ func (fixture *mixedV085Fixture) close(t *testing.T) {
 	for _, job := range fixture.jobs {
 		job.cancel()
 	}
+	return result
+}
+
+func (fixture *mixedV085Fixture) joinOwners(ctx context.Context, t *testing.T) (bool, error) {
+	t.Helper()
+	var result error
 	allJoined := true
 	for _, job := range fixture.jobs {
 		if job.command == nil || job.command.Process == nil {
@@ -605,53 +668,42 @@ func (fixture *mixedV085Fixture) close(t *testing.T) {
 		select {
 		case <-job.done:
 			result = errors.Join(result, mixedV085OwnerRetirement(job, func(pid int) error { return syscall.Kill(pid, 0) }))
-			for _, relative := range []string{"owner-metadata", "run-display"} {
-				if _, err := os.Lstat(filepath.Join(fixture.root, relative, job.token+".json")); !errors.Is(err, os.ErrNotExist) {
-					result = errors.Join(result, fmt.Errorf("mixed owned %s survived retirement: %v", relative, err))
-				}
-			}
+			result = errors.Join(result, fixture.requireRawRetirement(job))
 			t.Logf("mixed owner retired pid=%d payloadPID=%d token=%s Wait=%v stdout=%q stderr=%q", job.command.Process.Pid, job.payloadPID, job.token, job.waitError, job.output.Bytes(), job.diagnostics.Bytes())
 		case <-ctx.Done():
 			allJoined = false
 			result = errors.Join(result, errors.New("mixed owner actual Wait remains unjoined"))
 		}
 	}
-	// Finish BOTH owners' raw absence checks above before the first snapshot:
-	// reconciliation for either token can prune the other owner's leftovers.
-	if allJoined {
-		for _, job := range fixture.jobs {
-			if job.command != nil && job.command.Process != nil {
-				result = errors.Join(result, fixture.ledger.RequireOwnerRetired(ctx, job.token))
+	return allJoined, result
+}
+
+func (fixture *mixedV085Fixture) requireRawRetirement(job *mixedV085Owner) error {
+	var result error
+	for _, relative := range []string{"owner-metadata", "run-display"} {
+		if _, err := os.Lstat(filepath.Join(fixture.root, relative, job.token+".json")); !errors.Is(err, os.ErrNotExist) {
+			if err == nil {
+				result = errors.Join(result, fmt.Errorf("mixed owned %s survived retirement", relative))
+			} else {
+				result = errors.Join(result, fmt.Errorf("mixed owned %s retirement remains unverified: %w", relative, err))
 			}
 		}
 	}
-	for _, probe := range fixture.probes {
-		result = errors.Join(result, probe.Close(ctx))
-		trace := probe.Trace()
-		if !trace.Closed || trace.Active != 0 {
-			allJoined = false
-			result = errors.Join(result, errors.New("mixed collector fixture remains active or unjoined"))
-		}
+	return result
+}
+
+func (fixture *mixedV085Fixture) requireEmptyLedger(ctx context.Context) error {
+	if fixture.ledger == nil {
+		return nil
 	}
-	// A failed ownership join retains paths for the outer supervisor; never
-	// delete an owned directory while a command or collector still uses it.
-	if allJoined && queuedJoined {
-		if fixture.ledger != nil {
-			actual, err := runtimeadapter.NewEngine().Snapshot(ctx, fixture.root, "reservation")
-			if err != nil || actual.ActiveOwners != 0 || actual.WaitingOwners != 0 || len(actual.Owners) != 0 || len(actual.Waiters) != 0 || actual.Allocated != (coordination.ReservationVector{}) || actual.Waiting != (coordination.ReservationVector{}) {
-				result = errors.Join(result, fmt.Errorf("mixed cleanup left live ownership or reservation demand: %+v error=%v", actual, err))
-			}
-		}
-		fixture.driver.Close()
-		if fixture.directory != "" {
-			if _, err := os.Lstat(fixture.directory); !errors.Is(err, os.ErrNotExist) {
-				result = errors.Join(result, errors.New("mixed owned directory survived joined cleanup"))
-			}
-		}
+	actual, err := runtimeadapter.NewEngine().Snapshot(ctx, fixture.root, "reservation")
+	if err != nil {
+		return fmt.Errorf("mixed cleanup snapshot remains unverified: %w", err)
 	}
-	if result != nil {
-		t.Error(result)
+	if actual.ActiveOwners != 0 || actual.WaitingOwners != 0 || len(actual.Owners) != 0 || len(actual.Waiters) != 0 || actual.Allocated != (coordination.ReservationVector{}) || actual.Waiting != (coordination.ReservationVector{}) {
+		return fmt.Errorf("mixed cleanup left live ownership or reservation demand: %+v", actual)
 	}
+	return nil
 }
 
 func mixedV085OwnerRetirement(job *mixedV085Owner, inspect func(int) error) error {
@@ -679,13 +731,15 @@ func mixedV085ExecutableDigest(t *testing.T, path string) string {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		t.Fatal("mixed executable requires a clean absolute path")
 	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		t.Fatalf("mixed executable must be regular and executable: %v", err)
-	}
-	file, err := os.Open(path)
+	file, info, err := mixedV085OpenRegular(path)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+		t.Fatal("mixed executable must be executable")
 	}
 	hash := sha256.New()
 	_, readError := io.Copy(hash, file)
@@ -700,11 +754,7 @@ func mixedV085Read(t *testing.T, path string, maximum int64) []byte {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		t.Fatal("mixed receipt requires a clean absolute path")
 	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		t.Fatalf("mixed receipt must be a regular file: %v", err)
-	}
-	file, err := os.Open(path)
+	file, _, err := mixedV085OpenRegular(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -716,6 +766,41 @@ func mixedV085Read(t *testing.T, path string, maximum int64) []byte {
 		t.Fatal("mixed receipt exceeds its byte bound")
 	}
 	return data
+}
+
+// Open relative to an explicit parent capability, rejecting symlinks and a
+// replacement between lstat and open. The caller owns and closes the returned fd.
+func mixedV085OpenRegular(path string) (*os.File, os.FileInfo, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return nil, nil, errors.New("mixed input requires a clean absolute path")
+	}
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, nil, err
+	}
+	name := filepath.Base(path)
+	info, err := root.Lstat(name)
+	if err != nil {
+		return nil, nil, errors.Join(err, root.Close())
+	}
+	if !info.Mode().IsRegular() {
+		return nil, nil, errors.Join(errors.New("mixed input must be a regular file"), root.Close())
+	}
+	file, openError := root.Open(name)
+	if err := errors.Join(openError, root.Close()); err != nil {
+		if file != nil {
+			err = errors.Join(err, file.Close())
+		}
+		return nil, nil, err
+	}
+	opened, err := file.Stat()
+	if err != nil {
+		return nil, nil, errors.Join(err, file.Close())
+	}
+	if !os.SameFile(info, opened) || !opened.Mode().IsRegular() {
+		return nil, nil, errors.Join(errors.New("mixed input identity changed during open"), file.Close())
+	}
+	return file, opened, nil
 }
 
 func mixedV085Decode(t *testing.T, data []byte, destination any) {

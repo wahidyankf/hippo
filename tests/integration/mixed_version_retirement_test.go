@@ -5,7 +5,10 @@ package integration_test
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -83,5 +86,58 @@ func mixedV085RequireRetirementDiagnostic(t *testing.T, err error, message strin
 	}
 	if unknown && strings.Contains(err.Error(), "mixed payload survived") {
 		t.Errorf("unproven payload identity reported as survival: %v", err)
+	}
+}
+
+func TestMixedVersionInputFileIdentity(t *testing.T) {
+	mixedV085InputFileIdentity(t)
+}
+
+func mixedV085InputFileIdentity(t *testing.T) {
+	t.Helper()
+	directory := t.TempDir()
+	regular := filepath.Join(directory, "regular")
+	if err := os.WriteFile(regular, []byte("bounded receipt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	symlink := filepath.Join(directory, "symlink")
+	if err := os.Symlink(regular, symlink); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name, path string
+		accepted   bool
+	}{
+		{"regular", regular, true},
+		{"symlink", symlink, false},
+		{"directory", directory, false},
+		{"missing", filepath.Join(directory, "missing"), false},
+		{"relative", "regular", false},
+		{"unclean", directory + "/../" + filepath.Base(directory) + "/regular", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			file, info, err := mixedV085OpenRegular(test.path)
+			if !test.accepted {
+				if file != nil {
+					if closeError := file.Close(); closeError != nil {
+						t.Fatal(closeError)
+					}
+				}
+				if err == nil || file != nil || info != nil {
+					t.Fatal("foreign or nonregular input accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, readError := io.ReadAll(file)
+			if err := errors.Join(readError, file.Close()); err != nil {
+				t.Fatal(err)
+			}
+			if !info.Mode().IsRegular() || string(data) != "bounded receipt" {
+				t.Fatal("regular file identity/bytes changed")
+			}
+		})
 	}
 }
