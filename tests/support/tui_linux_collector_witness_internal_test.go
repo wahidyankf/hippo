@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -1067,4 +1070,150 @@ func TestLinuxCollectorWitnessNativeRootPrivacy(t *testing.T) {
 			t.Fatal("validator accepted a nonprivate owned root")
 		}
 	})
+}
+
+func TestLinuxCollectorWitnessResumeMetadataPresentation(t *testing.T) {
+	metadata := linuxWitnessFailureMetadata{
+		Leader: 11, TID: 22, Signal: 10,
+		Stop:  linuxWitnessStopMetadata{Status: 1407, Signal: 5, Event: 0, Kind: 4, Phase: 1, NumberKnown: true, Number: 231},
+		Last:  linuxWitnessResumeMetadata{Known: true, TID: 33, Signal: 0, Stop: linuxWitnessStopMetadata{Phase: 2, NumberKnown: true, Number: 202}},
+		Owned: 3, Held: 2, Detached: 1, Readings: 2, Active: 0, MaximumActive: 1,
+		Step: 14, Steps: 14, Events: 90, Pending: 1, Files: 2, PreludePending: 3, PreludeFiles: 4,
+		Retry: true, RetryTID: 44, Context: 1,
+	}
+	for _, original := range []error{syscall.ESRCH, syscall.EPERM} {
+		err := linuxWitnessResumeError(22, original, metadata)
+		if !errors.Is(err, original) || !errors.Is(errors.Join(err, errors.New("cleanup failed")), original) {
+			t.Fatal("resume diagnostic lost original errno identity", err)
+		}
+		for _, want := range []string{"Leader:11", "TID:22", "Number:231", "Number:202", "Known:true", "Owned:3", "Held:2", "Detached:1", "Readings:2", "Active:0", "MaximumActive:1", "Closed:false", "Step:14", "Steps:14", "Events:90", "Pending:1", "Files:2", "PreludePending:3", "PreludeFiles:4", "Retry:true", "RetryTID:44", "Context:canceled"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("resume diagnostic lacks observed field %q: %v", want, err)
+			}
+		}
+	}
+}
+
+func TestLinuxCollectorWitnessResumeMetadataSyscallAssociation(t *testing.T) {
+	var observation linuxWitnessObservation
+	if observation.held.NumberKnown || observation.entryKnown {
+		t.Fatal("initial observation invented a syscall")
+	}
+	observation.stop(1407, 5, 0, 4)
+	observation.syscall(1, 231)
+	if !observation.held.NumberKnown || observation.held.Number != 231 || observation.held.Phase != 1 {
+		t.Fatal("ignored ENTRY lost its observed syscall number", observation)
+	}
+	last := linuxWitnessSuccessfulResume(22, 0, observation.held)
+	originalLast := last
+	observation.stop(196991, 5, 3, 3)
+	if observation.held.Status != 196991 || observation.held.Signal != 5 || observation.held.Event != 3 || observation.held.Kind != 3 {
+		t.Fatal("non-syscall stop lost exact numeric observations", observation)
+	}
+	observation.stop(2687, 10, 0, 6)
+	if observation.held.Phase != 0 || observation.held.NumberKnown || observation.held.Number != 0 {
+		t.Fatal("signal stop invented a current syscall", observation)
+	}
+	observation.stop(1407, 5, 0, 4)
+	observation.syscall(2, math.MaxUint64)
+	if !observation.held.NumberKnown || observation.held.Number != 231 || observation.held.Phase != 2 {
+		t.Fatal("EXIT result replaced the observed ENTRY number", observation)
+	}
+	if last != originalLast || !last.Known || last.Stop.Phase != 1 || last.Stop.Number != 231 {
+		t.Fatal("later observation rewrote the copied successful resume", last)
+	}
+	observation.stop(1407, 5, 0, 4)
+	observation.syscall(2, 202)
+	if observation.held.NumberKnown || observation.held.Number != 0 {
+		t.Fatal("unpaired EXIT treated result as a syscall number", observation)
+	}
+	observation.stop(1407, 5, 0, 4)
+	observation.syscall(1, 0)
+	if !observation.held.NumberKnown || observation.held.Number != 0 {
+		t.Fatal("valid syscall zero became unknown", observation)
+	}
+}
+
+func TestLinuxCollectorWitnessResumeMetadataSnapshotIsBoundedAndImmutable(t *testing.T) {
+	const disclosureSentinel = "subject-path-buffer-payload-must-not-appear"
+	reducer := newLinuxCollectorReducer(11, disclosureSentinel)
+	file := &linuxWitnessFile{}
+	reducer.files[9] = file
+	reducer.pending[22] = linuxWitnessEvent{Path: disclosureSentinel, ReadIdentity: linuxWitnessReadIdentity{Buffer: math.MaxUint64}}
+	reducer.prelude.files[30] = disclosureSentinel
+	reducer.prelude.pending[22] = true
+	reducer.trace.Events = []PublicTUIHostProbeEvent{{Operation: disclosureSentinel}}
+	reducer.trace.Readings, reducer.trace.Active, reducer.trace.MaximumActive = 2, 1, 2
+	reducer.step = 3
+	reducer.retry = &linuxWitnessReadRetry{file: file, activeTID: 22, identity: linuxWitnessReadIdentity{Buffer: math.MaxUint64}}
+	before := *reducer
+	before.files, before.pending = maps.Clone(reducer.files), maps.Clone(reducer.pending)
+	before.prelude.files, before.prelude.pending = maps.Clone(reducer.prelude.files), maps.Clone(reducer.prelude.pending)
+	before.trace.Events = slices.Clone(reducer.trace.Events)
+	beforeRetry, beforeFile := *reducer.retry, *file
+	last := linuxWitnessSuccessfulResume(22, 0, linuxWitnessStopMetadata{NumberKnown: true, Number: 231})
+	metadata := reducer.failureMetadata(linuxWitnessFailureMetadata{Leader: 11, TID: 33, Last: last})
+	if metadata.Readings != 2 || metadata.Active != 1 || metadata.MaximumActive != 2 || metadata.Closed || metadata.Step != 3 || metadata.Steps != len(reducer.steps) || metadata.Events != 1 || metadata.Pending != 1 || metadata.Files != 1 || metadata.PreludePending != 1 || metadata.PreludeFiles != 1 || !metadata.Retry || metadata.RetryTID != 22 {
+		t.Fatal("snapshot lost observed reducer state", metadata)
+	}
+	formatted := linuxWitnessResumeError(33, syscall.ESRCH, metadata).Error()
+	if strings.Contains(formatted, disclosureSentinel) || strings.Contains(formatted, "18446744073709551615") || len(formatted) > 2048 || metadata.Last != last {
+		t.Fatal("snapshot disclosed subject data, exceeded bound or rewrote last resume", formatted)
+	}
+	if !reflect.DeepEqual(*reducer, before) || *reducer.retry != beforeRetry || *file != beforeFile {
+		t.Fatal("snapshot or formatting mutated collector evidence")
+	}
+	reducer.retry = nil
+	metadata = reducer.failureMetadata(metadata)
+	if metadata.Retry || metadata.RetryTID != 0 {
+		t.Fatal("snapshot kept stale retry debt", metadata)
+	}
+}
+
+func TestLinuxCollectorWitnessResumeMetadataMaximumScalarsAndContext(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"live", nil, "nil"},
+		{"canceled", context.Canceled, "canceled"},
+		{"expired", context.DeadlineExceeded, "deadline-exceeded"},
+		{"unexpected", errors.New("private-context-error-must-not-appear"), "unexpected-context-error"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			metadata := linuxWitnessFailureMetadata{Context: linuxWitnessContextObservation(test.err)}
+			witnessMetadataMaximumScalars(reflect.ValueOf(&metadata).Elem())
+			metadata.Context = linuxWitnessContextObservation(test.err)
+			err := linuxWitnessResumeError(math.MaxInt, syscall.ESRCH, metadata)
+			if len(err.Error()) > 2048 || !strings.Contains(err.Error(), "Context:"+test.want) || strings.Contains(err.Error(), "private-context-error-must-not-appear") || !errors.Is(err, syscall.ESRCH) {
+				t.Fatal("scalar diagnostic exceeded bound, disclosed context text or lost errno", err)
+			}
+		})
+	}
+}
+
+func witnessMetadataMaximumScalars(value reflect.Value) {
+	for _, field := range value.Fields() {
+		switch field.Kind() {
+		case reflect.Struct:
+			witnessMetadataMaximumScalars(field)
+		case reflect.Int:
+			field.SetInt(math.MaxInt)
+		case reflect.Int32:
+			field.SetInt(math.MaxInt32)
+		case reflect.Uint32:
+			field.SetUint(math.MaxUint32)
+		case reflect.Uint8:
+			field.SetUint(math.MaxUint8)
+		case reflect.Uint64:
+			field.SetUint(math.MaxUint64)
+		case reflect.Bool:
+			field.SetBool(true)
+		case reflect.Invalid, reflect.Int8, reflect.Int16, reflect.Int64, reflect.Uint, reflect.Uint16, reflect.Uintptr,
+			reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.Array, reflect.Chan, reflect.Func,
+			reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice, reflect.String, reflect.UnsafePointer:
+			panic("diagnostic added a non-scalar field")
+		}
+	}
 }
