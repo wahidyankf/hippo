@@ -60,8 +60,16 @@ Agent tools must not directly read, write, or edit `.env*` files, except `.env.e
 Code, OpenCode, and Command Code native bindings enforce their own physical checkout; neutral routing covers
 cross-repository operations. Compute-admission exemptions do not waive these restrictions.
 
-Agents must not open or read private-key contents anywhere. When private-key or secret access is necessary, agents must
-hand the command or script to the user, who executes it in a separate terminal session; agents must not run the access
-step themselves. Agents must not record secrets in the session, except secrets usable only in local development
-(loopback/localhost services, dummy or example values such as `.env.example`). The user reserves all private-key and
-secret access to themselves. No gate enforces this; review checks the observations.
+Agents must not open or read private-key contents anywhere, including outside every repository. Each secret step must be
+exactly one copy-ready command carrying its working directory, placed by the agent on the operator clipboard; the
+operator runs it in their own terminal, entering each secret at a hidden prompt only, and replies with the success word
+the step names, and the agent continues only on it. Agents must never request, handle, or record secret values, full
+outputs, or screenshots, and must avoid any script or interaction that prints, echoes, logs, or otherwise exposes a
+secret to the harness session; diagnosis uses exit and error codes alone, and only local-development secrets (loopback
+services, dummy or example values such as `.env.example`) may appear in session records. The secret session must open
+only inside the phase that needs it and lock before any review, pause, or PR handoff. Agent-assisted delivery must apply
+only with a proper pipeline and secrets management (tracked wrapper, closed one-word outputs, leak screens, green
+gates); elsewhere the agent stops at the secret boundary. An agent may operate the leak review only after reading every
+commit at the pinned head against the three leak classes; a record without that reading is fabrication. This removes
+value exposure from the session, and proper pipelines earn faster delivery. No gate enforces this; review checks the
+observations.
