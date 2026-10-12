@@ -59,3 +59,9 @@ Agent tools must not directly read, write, or edit `.env*` files, except `.env.e
 `scripts/agent-policy-hook.sh`; the tracked `.serena/project.yml` excludes the same paths from semantic indexing. Claude
 Code, OpenCode, and Command Code native bindings enforce their own physical checkout; neutral routing covers
 cross-repository operations. Compute-admission exemptions do not waive these restrictions.
+
+Agents must not open or read private-key contents anywhere. When private-key or secret access is necessary, agents must
+hand the command or script to the user, who executes it in a separate terminal session; agents must not run the access
+step themselves. Agents must not record secrets in the session, except secrets usable only in local development
+(loopback/localhost services, dummy or example values such as `.env.example`). The user reserves all private-key and
+secret access to themselves. No gate enforces this; review checks the observations.
