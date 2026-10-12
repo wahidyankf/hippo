@@ -87,7 +87,7 @@ func (fixture *publicBDDObservation) prepareCase(ctx context.Context, variant, f
 		fixture.idleBefore, err = fixture.ledger.CoordinationTree()
 		return ctx, err
 	}
-	if variant == "mixed" {
+	if fixture.isMixedObservation() {
 		return ctx, fixture.prepareMixedOwners(ctx)
 	}
 	return ctx, nil

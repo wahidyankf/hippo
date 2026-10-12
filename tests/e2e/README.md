@@ -34,9 +34,14 @@ and two GiB. Its scoped configuration caps memory capacity at three GiB, so the 
 runner with seven GB RAM after the production safety reserve. Production admission retains one CPU for the host, so the
 fixture requires at least three logical CPUs. Its three one-CPU FIFO peers remain genuinely queued behind the existing
 two-owner limit throughout display transitions. The 90-second owner context, 120-second leaf timeout, complete metadata
-and public-reader assertions, and natural zero retirement checks remain mandatory. The retained v0.8.4 native/BDD
-fixture separately keeps two CPUs per owner and its five-CPU host requirement and eight-GiB memory cap; this
-compatibility budget does not change production reservation policy.
+and public-reader assertions, and natural zero retirement checks remain mandatory.
+
+The canonical v0.8.4 public E2E row uses a separate compatibility variant with the same one-CPU owner requests,
+three-GiB memory cap and three-CPU host minimum. It retains its original four steps, 20-second journey, three-second
+retirement budget, real old/current binaries, current status and TUI assertions, unchanged coordination schemas, FIFO
+vectors and natural retirement with joined exit 0. The default native mixed fixture separately keeps two CPUs per owner,
+its five-CPU host minimum and eight-GiB memory cap. These scoped compatibility budgets do not change production
+reservation policy or either suite's selectors.
 
 For offline acquisition, set `HIPPO_E2E_OLD_ARCHIVE` and `HIPPO_E2E_V085_ARCHIVE` to absolute regular archive paths for
 the matching host and release. Each goes through the same checksum, member, and executable identity checks:

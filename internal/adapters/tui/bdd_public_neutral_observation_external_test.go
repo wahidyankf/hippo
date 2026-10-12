@@ -56,7 +56,7 @@ func (fixture *publicBDDObservation) neutralHandler(pattern string) any {
 	case `^the annotation advisory exposes no unchecked payload or private path$`:
 		return fixture.requirePrivateAdvisory
 	case `^old and current owners sharing unchanged coordination schemas$`:
-		return prepare("mixed")
+		return prepare(publicBDDMixedV084Variant)
 	case `^owners without display annotations remain visible with unavailable labels$`:
 		return fixture.checkRows
 	case `^admission accounting and FIFO ordering remain unchanged$`:
@@ -189,7 +189,7 @@ func (fixture *publicBDDObservation) checkPublicDetailRow(ctx context.Context, n
 		return err
 	}
 	absent := []string{}
-	if !row.Legacy && (fixture.variant != "mixed" || row.RegisteredAt != "") {
+	if !row.Legacy && (!fixture.isMixedObservation() || row.RegisteredAt != "") {
 		absent = append(absent, "Registered: unavailable")
 	}
 	if _, err := fixture.await(ctx, present, absent); err != nil {
@@ -234,7 +234,7 @@ func (fixture *publicBDDObservation) finishObservation(ctx context.Context) erro
 	if err := fixture.ledger.RequirePublicTotals(fixture.status.Coordination); err != nil {
 		return err
 	}
-	if fixture.variant == "mixed" {
+	if fixture.isMixedObservation() {
 		schemas, err := fixture.ledger.ProtocolSchemas()
 		if err != nil {
 			return err
@@ -249,7 +249,7 @@ func (fixture *publicBDDObservation) finishObservation(ctx context.Context) erro
 	if err := fixture.ledger.VerifyLiveness(ctx); err != nil {
 		return err
 	}
-	if fixture.variant == "mixed" {
+	if fixture.isMixedObservation() {
 		// Retire genuine mixed children before Godog cancels the scenario context.
 		// All schema, accounting, FIFO, frame, natural-q and live-owner checks precede release.
 		cleanup, stop := context.WithTimeout(ctx, 3*time.Second)

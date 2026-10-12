@@ -26,13 +26,14 @@ const (
 	publicTUILegacyVariant    = "legacy"
 	publicTUIMixedVariant     = "mixed"
 	publicTUIMixedV085Variant = "mixed-v085"
+	publicTUIMixedV084Variant = "mixed-v084"
 )
 
 // PrepareObservation changes only authentic owned input fixtures. It neither
 // supplies a snapshot nor reads the selected subject's observations.
 func (fixture *PublicTUILedger) PrepareObservation(ctx context.Context, variant, fault string) error {
 	switch variant {
-	case "known", publicTUIHostVariant, "filtered", "mode-disagreement", tuiIdleState, exclusiveMode, publicTUILegacyVariant, "identity", tuiAnnotationFaultVariant, publicTUIMixedVariant, publicTUIMixedV085Variant, "three", "one", tuiEmptyVariant:
+	case "known", publicTUIHostVariant, "filtered", "mode-disagreement", tuiIdleState, exclusiveMode, publicTUILegacyVariant, "identity", tuiAnnotationFaultVariant, publicTUIMixedVariant, publicTUIMixedV085Variant, publicTUIMixedV084Variant, "three", "one", tuiEmptyVariant:
 	default:
 		return errors.New("unknown original public observation fixture")
 	}
@@ -40,7 +41,7 @@ func (fixture *PublicTUILedger) PrepareObservation(ctx context.Context, variant,
 		return err
 	}
 	fixture.expected = coordination.ReservationTotals{SchemaVersion: 5, Mode: reservationMode}
-	if variant == tuiIdleState || variant == publicTUIMixedVariant || variant == publicTUIMixedV085Variant || variant == tuiEmptyVariant {
+	if variant == tuiIdleState || variant == publicTUIMixedVariant || variant == publicTUIMixedV085Variant || variant == publicTUIMixedV084Variant || variant == tuiEmptyVariant {
 		return nil
 	}
 	if variant == exclusiveMode {
@@ -270,6 +271,12 @@ func (fixture *PublicTUILedger) AdoptMixedOwners(ctx context.Context, ids []stri
 	return fixture.adoptMixedOwners(ctx, ids, pids, 2, publicTUIMixedVariant)
 }
 
+// AdoptV084MixedOwners owns the public v0.8.4 compatibility route. The native
+// mixed fixture keeps its separate two-CPU contract.
+func (fixture *PublicTUILedger) AdoptV084MixedOwners(ctx context.Context, ids []string, pids []int) error {
+	return fixture.adoptMixedOwners(ctx, ids, pids, 1, publicTUIMixedV084Variant)
+}
+
 // AdoptV085MixedOwners retains the real two-version compatibility fixture with
 // one CPU per owner. The ordinary native/BDD mixed fixture remains two CPUs.
 func (fixture *PublicTUILedger) AdoptV085MixedOwners(ctx context.Context, ids []string, pids []int) error {
@@ -323,6 +330,10 @@ func (fixture *PublicTUILedger) adoptMixedOwners(ctx context.Context, ids []stri
 // host/configuration inputs, before their snapshot is adopted as a preservation baseline.
 func validateMixedPublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
 	return validateMixedOwnerBudget(actual, logicalCPUs, 2)
+}
+
+func validateMixedV084PublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
+	return validateMixedOwnerBudget(actual, logicalCPUs, 1)
 }
 
 func validateMixedV085PublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
@@ -411,17 +422,17 @@ func (fixture *PublicTUILedger) initializeObservation(variant string) error {
 	if variant == exclusiveMode || variant == "mode-disagreement" {
 		document = boundarySchemaOne
 	}
-	if variant == publicTUIMixedVariant || variant == publicTUIMixedV085Variant {
+	if variant == publicTUIMixedVariant || variant == publicTUIMixedV085Variant || variant == publicTUIMixedV084Variant {
 		// Both released and current commands derive the same genuine epoch budget
 		// from public configuration and real host evidence.
 		memoryMiB := "8192"
-		if variant == publicTUIMixedV085Variant {
+		if variant == publicTUIMixedV085Variant || variant == publicTUIMixedV084Variant {
 			memoryMiB = "3072"
 		}
 		document = strings.ReplaceAll(interruptionConfig, `"maxMemoryMiB": 16384`, `"maxMemoryMiB": `+memoryMiB)
 		document = strings.ReplaceAll(document, `"maximumMemoryMiB": 16384`, `"maximumMemoryMiB": `+memoryMiB)
 		document = strings.ReplaceAll(document, `"maxActiveOwners": 3`, `"maxActiveOwners": 2`)
-		if variant == publicTUIMixedV085Variant {
+		if variant == publicTUIMixedV085Variant || variant == publicTUIMixedV084Variant {
 			// Schema three requires every tier to fit the pool, including unused
 			// standard/heavy tiers. Light retains its declared one/two-GiB bounds.
 			document = strings.ReplaceAll(document, `"maximumMemoryMiB": 6144`, `"maximumMemoryMiB": 3072`)
