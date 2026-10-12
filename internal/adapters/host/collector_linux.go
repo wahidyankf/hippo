@@ -13,23 +13,39 @@ import (
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
-func readOptional(read FileReader, path string) []byte {
-	value, err := read(path)
-	if err != nil {
-		return nil
+func readOptionalFiles(ctx context.Context, read ContextFileReader, paths ...string) ([][]byte, error) {
+	values := make([][]byte, len(paths))
+	for index, path := range paths {
+		value, err := read(ctx, path)
+		if cancelled := ctx.Err(); cancelled != nil {
+			return nil, cancelled
+		}
+		if err == nil {
+			values[index] = value
+		}
 	}
-
-	return value
+	return values, nil
 }
 
-func linuxMemoryPressure(read FileReader, cgroup string) (*float64, *float64, int) {
-	psiData := readOptional(read, filepath.Join(cgroup, "memory.pressure"))
-	if len(psiData) == 0 {
-		psiData = readOptional(read, "/proc/pressure/memory")
+func linuxMemoryPressure(ctx context.Context, read ContextFileReader, cgroup string) (*float64, *float64, int, error) {
+	values, readError := readOptionalFiles(ctx, read, filepath.Join(cgroup, "memory.pressure"))
+	if readError != nil {
+		return nil, nil, 0, readError
+	}
+	if len(values[0]) == 0 {
+		values, readError = readOptionalFiles(ctx, read, "/proc/pressure/memory")
+		if readError != nil {
+			return nil, nil, 0, readError
+		}
 	}
 
+	some, full, pressureLevel := linuxMemoryPressureValues(values[0])
+	return some, full, pressureLevel, nil
+}
+
+func linuxMemoryPressureValues(data []byte) (*float64, *float64, int) {
 	pressureLevel := 1
-	psi, err := ParsePSI(string(psiData))
+	psi, err := ParsePSI(string(data))
 	if err != nil {
 		return nil, nil, pressureLevel
 	}
@@ -50,17 +66,14 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 		return Reading{}, err
 	}
 
-	read := collector.ReadFile
-	if read == nil {
-		read = os.ReadFile
-	}
+	read := collector.contextFileReader()
 
 	now := collector.Now
 	if now == nil {
 		now = time.Now
 	}
 
-	memData, err := read("/proc/meminfo")
+	memData, err := read(ctx, "/proc/meminfo")
 	if err != nil {
 		return Reading{}, fmt.Errorf("read Linux memory: %w", err)
 	}
@@ -70,7 +83,7 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 		return Reading{}, err
 	}
 
-	statData, err := read("/proc/stat")
+	statData, err := read(ctx, "/proc/stat")
 	if err != nil {
 		return Reading{}, fmt.Errorf("read Linux CPU: %w", err)
 	}
@@ -80,38 +93,34 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 		return Reading{}, err
 	}
 
-	cgroupData := readOptional(read, "/proc/self/cgroup")
-	cgroup := CgroupRoot(string(cgroupData))
-	maximum, maximumFinite := ParseCgroupLimit(readOptional(read, filepath.Join(cgroup, "memory.max")))
-	high, highFinite := ParseCgroupLimit(readOptional(read, filepath.Join(cgroup, "memory.high")))
-	if !maximumFinite {
-		maximum = 0
+	cgroupValues, err := readOptionalFiles(ctx, read, "/proc/self/cgroup")
+	if err != nil {
+		return Reading{}, err
 	}
-	if !highFinite {
-		high = 0
+	cgroup := CgroupRoot(string(cgroupValues[0]))
+	capacity, err := readOptionalFiles(ctx, read,
+		filepath.Join(cgroup, "memory.max"), filepath.Join(cgroup, "memory.high"),
+		filepath.Join(cgroup, "memory.current"), filepath.Join(cgroup, "memory.stat"), filepath.Join(cgroup, "cpu.max"))
+	if err != nil {
+		return Reading{}, err
+	}
+	effective, available, parallelism := linuxCgroupCapacity(memory, capacity, runtime.NumCPU())
+
+	some, full, pressureLevel, err := linuxMemoryPressure(ctx, read, cgroup)
+	if err != nil {
+		return Reading{}, err
 	}
 
-	effective := EffectiveMemoryLimit(memory.Total, maximum, high)
-	available := CgroupAvailableMemory(
-		memory.Available,
-		effective,
-		readOptional(read, filepath.Join(cgroup, "memory.current")),
-		readOptional(read, filepath.Join(cgroup, "memory.stat")),
-	)
-
-	parallelism := runtime.NumCPU()
-	if quota, finite := ParseCPUMax(string(readOptional(read, filepath.Join(cgroup, "cpu.max")))); finite {
-		parallelism = min(parallelism, quota)
+	swap, err := readOptionalFiles(ctx, read, filepath.Join(cgroup, "memory.events"),
+		filepath.Join(cgroup, "memory.swap.max"), filepath.Join(cgroup, "memory.swap.current"))
+	if err != nil {
+		return Reading{}, err
 	}
-	parallelism = max(1, parallelism)
-
-	some, full, pressureLevel := linuxMemoryPressure(read, cgroup)
-
-	events := ParseMemoryEvents(string(readOptional(read, filepath.Join(cgroup, "memory.events"))))
+	events := ParseMemoryEvents(string(swap[0]))
 	oom, oomKill := events["oom"], events["oom_kill"]
 
-	swapMax, swapMaxFinite := ParseCgroupLimit(readOptional(read, filepath.Join(cgroup, "memory.swap.max")))
-	swapCurrent, swapCurrentFinite := ParseCgroupLimit(readOptional(read, filepath.Join(cgroup, "memory.swap.current")))
+	swapMax, swapMaxFinite := ParseCgroupLimit(swap[1])
+	swapCurrent, swapCurrentFinite := ParseCgroupLimit(swap[2])
 	swapState := "idle"
 	if memory.SwapTotal == 0 || swapMaxFinite && swapMax == 0 {
 		swapState = "unavailable"
@@ -119,13 +128,20 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 		swapState = "active"
 	}
 
+	if err := ctx.Err(); err != nil {
+		return Reading{}, err
+	}
 	diskFree, diskTotal, diskError := diskCapacity(diskPath)
 	if diskError != nil {
 		return Reading{}, fmt.Errorf("read disk capacity: %w", diskError)
 	}
 
 	pageSize := int64(os.Getpagesize())
-	swapIns, swapOuts := ParseLinuxVMStat(string(readOptional(read, "/proc/vmstat")))
+	vmstat, err := readOptionalFiles(ctx, read, "/proc/vmstat")
+	if err != nil {
+		return Reading{}, err
+	}
+	swapIns, swapOuts := ParseLinuxVMStat(string(vmstat[0]))
 	swapUsed := max(int64(0), memory.SwapTotal-memory.SwapFree)
 
 	sample := policy.Sample{
@@ -155,4 +171,29 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 	}
 
 	return Reading{CPUState: currentCPU, Sample: sample}, nil
+}
+
+func linuxCgroupCapacity(memory LinuxMemory, capacity [][]byte, parallelism int) (int64, int64, int) {
+	maximum, maximumFinite := ParseCgroupLimit(capacity[0])
+	high, highFinite := ParseCgroupLimit(capacity[1])
+	if !maximumFinite {
+		maximum = 0
+	}
+	if !highFinite {
+		high = 0
+	}
+
+	effective := EffectiveMemoryLimit(memory.Total, maximum, high)
+	available := CgroupAvailableMemory(
+		memory.Available,
+		effective,
+		capacity[2], capacity[3],
+	)
+
+	if quota, finite := ParseCPUMax(string(capacity[4])); finite {
+		parallelism = min(parallelism, quota)
+	}
+	parallelism = max(1, parallelism)
+
+	return effective, available, parallelism
 }
