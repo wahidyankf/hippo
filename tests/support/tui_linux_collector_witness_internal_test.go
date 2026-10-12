@@ -216,6 +216,9 @@ func TestLinuxCollectorWitnessOptionalReadEINTRPreservesExactLiveContinuation(t 
 	prefix = append(prefix, witnessCall(witnessLeader, linuxWitnessRead, "", 9, 8)...)
 	witnessAcceptEvents(t, reducer, prefix)
 	file, step := reducer.files[9], reducer.step
+	if file == nil {
+		t.Fatal("optional continuation control requires its live FD")
+	}
 	identity := linuxWitnessReadIdentity{Number: 63, Buffer: 4096, Count: 32, Observed: true}
 	interrupted := witnessCall(witnessLeader, linuxWitnessRead, "", 9, -4)
 	interrupted[0].ReadIdentity = identity
@@ -265,6 +268,9 @@ func TestLinuxCollectorWitnessPendingMeminfoBeginWinsOverLiveReadRetryDebt(t *te
 		t.Fatal(err)
 	}
 	retry, file := reducer.retry, reducer.files[9]
+	if file == nil {
+		t.Fatal("pending BEGIN control requires its live interrupted FD")
+	}
 	continuation := witnessCall(witnessLeader, linuxWitnessRead, "", 9, 32)
 	continuation[0].ReadIdentity = identity
 	witnessAcceptEvents(t, reducer, continuation[:1])
