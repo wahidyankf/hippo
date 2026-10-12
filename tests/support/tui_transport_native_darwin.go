@@ -2,6 +2,7 @@ package support
 
 import (
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +21,16 @@ func nativeTUIIoctl(descriptor, command uintptr, payload unsafe.Pointer) error {
 		return errno
 	}
 	return nil
+}
+
+func nativeTUISignedDevice(device int32) uint64 {
+	// Keep the low 31 bits in their proven nonnegative range, then explicitly
+	// extend the sign bit through the uint64 identity, matching the original cast.
+	lowBits := uint64(device & math.MaxInt32)
+	if device < 0 {
+		return lowBits | ^uint64(math.MaxInt32)
+	}
+	return lowBits
 }
 
 func nativeTUIDevice(stat syscall.Stat_t) uint64 {

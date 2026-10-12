@@ -29,10 +29,10 @@ versions: [`go.mod`](../../../../../go.mod).
   [Code Clarity](../../../code-clarity.md). Exact x/ansi root serves only TUI text and
   `tests/host/evidence-verifier/*.go` native cells. Other restrictions remain.
   - Native support permits exact `golang.org/x/sys/unix` only in `tests/support/tui_arguments.go`,
-    `tests/support/tui_public_interactive_inputs.go`, `tests/support/tui_transport_native.go`, and
-    `tests/support/tui_transport_native_darwin.go`: real terminal/FD state requires the pinned kernel API. Their strict
-    binding retains the support allowlist; other support, x/sys packages, Charm and production permissions stay
-    unchanged.
+    `tests/support/tui_public_interactive_inputs.go`, `tests/support/tui_transport_native.go`,
+    `tests/support/tui_transport_native_darwin.go` and `tests/support/tui_transport_native_linux.go`: real terminal/FD
+    state on both platforms requires the pinned kernel API. Their strict binding retains the support allowlist; other
+    support, x/sys packages, Charm and production permissions stay unchanged.
 - `ireturn`: only exact `Update`/Tea.Model in `internal/adapters/tui/model.go` is excluded because the pinned external
   consumer requires that interface. Helpers/constructors/other files stay concrete:
   [Lint Strictness](../../checks/lint-strictness.md).

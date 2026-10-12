@@ -31,16 +31,6 @@ const nativeTUICaptureLimit = 8 * 1024 * 1024
 
 type nativeTUIWindowSize = unix.Winsize
 
-func nativeTUISignedDevice(device int32) uint64 {
-	// Keep the low 31 bits in their proven nonnegative range, then explicitly
-	// extend the sign bit through the uint64 identity, matching the original cast.
-	lowBits := uint64(device & math.MaxInt32)
-	if device < 0 {
-		return lowBits | ^uint64(math.MaxInt32)
-	}
-	return lowBits
-}
-
 func nativeTUIDescriptor(descriptor uintptr) (int, error) {
 	if descriptor > math.MaxInt {
 		return 0, errors.New("native TUI descriptor exceeds bounds")
