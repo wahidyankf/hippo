@@ -75,15 +75,17 @@ func linuxWitnessDrainFrontier(ctx context.Context, source linuxWitnessFrontierS
 // Linux v6.8 UAPI include/uapi/linux/ptrace.h defines the typed info request
 // (lines 69-95) and EXITKILL (line 162), absent from frozen syscall APIs.
 const (
-	linuxGetSyscallInfo = 0x420e
-	linuxTraceExitKill  = 0x100000
-	linuxAuditAMD64     = 0xc000003e
-	linuxAuditARM64     = 0xc00000b7
-	linuxWitnessOpen    = "open"
-	linuxWitnessRead    = "read"
-	linuxWitnessClose   = "close"
-	linuxWitnessStatFS  = "statfs"
-	linuxWitnessMeminfo = "/proc/meminfo"
+	linuxGetSyscallInfo    = 0x420e
+	linuxTraceExitKill     = 0x100000
+	linuxAuditAMD64        = 0xc000003e
+	linuxAuditARM64        = 0xc00000b7
+	linuxWitnessOpen       = "open"
+	linuxWitnessRead       = "read"
+	linuxWitnessClose      = "close"
+	linuxWitnessStatFS     = "statfs"
+	linuxWitnessMeminfo    = "/proc/meminfo"
+	linuxWitnessProcCgroup = "/proc/self/cgroup"
+	linuxWitnessCPUPeriod  = "cpu.cfs_period_us"
 )
 
 // linuxSyscallInfo matches the fixed-width UAPI. kernel/ptrace.c returns 80
@@ -151,6 +153,111 @@ type linuxCollectorReducer struct {
 	steps        []string
 	step         int
 	retry        *linuxWitnessReadRetry
+	prelude      linuxWitnessPrelude
+}
+
+// Go initializes CPU cgroup discovery before applying GOMAXPROCS. These
+// bounded startup descriptors are occupancy, never collector evidence.
+type linuxWitnessPrelude struct {
+	files                   map[int]string
+	pending                 map[int]bool
+	procAttempt, procClosed bool
+	procFailed              bool
+	directory, family       string
+	cpuAttempts             int
+}
+
+func (prelude *linuxWitnessPrelude) entry(event linuxWitnessEvent, readings int) (bool, error) {
+	if event.Operation == linuxWitnessRead || event.Operation == linuxWitnessClose {
+		_, found := prelude.files[event.FD]
+		return found, nil
+	}
+	if event.Operation != linuxWitnessOpen || readings != 0 {
+		return false, nil
+	}
+	if event.Path == linuxWitnessProcCgroup {
+		if prelude.procAttempt {
+			return false, errors.New("linux runtime prelude repeated cgroup discovery")
+		}
+		prelude.procAttempt = true
+		return true, nil
+	}
+	if !linuxWitnessCPUPreludePath(event.Path) {
+		return false, nil
+	}
+	return true, prelude.cpuOpen(event.Path)
+}
+
+func linuxWitnessCPUPreludePath(path string) bool {
+	directory := filepath.Dir(path)
+	return filepath.Clean(path) == path && (directory == "/sys/fs/cgroup" || strings.HasPrefix(directory, "/sys/fs/cgroup/")) &&
+		slices.Contains([]string{"cpu.max", "cpu.cfs_quota_us", linuxWitnessCPUPeriod}, filepath.Base(path))
+}
+
+func (prelude *linuxWitnessPrelude) cpuOpen(path string) error {
+	if !prelude.procClosed || prelude.procFailed {
+		return errors.New("linux runtime CPU prelude lacks completed cgroup discovery")
+	}
+	directory, name := filepath.Dir(path), filepath.Base(path)
+	if prelude.directory != "" && prelude.directory != directory {
+		return errors.New("linux runtime CPU prelude changed directory")
+	}
+	if prelude.cpuAttempts == 0 {
+		if name == linuxWitnessCPUPeriod {
+			return errors.New("linux runtime CPU prelude reversed quota and period")
+		}
+		prelude.family, prelude.directory = name, directory
+	} else {
+		quotaOpen := prelude.hasFile(filepath.Join(directory, "cpu.cfs_quota_us"))
+		if prelude.cpuAttempts != 1 || prelude.family != "cpu.cfs_quota_us" || name != linuxWitnessCPUPeriod || !quotaOpen {
+			return errors.New("linux runtime CPU prelude repeated or mixed limit attempts")
+		}
+	}
+	prelude.cpuAttempts++
+	return nil
+}
+
+func (prelude *linuxWitnessPrelude) begin() error {
+	if len(prelude.pending) != 0 || prelude.hasFile(linuxWitnessProcCgroup) {
+		return errors.New("linux runtime prelude remains pending at collector begin")
+	}
+	return nil
+}
+
+func (prelude *linuxWitnessPrelude) hasFile(path string) bool {
+	for _, openPath := range prelude.files {
+		if openPath == path {
+			return true
+		}
+	}
+	return false
+}
+
+func (prelude *linuxWitnessPrelude) result(entry linuxWitnessEvent, result int64) error {
+	if linuxWitnessInterrupted(result) {
+		return errLinuxWitnessInterruptedEvidence
+	}
+	switch entry.Operation {
+	case linuxWitnessOpen:
+		if result >= 0 {
+			prelude.files[int(result)] = entry.Path
+		} else if entry.Path == linuxWitnessProcCgroup {
+			prelude.procFailed = true
+		}
+	case linuxWitnessRead:
+		if result < 0 && prelude.files[entry.FD] == linuxWitnessProcCgroup {
+			prelude.procFailed = true
+		}
+	case linuxWitnessClose:
+		if result != 0 {
+			return errors.New("linux runtime prelude close is unproven")
+		}
+		if prelude.files[entry.FD] == linuxWitnessProcCgroup {
+			prelude.procClosed = true
+		}
+		delete(prelude.files, entry.FD)
+	}
+	return nil
 }
 
 type linuxWitnessReadRetry struct {
@@ -167,7 +274,7 @@ type linuxWitnessFile struct {
 }
 
 func newLinuxCollectorReducer(leader int, disk string) *linuxCollectorReducer {
-	return &linuxCollectorReducer{threads: map[int]bool{leader: true}, pending: map[int]linuxWitnessEvent{}, files: map[int]*linuxWitnessFile{}, disk: disk}
+	return &linuxCollectorReducer{threads: map[int]bool{leader: true}, pending: map[int]linuxWitnessEvent{}, files: map[int]*linuxWitnessFile{}, disk: disk, prelude: linuxWitnessPrelude{files: map[int]string{}, pending: map[int]bool{}}}
 }
 
 func (reducer *linuxCollectorReducer) addThread(parent, child int) error {
@@ -207,9 +314,14 @@ func (reducer *linuxCollectorReducer) begin(tid int) error {
 	if reducer.trace.Readings > 2 {
 		return errors.New("linux collector produced excess readings")
 	}
+	if reducer.trace.Readings == 1 {
+		if err := reducer.prelude.begin(); err != nil {
+			return err
+		}
+	}
 	reducer.trace.Active = 1
 	reducer.step, reducer.cgroup = 0, ""
-	reducer.steps = []string{linuxWitnessMeminfo, "/proc/stat", "/proc/self/cgroup", "memory.max", "memory.high", "memory.current", "memory.stat", "cpu.max", "memory.pressure", "memory.events", "memory.swap.max", "memory.swap.current", linuxWitnessStatFS, "/proc/vmstat"}
+	reducer.steps = []string{linuxWitnessMeminfo, "/proc/stat", linuxWitnessProcCgroup, "memory.max", "memory.high", "memory.current", "memory.stat", "cpu.max", "memory.pressure", "memory.events", "memory.swap.max", "memory.swap.current", linuxWitnessStatFS, "/proc/vmstat"}
 	return nil
 }
 
@@ -218,20 +330,22 @@ func (reducer *linuxCollectorReducer) accept(event linuxWitnessEvent) error {
 		return errors.New("linux witness received foreign thread")
 	}
 	if event.Entry {
-		if _, found := reducer.pending[event.TID]; found {
-			return errors.New("linux witness duplicated a syscall entry")
-		}
-		if err := reducer.validateEntry(event); err != nil {
-			return err
-		}
-		reducer.pending[event.TID] = event
-		return nil
+		return reducer.acceptEntry(event)
 	}
 	entry, found := reducer.pending[event.TID]
 	if !found || entry.Operation != event.Operation {
 		return errors.New("linux witness received unpaired syscall exit")
 	}
 	delete(reducer.pending, event.TID)
+	if entry.Operation == linuxWitnessOpen && event.Result >= 0 {
+		if err := reducer.validateOpenDescriptor(event.Result); err != nil {
+			return err
+		}
+	}
+	if reducer.prelude.pending[event.TID] {
+		delete(reducer.prelude.pending, event.TID)
+		return reducer.prelude.result(entry, event.Result)
+	}
 	_, watchedFD := reducer.files[entry.FD]
 	watched := entry.Operation == linuxWitnessOpen && linuxWitnessPath(entry.Path) || entry.Operation == linuxWitnessStatFS || watchedFD && (entry.Operation == linuxWitnessRead || entry.Operation == linuxWitnessClose)
 	if watched && linuxWitnessInterrupted(event.Result) && (event.Result != -4 || entry.Operation != linuxWitnessRead) {
@@ -256,6 +370,43 @@ func (reducer *linuxCollectorReducer) accept(event linuxWitnessEvent) error {
 	}
 }
 
+func (reducer *linuxCollectorReducer) acceptEntry(event linuxWitnessEvent) error {
+	if _, found := reducer.pending[event.TID]; found {
+		return errors.New("linux witness duplicated a syscall entry")
+	}
+	prelude, err := reducer.prelude.entry(event, reducer.trace.Readings)
+	if err != nil {
+		return err
+	}
+	if err := reducer.validateAcceptedEntry(event, prelude); err != nil {
+		return err
+	}
+	if prelude {
+		reducer.prelude.pending[event.TID] = true
+	}
+	reducer.pending[event.TID] = event
+	return nil
+}
+
+func (reducer *linuxCollectorReducer) validateAcceptedEntry(event linuxWitnessEvent, prelude bool) error {
+	if prelude {
+		return reducer.validateRetryEntry(event)
+	}
+	return reducer.validateEntry(event)
+}
+
+func (reducer *linuxCollectorReducer) validateOpenDescriptor(result int64) error {
+	if result > 1<<20 {
+		return errors.New("linux witness descriptor exceeds bounds")
+	}
+	_, collector := reducer.files[int(result)]
+	_, background := reducer.prelude.files[int(result)]
+	if collector || background {
+		return errors.New("linux witness descriptor reused before close")
+	}
+	return nil
+}
+
 // Linux v6.8 include/linux/errno.h reserves the restart results below. Go's
 // os.Open/internal/poll.Read retry EINTR, but open pointers can be reallocated.
 func linuxWitnessInterrupted(result int64) bool {
@@ -263,7 +414,7 @@ func linuxWitnessInterrupted(result int64) bool {
 }
 
 func linuxWitnessPath(path string) bool {
-	return slices.Contains([]string{linuxWitnessMeminfo, "/proc/stat", "/proc/self/cgroup", "/proc/pressure/memory", "/proc/vmstat"}, path) || strings.HasPrefix(path, "/sys/fs/cgroup/")
+	return slices.Contains([]string{linuxWitnessMeminfo, "/proc/stat", linuxWitnessProcCgroup, "/proc/pressure/memory", "/proc/vmstat"}, path) || strings.HasPrefix(path, "/sys/fs/cgroup/")
 }
 
 func (reducer *linuxCollectorReducer) validateEntry(event linuxWitnessEvent) error {

@@ -3,13 +3,316 @@ package support
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 )
+
+func TestLinuxCollectorWitnessRuntimePreludePreservesCollectorTrace(t *testing.T) {
+	readings := append(witnessReading(), witnessReading()...)
+	baseline, err := witnessRun(readings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Model the observed operations required by pinned Go's startup source.
+	// This portable protocol control is not a claimed native syscall recording.
+	prefix := witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)
+	prefix = append(prefix, witnessCall(witnessLeader, linuxWitnessRead, "", 30, 32)...)
+	prefix = append(prefix, witnessCall(witnessLeader, linuxWitnessRead, "", 30, 0)...)
+	prefix = append(prefix, witnessCall(witnessLeader, linuxWitnessClose, "", 30, 0)...)
+	prefix = append(prefix, witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 31)...)
+	trace, err := witnessRun(append(prefix, readings...))
+	if err != nil || !reflect.DeepEqual(trace, baseline) {
+		t.Fatalf("runtime startup changed genuine collector obligations: trace=%+v baseline=%+v err=%v", trace, baseline, err)
+	}
+}
+
+func witnessPreludeDiscovery() []linuxWitnessEvent {
+	events := witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)
+	events = append(events, witnessCall(witnessLeader, linuxWitnessRead, "", 30, 32)...)
+	// The v1 parser can return before EOF; only the actual close ends discovery.
+	return append(events, witnessCall(witnessLeader, linuxWitnessClose, "", 30, 0)...)
+}
+
+func witnessPreludeCPU() []linuxWitnessEvent {
+	return append(witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 31)...)
+}
+
+func witnessPreludeFeed(t *testing.T, events []linuxWitnessEvent) *linuxCollectorReducer {
+	t.Helper()
+	reducer := newLinuxCollectorReducer(witnessLeader, "/owned/disk")
+	if err := reducer.addThread(witnessLeader, 22); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if err := reducer.batch([]linuxWitnessEvent{event}); err != nil {
+			t.Fatalf("valid prelude fixture failed: %+v: %v", event, err)
+		}
+	}
+	return reducer
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeFiniteStartupShapes(t *testing.T) {
+	failedRead := witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)
+	failedRead = append(failedRead, witnessCall(witnessLeader, linuxWitnessRead, "", 30, -5)...)
+	failedRead = append(failedRead, witnessCall(witnessLeader, linuxWitnessClose, "", 30, 0)...)
+	quota := append(witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_quota_us", 0, 31)...)
+	readings := append(witnessReading(), witnessReading()...)
+	baseline, err := witnessRun(readings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name   string
+		prefix []linuxWitnessEvent
+	}{
+		{"no-prelude", nil},
+		{"v1-early-parser-close", append(slices.Clone(quota), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_period_us", 0, 32)...)},
+		{"failed-proc-open", witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, -2)},
+		{"failed-proc-read", failedRead},
+		{"failed-v2-open", append(witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, -2)...)},
+		{"failed-v1-quota-open", append(witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_quota_us", 0, -2)...)},
+		{"v1-partial-open-period-failure", append(slices.Clone(quota), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_period_us", 0, -2)...)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			trace, err := witnessRun(append(slices.Clone(test.prefix), readings...))
+			if err != nil || !reflect.DeepEqual(trace, baseline) {
+				t.Fatalf("finite runtime startup changed collector trace: %v", err)
+			}
+		})
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeRefusesMalformedMetadata(t *testing.T) {
+	quota := append(witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_quota_us", 0, 31)...)
+	period := append(slices.Clone(quota), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_period_us", 0, 32)...)
+	failedRead := witnessPreludeDiscovery()
+	failedRead[3].Result = -5
+	for _, test := range []struct {
+		name        string
+		prefix, bad []linuxWitnessEvent
+	}{
+		{"duplicate-proc", witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)[:1]},
+		{"cpu-without-discovery", nil, witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 31)[:1]},
+		{"failed-discovery-cannot-open-cpu", witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, -2), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 31)[:1]},
+		{"failed-read-cannot-open-cpu", failedRead, witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 31)[:1]},
+		{"duplicate-v2", witnessPreludeCPU(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 32)[:1]},
+		{"mixed-family", witnessPreludeCPU(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.cfs_quota_us", 0, 32)[:1]},
+		{"v1-period-first", witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.cfs_period_us", 0, 31)[:1]},
+		{"changed-directory", quota, witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/foreign/cpu.cfs_period_us", 0, 32)[:1]},
+		{"excess-v1-attempt", period, witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_period_us", 0, 33)[:1]},
+		{"traversal", witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/../cpu.max", 0, 31)[:1]},
+		{"foreign-thread", nil, witnessCall(99, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)[:1]},
+		{"unpaired-exit", nil, witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)[1:]},
+		{"duplicate-entry", witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)[:1], witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)[:1]},
+		{"mismatched-exit", witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)[:1], witnessCall(witnessLeader, linuxWitnessRead, "", 30, 32)[1:]},
+		{"oversized-fd", nil, witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 1<<20+1)},
+		{"occupied-prelude-fd", quota, witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu/cpu.cfs_period_us", 0, 31)},
+		{"unrelated-open-reuses-prelude-fd", witnessPreludeCPU(), witnessCall(witnessLeader, linuxWitnessOpen, "", 0, 31)},
+		{"failed-background-close", witnessPreludeCPU(), witnessCall(witnessLeader, linuxWitnessClose, "", 31, -5)},
+		{"failed-proc-close", witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30), witnessCall(witnessLeader, linuxWitnessClose, "", 30, -5)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reducer := witnessPreludeFeed(t, test.prefix)
+			for index, event := range test.bad {
+				err := reducer.batch([]linuxWitnessEvent{event})
+				if (err != nil) != (index == len(test.bad)-1) {
+					t.Fatalf("malformed prelude refusal at wrong operation: %d %v", index, err)
+				}
+			}
+			if reducer.trace.Readings != 0 || len(reducer.trace.Events) != 0 || reducer.trace.Closed {
+				t.Fatal("malformed startup fabricated collector evidence")
+			}
+		})
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeDoesNotExemptCollectorPaths(t *testing.T) {
+	for _, path := range []string{"/proc/stat", "/proc/vmstat", "/proc/pressure/memory", "/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/foreign", "/sys/fs/cgroup//cpu.max"} {
+		t.Run(path, func(t *testing.T) {
+			reducer := witnessPreludeFeed(t, witnessPreludeDiscovery())
+			if err := reducer.batch(witnessCall(witnessLeader, linuxWitnessOpen, path, 0, 31)[:1]); err == nil {
+				t.Fatal("non-runtime startup path became prelude evidence")
+			}
+		})
+	}
+	reducer := witnessPreludeFeed(t, witnessPreludeDiscovery())
+	if err := reducer.batch(witnessCall(witnessLeader, linuxWitnessStatFS, "/owned/disk", 0, 0)[:1]); err == nil {
+		t.Fatal("runtime startup exempted disk evidence outside a reading")
+	}
+	for _, count := range []int{1, 2} {
+		t.Run(strconv.Itoa(count), func(t *testing.T) {
+			prefix := witnessPreludeCPU()
+			for range count {
+				prefix = append(prefix, witnessReading()...)
+			}
+			reducer := witnessPreludeFeed(t, prefix)
+			if err := reducer.batch(witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 32)[:1]); err == nil || reducer.trace.Readings != count {
+				t.Fatal("new runtime-looking open escaped order after first begin", err)
+			}
+		})
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeFailedCloseRetainsGeneration(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		prefix []linuxWitnessEvent
+		fd     int
+		path   string
+	}{
+		{"proc", witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30), 30, "/proc/self/cgroup"},
+		{"cpu", witnessPreludeCPU(), 31, "/sys/fs/cgroup/cpu.max"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reducer := witnessPreludeFeed(t, test.prefix)
+			closeCall := witnessCall(witnessLeader, linuxWitnessClose, "", test.fd, -5)
+			if err := reducer.batch(closeCall[:1]); err != nil {
+				t.Fatal(err)
+			}
+			if err := reducer.batch(closeCall[1:]); err == nil || reducer.prelude.files[test.fd] != test.path || reducer.trace.Readings != 0 {
+				t.Fatal("failed close discarded an occupied runtime generation", err)
+			}
+		})
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeCannotMaskMissingOrReorderedReadings(t *testing.T) {
+	reducer := witnessPreludeFeed(t, witnessPreludeCPU())
+	if trace, err := reducer.finish(); err == nil || trace.Readings != 0 || len(trace.Events) != 0 || trace.Closed {
+		t.Fatal("runtime-only startup became a complete collector reading", trace, err)
+	}
+	reducer = witnessPreludeFeed(t, append(witnessPreludeCPU(), witnessReading()[:8]...))
+	if err := reducer.batch(witnessCall(witnessLeader, linuxWitnessOpen, "/proc/vmstat", 0, 9)[:1]); !errors.Is(err, errLinuxWitnessEvidenceOrder) {
+		t.Fatal("runtime prefix masked reordered mandatory collector evidence", err)
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeKeepsDescriptorGenerationsSeparate(t *testing.T) {
+	readings := append(witnessReading(), witnessReading()...)
+	baseline, err := witnessRun(readings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix := witnessPreludeCPU()
+	background := witnessCall(22, linuxWitnessRead, "", 31, 8)
+	background = append(background, witnessCall(witnessLeader, linuxWitnessRead, "", 31, 0)...)
+	background = append(background, witnessCall(22, linuxWitnessClose, "", 31, 0)...)
+	events := append(slices.Clone(prefix), readings[:2]...)
+	events = append(events, background...)
+	// Only an actual successful background close frees this descriptor for the
+	// next collector generation. All collector operations retain their protocol.
+	for _, event := range readings[2:] {
+		if event.FD == 9 {
+			event.FD = 31
+		}
+		if event.Operation == linuxWitnessOpen && !event.Entry && event.Result == 9 {
+			event.Result = 31
+		}
+		events = append(events, event)
+	}
+	// The first meminfo open above used FD9, so its read/close keeps that generation.
+	for index := 2 + len(prefix) + len(background); index < 8+len(prefix)+len(background); index++ {
+		if events[index].FD == 31 {
+			events[index].FD = 9
+		}
+	}
+	trace, err := witnessRun(events)
+	if err != nil || !reflect.DeepEqual(trace, baseline) {
+		t.Fatal("background descriptor activity borrowed collector evidence", err)
+	}
+	reducer := witnessPreludeFeed(t, append(witnessPreludeCPU(), witnessReading()[:1]...))
+	if err := reducer.batch([]linuxWitnessEvent{{TID: witnessLeader, Operation: linuxWitnessOpen, Result: 31}}); err == nil || len(reducer.files) != 0 || reducer.prelude.files[31] == "" {
+		t.Fatal("collector adopted an occupied background generation", err)
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludePreservesCollectorRetryDebt(t *testing.T) {
+	reducer := witnessPreludeFeed(t, append(witnessPreludeCPU(), witnessReading()[:2]...))
+	read := witnessCall(witnessLeader, linuxWitnessRead, "", 9, -4)
+	read[0].ReadIdentity = linuxWitnessReadIdentity{Number: 0, Buffer: 4096, Count: 32, Observed: true}
+	for _, event := range read {
+		if err := reducer.batch([]linuxWitnessEvent{event}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	debt := reducer.retry
+	if debt == nil {
+		t.Fatal("mandatory read did not establish exact retry debt")
+	}
+	for _, event := range witnessCall(22, linuxWitnessRead, "", 31, 8) {
+		if err := reducer.batch([]linuxWitnessEvent{event}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file := reducer.files[9]
+	if file == nil {
+		t.Fatal("background read discarded the live mandatory collector generation")
+	}
+	if reducer.retry != debt || debt.activeTID != 0 || reducer.step != 0 || file.bytes != 0 || file.eof {
+		t.Fatal("background read satisfied or changed collector debt")
+	}
+	if _, err := reducer.finish(); !errors.Is(err, errLinuxWitnessInterruptedEvidence) {
+		t.Fatal("background read converted unresolved collector debt into completion", err)
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeInterruptionsRetainOccupancy(t *testing.T) {
+	for _, operation := range []string{linuxWitnessOpen, linuxWitnessRead, linuxWitnessClose} {
+		for _, result := range []int64{-4, -512, -513, -514, -516} {
+			t.Run(fmt.Sprintf("%s/%d", operation, result), func(t *testing.T) {
+				prefix := witnessPreludeCPU()
+				path := ""
+				if operation == linuxWitnessOpen {
+					prefix, path = witnessPreludeDiscovery(), "/sys/fs/cgroup/cpu.max"
+				}
+				reducer := witnessPreludeFeed(t, prefix)
+				before := len(reducer.prelude.files)
+				call := witnessCall(witnessLeader, operation, path, 31, result)
+				if err := reducer.batch(call[:1]); err != nil {
+					t.Fatal(err)
+				}
+				if err := reducer.batch(call[1:]); !errors.Is(err, errLinuxWitnessInterruptedEvidence) || reducer.retry != nil || len(reducer.prelude.files) != before || reducer.trace.Readings != 0 {
+					t.Fatal("interrupted startup evidence advanced or borrowed collector debt", err)
+				}
+			})
+		}
+	}
+}
+
+func TestLinuxCollectorWitnessRuntimePreludeRefusesAmbiguousBegin(t *testing.T) {
+	procOpen := witnessCall(witnessLeader, linuxWitnessOpen, "/proc/self/cgroup", 0, 30)
+	for _, test := range []struct {
+		name   string
+		prefix []linuxWitnessEvent
+	}{
+		{"pending-open", procOpen[:1]},
+		{"live-proc-fd", procOpen},
+		{"pending-proc-read", append(slices.Clone(procOpen), witnessCall(witnessLeader, linuxWitnessRead, "", 30, 32)[:1]...)},
+		{"pending-proc-close", append(slices.Clone(procOpen), witnessCall(witnessLeader, linuxWitnessClose, "", 30, 0)[:1]...)},
+		{"pending-cpu-open", append(witnessPreludeDiscovery(), witnessCall(witnessLeader, linuxWitnessOpen, "/sys/fs/cgroup/cpu.max", 0, 31)[:1]...)},
+		{"pending-cpu-read", append(witnessPreludeCPU(), witnessCall(witnessLeader, linuxWitnessRead, "", 31, 32)[:1]...)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reducer := witnessPreludeFeed(t, test.prefix)
+			begin := witnessCall(22, linuxWitnessOpen, linuxWitnessMeminfo, 0, 9)[0]
+			if err := reducer.batch([]linuxWitnessEvent{begin}); err == nil || reducer.trace.Readings != 1 || reducer.trace.Closed {
+				t.Fatal("actual meminfo begin hid unresolved startup metadata", err)
+			}
+		})
+	}
+	reducer := witnessPreludeFeed(t, nil)
+	batch := []linuxWitnessEvent{procOpen[0], witnessCall(22, linuxWitnessOpen, linuxWitnessMeminfo, 0, 9)[0]}
+	if err := reducer.batch(batch); err == nil || reducer.trace.Readings != 1 {
+		t.Fatal("same-batch begin retroactively admitted startup evidence", err)
+	}
+}
 
 func TestLinuxCollectorWitnessTrapEventRequiresPlainTrapSignal(t *testing.T) {
 	// Go's Linux WaitStatus.TrapCause returns -1 for non-SIGTRAP stops.
