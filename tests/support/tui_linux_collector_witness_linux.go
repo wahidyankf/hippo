@@ -201,7 +201,7 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		return linuxStopResult{}, fmt.Errorf("linux witness lacks owned state for thread %d", tid)
 	}
 	signal := status.StopSignal()
-	event := status.TrapCause()
+	event := linuxWitnessTrapEvent(int(signal), int(syscall.SIGTRAP), status.TrapCause())
 	if initial && tid == observer.leader {
 		if signal != syscall.SIGTRAP || event != 0 {
 			return linuxStopResult{}, errors.New("linux witness child lacks initial exec stop")

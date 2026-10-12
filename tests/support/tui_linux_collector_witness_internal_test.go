@@ -11,6 +11,34 @@ import (
 	"time"
 )
 
+func TestLinuxCollectorWitnessTrapEventRequiresPlainTrapSignal(t *testing.T) {
+	// Go's Linux WaitStatus.TrapCause returns -1 for non-SIGTRAP stops.
+	// SIGTRAP|0x80 identifies syscall stops under PTRACE_O_TRACESYSGOOD.
+	const trapSignal = 5
+	for _, test := range []struct {
+		name                    string
+		signal, cause, expected int
+	}{
+		{"syscall-stop", trapSignal | 0x80, -1, 0},
+		{"cloned-thread-initial-stop", 19, -1, 0},
+		{"asynchronous-signal", 23, -1, 0},
+		{"initial-exec-trap", trapSignal, 0, 0},
+		{"fork-event", trapSignal, 1, 1},
+		{"vfork-event", trapSignal, 2, 2},
+		{"clone-event", trapSignal, 3, 3},
+		{"exec-event", trapSignal, 4, 4},
+		{"exit-event", trapSignal, 6, 6},
+		{"unknown-event", trapSignal, 99, 99},
+		{"invalid-trap-cause", trapSignal, -1, -1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if event := linuxWitnessTrapEvent(test.signal, trapSignal, test.cause); event != test.expected {
+				t.Fatalf("signal=%d cause=%d: event=%d, want %d", test.signal, test.cause, event, test.expected)
+			}
+		})
+	}
+}
+
 func TestLinuxCollectorWitnessFrontierRescansMutationAndUncertainty(t *testing.T) {
 	for _, mode := range []string{"clone", "exit", "uncertain", "second-pass"} {
 		t.Run(mode, func(t *testing.T) {
