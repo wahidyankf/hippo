@@ -1,6 +1,7 @@
 package support
 
 import (
+	"context"
 	"errors"
 	"math"
 	"os"
@@ -190,4 +191,11 @@ func nativeTUIInspectionSlaveIdentity(master, slave *os.File) (os.FileInfo, erro
 		return nil, errors.New("inspection acquisition refuses an unowned or replaced slave device")
 	}
 	return opened, nil
+}
+
+func observePublicHostFIFOReaderAbsent(ctx context.Context, _ uintptr) (publicHostFIFOObservation, error) {
+	if err := ctx.Err(); err != nil {
+		return publicHostFIFOObservation{}, err
+	}
+	return publicHostFIFOObservation{}, errors.New("linux FIFO reader-absence witness is unavailable on Darwin")
 }

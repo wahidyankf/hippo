@@ -29,6 +29,11 @@ const NativeTUITeaHelper = "TestBDDNativeTeaTransportHelper"
 
 const nativeTUICaptureLimit = 8 * 1024 * 1024
 
+type publicHostFIFOObservation struct {
+	descriptor int
+	events     int16
+}
+
 type nativeTUIWindowSize = unix.Winsize
 
 func nativeTUIDescriptor(descriptor uintptr) (int, error) {
@@ -2520,4 +2525,40 @@ func executePublicHolderCandidate(ctx context.Context, setup publicHolderSetup, 
 	after, nativeFailure := publicHolderPostChildState(slave, spec)
 	completion := publicHolderCompletionState{candidate: candidate, facts: facts, baseline: baseline, after: after, nativeFailure: nativeFailure, waitError: waitError, factsError: factsError, controlError: controlError, early: early}
 	return finishPublicHolderCompletion(control, next, &controlPending, readNext, send, signals, deadline, spec.Nonce, completion)
+}
+
+func publicHostFIFOReaderAbsent(events int16) (bool, error) {
+	if events&unix.POLLNVAL != 0 {
+		return false, syscall.EBADF
+	}
+	return events&unix.POLLERR != 0, nil
+}
+
+func waitOriginalFIFOReaderAbsent(ctx context.Context, descriptor int, poll func(int, int) (int16, error)) (publicHostFIFOObservation, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return publicHostFIFOObservation{}, err
+		}
+		quantum := 10 * time.Millisecond
+		if deadline, exists := ctx.Deadline(); exists {
+			quantum = min(quantum, max(0, time.Until(deadline)))
+		}
+		events, err := poll(descriptor, int(quantum/time.Millisecond))
+		if canceled := ctx.Err(); canceled != nil {
+			return publicHostFIFOObservation{}, errors.Join(canceled, err)
+		}
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		if err != nil {
+			return publicHostFIFOObservation{}, err
+		}
+		absent, err := publicHostFIFOReaderAbsent(events)
+		if err != nil {
+			return publicHostFIFOObservation{}, err
+		}
+		if absent {
+			return publicHostFIFOObservation{descriptor: descriptor, events: events}, nil
+		}
+	}
 }

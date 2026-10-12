@@ -1,8 +1,10 @@
 package support
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"syscall"
 
@@ -56,4 +58,21 @@ func publicTUITermios(descriptor int) (*unix.Termios, error) {
 // Linux already reports a genuine slave inspection error after master hangup.
 func prepareNativeTUIInspectionSlave(_, slave *os.File) (*os.File, error) {
 	return slave, nil
+}
+
+// The original acquired writer stays open through this observation. Events=0
+// requests no data readiness; Linux reports POLLERR when no readers remain.
+func observePublicHostFIFOReaderAbsent(ctx context.Context, descriptor uintptr) (publicHostFIFOObservation, error) {
+	number, err := nativeTUIDescriptor(descriptor)
+	if err != nil {
+		return publicHostFIFOObservation{}, err
+	}
+	return waitOriginalFIFOReaderAbsent(ctx, number, func(original, timeout int) (int16, error) {
+		if original < 0 || original > math.MaxInt32 {
+			return 0, errors.New("original FIFO descriptor exceeds signed pollfd bounds")
+		}
+		value := []unix.PollFd{{Fd: int32(original), Events: 0}}
+		_, err := unix.Poll(value, timeout)
+		return value[0].Revents, err
+	})
 }
