@@ -57,8 +57,9 @@ Agent tools must not directly read, write, or edit `.env*` files, except `.env.e
 `credentials/` are also protected. The repository owns these restrictions.
 [`.agents/agent-policy.json`](../../.agents/agent-policy.json) declares the path patterns for
 `scripts/agent-policy-hook.sh`; the tracked `.serena/project.yml` excludes the same paths from semantic indexing. Claude
-Code, OpenCode, and Command Code native bindings enforce their own physical checkout; neutral routing covers
-cross-repository operations. Compute-admission exemptions do not waive these restrictions.
+Code, OpenCode, Command Code, and Muse native bindings enforce their own physical checkout; neutral routing covers
+cross-repository operations, with Muse converting decisions to exit statuses. Compute-admission exemptions do not waive
+these restrictions.
 
 Agents must not open or read private-key contents anywhere, including outside every repository. Each secret step must be
 exactly one copy-ready command carrying its working directory, placed by the agent on the operator clipboard; the
