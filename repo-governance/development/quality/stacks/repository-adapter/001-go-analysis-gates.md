@@ -33,6 +33,9 @@ versions: [`go.mod`](../../../../../go.mod).
     `tests/support/tui_transport_native_darwin.go` and `tests/support/tui_transport_native_linux.go`: real terminal/FD
     state on both platforms requires the pinned kernel API. Their strict binding retains the support allowlist; other
     support, x/sys packages, Charm and production permissions stay unchanged.
+  - Native fault test `internal/adapters/tui/bdd_native_faults_internal_test.go` permits exact `golang.org/x/sys/unix`
+    in its separate strict binding, alongside only the standard library and HIPPO module. Atomic replacement of its
+    distinct retained descriptors needs the pinned kernel API on Linux arm64; other TUI tests retain their restrictions.
 - `ireturn`: only exact `Update`/Tea.Model in `internal/adapters/tui/model.go` is excluded because the pinned external
   consumer requires that interface. Helpers/constructors/other files stay concrete:
   [Lint Strictness](../../checks/lint-strictness.md).
@@ -54,28 +57,17 @@ versions: [`go.mod`](../../../../../go.mod).
 
 ## NilAway
 
-- runner: `go.uber.org/nilaway/cmd/nilaway` in `go.mod`'s `tool` block, pseudo-versioned because it has no tags. Run
-  directly after golangci-lint. Unlike per-function `nilness`, it follows nil flow across functions/packages; it is not
-  a golangci-lint linter.
-- pins: review `go.mod` diffs. Minimal version selection can raise shared modules; the first pin raised production
+- runner: `go.uber.org/nilaway/cmd/nilaway` in `go.mod`'s `tool` block; no tags, so pseudo-versioned. Run directly after
+  golangci-lint. This separate tool tracks cross-function/package nil flow beyond per-function `nilness`.
+- pins: review `go.mod` diffs: minimal version selection can raise shared modules. The first pin raised production
   `golang.org/x/sys`: [Dependency Selection](../../../dependency-selection.md).
-- output: plain; diagnostic exit `3`/loading failure `1` stop the gate. Never `-json`, which exits `0` with findings.
-- scope: `-include-pkgs` names this module; dependencies are not ours to fix.
-- exclusions: inline `//nolint:nilaway // <reason>`, never `-exclude-errors-in-files`, colocates waivers:
+- output: plain; diagnostic `3`/loading failure `1` stop the gate. Never `-json`: findings exit `0`.
+- scope: `-include-pkgs` selects this module, excluding dependency repairs.
+- exclusions: colocated `//nolint:nilaway // <reason>`, never `-exclude-errors-in-files`, per
   [Lint Strictness](../../checks/lint-strictness.md). `nolintlint` accepts them; golangci-lint's
-  `Found unknown linters in //nolint directives: nilaway` warning never fails the run.
-  - Syntax-node scope: trailing an `if` line's `{` misses that line; directly above the statement covers it.
-  - One conflict per nil source means exclusions hide later unguarded reads. Review changed excluded sources for new
-    reads; the gate stays silent.
-  - No stale-directive gate exists: `nolintlint` cannot judge continued need; review removes resolved waivers.
+  `Found unknown linters in //nolint directives: nilaway` warning does not fail.
 
-Both false-positive exclusions escaped adjacent tests:
-
-- `internal/adapters/runtime/exclusive_status.go`, `ExclusiveStatus`, result 0 of `liveExclusiveHeavyOwner`: nil means
-  `live` false or error; both return first. NilAway cannot correlate three results. Tests:
-  `internal/adapters/runtime/exclusive_status_test.go`.
-- `internal/adapters/runtime/lease.go`, `DescribeHeavyLease`, result 0 of `readLeaseOwner`: nil requires error, checked
-  first by the guard. Reassigning `err` loses NilAway's correlation. Tests: `tests/integration/lease_evidence_test.go`.
+[NilAway Exclusion Review](002-nilaway-exclusion-review.md) owns the full review limitations and known cases.
 
 ## Domain Literal Analysis
 

@@ -127,6 +127,7 @@ linters:
           list-mode: strict
           files:
             - "**/internal/adapters/tui/*_test.go"
+            - "!**/internal/adapters/tui/bdd_native_faults_internal_test.go"
           allow:
             - $gostd
             - github.com/cucumber/godog
@@ -136,6 +137,15 @@ linters:
             - charm.land/lipgloss/v2$
             - charm.land/bubbles/v2/
             - github.com/charmbracelet/x/ansi$
+        # Only this owned FD fault fixture needs atomic descriptor replacement on every supported architecture.
+        native-fault-test:
+          list-mode: strict
+          files:
+            - "**/internal/adapters/tui/bdd_native_faults_internal_test.go"
+          allow:
+            - $gostd
+            - github.com/wahidyankf/hippo
+            - golang.org/x/sys/unix$
     exhaustive:
       # A map keyed by an enumerated type must name every member, as a switch over it must.
       check:

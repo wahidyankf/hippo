@@ -14,6 +14,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/status"
+	"golang.org/x/sys/unix"
 )
 
 // BDDNativeFaultOperation retains real file operations, their results and order.
@@ -376,7 +377,7 @@ func (state *bddNativeFaultObservation) applyOutputFault(ctx context.Context) er
 		return true, file.Close()
 	})
 	if observationError == nil {
-		observationError = syscall.Dup2(int(state.readonly.Fd()), int(state.outputClone.Fd()))
+		observationError = unix.Dup2(int(state.readonly.Fd()), int(state.outputClone.Fd()))
 		state.record("owned-output-fd-readonly-swap", int(state.outputClone.Fd()), 0, observationError)
 	}
 	if observationError == nil {
