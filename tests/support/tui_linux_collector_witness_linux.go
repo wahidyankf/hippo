@@ -117,6 +117,12 @@ func (observer *linuxCollectorObserver) observe(ctx context.Context) error {
 		}
 		events, err := observer.drain(ctx, initial)
 		if err != nil {
+			var failure *linuxWitnessOperationError
+			if errors.As(err, &failure) && failure != nil {
+				contextError := ctx.Err()
+				metadata := observer.resumeFailureMetadata(failure.tid, contextError)
+				return linuxWitnessOperationFailureError(err, metadata)
+			}
 			return err
 		}
 		if err := observer.reducer.batch(events); err != nil {
@@ -151,7 +157,7 @@ func (observer *linuxCollectorObserver) heldStopMetadata(tid int) linuxWitnessSt
 func (observer *linuxCollectorObserver) resumeFailureMetadata(tid int, contextError error) linuxWitnessFailureMetadata {
 	metadata := linuxWitnessFailureMetadata{
 		Leader: observer.leader, TID: tid, Signal: observer.stopped[tid], Last: observer.lastResume, Stop: observer.heldStopMetadata(tid),
-		Owned: len(observer.threads), Held: len(observer.stopped), Detached: observer.detached,
+		RegisteredHeld: observer.linuxWitnessHeld(tid), Owned: len(observer.threads), Held: len(observer.stopped), Detached: observer.detached,
 		Context: linuxWitnessContextObservation(contextError),
 	}
 	return observer.reducer.failureMetadata(metadata)
@@ -229,7 +235,7 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		}
 		options := syscall.PTRACE_O_TRACESYSGOOD | syscall.PTRACE_O_TRACECLONE | syscall.PTRACE_O_TRACEEXIT | syscall.PTRACE_O_TRACEEXEC | syscall.PTRACE_O_TRACEFORK | syscall.PTRACE_O_TRACEVFORK | linuxTraceExitKill
 		if err := syscall.PtraceSetOptions(tid, options); err != nil {
-			return linuxStopResult{}, err
+			return linuxStopResult{}, linuxWitnessTagOperation(linuxWitnessInitialSetOptions, tid, err)
 		}
 		thread.observation.held.Kind = 1
 		observer.stopped[tid] = 0
@@ -251,7 +257,7 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		}
 		child, err := syscall.PtraceGetEventMsg(tid)
 		if err != nil {
-			return linuxStopResult{}, err
+			return linuxStopResult{}, linuxWitnessTagOperation(linuxWitnessCloneEventMessage, tid, err)
 		}
 		if child == 0 || child > math.MaxInt32 {
 			return linuxStopResult{}, errors.New("linux witness clone id exceeds bounds")
@@ -298,13 +304,16 @@ func linuxWitnessSyscallInfo(tid int) (linuxSyscallInfo, error) {
 	length, _, errno := syscall.RawSyscall6(syscall.SYS_PTRACE, linuxGetSyscallInfo, uintptr(tid), unsafe.Sizeof(info), uintptr(unsafe.Pointer(&info)), 0, 0)
 	runtime.KeepAlive(&info)
 	if errno != 0 {
-		return info, errno
+		return info, linuxWitnessTagOperation(linuxWitnessSyscallInfoKernel, tid, errno)
 	}
 	expectedArchitecture := uint32(linuxAuditAMD64)
 	if runtime.GOARCH == "arm64" {
 		expectedArchitecture = linuxAuditARM64
 	}
-	return info, info.validate(length, unsafe.Sizeof(info), expectedArchitecture)
+	if err := info.validate(length, unsafe.Sizeof(info), expectedArchitecture); err != nil {
+		return info, linuxWitnessTagOperation(linuxWitnessSyscallInfoValidation, tid, err)
+	}
+	return info, nil
 }
 
 func (observer *linuxCollectorObserver) syscall(tid int, info linuxSyscallInfo) (linuxStopResult, error) {
@@ -418,7 +427,7 @@ func linuxWitnessCloneFlags(tid int, pointer, size uint64) (uint64, error) {
 	var data [8]byte
 	count, err := syscall.PtracePeekData(tid, uintptr(pointer), data[:])
 	if err != nil {
-		return 0, err
+		return 0, linuxWitnessTagOperation(linuxWitnessCloneFlagsKernel, tid, err)
 	}
 	if count != len(data) {
 		return 0, errors.New("linux witness clone flags are truncated")
@@ -439,7 +448,7 @@ func linuxWitnessPathname(tid int, pointer uint64) (string, error) {
 		var data [8]byte
 		count, err := syscall.PtracePeekData(tid, uintptr(pointer+offset), data[:])
 		if err != nil {
-			return "", err
+			return "", linuxWitnessTagOperation(linuxWitnessPathnameKernel, tid, err)
 		}
 		if count != len(data) {
 			return "", errors.New("linux witness syscall pathname is truncated")

@@ -11,6 +11,64 @@ import (
 	"strings"
 )
 
+type linuxWitnessOperation uint8
+
+const (
+	linuxWitnessInitialSetOptions linuxWitnessOperation = iota + 1
+	linuxWitnessCloneEventMessage
+	linuxWitnessSyscallInfoKernel
+	linuxWitnessSyscallInfoValidation
+	linuxWitnessCloneFlagsKernel
+	linuxWitnessPathnameKernel
+)
+
+func (operation linuxWitnessOperation) String() string {
+	switch operation {
+	case linuxWitnessInitialSetOptions:
+		return "initial-ptrace-set-options"
+	case linuxWitnessCloneEventMessage:
+		return "clone-get-event-message"
+	case linuxWitnessSyscallInfoKernel:
+		return "get-syscall-info-kernel"
+	case linuxWitnessSyscallInfoValidation:
+		return "get-syscall-info-validation"
+	case linuxWitnessCloneFlagsKernel:
+		return "peek-clone-flags-kernel"
+	case linuxWitnessPathnameKernel:
+		return "peek-pathname-kernel"
+	default:
+		return "unknown-operation"
+	}
+}
+
+type linuxWitnessOperationError struct {
+	operation linuxWitnessOperation
+	tid       int
+	original  error
+}
+
+func (failure *linuxWitnessOperationError) Error() string {
+	return fmt.Sprintf("linux witness operation=%s tid=%d: %v", failure.operation, failure.tid, failure.original)
+}
+
+func (failure *linuxWitnessOperationError) Unwrap() error { return failure.original }
+
+func linuxWitnessTagOperation(operation linuxWitnessOperation, tid int, original error) error {
+	if original == nil {
+		return nil
+	}
+	return &linuxWitnessOperationError{operation: operation, tid: tid, original: original}
+}
+
+func linuxWitnessOperationFailureError(original error, metadata linuxWitnessFailureMetadata) error {
+	var failure *linuxWitnessOperationError
+	if !errors.As(original, &failure) || failure == nil {
+		return original
+	}
+	metadata.TID = failure.tid
+	return fmt.Errorf("%w; witness=%+v", original, metadata)
+}
+
 // Resume diagnostics contain only copied scalar observations, never subject data.
 type linuxWitnessStopMetadata struct {
 	Status      uint32
@@ -35,6 +93,7 @@ type linuxWitnessFailureMetadata struct {
 	Signal         int
 	Stop           linuxWitnessStopMetadata
 	Last           linuxWitnessResumeMetadata
+	RegisteredHeld bool
 	Owned          int
 	Held           int
 	Detached       int
