@@ -44,6 +44,8 @@ type PublicTUIHostProbeEvent struct {
 	Operation, Phase   string
 	RaceOptions        string
 	PID, ParentPID     int
+	Descriptor         int
+	PollEvents         int16
 	Arguments          []string
 	ElapsedNanoseconds int64
 }
@@ -58,6 +60,14 @@ type PublicTUIHostProbeTrace struct {
 type publicHostGate struct {
 	release                chan struct{}
 	acknowledged, released bool
+}
+
+type publicHostFIFOWriter struct {
+	writer          *os.File
+	path, name      string
+	reading         int
+	decision        chan struct{}
+	shutdownClaimed bool
 }
 
 type publicHostRequest = hostprobe.Request
@@ -93,6 +103,9 @@ type PublicTUIHostProbe struct {
 	closeOnce                    sync.Once
 	closeError                   error
 	closing                      bool
+	fifoObserver                 func(context.Context, uintptr) (publicHostFIFOObservation, error)
+	fifoWriters                  map[*os.File]*publicHostFIFOWriter
+	shutdownDone                 chan struct{}
 	cpuBusy, cpuIdle             uint64
 }
 
@@ -394,53 +407,119 @@ func (probe *PublicTUIHostProbe) serveFIFO(path, name string, done chan struct{}
 	for {
 		writer, err := os.OpenFile(path, os.O_WRONLY, 0)
 		if err != nil {
-			probe.mu.Lock()
-			closing := probe.closing
-			probe.mu.Unlock()
-			if !closing {
-				probe.retainError(err)
-			}
+			probe.retainFIFOOpenError(err)
 			return
 		}
-		probe.mu.Lock()
-		if probe.closing {
-			probe.mu.Unlock()
-			probe.retainError(writer.Close())
-			return
-		}
-		reading, gate, beginError := probe.fifoReadingLocked(name)
-		probe.mu.Unlock()
-		if beginError != nil || !probe.waitGate(gate) {
+		owner, gate, beginError := probe.acquireFIFOWriter(writer, path, name)
+		if owner == nil {
 			probe.retainError(errors.Join(beginError, writer.Close()))
+			return
+		}
+		reading := owner.reading
+		if beginError != nil || !probe.waitGate(gate) {
+			shutdown := probe.claimFIFOWriterClose(owner)
+			if shutdown {
+				<-owner.decision
+			}
+			probe.retainError(errors.Join(beginError, probe.finishFIFOWriterClose(owner)))
+			if shutdown {
+				return
+			}
 			continue
 		}
 		probe.mu.Lock()
 		if probe.closing {
 			probe.mu.Unlock()
-			probe.retainError(writer.Close())
+			if probe.claimFIFOWriterClose(owner) {
+				<-owner.decision
+			}
+			probe.retainError(probe.finishFIFOWriterClose(owner))
 			return
 		}
 		output := probe.linuxReplyLocked(name)
 		rotateError := probe.rotateFIFOLocked(path)
 		probe.mu.Unlock()
 		if rotateError != nil {
-			probe.retainError(errors.Join(rotateError, writer.Close()))
+			if probe.claimFIFOWriterClose(owner) {
+				<-owner.decision
+			}
+			probe.retainError(errors.Join(rotateError, probe.finishFIFOWriterClose(owner)))
 			return
 		}
 		_, writeError := io.WriteString(writer, output)
-		probe.mu.Lock()
-		phase := "output"
-		if writeError != nil {
-			phase = "write-error"
+		probe.recordFIFOOutput(owner, reading, name, writeError)
+		shutdown := probe.claimFIFOWriterClose(owner)
+		if shutdown {
+			<-owner.decision
 		}
-		probe.eventLocked(reading, name, phase, publicHostRequest{})
-		if name == "stat" {
-			probe.trace.Active = 0
-			probe.commandIndex = 0
+		probe.retainError(errors.Join(writeError, probe.finishFIFOWriterClose(owner)))
+		if shutdown {
+			return
 		}
-		probe.mu.Unlock()
-		probe.retainError(errors.Join(writeError, writer.Close()))
 	}
+}
+
+func (probe *PublicTUIHostProbe) retainFIFOOpenError(err error) {
+	probe.mu.Lock()
+	closing := probe.closing
+	probe.mu.Unlock()
+	if !closing {
+		probe.retainError(err)
+	}
+}
+
+func (probe *PublicTUIHostProbe) acquireFIFOWriter(writer *os.File, path, name string) (*publicHostFIFOWriter, *publicHostGate, error) {
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if probe.closing {
+		return nil, nil, nil
+	}
+	return probe.registerFIFOWriterLocked(writer, path, name)
+}
+
+func (probe *PublicTUIHostProbe) recordFIFOOutput(owner *publicHostFIFOWriter, reading int, name string, writeError error) {
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	phase := "output"
+	if writeError != nil {
+		phase = "write-error"
+	}
+	probe.eventLocked(reading, name, phase, publicHostRequest{})
+	if name == "stat" && !owner.shutdownClaimed {
+		probe.trace.Active = 0
+		probe.commandIndex = 0
+	}
+}
+
+func (probe *PublicTUIHostProbe) registerFIFOWriterLocked(writer *os.File, path, name string) (*publicHostFIFOWriter, *publicHostGate, error) {
+	if probe.closing {
+		return nil, nil, errors.New("public host FIFO acquisition arrived after closing")
+	}
+	reading, gate, err := probe.fifoReadingLocked(name)
+	owner := &publicHostFIFOWriter{writer: writer, path: path, name: name, reading: reading, decision: make(chan struct{})}
+	if probe.fifoWriters == nil {
+		probe.fifoWriters = map[*os.File]*publicHostFIFOWriter{}
+	}
+	probe.fifoWriters[writer] = owner
+	return owner, gate, err
+}
+
+func (probe *PublicTUIHostProbe) claimFIFOWriterClose(owner *publicHostFIFOWriter) bool {
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if owner.shutdownClaimed {
+		return true
+	}
+	delete(probe.fifoWriters, owner.writer)
+	return false
+}
+
+func (probe *PublicTUIHostProbe) finishFIFOWriterClose(owner *publicHostFIFOWriter) error {
+	closeError := owner.writer.Close()
+	probe.mu.Lock()
+	delete(probe.fifoWriters, owner.writer)
+	probe.mu.Unlock()
+	return closeError
 }
 
 // Rotate the pathname while the acknowledged reader keeps the old inode.
@@ -632,6 +711,62 @@ func (input *publicHostRequestInput) Read(buffer []byte) (int, error) {
 	return count, err
 }
 
+type publicHostDecodeSnapshot struct {
+	received int
+	offset   int64
+	buffered int64
+}
+
+type publicHostDecodeMetadata struct {
+	accepted             bool
+	reading, pid, parent int
+	before, after        publicHostDecodeSnapshot
+}
+
+type publicHostDecodeResult struct {
+	err      error
+	metadata publicHostDecodeMetadata
+}
+
+func publicHostDecoderSnapshot(decoder *json.Decoder, input *publicHostRequestInput) (publicHostDecodeSnapshot, error) {
+	buffered, err := io.Copy(io.Discard, decoder.Buffered())
+	return publicHostDecodeSnapshot{received: input.received, offset: decoder.InputOffset(), buffered: buffered}, err
+}
+
+func preparePublicHostDecodeMetadata(decoder *json.Decoder, input *publicHostRequestInput, metadata publicHostDecodeMetadata) (publicHostDecodeMetadata, error) {
+	before, err := publicHostDecoderSnapshot(decoder, input)
+	metadata.before = before
+	return metadata, err
+}
+
+func finishPublicHostDecodeMetadata(decoder *json.Decoder, input *publicHostRequestInput, metadata publicHostDecodeMetadata, decodeError error) publicHostDecodeResult {
+	after, err := publicHostDecoderSnapshot(decoder, input)
+	metadata.after = after
+	return publicHostDecodeResult{err: errors.Join(decodeError, err), metadata: metadata}
+}
+
+func validatePublicHostAcknowledgement(message string, decodeError error) error {
+	if decodeError == nil && message != "output-written" {
+		return errors.New("public host probe output acknowledgement is invalid")
+	}
+	return decodeError
+}
+
+func publicHostRetainedDecodeError(result publicHostDecodeResult) error {
+	if result.err == nil {
+		return nil
+	}
+	metadata := result.metadata
+	phase := "pre-request"
+	reading, pid, parent := 0, 0, 0
+	if metadata.accepted {
+		phase = "accepted-ack"
+		reading, pid, parent = metadata.reading, metadata.pid, metadata.parent
+	}
+	return fmt.Errorf("public host decoder phase=%s accepted=%t reading=%d pid=%d parent=%d wire-before=%d wire-after=%d offset-before=%d offset-after=%d buffered-before=%d buffered-after=%d: %w",
+		phase, metadata.accepted, reading, pid, parent, metadata.before.received, metadata.after.received, metadata.before.offset, metadata.after.offset, metadata.before.buffered, metadata.after.buffered, result.err)
+}
+
 func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 	defer func() {
 		probe.retainError(publicHostCloseConnection(connection))
@@ -647,13 +782,16 @@ func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 	decoder := json.NewDecoder(input)
 	decoder.DisallowUnknownFields()
 	var request publicHostRequest
-	if err := decoder.Decode(&request); err != nil {
+	metadata, beforeError := preparePublicHostDecodeMetadata(decoder, input, publicHostDecodeMetadata{})
+	decodeError := decoder.Decode(&request)
+	decoded := finishPublicHostDecodeMetadata(decoder, input, metadata, errors.Join(beforeError, decodeError))
+	if err := decoded.err; err != nil {
 		// Cancellation can close a connected helper before it sends a request.
 		// Received whitespace or invalid JSON still retains the original error.
-		if errors.Is(err, io.EOF) && input.received == 0 {
+		if errors.Is(err, io.EOF) && decoded.metadata.after.received == 0 {
 			return
 		}
-		probe.retainError(err)
+		probe.retainError(publicHostRetainedDecodeError(decoded))
 		return
 	}
 	probe.mu.Lock()
@@ -667,17 +805,16 @@ func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 		probe.retainError(encoder.Encode(publicHostResponse{Error: err.Error()}))
 		return
 	}
-	acknowledgement := make(chan error, 1)
+	acknowledgement := make(chan publicHostDecodeResult, 1)
 	acknowledgementDone := make(chan struct{})
 	defer func() { <-acknowledgementDone }()
 	go func() {
 		defer close(acknowledgementDone)
+		metadata, beforeError := preparePublicHostDecodeMetadata(decoder, input, publicHostDecodeMetadata{accepted: true, reading: reading, pid: request.PID, parent: request.ParentPID})
 		var message string
 		decodeError := decoder.Decode(&message)
-		if decodeError == nil && message != "output-written" {
-			decodeError = errors.New("public host probe output acknowledgement is invalid")
-		}
-		acknowledgement <- decodeError
+		result := finishPublicHostDecodeMetadata(decoder, input, metadata, errors.Join(beforeError, validatePublicHostAcknowledgement(message, decodeError)))
+		acknowledgement <- result
 	}()
 	if !probe.darwinGate(gate, acknowledgement, reading, request) {
 		return
@@ -687,18 +824,20 @@ func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 	probe.mu.Unlock()
 	if err = encoder.Encode(publicHostResponse{Output: output}); err != nil {
 		probe.retainError(publicHostCloseConnection(connection))
-		<-acknowledgement
+		acknowledged := <-acknowledgement
+		probe.retainError(publicHostRetainedDecodeError(acknowledged))
 		probe.completeDarwin(reading, request, "write-error")
 		probe.retainError(err)
 		return
 	}
-	err = <-acknowledgement
+	acknowledged := <-acknowledgement
+	err = acknowledged.err
 	if err != nil {
 		phase := "read-error"
 		if errors.Is(err, io.EOF) {
 			phase = tuiCanceledEOFPhase
 		} else {
-			probe.retainError(err)
+			probe.retainError(publicHostRetainedDecodeError(acknowledged))
 		}
 		probe.completeDarwin(reading, request, phase)
 		return
@@ -707,25 +846,27 @@ func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 	probe.retainError(encoder.Encode("committed"))
 }
 
-func (probe *PublicTUIHostProbe) darwinGate(gate *publicHostGate, acknowledgement <-chan error, reading int, request publicHostRequest) bool {
+func (probe *PublicTUIHostProbe) darwinGate(gate *publicHostGate, acknowledgement <-chan publicHostDecodeResult, reading int, request publicHostRequest) bool {
 	if gate == nil {
 		return true
 	}
 	select {
 	case <-probe.stopping:
-		err := <-acknowledgement
+		result := <-acknowledgement
 		phase := "teardown-eof"
-		if errors.Is(err, io.EOF) {
+		if errors.Is(result.err, io.EOF) {
 			phase = tuiCanceledEOFPhase
+		} else {
+			probe.retainError(publicHostRetainedDecodeError(result))
 		}
 		probe.completeDarwin(reading, request, phase)
 		return false
-	case err := <-acknowledgement:
+	case result := <-acknowledgement:
 		phase := "protocol-error"
-		if errors.Is(err, io.EOF) {
+		if errors.Is(result.err, io.EOF) {
 			phase = tuiCanceledEOFPhase
 		} else {
-			probe.retainError(err)
+			probe.retainError(publicHostRetainedDecodeError(result))
 		}
 		probe.completeDarwin(reading, request, phase)
 		return false
@@ -830,14 +971,32 @@ func publicHostCloseConnection(connection net.Conn) error {
 	return err
 }
 
-func (probe *PublicTUIHostProbe) stopOwnedEffects() {
+type publicHostShutdown struct {
+	writers       []*publicHostFIFOWriter
+	acquiredPaths map[string]bool
+	connections   map[net.Conn]int
+}
+
+func (probe *PublicTUIHostProbe) claimOwnedShutdown() publicHostShutdown {
 	probe.mu.Lock()
 	probe.closing = true
+	probe.shutdownDone = make(chan struct{})
+	writers := slices.Collect(maps.Values(probe.fifoWriters))
+	acquiredPaths := make(map[string]bool, len(writers))
+	for _, owner := range writers {
+		owner.shutdownClaimed = true
+		acquiredPaths[owner.path] = true
+	}
 	close(probe.stopping)
 	probe.notifyLocked()
 	connections := make(map[net.Conn]int, len(probe.connections))
 	maps.Copy(connections, probe.connections)
 	probe.mu.Unlock()
+	return publicHostShutdown{writers: writers, acquiredPaths: acquiredPaths, connections: connections}
+}
+
+func (probe *PublicTUIHostProbe) stopOwnedEffects(ctx context.Context, shutdown publicHostShutdown) {
+	writers, acquiredPaths, connections := shutdown.writers, shutdown.acquiredPaths, shutdown.connections
 	if probe.listener != nil {
 		probe.retainError(probe.listener.Close())
 	}
@@ -850,6 +1009,9 @@ func (probe *PublicTUIHostProbe) stopOwnedEffects() {
 		probe.retainError(publicHostCloseConnection(connection))
 	}
 	for _, path := range probe.fifoPaths {
+		if acquiredPaths[path] {
+			continue
+		}
 		release, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			probe.retainError(err)
@@ -858,16 +1020,91 @@ func (probe *PublicTUIHostProbe) stopOwnedEffects() {
 		probe.releaseReaders = append(probe.releaseReaders, release)
 		probe.retainError(os.Remove(path))
 	}
+	for _, owner := range writers {
+		probe.retireCanceledFIFOWriter(ctx, owner)
+		close(owner.decision)
+	}
+}
+
+func (probe *PublicTUIHostProbe) retireCanceledFIFOWriter(ctx context.Context, owner *publicHostFIFOWriter) {
+	probe.mu.Lock()
+	eligible := owner.shutdownClaimed && probe.trace.Active == 1 && owner.reading == probe.reading && owner.reading > 0 && probe.fifoWriters[owner.writer] == owner
+	observer := probe.fifoObserver
+	probe.mu.Unlock()
+	if !eligible {
+		return
+	}
+	if observer == nil {
+		observer = observePublicHostFIFOReaderAbsent
+	}
+	original, err := nativeTUIDescriptor(owner.writer.Fd())
+	if err != nil {
+		probe.retainError(err)
+		return
+	}
+	observation, err := observer(ctx, owner.writer.Fd())
+	if err != nil {
+		probe.retainError(err)
+		return
+	}
+	absent, err := publicHostFIFOReaderAbsent(observation.events)
+	if err != nil {
+		probe.retainError(err)
+		return
+	}
+	if !absent || observation.descriptor != original {
+		probe.retainError(errors.New("original public FIFO reader absence is unproven"))
+		return
+	}
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		probe.closeError = errors.Join(probe.closeError, err)
+		return
+	}
+	if probe.trace.Active != 1 || owner.reading != probe.reading || probe.fifoWriters[owner.writer] != owner {
+		probe.closeError = errors.Join(probe.closeError, errors.New("public FIFO cancellation ownership changed before retirement"))
+		return
+	}
+	if len(probe.trace.Events) >= 8192 {
+		probe.closeError = errors.Join(probe.closeError, errors.New("public host probe event capture exceeds bounds"))
+		return
+	}
+	probe.eventLocked(owner.reading, owner.name, "canceled-reader-absent", publicHostRequest{})
+	event := &probe.trace.Events[len(probe.trace.Events)-1]
+	event.Descriptor, event.PollEvents = observation.descriptor, observation.events
+	probe.trace.Active = 0
+	probe.commandIndex = 0
+}
+
+func (probe *PublicTUIHostProbe) retainedCloseError() error {
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	return probe.closeError
 }
 
 // Close joins owned probe effects within the caller's cleanup bound.
 func (probe *PublicTUIHostProbe) Close(ctx context.Context) error {
-	probe.closeOnce.Do(probe.stopOwnedEffects)
+	elected := false
+	var shutdown publicHostShutdown
+	probe.closeOnce.Do(func() { elected = true; shutdown = probe.claimOwnedShutdown() })
+	if elected {
+		probe.stopOwnedEffects(ctx, shutdown)
+		close(probe.shutdownDone)
+	}
+	select {
+	case <-probe.shutdownDone:
+	case <-ctx.Done():
+		return errors.Join(probe.retainedCloseError(), ctx.Err())
+	}
 	for _, done := range probe.done {
 		select {
 		case <-done:
 		case <-ctx.Done():
-			return ctx.Err()
+			probe.mu.Lock()
+			retained := probe.closeError
+			probe.mu.Unlock()
+			return errors.Join(retained, ctx.Err())
 		}
 	}
 	probe.mu.Lock()
