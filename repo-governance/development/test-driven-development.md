@@ -41,10 +41,10 @@ Use the raw runner's selection when an aggregate enforces coverage over code del
 not lower coverage floors or change their exclusions or full-coverage targets. Keep required build, code generation,
 resource admission, fixture isolation, and cleanup around every selected run.
 
-At the end of each plan phase, and before PR ready-for-review or session end as a safety net, run the whole
-automated suite except full E2E, plus only the affected E2E flow. One recorded complete run may satisfy both
-boundaries when the tested code, tests, configuration, and affected scope are unchanged; otherwise rerun the affected
-gates. Focused runs replace no hook, CI, or delivery gate.
+At the end of each plan phase, and before PR ready-for-review or session end as a safety net, run the whole automated
+suite except full E2E, plus only the affected E2E flow. One recorded complete run may satisfy both boundaries when the
+tested code, tests, configuration, and affected scope are unchanged; otherwise rerun the affected gates. Focused runs
+replace no hook, CI, or delivery gate.
 
 Followed evidence names relevant executed cases with positive counts and the complete boundary runs. A per-item whole
 suite, a selection omitting an affected shared boundary, nonexecuting evidence, or a missing required complete gate

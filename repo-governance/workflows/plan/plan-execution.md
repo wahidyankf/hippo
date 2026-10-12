@@ -28,8 +28,8 @@ four: every verdict is advisory, so a `FAIL` or `BLOCKED` row has an owner and d
 ## Exit
 
 Every substantive checklist item is terminal, `learnings.md` holds what execution discovered, and the execution check
-has recorded a verdict. Never require a full E2E run as a completion condition for plan execution or a plan phase;
-full E2E is a separately batched set.
+has recorded a verdict. Never require a full E2E run as a completion condition for plan execution or a plan phase; full
+E2E is a separately batched set.
 
 ## Pause Safety
 
