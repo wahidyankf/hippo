@@ -36,13 +36,21 @@ versions: [`go.mod`](../../../../../go.mod).
 - `ireturn`: only exact `Update`/Tea.Model in `internal/adapters/tui/model.go` is excluded because the pinned external
   consumer requires that interface. Helpers/constructors/other files stay concrete:
   [Lint Strictness](../../checks/lint-strictness.md).
-- `G702`: exactly three inline `#nosec G702` waivers under [Lint Strictness](../../checks/lint-strictness.md); other
+- `G702`: exactly five inline `#nosec G702` waivers under [Lint Strictness](../../checks/lint-strictness.md); other
   calls remain checked:
   - [`invokeCompiledTUI`](../../../../../tests/e2e/tui_contract_test.go): stamped harness selection.
   - [Old executable](../../../../../internal/adapters/tui/bdd_public_mixed_owners_external_test.go): authenticated
     absolute regular executable; pinned SHA/strict release receipt; separate argv/context.
   - [PS wrapper](../../../../../internal/adapters/tui/bdd_public_ps_startup_diagnostic_external_test.go): probe-owned
     0700 wrapper; quoted authenticated helper, fixed argv, finite context/Wait.
+  - [Mixed owner](../../../../../tests/integration/mixed_version_v085_test.go): trusted supervisor verifies v0.8.5
+    provenance and builds/selects current; leaf identity checks; separate argv, fixed payload shell, finite
+    context/Wait.
+  - [Mixed status](../../../../../tests/integration/mixed_version_v085_test.go): same selection/identity checks; fixed
+    separate status argv, finite context/Run.
+  - Review judges continued need; taint analysis cannot authenticate the supervisor (**unenforced by decision**).
+    Untrusted selection, interpolated shell source, removed provenance or changed status argv invalidates waivers.
+    Leaf/integration TestMain does not authenticate current stamp.
 
 ## NilAway
 

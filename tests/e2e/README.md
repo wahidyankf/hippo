@@ -29,6 +29,15 @@ exports `HIPPO_PUBLIC_V085_BIN`, `HIPPO_PUBLIC_V085_BIN_SHA256`, and `HIPPO_PUBL
 The existing v0.8.4 inputs remain separate. These artifact inputs never become product environment. A preparation or
 compatibility failure stops the gate; no missing-input skip exists.
 
+This v0.8.5 compatibility fixture reserves one CPU and one GiB per real owner: two concurrent owners allocate two CPUs
+and two GiB. Its scoped configuration caps memory capacity at three GiB, so the exact oracle also applies on a standard
+runner with seven GB RAM after the production safety reserve. Production admission retains one CPU for the host, so the
+fixture requires at least three logical CPUs. Its three one-CPU FIFO peers remain genuinely queued behind the existing
+two-owner limit throughout display transitions. The 90-second owner context, 120-second leaf timeout, complete metadata
+and public-reader assertions, and natural zero retirement checks remain mandatory. The retained v0.8.4 native/BDD
+fixture separately keeps two CPUs per owner and its five-CPU host requirement and eight-GiB memory cap; this
+compatibility budget does not change production reservation policy.
+
 For offline acquisition, set `HIPPO_E2E_OLD_ARCHIVE` and `HIPPO_E2E_V085_ARCHIVE` to absolute regular archive paths for
 the matching host and release. Each goes through the same checksum, member, and executable identity checks:
 
