@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -677,4 +679,61 @@ func TestLinuxCollectorWitnessRejectsForeignCloneOwnership(t *testing.T) {
 			t.Fatal("unobserved or duplicate thread joined the trace cohort")
 		}
 	}
+}
+
+func linuxNativePrivateRoot(t *testing.T, initialize func(string) error) string {
+	t.Helper()
+	directory := t.TempDir()
+	if initialize != nil {
+		if err := initialize(directory); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// testing.TempDir does not guarantee 0700 on its returned leaf. Enforce
+	// privacy only on this freshly test-owned canonical root, then validate it.
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateOwnedCandidateDirectory(root); err != nil {
+		t.Fatalf("own native helper root: %v", err)
+	}
+	return root
+}
+
+func TestLinuxCollectorWitnessNativeRootPrivacy(t *testing.T) {
+	t.Run("prepare newly owned nonprivate leaf", func(t *testing.T) {
+		root := linuxNativePrivateRoot(t, func(directory string) error {
+			return os.Chmod(directory, 0o755)
+		})
+		canonical, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Lstat(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if canonical != root || !info.IsDir() || info.Mode().Perm() != 0o700 {
+			t.Fatal("owned helper root is not canonical and private", root, info.Mode())
+		}
+		if err := validateOwnedCandidateDirectory(root); err != nil {
+			t.Fatal("owned private root remains invalid", err)
+		}
+	})
+	t.Run("validator refuses nonprivate leaf", func(t *testing.T) {
+		root, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := validateOwnedCandidateDirectory(root); err == nil {
+			t.Fatal("validator accepted a nonprivate owned root")
+		}
+	})
 }

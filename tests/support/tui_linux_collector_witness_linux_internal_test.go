@@ -361,13 +361,7 @@ func linuxNativeCommand(ctx context.Context, t *testing.T, mode string) *exec.Cm
 		t.Fatal(err)
 	}
 	command := exec.CommandContext(ctx, executable, "-test.run=^TestLinuxCollectorWitnessNativeChild$")
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := validateOwnedCandidateDirectory(root); err != nil {
-		t.Fatalf("own native helper root: %v", err)
-	}
+	root := linuxNativePrivateRoot(t, nil)
 	// This exact private root belongs to this parent test. The established
 	// re-exec marker keeps trusted modes through TestMain without another build
 	// or environment scrub. Ordinary support-suite setup remains unchanged.
