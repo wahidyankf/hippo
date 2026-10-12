@@ -75,12 +75,13 @@ linters:
             - "!**/tests/support/tui_public_interactive_inputs.go"
             - "!**/tests/support/tui_transport_native.go"
             - "!**/tests/support/tui_transport_native_darwin.go"
+            - "!**/tests/support/tui_transport_native_linux.go"
           allow:
             - $gostd
             - github.com/cucumber/godog
             - github.com/cucumber/messages/go/v34
             - github.com/wahidyankf/hippo
-        # These four terminal/FD fixtures inspect real kernel state; no other support import gains this capability.
+        # These five terminal/FD fixtures inspect real kernel state; no other support import gains this capability.
         native-terminal-support:
           list-mode: strict
           files:
@@ -88,6 +89,7 @@ linters:
             - "**/tests/support/tui_public_interactive_inputs.go"
             - "**/tests/support/tui_transport_native.go"
             - "**/tests/support/tui_transport_native_darwin.go"
+            - "**/tests/support/tui_transport_native_linux.go"
           allow:
             - $gostd
             - github.com/cucumber/godog
