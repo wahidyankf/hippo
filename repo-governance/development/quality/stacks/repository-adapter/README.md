@@ -7,9 +7,11 @@ when_to_use: >-
 
 # Repository Adapter Modules
 
-Read in order, after the [Repository Adapter](../repository-adapter.md) entrypoint that links each one.
+Read these modules in order after the [Repository Adapter](../repository-adapter.md) entrypoint.
 
 ## Directory Map
 
 - [001 Go Analysis Gates](001-go-analysis-gates.md) — nilness, exhaustive map checks, scoped `exhaustruct_v5`, NilAway
   and its exclusions, the domain literal analysis and its no-finding rule, and `gochecksumtype`'s empty target
+- [002 NilAway Exclusion Review](002-nilaway-exclusion-review.md) — exclusion scope, review limitations and known
+  false-positive cases
