@@ -23,6 +23,61 @@ import (
 
 const linuxNativeChildMode = "HIPPO_TEST_LINUX_WITNESS_CHILD"
 
+func TestLinuxCollectorWitnessAdapterRejectsMissingThreadState(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		present   bool
+		operation uint8
+	}{
+		{"absent clone stop", false, 0},
+		{"nil clone stop", true, 0},
+		{"absent syscall entry", false, 1},
+		{"nil syscall entry", true, 1},
+		{"absent syscall exit", false, 2},
+		{"nil syscall exit", true, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			live := &linuxWitnessThread{paired: true, initial: true, cloneAllowed: true}
+			before := *live
+			command := &exec.Cmd{}
+			reducer := newLinuxCollectorReducer(witnessLeader, "/owned/disk")
+			observer := &linuxCollectorObserver{command: command, reducer: reducer, leader: witnessLeader, threads: map[int]*linuxWitnessThread{witnessLeader: live}, stopped: map[int]int{witnessLeader: int(syscall.SIGUSR1)}}
+			if test.present {
+				observer.threads[22] = nil
+			}
+			count := len(observer.threads)
+			var result linuxStopResult
+			var err error
+			if test.operation == 0 {
+				// A modeled clone stop reaches the missing-state boundary before
+				// any ptrace call. This is an adapter control, not kernel evidence.
+				status := syscall.WaitStatus(syscall.PTRACE_EVENT_CLONE<<16 | int(syscall.SIGTRAP)<<8 | 0x7f)
+				result, err = observer.stop(22, status, false)
+			} else {
+				result, err = observer.syscall(22, linuxSyscallInfo{Operation: test.operation})
+			}
+			if err == nil || result.observed || result.event != (linuxWitnessEvent{}) {
+				t.Fatal("missing thread state became accepted witness evidence", result, err)
+			}
+			_, present := observer.threads[22]
+			if present != test.present || observer.threads[22] != nil || len(observer.threads) != count || observer.threads[witnessLeader] != live || *live != before {
+				t.Fatal("missing-state refusal changed thread ownership or a live syscall pair")
+			}
+			if len(observer.stopped) != 1 || observer.stopped[witnessLeader] != int(syscall.SIGUSR1) || observer.detached != 0 || observer.command != command || command.Process != nil || observer.reducer != reducer {
+				t.Fatal("missing-state refusal changed held stops, detach handoff or command ownership")
+			}
+			linuxAssertMissingThreadReducerUnchanged(t, reducer)
+		})
+	}
+}
+
+func linuxAssertMissingThreadReducerUnchanged(t *testing.T, reducer *linuxCollectorReducer) {
+	t.Helper()
+	if len(reducer.trace.Events) != 0 || reducer.trace.Readings != 0 || reducer.trace.Active != 0 || reducer.trace.MaximumActive != 0 || reducer.trace.Closed || reducer.step != 0 || reducer.retry != nil || len(reducer.pending) != 0 || len(reducer.files) != 0 || len(reducer.threads) != 1 || !reducer.threads[witnessLeader] {
+		t.Fatal("missing-state refusal advanced or closed collector evidence")
+	}
+}
+
 type linuxNativeReceipt struct {
 	PID      int    `json:"pid"`
 	OpenTID  int    `json:"openTID"`
