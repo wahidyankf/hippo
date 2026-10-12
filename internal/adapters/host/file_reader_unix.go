@@ -183,8 +183,20 @@ func pollFileDescriptor(descriptor, timeout int) (bool, error) {
 	if _, err := unix.Poll(value, timeout); err != nil {
 		return false, err
 	}
-	if value[0].Revents&(unix.POLLNVAL|unix.POLLERR) != 0 {
+	return classifyFilePoll(value[0].Revents)
+}
+
+func classifyFilePoll(events int16) (bool, error) {
+	if events&unix.POLLNVAL != 0 {
 		return false, unix.EIO
 	}
-	return value[0].Revents&(unix.POLLIN|unix.POLLHUP) != 0, nil
+	// Readiness permits a read even with POLLERR; only the read determines
+	// bytes, actual EOF or an acquisition failure.
+	if events&(unix.POLLIN|unix.POLLHUP) != 0 {
+		return true, nil
+	}
+	if events&unix.POLLERR != 0 {
+		return false, unix.EIO
+	}
+	return false, nil
 }
