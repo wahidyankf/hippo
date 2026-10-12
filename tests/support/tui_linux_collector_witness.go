@@ -16,6 +16,15 @@ type linuxStopResult struct {
 	observed bool
 }
 
+func linuxWitnessTrapEvent(signal, trapSignal, cause int) int {
+	// Go's Linux WaitStatus.TrapCause is an event only for plain SIGTRAP;
+	// other stops return -1, including TRACESYSGOOD syscall stops.
+	if signal == trapSignal {
+		return cause
+	}
+	return 0
+}
+
 type linuxWitnessHarvest struct {
 	result              linuxStopResult
 	acquired, uncertain bool
