@@ -621,6 +621,17 @@ func (probe *PublicTUIHostProbe) retainDarwinRequestLocked(request publicHostReq
 	probe.darwinPending = &request
 }
 
+type publicHostRequestInput struct {
+	reader   io.Reader
+	received int
+}
+
+func (input *publicHostRequestInput) Read(buffer []byte) (int, error) {
+	count, err := input.reader.Read(buffer)
+	input.received += count
+	return count, err
+}
+
 func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 	defer func() {
 		probe.retainError(publicHostCloseConnection(connection))
@@ -632,10 +643,16 @@ func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 		probe.retainError(err)
 		return
 	}
-	decoder := json.NewDecoder(io.LimitReader(connection, 8192))
+	input := &publicHostRequestInput{reader: io.LimitReader(connection, 8192)}
+	decoder := json.NewDecoder(input)
 	decoder.DisallowUnknownFields()
 	var request publicHostRequest
 	if err := decoder.Decode(&request); err != nil {
+		// Cancellation can close a connected helper before it sends a request.
+		// Received whitespace or invalid JSON still retains the original error.
+		if errors.Is(err, io.EOF) && input.received == 0 {
+			return
+		}
 		probe.retainError(err)
 		return
 	}
