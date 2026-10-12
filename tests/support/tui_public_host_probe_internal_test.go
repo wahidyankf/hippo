@@ -5,7 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +59,156 @@ func publicHostProtocolRequest() publicHostRequest {
 		Nonce: "owned-protocol-nonce", Executable: "/owned/test-helper",
 		PID: 17, ParentPID: 23, Name: "ps", Arguments: []string{"-A", "-o", "%cpu="},
 	}
+}
+
+// A helper may be cancelled after connect and before its first request. Only
+// zero received bytes are a clean disconnect; received invalid data stays fatal.
+func TestPublicHostProbePreRequestDisconnect(t *testing.T) {
+	for _, test := range []struct {
+		name, input string
+		wantError   error
+		wantSyntax  bool
+	}{
+		{name: "zero-byte"},
+		{name: "whitespace", input: " \t\n", wantError: io.EOF},
+		{name: "truncated", input: `{"Nonce":`, wantError: io.ErrUnexpectedEOF},
+		{name: "malformed", input: "}", wantSyntax: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			probe, owner := newPublicHostPreRequestControl(t)
+			closeError, ownerError := disconnectPublicHostPreRequest(t, probe, owner, test.input)
+			requirePublicHostPreRequestJoined(t, probe)
+			if test.input == "" {
+				if err := errors.Join(closeError, ownerError); err != nil {
+					t.Fatal("zero-byte peer disconnect poisoned joined retirement", err)
+				}
+				if len(owner.sets) != 0 || probe.wrappers != nil {
+					t.Fatal("joined zero-byte handler retained its wrapper borrower")
+				}
+				if _, err := os.Stat(probe.wrapperDirectory); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("joined wrapper code survived owner retirement: %v", err)
+				}
+				return
+			}
+			requirePublicHostPreRequestFailure(t, closeError, test.wantError, test.wantSyntax)
+			if ownerError == nil || probe.wrappers == nil || probe.wrappers.borrowers != 1 {
+				t.Fatal("received invalid data bypassed failed borrower retirement")
+			}
+			if _, err := os.Stat(probe.wrapperDirectory); err != nil {
+				t.Fatal("failed borrower retirement lost its owned wrapper code", err)
+			}
+			t.Logf("received data preserved decode failure and borrower: %v / %v", closeError, ownerError)
+		})
+	}
+}
+
+func disconnectPublicHostPreRequest(t *testing.T, probe *PublicTUIHostProbe, owner *publicTUIHostWrapperOwner, input string) (error, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	var dialer net.Dialer
+	connection, err := dialer.DialContext(ctx, "tcp4", probe.listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := probe.listener.Accept()
+	if err != nil {
+		t.Fatal(errors.Join(err, connection.Close()))
+	}
+	probe.connections[server] = 0
+	done := make(chan struct{})
+	probe.done = append(probe.done, done)
+	go func() { probe.handleDarwin(server); close(done) }()
+	if _, err := io.WriteString(connection, input); err != nil {
+		t.Fatal(errors.Join(err, connection.Close()))
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("real pre-request handler did not join", ctx.Err())
+	}
+	closeError := probe.Close(ctx)
+	return closeError, owner.close()
+}
+
+func requirePublicHostPreRequestJoined(t *testing.T, probe *PublicTUIHostProbe) {
+	t.Helper()
+	trace := probe.Trace()
+	if !trace.Closed || trace.Readings != 0 || trace.Active != 0 || trace.MaximumActive != 0 || len(trace.Events) != 0 ||
+		len(probe.connections) != 0 || probe.darwinPending != nil || probe.darwinParent != 0 || len(probe.darwinHelpers) != 0 {
+		t.Fatalf("unaccepted connection invented a reading or retained a handler: %+v", trace)
+	}
+	if _, err := os.Stat(probe.directory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("joined probe directory survived: %v", err)
+	}
+}
+
+func requirePublicHostPreRequestFailure(t *testing.T, err, expected error, syntax bool) {
+	t.Helper()
+	if syntax {
+		if _, ok := errors.AsType[*json.SyntaxError](err); !ok {
+			t.Fatal("malformed request lost its syntax error", err)
+		}
+		return
+	}
+	if !errors.Is(err, expected) {
+		t.Fatal("received request lost its decode error", err)
+	}
+}
+
+func newPublicHostPreRequestControl(t *testing.T) (*PublicTUIHostProbe, *publicTUIHostWrapperOwner) {
+	t.Helper()
+	owner, err := newPublicTUIHostWrapperOwner(publicHostPreRequestDirectory(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	executable, err = filepath.EvalSymlinks(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := owner.acquire(executable, publicHostDarwinScripts(executable))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := publicHostProtocolFixture()
+	probe.directory = publicHostPreRequestDirectory(t)
+	probe.executable, probe.platform, probe.origin = executable, darwinPlatform, time.Now()
+	probe.wrapperOwner, probe.wrappers, probe.wrapperDirectory = owner, set, set.directory
+	probe.listener, probe.connections = listener, map[net.Conn]int{}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 3*time.Second)
+		defer cancel()
+		if err := probe.Close(ctx); err != nil {
+			t.Log("retained original probe failure at final owned cleanup", err)
+		}
+		if err := owner.close(); err != nil {
+			t.Log("retained original borrower failure; private TempDir removes only joined test data", err)
+		}
+	})
+	return probe, owner
+}
+
+func publicHostPreRequestDirectory(t *testing.T) string {
+	t.Helper()
+	directory, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return directory
 }
 
 func TestPublicHostProbeExactProtocolRejectsForeignAndOutOfOrder(t *testing.T) {
