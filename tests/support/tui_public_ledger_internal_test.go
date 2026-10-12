@@ -200,6 +200,15 @@ func TestMixedPublicOwnerBudgetRejectsHostsBelowDeclaredOwnerCapacity(t *testing
 }
 
 func TestMixedV085PublicOwnerBudgetUsesDeclaredHostParallelism(t *testing.T) {
+	mixedCompatibilityBudgetControls(t, validateMixedV085PublicOwnerBudget)
+}
+
+func TestMixedV084PublicOwnerBudgetUsesDeclaredHostParallelism(t *testing.T) {
+	mixedCompatibilityBudgetControls(t, validateMixedV084PublicOwnerBudget)
+}
+
+func mixedCompatibilityBudgetControls(t *testing.T, validate func(coordination.ReservationTotals, int) error) {
+	t.Helper()
 	for _, host := range []struct {
 		parallelism int
 		cpuCapacity int
@@ -210,10 +219,10 @@ func TestMixedV085PublicOwnerBudgetUsesDeclaredHostParallelism(t *testing.T) {
 				Capacity:  coordination.ReservationVector{CPU: host.cpuCapacity, MemoryBytes: 3 * policy.GiB},
 				Allocated: coordination.ReservationVector{CPU: 2, MemoryBytes: 2 * policy.GiB},
 			}
-			if err := validateMixedV085PublicOwnerBudget(declared, host.parallelism); err != nil {
+			if err := validate(declared, host.parallelism); err != nil {
 				t.Fatalf("declared one-CPU compatibility owner budget rejected: %v", err)
 			}
-			mixedPublicOwnerBudgetFaultControls(t, declared, host.parallelism, validateMixedV085PublicOwnerBudget)
+			mixedPublicOwnerBudgetFaultControls(t, declared, host.parallelism, validate)
 		})
 	}
 }
@@ -245,6 +254,15 @@ func mixedPublicOwnerBudgetFaultControls(t *testing.T, declared coordination.Res
 }
 
 func TestMixedV085PublicOwnerBudgetRejectsImpossibleHostsAndNativeAllocations(t *testing.T) {
+	mixedCompatibilityImpossibleHostControls(t, validateMixedV085PublicOwnerBudget)
+}
+
+func TestMixedV084PublicOwnerBudgetRejectsImpossibleHostsAndNativeAllocations(t *testing.T) {
+	mixedCompatibilityImpossibleHostControls(t, validateMixedV084PublicOwnerBudget)
+}
+
+func mixedCompatibilityImpossibleHostControls(t *testing.T, validate func(coordination.ReservationTotals, int) error) {
+	t.Helper()
 	for _, logicalCPUs := range []int{0, 1, 2, 3, 4, 8} {
 		t.Run(fmt.Sprintf("%d-logical-CPUs", logicalCPUs), func(t *testing.T) {
 			for _, allocatedCPU := range []int{2, 4} {
@@ -257,7 +275,7 @@ func TestMixedV085PublicOwnerBudgetRejectsImpossibleHostsAndNativeAllocations(t 
 						Capacity:  coordination.ReservationVector{CPU: cpuCapacity, MemoryBytes: 3 * policy.GiB},
 						Allocated: coordination.ReservationVector{CPU: allocatedCPU, MemoryBytes: 2 * policy.GiB},
 					}
-					if err := validateMixedV085PublicOwnerBudget(actual, logicalCPUs); err == nil {
+					if err := validate(actual, logicalCPUs); err == nil {
 						t.Fatal("impossible host, manufactured capacity or native allocation accepted as compatibility budget")
 					}
 				}
@@ -267,12 +285,21 @@ func TestMixedV085PublicOwnerBudgetRejectsImpossibleHostsAndNativeAllocations(t 
 }
 
 func TestMixedV085PublicOwnerBudgetRejectsNativeMemoryCap(t *testing.T) {
+	mixedCompatibilityNativeMemoryControl(t, validateMixedV085PublicOwnerBudget)
+}
+
+func TestMixedV084PublicOwnerBudgetRejectsNativeMemoryCap(t *testing.T) {
+	mixedCompatibilityNativeMemoryControl(t, validateMixedV084PublicOwnerBudget)
+}
+
+func mixedCompatibilityNativeMemoryControl(t *testing.T, validate func(coordination.ReservationTotals, int) error) {
+	t.Helper()
 	actual := coordination.ReservationTotals{
 		SchemaVersion: 5, Mode: reservationMode, ActiveOwners: 2,
 		Capacity:  coordination.ReservationVector{CPU: 2, MemoryBytes: 8 * policy.GiB},
 		Allocated: coordination.ReservationVector{CPU: 2, MemoryBytes: 2 * policy.GiB},
 	}
-	if err := validateMixedV085PublicOwnerBudget(actual, 3); err == nil {
+	if err := validate(actual, 3); err == nil {
 		t.Fatal("native eight-GiB cap accepted as compatibility three-GiB budget")
 	}
 }
@@ -280,7 +307,7 @@ func TestMixedV085PublicOwnerBudgetRejectsNativeMemoryCap(t *testing.T) {
 // These are modeled host inputs, not a claim of execution on a hosted runner.
 // Use the real configuration loader, catalog safety reserve and admission planner.
 func TestMixedV085PublicOwnerBudgetDerivesStandardRAMCapacity(t *testing.T) {
-	for _, variant := range []string{publicTUIMixedVariant, publicTUIMixedV085Variant} {
+	for _, variant := range []string{publicTUIMixedVariant, publicTUIMixedV085Variant, publicTUIMixedV084Variant} {
 		t.Run(variant, func(t *testing.T) {
 			directory := t.TempDir()
 			if err := os.Chmod(directory, 0o700); err != nil {
@@ -299,7 +326,7 @@ func TestMixedV085PublicOwnerBudgetDerivesStandardRAMCapacity(t *testing.T) {
 				t.Fatal(err)
 			}
 			capBytes := 8 * policy.GiB
-			if variant == publicTUIMixedV085Variant {
+			if variant == publicTUIMixedV085Variant || variant == publicTUIMixedV084Variant {
 				capBytes = 3 * policy.GiB
 			}
 			if configured.Coordination.MaxMemoryBytes != capBytes || configured.Coordination.MaxCPU != 8 || configured.Coordination.MaxActiveOwners != 2 {
@@ -315,12 +342,21 @@ func TestMixedV085PublicOwnerBudgetDerivesStandardRAMCapacity(t *testing.T) {
 
 func mixedV085StandardRAMControls(t *testing.T, configured configadapter.Result) {
 	t.Helper()
+	for _, logicalCPUs := range []int{3, 4} {
+		t.Run(fmt.Sprintf("%d-logical-CPUs", logicalCPUs), func(t *testing.T) {
+			mixedCompatibilityRAMControls(t, configured, logicalCPUs)
+		})
+	}
+}
+
+func mixedCompatibilityRAMControls(t *testing.T, configured configadapter.Result, logicalCPUs int) {
+	t.Helper()
 	capBytes := 3 * policy.GiB
 	for _, memory := range []int64{7_000_000_000, 7 * policy.GiB, 16 * policy.GiB} {
 		for _, swap := range []string{"available", "unavailable"} {
 			t.Run(fmt.Sprintf("%d-bytes-%s-swap", memory, swap), func(t *testing.T) {
 				disk := 64 * policy.GiB
-				sample := policy.Sample{PhysicalMemoryBytes: memory, EffectiveMemoryLimitBytes: memory, AvailableMemoryBytes: &memory, AvailableParallelism: 3, DiskFreeBytes: &disk, DiskTotalBytes: &disk, SwapState: swap}
+				sample := policy.Sample{PhysicalMemoryBytes: memory, EffectiveMemoryLimitBytes: memory, AvailableMemoryBytes: &memory, AvailableParallelism: logicalCPUs, DiskFreeBytes: &disk, DiskTotalBytes: &disk, SwapState: swap}
 				resolution, err := configured.Catalog.Resolve("balanced", policy.TaskEphemeral, sample)
 				if err != nil {
 					t.Fatal(err)
@@ -330,10 +366,21 @@ func mixedV085StandardRAMControls(t *testing.T, configured configadapter.Result)
 				}
 				settings := coordination.ReservationPolicy{Enabled: true, MaxCPU: configured.Coordination.MaxCPU, MaxMemoryBytes: configured.Coordination.MaxMemoryBytes, MaxActiveOwners: configured.Coordination.MaxActiveOwners, OwnerShares: configured.Coordination.OwnerShares}
 				plan, err := coordination.PlanReservation(sample, resolution, settings, 1, policy.GiB)
-				if err != nil || plan.Capacity != (coordination.ReservationVector{CPU: 2, MemoryBytes: 3 * policy.GiB}) || plan.Requested != (coordination.ReservationVector{CPU: 1, MemoryBytes: policy.GiB}) || plan.Allocated != plan.Requested {
+				if err != nil || plan.Capacity != (coordination.ReservationVector{CPU: logicalCPUs - 1, MemoryBytes: 3 * policy.GiB}) || plan.Requested != (coordination.ReservationVector{CPU: 1, MemoryBytes: policy.GiB}) || plan.Allocated != plan.Requested {
 					t.Fatalf("standard RAM exact safe plan differs: %+v error=%v", plan, err)
 				}
 			})
 		}
+	}
+}
+
+func TestMixedV084PublicOwnerBudgetRejectsPriorNativeContract(t *testing.T) {
+	actual := coordination.ReservationTotals{
+		SchemaVersion: 5, Mode: reservationMode, ActiveOwners: 2,
+		Capacity:  coordination.ReservationVector{CPU: 7, MemoryBytes: 8 * policy.GiB},
+		Allocated: coordination.ReservationVector{CPU: 4, MemoryBytes: 2 * policy.GiB},
+	}
+	if err := validateMixedV084PublicOwnerBudget(actual, 8); err == nil {
+		t.Fatal("prior two-CPU/eight-GiB native contract accepted as one-CPU compatibility budget")
 	}
 }

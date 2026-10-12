@@ -19,8 +19,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cucumber/godog"
 	"github.com/wahidyankf/hippo/tests/support"
 )
+
+const publicBDDMixedV084Variant = "mixed-v084"
+
+func (fixture *publicBDDObservation) isMixedObservation() bool {
+	return fixture.variant == "mixed" || fixture.variant == publicBDDMixedV084Variant
+}
+
+func publicBDDMixedOwnerCPU(variant string) int {
+	if variant == publicBDDMixedV084Variant {
+		return 1
+	}
+	return 2
+}
 
 // These are actual guarded command lifetimes. Their readiness token comes from
 // the real HIPPO_SESSION published into the ordinary shell child's environment.
@@ -140,6 +154,15 @@ func (fixture *publicBDDObservation) prepareMixedOwners(ctx context.Context) err
 		ids = append(ids, job.token)
 		pids = append(pids, job.command.Process.Pid)
 	}
+	if fixture.variant == publicBDDMixedV084Variant {
+		if err := fixture.ledger.AdoptV084MixedOwners(ctx, ids, pids); err != nil {
+			return err
+		}
+		for _, job := range fixture.mixed {
+			godog.Logf(ctx, "actual v084 compatibility ready=%s", fixture.mixedStartupReceipt(job))
+		}
+		return nil
+	}
 	return fixture.ledger.AdoptMixedOwners(ctx, ids, pids)
 }
 
@@ -171,7 +194,7 @@ func (fixture *publicBDDObservation) startMixedOwner(parent context.Context, exe
 		return closeUnstarted(err)
 	}
 	job.stage = "command-construction"
-	arguments := []string{"run", "--config", fixture.ledger.Configuration(), "--cwd", directory, "--disk-path", directory, "--profile", "balanced", "--class", "ephemeral", "--resource-tier", "light", "--source", "owner", "--tag", "role=owner", "--reserve-cpu", "2", "--reserve-memory-mib", "1024"}
+	arguments := []string{"run", "--config", fixture.ledger.Configuration(), "--cwd", directory, "--disk-path", directory, "--profile", "balanced", "--class", "ephemeral", "--resource-tier", "light", "--source", "owner", "--tag", "role=owner", "--reserve-cpu", strconv.Itoa(publicBDDMixedOwnerCPU(fixture.variant)), "--reserve-memory-mib", "1024"}
 	if current {
 		arguments = append(arguments, "--label", "current-owner")
 	}
@@ -371,6 +394,9 @@ func (fixture *publicBDDObservation) closeMixedJob(ctx context.Context, job *pub
 		result = errors.Join(result, job.probe.Close(ctx))
 	}
 	job.cancel()
+	if fixture.variant == publicBDDMixedV084Variant {
+		godog.Logf(ctx, "actual v084 compatibility retired=%s", fixture.mixedStartupReceipt(job))
+	}
 	return result
 }
 
@@ -414,7 +440,7 @@ func (fixture *publicBDDObservation) mixedStartupReceipt(job *publicBDDMixedJob)
 	}
 	if fixture.ledger != nil {
 		receipt["expectedOwnedInputs"] = fixture.ledger.Expected()
-		config, err := os.ReadFile(fixture.ledger.Configuration())
+		config, err := readPublicMixedConfiguration(fixture.directory, fixture.ledger.Configuration())
 		switch {
 		case err != nil:
 			receipt["configurationReadError"] = err.Error()
@@ -430,6 +456,18 @@ func (fixture *publicBDDObservation) mixedStartupReceipt(job *publicBDDMixedJob)
 		return fmt.Sprintf("receipt serialization failed: %v", err)
 	}
 	return string(encoded)
+}
+
+func readPublicMixedConfiguration(directory, configuration string) ([]byte, error) {
+	if !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || configuration != filepath.Join(directory, "observation.json") {
+		return nil, errors.New("mixed diagnostic configuration is not the owned fixture file")
+	}
+	owned, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil, err
+	}
+	config, readError := owned.ReadFile("observation.json")
+	return config, errors.Join(readError, owned.Close())
 }
 
 func recordPublicMixedCommandReceipt(receipt map[string]any, job *publicBDDMixedJob) {
