@@ -464,7 +464,7 @@ public_v085_release_prepare() {
 	for _, path := range []string{"go.mod", "go.sum", "tests/support/hostprobe/protocol.go"} {
 		write(path, []byte("recording preparation source fixture\n"))
 	}
-	for _, path := range []string{"scripts/check-worktree-layout.sh", "scripts/format-check.sh", "tests/artifacts/run.sh", ".commandcode/hooks/agent-policy-selector.test.sh", ".commandcode/hooks/git-fixture-isolation.test.sh"} {
+	for _, path := range []string{"scripts/check-worktree-layout.sh", "scripts/format-check.sh", "tests/artifacts/run.sh", ".commandcode/hooks/agent-policy-selector.test.sh", ".commandcode/hooks/git-fixture-isolation.test.sh", ".muse/hooks/run-policy-hook.test.sh"} {
 		write(path, []byte("#!/bin/sh\nset -eu\nexit 0\n"))
 	}
 	write("bin/go", []byte(`#!/bin/sh
