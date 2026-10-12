@@ -52,6 +52,7 @@ var (
 var errLinuxWitnessUnexpectedExecEntry = errors.New("linux witness refused unexpected child exec entry")
 
 type linuxWitnessThread struct {
+	observation     linuxWitnessObservation
 	call            *linuxWitnessEvent
 	paired, initial bool
 	cloneAllowed    bool
@@ -65,12 +66,13 @@ func linuxWitnessObserved(event *linuxWitnessEvent) linuxStopResult {
 }
 
 type linuxCollectorObserver struct {
-	command  *exec.Cmd
-	reducer  *linuxCollectorReducer
-	threads  map[int]*linuxWitnessThread
-	stopped  map[int]int
-	leader   int
-	detached int
+	command    *exec.Cmd
+	reducer    *linuxCollectorReducer
+	threads    map[int]*linuxWitnessThread
+	stopped    map[int]int
+	leader     int
+	detached   int
+	lastResume linuxWitnessResumeMetadata
 }
 
 // RunPublicLinuxCollectorWitness observes real procfs syscalls of the exact selected
@@ -129,12 +131,30 @@ func (observer *linuxCollectorObserver) observe(ctx context.Context) error {
 		initial = false
 		for _, tid := range observer.sortedStopped() {
 			if err := syscall.PtraceSyscall(tid, observer.stopped[tid]); err != nil {
-				return fmt.Errorf("resume owned linux thread %d: %w", tid, err)
+				metadata := observer.resumeFailureMetadata(tid, ctx.Err())
+				return linuxWitnessResumeError(tid, err, metadata)
 			}
+			observer.lastResume = linuxWitnessSuccessfulResume(tid, observer.stopped[tid], observer.heldStopMetadata(tid))
 			delete(observer.stopped, tid)
 		}
 	}
 	return nil
+}
+
+func (observer *linuxCollectorObserver) heldStopMetadata(tid int) linuxWitnessStopMetadata {
+	if thread := observer.threads[tid]; thread != nil {
+		return thread.observation.held
+	}
+	return linuxWitnessStopMetadata{}
+}
+
+func (observer *linuxCollectorObserver) resumeFailureMetadata(tid int, contextError error) linuxWitnessFailureMetadata {
+	metadata := linuxWitnessFailureMetadata{
+		Leader: observer.leader, TID: tid, Signal: observer.stopped[tid], Last: observer.lastResume, Stop: observer.heldStopMetadata(tid),
+		Owned: len(observer.threads), Held: len(observer.stopped), Detached: observer.detached,
+		Context: linuxWitnessContextObservation(contextError),
+	}
+	return observer.reducer.failureMetadata(metadata)
 }
 
 func linuxWitnessPause(ctx context.Context) error {
@@ -202,6 +222,7 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 	}
 	signal := status.StopSignal()
 	event := linuxWitnessTrapEvent(int(signal), int(syscall.SIGTRAP), status.TrapCause())
+	thread.observation.stop(uint32(status), int(signal), event, 0)
 	if initial && tid == observer.leader {
 		if signal != syscall.SIGTRAP || event != 0 {
 			return linuxStopResult{}, errors.New("linux witness child lacks initial exec stop")
@@ -210,10 +231,12 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		if err := syscall.PtraceSetOptions(tid, options); err != nil {
 			return linuxStopResult{}, err
 		}
+		thread.observation.held.Kind = 1
 		observer.stopped[tid] = 0
 		return linuxStopResult{}, nil
 	}
 	if event == syscall.PTRACE_EVENT_EXIT {
+		thread.observation.held.Kind = 2
 		if err := syscall.PtraceDetach(tid); err != nil {
 			return linuxStopResult{}, fmt.Errorf("detach exiting owned thread %d: %w", tid, err)
 		}
@@ -222,6 +245,7 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		return linuxStopResult{}, nil
 	}
 	if event == syscall.PTRACE_EVENT_CLONE {
+		thread.observation.held.Kind = 3
 		if !thread.cloneAllowed {
 			return linuxStopResult{}, errors.New("linux witness observed an unqualified clone")
 		}
@@ -247,16 +271,20 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		if err != nil {
 			return linuxStopResult{}, err
 		}
+		thread.observation.held.Kind = 4
+		thread.observation.syscall(info.Operation, info.Data[0])
 		observer.stopped[tid] = 0
 		return observer.syscall(tid, info)
 	}
 	if signal == syscall.SIGSTOP && thread.initial {
+		thread.observation.held.Kind = 5
 		observer.stopped[tid] = 0
 		return linuxStopResult{}, nil
 	}
 	if signal == syscall.SIGTRAP || signal == syscall.SIGSTOP {
 		return linuxStopResult{}, errors.New("linux witness received unexplained tracing stop")
 	}
+	thread.observation.held.Kind = 6
 	observer.stopped[tid] = int(signal)
 	return linuxStopResult{}, nil
 }

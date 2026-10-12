@@ -11,6 +11,124 @@ import (
 	"strings"
 )
 
+// Resume diagnostics contain only copied scalar observations, never subject data.
+type linuxWitnessStopMetadata struct {
+	Status      uint32
+	Signal      int
+	Event       int
+	Kind        uint8
+	Phase       uint8
+	NumberKnown bool
+	Number      uint64
+}
+
+type linuxWitnessResumeMetadata struct {
+	Known  bool
+	TID    int
+	Signal int
+	Stop   linuxWitnessStopMetadata
+}
+
+type linuxWitnessFailureMetadata struct {
+	Leader         int
+	TID            int
+	Signal         int
+	Stop           linuxWitnessStopMetadata
+	Last           linuxWitnessResumeMetadata
+	Owned          int
+	Held           int
+	Detached       int
+	Readings       int
+	Active         int
+	MaximumActive  int
+	Closed         bool
+	Step           int
+	Steps          int
+	Events         int
+	Pending        int
+	Files          int
+	PreludePending int
+	PreludeFiles   int
+	Retry          bool
+	RetryTID       int
+	Context        linuxWitnessContextMetadata
+}
+
+type linuxWitnessContextMetadata uint8
+
+func (state linuxWitnessContextMetadata) String() string {
+	switch state {
+	case 0:
+		return "nil"
+	case 1:
+		return "canceled"
+	case 2:
+		return "deadline-exceeded"
+	default:
+		return "unexpected-context-error"
+	}
+}
+
+func linuxWitnessContextObservation(err error) linuxWitnessContextMetadata {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, context.Canceled):
+		return 1
+	case errors.Is(err, context.DeadlineExceeded):
+		return 2
+	default:
+		return 3
+	}
+}
+
+type linuxWitnessObservation struct {
+	held        linuxWitnessStopMetadata
+	entryKnown  bool
+	entryNumber uint64
+}
+
+func (observation *linuxWitnessObservation) stop(status uint32, signal, event int, kind uint8) {
+	observation.held = linuxWitnessStopMetadata{Status: status, Signal: signal, Event: event, Kind: kind}
+}
+
+func (observation *linuxWitnessObservation) syscall(phase uint8, value uint64) {
+	if phase == 1 {
+		observation.entryKnown, observation.entryNumber = true, value
+	}
+
+	observation.held.Phase = phase
+	observation.held.NumberKnown = observation.entryKnown
+	if observation.entryKnown {
+		observation.held.Number = observation.entryNumber
+	}
+	// EXIT's value is a result. Only a previously observed ENTRY supplies its number.
+	if phase == 2 {
+		observation.entryKnown, observation.entryNumber = false, 0
+	}
+}
+
+func linuxWitnessSuccessfulResume(tid, signal int, stop linuxWitnessStopMetadata) linuxWitnessResumeMetadata {
+	return linuxWitnessResumeMetadata{Known: true, TID: tid, Signal: signal, Stop: stop}
+}
+
+func (reducer *linuxCollectorReducer) failureMetadata(metadata linuxWitnessFailureMetadata) linuxWitnessFailureMetadata {
+	metadata.Readings, metadata.Active = reducer.trace.Readings, reducer.trace.Active
+	metadata.MaximumActive, metadata.Closed = reducer.trace.MaximumActive, reducer.trace.Closed
+	metadata.Step, metadata.Steps = reducer.step, len(reducer.steps)
+	metadata.Events, metadata.Pending, metadata.Files = len(reducer.trace.Events), len(reducer.pending), len(reducer.files)
+	metadata.PreludePending, metadata.PreludeFiles = len(reducer.prelude.pending), len(reducer.prelude.files)
+	metadata.Retry, metadata.RetryTID = false, 0
+	if reducer.retry != nil {
+		metadata.Retry, metadata.RetryTID = true, reducer.retry.activeTID
+	}
+	return metadata
+}
+
+func linuxWitnessResumeError(tid int, original error, metadata linuxWitnessFailureMetadata) error {
+	return fmt.Errorf("resume owned linux thread %d: %w; witness=%+v", tid, original, metadata)
+}
+
 type linuxStopResult struct {
 	event    linuxWitnessEvent
 	observed bool
