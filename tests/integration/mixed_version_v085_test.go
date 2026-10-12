@@ -33,6 +33,9 @@ import (
 // The full gate registers this genuine two-binary leaf explicitly with the
 // mixedversion tag. Dedicated inputs leave its v0.8.4 corpus fixture untouched.
 func TestMixedVersionV085DisplayInteroperability(t *testing.T) {
+	if !t.Run("payload retirement identity", mixedV085OwnerRetirementIdentity) {
+		return
+	}
 	if !t.Run("metadata oracle rejects altered declarations", mixedV085MetadataOracleControls) {
 		return
 	}
@@ -601,12 +604,7 @@ func (fixture *mixedV085Fixture) close(t *testing.T) {
 		}
 		select {
 		case <-job.done:
-			if job.waitError != nil || job.command.ProcessState == nil || job.command.ProcessState.ExitCode() != 0 {
-				result = errors.Join(result, fmt.Errorf("mixed owner did not naturally exit zero: %v", job.waitError))
-			}
-			if !errors.Is(syscall.Kill(job.payloadPID, 0), syscall.ESRCH) {
-				result = errors.Join(result, errors.New("mixed payload survived actual joined Wait"))
-			}
+			result = errors.Join(result, mixedV085OwnerRetirement(job, func(pid int) error { return syscall.Kill(pid, 0) }))
 			for _, relative := range []string{"owner-metadata", "run-display"} {
 				if _, err := os.Lstat(filepath.Join(fixture.root, relative, job.token+".json")); !errors.Is(err, os.ErrNotExist) {
 					result = errors.Join(result, fmt.Errorf("mixed owned %s survived retirement: %v", relative, err))
@@ -654,6 +652,26 @@ func (fixture *mixedV085Fixture) close(t *testing.T) {
 	if result != nil {
 		t.Error(result)
 	}
+}
+
+func mixedV085OwnerRetirement(job *mixedV085Owner, inspect func(int) error) error {
+	var result error
+	if job.waitError != nil || job.command.ProcessState == nil || job.command.ProcessState.ExitCode() != 0 {
+		result = errors.New("mixed owner did not naturally exit zero")
+		if job.waitError != nil {
+			result = fmt.Errorf("mixed owner did not naturally exit zero: %w", job.waitError)
+		}
+	}
+	if job.payloadPID <= 0 {
+		return errors.Join(result, errors.New("mixed payload retirement UNKNOWN: payload PID unobserved"))
+	}
+	err := inspect(job.payloadPID)
+	if err == nil {
+		result = errors.Join(result, errors.New("mixed payload survived actual joined Wait"))
+	} else if !errors.Is(err, syscall.ESRCH) {
+		result = errors.Join(result, fmt.Errorf("mixed payload retirement UNKNOWN: inspect PID %d: %w", job.payloadPID, err))
+	}
+	return result
 }
 
 func mixedV085ExecutableDigest(t *testing.T, path string) string {
