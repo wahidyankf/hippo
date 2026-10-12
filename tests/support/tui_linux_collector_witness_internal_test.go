@@ -1217,3 +1217,204 @@ func witnessMetadataMaximumScalars(value reflect.Value) {
 		}
 	}
 }
+
+func TestLinuxCollectorWitnessOperationMetadataPresentation(t *testing.T) {
+	for _, test := range []struct {
+		operation linuxWitnessOperation
+		name      string
+	}{
+		{linuxWitnessInitialSetOptions, "initial-ptrace-set-options"},
+		{linuxWitnessCloneEventMessage, "clone-get-event-message"},
+		{linuxWitnessSyscallInfoKernel, "get-syscall-info-kernel"},
+		{linuxWitnessSyscallInfoValidation, "get-syscall-info-validation"},
+		{linuxWitnessCloneFlagsKernel, "peek-clone-flags-kernel"},
+		{linuxWitnessPathnameKernel, "peek-pathname-kernel"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			metadata := linuxWitnessFailureMetadata{
+				Leader: 11, TID: 22, RegisteredHeld: true, Owned: 3, Held: 2, Detached: 1,
+				Stop:     linuxWitnessStopMetadata{Status: 1407, Signal: 5, Kind: 4},
+				Last:     linuxWitnessSuccessfulResume(33, 0, linuxWitnessStopMetadata{Phase: 1, NumberKnown: true, Number: 231}),
+				Readings: 2, Active: 1, MaximumActive: 1, Pending: 1, Context: 1,
+			}
+			tagged := linuxWitnessTagOperation(test.operation, 22, syscall.ESRCH)
+			err := linuxWitnessOperationFailureError(tagged, metadata)
+			if err == nil || !errors.Is(err, syscall.ESRCH) {
+				t.Fatal("operation diagnostic lost original errno", err)
+			}
+			for _, want := range []string{"operation=" + test.name, "tid=22", "Leader:11", "TID:22", "RegisteredHeld:true", "Owned:3", "Held:2", "Last:{Known:true TID:33", "Status:1407", "Phase:0 NumberKnown:false Number:0", "Readings:2", "Active:1", "Pending:1", "Context:canceled"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("bare native error lacks required operation snapshot %q: %v", want, err)
+				}
+			}
+		})
+	}
+}
+
+func TestLinuxCollectorWitnessOperationMetadataPreservesIdentityAndExactTID(t *testing.T) {
+	for _, operation := range []linuxWitnessOperation{linuxWitnessInitialSetOptions, linuxWitnessCloneEventMessage, linuxWitnessSyscallInfoKernel, linuxWitnessSyscallInfoValidation, linuxWitnessCloneFlagsKernel, linuxWitnessPathnameKernel} {
+		for _, original := range []error{syscall.ESRCH, syscall.EIO, errors.New("syscall info validation rejected")} {
+			for _, registered := range []bool{false, true} {
+				witnessAssertOperationIdentity(t, operation, original, registered)
+			}
+		}
+	}
+}
+
+func witnessAssertOperationIdentity(t *testing.T, operation linuxWitnessOperation, original error, registered bool) {
+	t.Helper()
+	metadata := linuxWitnessFailureMetadata{
+		Leader: 11, TID: 99, RegisteredHeld: registered, Owned: 3, Held: 2, Detached: 1,
+		Stop: linuxWitnessStopMetadata{Status: 196991, Signal: 5, Event: 3, Kind: 3},
+		Last: linuxWitnessSuccessfulResume(33, 10, linuxWitnessStopMetadata{Phase: 1, NumberKnown: true, Number: 231}),
+	}
+	tagged := linuxWitnessTagOperation(operation, 22, original)
+	propagated := fmt.Errorf("harvest: %w", tagged)
+	formatted := linuxWitnessOperationFailureError(propagated, metadata)
+	cleanup := fmt.Errorf("cleanup tid44: %w", syscall.ECHILD)
+	joined := errors.Join(formatted, cleanup)
+	var failure *linuxWitnessOperationError
+	if !errors.As(joined, &failure) || failure == nil || failure.tid != 22 || failure.operation != operation {
+		t.Fatal("wrapping layers lost exact operation/TID", joined)
+	}
+	if !errors.Is(tagged, original) || !errors.Is(propagated, original) || !errors.Is(formatted, original) || !errors.Is(joined, original) || !errors.Is(joined, syscall.ECHILD) {
+		t.Fatal("operation or existing cleanup joins lost error identity", joined)
+	}
+	for _, want := range []string{"operation=" + operation.String(), "tid=22", "TID:22", fmt.Sprintf("RegisteredHeld:%t", registered), "Status:196991", "Signal:5 Event:3 Kind:3", "Last:{Known:true TID:33 Signal:10"} {
+		if !strings.Contains(joined.Error(), want) {
+			t.Fatalf("operation snapshot borrowed last-resume/cleanup identity or lost field %q: %v", want, joined)
+		}
+	}
+	if metadata.TID != 99 || metadata.Last.TID != 33 || metadata.RegisteredHeld != registered {
+		t.Fatal("formatter changed caller scalar snapshot", metadata)
+	}
+}
+
+func TestLinuxCollectorWitnessOperationMetadataUnknownAndUntaggedErrors(t *testing.T) {
+	for _, operation := range []linuxWitnessOperation{0, math.MaxUint8} {
+		err := linuxWitnessTagOperation(operation, 22, syscall.ESRCH)
+		if err == nil || !strings.Contains(err.Error(), "operation=unknown-operation tid=22") || !errors.Is(err, syscall.ESRCH) {
+			t.Fatal("unknown enum became arbitrary operation text or lost errno", err)
+		}
+	}
+	original := errors.New("untagged failure")
+	if actual := linuxWitnessOperationFailureError(original, linuxWitnessFailureMetadata{}); !errors.Is(actual, original) || !reflect.DeepEqual(actual, original) {
+		t.Fatal("untagged reducer/context/cleanup error was indiscriminately decorated", actual)
+	}
+	if linuxWitnessTagOperation(linuxWitnessPathnameKernel, 22, nil) != nil || linuxWitnessOperationFailureError(nil, linuxWitnessFailureMetadata{}) != nil {
+		t.Fatal("operation diagnostics invented a failure")
+	}
+}
+
+func TestLinuxCollectorWitnessOperationMetadataFailedSyscallInfoKeepsUnknownCurrentCall(t *testing.T) {
+	for _, operation := range []linuxWitnessOperation{linuxWitnessSyscallInfoKernel, linuxWitnessSyscallInfoValidation} {
+		observation := linuxWitnessObservation{entryKnown: true, entryNumber: 231}
+		last := linuxWitnessSuccessfulResume(33, 0, linuxWitnessStopMetadata{Phase: 1, NumberKnown: true, Number: 231})
+		observation.stop(1407, 133, 0, 0)
+		before := observation
+		metadata := linuxWitnessFailureMetadata{Leader: 11, TID: 22, Stop: observation.held, Last: last}
+		err := linuxWitnessOperationFailureError(linuxWitnessTagOperation(operation, 22, syscall.ESRCH), metadata)
+		if err == nil {
+			t.Fatal("failed syscall info was accepted")
+		}
+		for _, want := range []string{"RegisteredHeld:false", "Status:1407 Signal:133 Event:0 Kind:0 Phase:0 NumberKnown:false Number:0", "Last:{Known:true TID:33", "NumberKnown:true Number:231"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("failed syscall info invented validated current fields or lost raw stop %q: %v", want, err)
+			}
+		}
+		if observation != before || metadata.Last != last || metadata.Stop.NumberKnown {
+			t.Fatal("failed syscall info rewrote prior observation or last resume")
+		}
+	}
+}
+
+func TestLinuxCollectorWitnessOperationMetadataPeeksRetainValidatedEntry(t *testing.T) {
+	for _, operation := range []linuxWitnessOperation{linuxWitnessCloneFlagsKernel, linuxWitnessPathnameKernel} {
+		var observation linuxWitnessObservation
+		observation.stop(1407, 133, 0, 4)
+		observation.syscall(1, 257)
+		before := observation
+		metadata := linuxWitnessFailureMetadata{TID: 22, RegisteredHeld: true, Stop: observation.held}
+		err := linuxWitnessOperationFailureError(linuxWitnessTagOperation(operation, 22, syscall.EIO), metadata)
+		if err == nil || !strings.Contains(err.Error(), "RegisteredHeld:true") || !strings.Contains(err.Error(), "Status:1407 Signal:133 Event:0 Kind:4 Phase:1 NumberKnown:true Number:257") || observation != before {
+			t.Fatal("peek failure lost retained validated ENTRY/raw stop or mutated observation", err)
+		}
+	}
+}
+
+func TestLinuxCollectorWitnessOperationMetadataContextIsDescriptiveOnly(t *testing.T) {
+	for _, test := range []struct {
+		err  error
+		name string
+	}{
+		{nil, "nil"},
+		{context.Canceled, "canceled"},
+		{context.DeadlineExceeded, "deadline-exceeded"},
+		{fmt.Errorf("wrapped: %w", context.Canceled), "canceled"},
+		{fmt.Errorf("wrapped: %w", context.DeadlineExceeded), "deadline-exceeded"},
+		{errors.New("private-context-path-payload-must-not-appear"), "unexpected-context-error"},
+	} {
+		metadata := linuxWitnessFailureMetadata{Context: linuxWitnessContextObservation(test.err)}
+		err := linuxWitnessOperationFailureError(linuxWitnessTagOperation(linuxWitnessPathnameKernel, 22, syscall.ESRCH), metadata)
+		if err == nil || !strings.Contains(err.Error(), "Context:"+test.name) || strings.Contains(err.Error(), "private-context-path-payload-must-not-appear") || !errors.Is(err, syscall.ESRCH) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal("context description leaked text, changed primary errno or joined context", err)
+		}
+	}
+}
+
+func TestLinuxCollectorWitnessOperationMetadataMaximumScalarSuffixIsBounded(t *testing.T) {
+	metadata := linuxWitnessFailureMetadata{}
+	witnessMetadataMaximumScalars(reflect.ValueOf(&metadata).Elem())
+	before := metadata
+	for _, operation := range []linuxWitnessOperation{linuxWitnessInitialSetOptions, linuxWitnessCloneEventMessage, linuxWitnessSyscallInfoKernel, linuxWitnessSyscallInfoValidation, linuxWitnessCloneFlagsKernel, linuxWitnessPathnameKernel, math.MaxUint8} {
+		err := linuxWitnessOperationFailureError(linuxWitnessTagOperation(operation, math.MaxInt, syscall.ESRCH), metadata)
+		if err == nil {
+			t.Fatal("maximum scalar operation failure disappeared")
+		}
+		text := err.Error()
+		suffix := strings.Index(text, "; witness=")
+		if suffix < 0 || len(text[suffix:]) > 2048 || !errors.Is(err, syscall.ESRCH) || metadata != before || !strings.Contains(text, "RegisteredHeld:true") || !strings.Contains(text, "Context:unexpected-context-error") {
+			t.Fatal("operation scalar suffix exceeded bound, mutated snapshot or lost errno", text)
+		}
+	}
+}
+
+func TestLinuxCollectorWitnessOperationMetadataSnapshotDoesNotDiscloseOrMutateEvidence(t *testing.T) {
+	const sentinel = "private-subject-path-pointer-buffer-payload-environment-must-not-appear"
+	reducer := newLinuxCollectorReducer(11, sentinel)
+	file := &linuxWitnessFile{}
+	reducer.files[9] = file
+	reducer.pending[22] = linuxWitnessEvent{Path: sentinel, ReadIdentity: linuxWitnessReadIdentity{Buffer: math.MaxUint64}}
+	reducer.prelude.files[30], reducer.prelude.pending[22] = sentinel, true
+	reducer.trace.Events = []PublicTUIHostProbeEvent{{Operation: sentinel}}
+	reducer.trace.Readings, reducer.trace.Active, reducer.trace.MaximumActive = 2, 1, 2
+	reducer.step = 3
+	reducer.retry = &linuxWitnessReadRetry{file: file, activeTID: 22, identity: linuxWitnessReadIdentity{Buffer: math.MaxUint64}}
+	before := *reducer
+	before.files, before.pending = maps.Clone(reducer.files), maps.Clone(reducer.pending)
+	before.prelude.files, before.prelude.pending = maps.Clone(reducer.prelude.files), maps.Clone(reducer.prelude.pending)
+	before.trace.Events = slices.Clone(reducer.trace.Events)
+	beforeRetry, beforeFile := *reducer.retry, *file
+	threads, held := map[int]bool{11: true, 22: true}, map[int]int{22: 0}
+	beforeThreads, beforeHeld := maps.Clone(threads), maps.Clone(held)
+	_, registered := held[22]
+	last := linuxWitnessSuccessfulResume(33, 0, linuxWitnessStopMetadata{Phase: 1, NumberKnown: true, Number: 231})
+	metadata := reducer.failureMetadata(linuxWitnessFailureMetadata{Leader: 11, TID: 22, RegisteredHeld: registered, Owned: len(threads), Held: len(held), Last: last})
+	beforeMetadata := metadata
+	err := linuxWitnessOperationFailureError(linuxWitnessTagOperation(linuxWitnessPathnameKernel, 22, syscall.ESRCH), metadata)
+	if err == nil {
+		t.Fatal("operation snapshot failure disappeared")
+	}
+	text := err.Error()
+	if strings.Contains(text, sentinel) || strings.Contains(text, "18446744073709551615") || strings.Contains(text, "0xc") || !errors.Is(err, syscall.ESRCH) || metadata.Last != last || metadata != beforeMetadata {
+		t.Fatal("operation diagnostic disclosed subject data or rewrote copied observations", text)
+	}
+	if !reflect.DeepEqual(*reducer, before) || *reducer.retry != beforeRetry || *file != beforeFile || !maps.Equal(threads, beforeThreads) || !maps.Equal(held, beforeHeld) {
+		t.Fatal("operation snapshot/formatting mutated reducer/ownership/debt evidence")
+	}
+	delete(threads, 22)
+	delete(held, 22)
+	if err.Error() != text || !strings.Contains(text, "Owned:2 Held:1") || !strings.Contains(text, "RegisteredHeld:true") || !strings.Contains(text, "Retry:true RetryTID:22") || !strings.Contains(text, "Readings:2 Active:1 MaximumActive:2 Closed:false") {
+		t.Fatal("later cleanup changed pre-cleanup copied scalar diagnostic", err)
+	}
+}
