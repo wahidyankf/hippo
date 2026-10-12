@@ -197,6 +197,9 @@ func (observer *linuxCollectorObserver) linuxWitnessHarvest(tid int, initial boo
 
 func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus, initial bool) (linuxStopResult, error) {
 	thread := observer.threads[tid]
+	if thread == nil {
+		return linuxStopResult{}, fmt.Errorf("linux witness lacks owned state for thread %d", tid)
+	}
 	signal := status.StopSignal()
 	event := status.TrapCause()
 	if initial && tid == observer.leader {
@@ -278,6 +281,9 @@ func linuxWitnessSyscallInfo(tid int) (linuxSyscallInfo, error) {
 
 func (observer *linuxCollectorObserver) syscall(tid int, info linuxSyscallInfo) (linuxStopResult, error) {
 	thread := observer.threads[tid]
+	if thread == nil {
+		return linuxStopResult{}, fmt.Errorf("linux witness lacks owned state for thread %d", tid)
+	}
 	if info.Operation == 1 {
 		if thread.paired {
 			return linuxStopResult{}, errors.New("linux witness duplicated syscall entry")
