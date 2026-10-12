@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -37,6 +38,9 @@ func TestMixedVersionV085DisplayInteroperability(t *testing.T) {
 		return
 	}
 	if !t.Run("metadata oracle rejects altered declarations", mixedV085MetadataOracleControls) {
+		return
+	}
+	if !t.Run("witnessed reader cleanup ownership", mixedV085WitnessedReaderCleanupOwnership) {
 		return
 	}
 	if !t.Run("owned stream rejects foreign identity", func(t *testing.T) {
@@ -134,14 +138,15 @@ func TestMixedVersionV085DisplayInteroperability(t *testing.T) {
 }
 
 type mixedV085Fixture struct {
-	driver          *support.Driver
-	cancel          context.CancelFunc
-	ledger          *support.PublicTUILedger
-	root, directory string
-	identityPath    string
-	expected        coordination.ReservationTotals
-	jobs            []*mixedV085Owner
-	probes          []*support.PublicTUIHostProbe
+	driver                  *support.Driver
+	cancel                  context.CancelFunc
+	ledger                  *support.PublicTUILedger
+	root, directory         string
+	identityPath            string
+	expected                coordination.ReservationTotals
+	jobs                    []*mixedV085Owner
+	probes                  []*support.PublicTUIHostProbe
+	witnessedReaderUnproven bool
 }
 
 type mixedV085Owner struct {
@@ -402,7 +407,7 @@ func mixedV085MetadataOracleControls(t *testing.T) {
 	}
 }
 
-func (fixture *mixedV085Fixture) requireStatus(parent context.Context, t *testing.T, executable string) {
+func (fixture *mixedV085Fixture) requireStatus(parent context.Context, t *testing.T, executable string, authenticOld bool) {
 	t.Helper()
 	fixture.requireWaiterWindow(t)
 	probe := fixture.probe(parent, t)
@@ -416,7 +421,19 @@ func (fixture *mixedV085Fixture) requireStatus(parent context.Context, t *testin
 	output, diagnostics := &mixedV085Capture{}, &mixedV085Capture{}
 	command.Stdout, command.Stderr = output, diagnostics
 	command.WaitDelay = 3 * time.Second
-	if err := command.Run(); err != nil {
+	var trace support.PublicTUIHostProbeTrace
+	var runError error
+	if authenticOld && runtime.GOOS == "linux" {
+		// The immutable release ignores the test-build FIFO override. Observe its
+		// genuine procfs syscalls while retaining this exact child's natural Wait.
+		fixture.witnessedReaderUnproven = true
+		trace, runError = support.RunPublicLinuxCollectorWitness(ctx, command, fixture.directory)
+		fixture.completeWitnessedReader(command, trace, runError)
+	} else {
+		runError = command.Run()
+		trace = probe.Trace()
+	}
+	if err := runError; err != nil {
 		t.Fatalf("real status reader failed: %v stdout=%q stderr=%q", err, output.Bytes(), diagnostics.Bytes())
 	}
 	if command.ProcessState == nil || command.ProcessState.ExitCode() != 0 || diagnostics.Len() != 0 {
@@ -438,11 +455,17 @@ func (fixture *mixedV085Fixture) requireStatus(parent context.Context, t *testin
 		t.Fatalf("real strict reader changed complete row identity, tier bounds or registration metadata binary=%s %s", executable, difference)
 	}
 	fixture.requireWaiterWindow(t)
-	trace := probe.Trace()
 	if trace.Readings != 2 || trace.Active != 0 || trace.MaximumActive != 1 {
 		t.Fatalf("real status reader did not complete two serialized collector readings: %+v", trace)
 	}
 	t.Logf("mixed real status binary=%s pid=%d exit=%d coordination=%+v collector=%+v", executable, command.Process.Pid, command.ProcessState.ExitCode(), actual.Coordination, trace)
+}
+
+func (fixture *mixedV085Fixture) completeWitnessedReader(command *exec.Cmd, trace support.PublicTUIHostProbeTrace, runError error) {
+	if runError != nil || command == nil || command.Process == nil || command.Process.Pid <= 0 || command.ProcessState == nil || command.ProcessState.Pid() != command.Process.Pid || command.ProcessState.ExitCode() != 0 || !trace.Closed || trace.Readings != 2 || trace.Active != 0 || trace.MaximumActive != 1 {
+		return
+	}
+	fixture.witnessedReaderUnproven = false
 }
 
 func (fixture *mixedV085Fixture) requireTransitions(ctx context.Context, t *testing.T, old, current, oldToken, currentToken string) {
@@ -474,8 +497,8 @@ func (fixture *mixedV085Fixture) requireTransitions(ctx context.Context, t *test
 			}
 		}
 		fixture.requireLabels(ctx, t, oldToken, currentToken, label)
-		for _, executable := range []string{old, current} {
-			fixture.requireStatus(ctx, t, executable)
+		for index, executable := range []string{old, current} {
+			fixture.requireStatus(ctx, t, executable, index == 0)
 		}
 		fixture.requireSchemas(t, schemas)
 		after, err := fixture.ledger.CoordinationTree()
@@ -607,7 +630,7 @@ func (fixture *mixedV085Fixture) close(t *testing.T) {
 	}
 	// A failed ownership join retains paths for the outer supervisor; never
 	// delete an owned directory while a command or collector still uses it.
-	if allJoined && queuedJoined {
+	if allJoined && queuedJoined && !fixture.witnessedReaderUnproven {
 		result = errors.Join(result, fixture.requireEmptyLedger(ctx))
 		fixture.driver.Close()
 		if fixture.directory != "" {
@@ -618,6 +641,79 @@ func (fixture *mixedV085Fixture) close(t *testing.T) {
 	}
 	if result != nil {
 		t.Error(result)
+	}
+}
+
+func TestMixedV085WitnessedReaderCleanupOwnership(t *testing.T) {
+	mixedV085WitnessedReaderCleanupOwnership(t)
+}
+
+func mixedV085WitnessedReaderCleanupOwnership(t *testing.T) {
+	t.Helper()
+	for _, failed := range []bool{true, false} {
+		t.Run(strconv.FormatBool(failed), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
+			defer cancel()
+			fixture := mixedV085ReaderCleanupFixture(ctx, t, cancel)
+			command := exec.CommandContext(ctx, "/bin/sh", "-c", "exit 0")
+			command.WaitDelay = 3 * time.Second
+			if err := command.Run(); err != nil || command.ProcessState == nil || !command.ProcessState.Success() {
+				t.Fatalf("owned reader control lacks an actual natural Wait: %v", err)
+			}
+			// This models the caller's witness result, not Linux kernel proof.
+			// The failure conservatively retains ownership even after real Wait.
+			trace := support.PublicTUIHostProbeTrace{Readings: 2, MaximumActive: 1, Closed: true}
+			var witnessError error
+			if failed {
+				witnessError = errors.New("controlled witnessed-reader retirement remains unproven")
+			}
+			fixture.completeWitnessedReader(command, trace, witnessError)
+			fixture.close(t)
+			mixedV085AssertReaderCleanup(t, fixture, failed)
+		})
+	}
+}
+
+func mixedV085ReaderCleanupFixture(ctx context.Context, t *testing.T, cancel context.CancelFunc) *mixedV085Fixture {
+	t.Helper()
+	driver := support.NewDriver(contract.Adapter{Name: contract.E2E})
+	t.Cleanup(driver.Close)
+	root, directory, err := driver.PreparePublicTUIRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := driver.NewPublicTUILedger(ctx, root, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.PrepareKnownRows(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if expected := ledger.Expected(); len(expected.Owners) != 2 || len(expected.Waiters) != 3 {
+		t.Fatal("cleanup control did not acquire its real owner/FIFO cohort")
+	}
+	probe, err := driver.NewPublicTUIHostProbe(ctx, directory, support.PublicTUIHostReply{CPUPercent: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &mixedV085Fixture{driver: driver, cancel: cancel, root: root, directory: directory, ledger: ledger, probes: []*support.PublicTUIHostProbe{probe}, witnessedReaderUnproven: true}
+}
+
+func mixedV085AssertReaderCleanup(t *testing.T, fixture *mixedV085Fixture, failed bool) {
+	t.Helper()
+	if !fixture.ledger.QueuedActorsJoined() || !fixture.probes[0].Trace().Closed || fixture.probes[0].Trace().Active != 0 {
+		t.Fatal("reader retention prevented actual FIFO/probe joins")
+	}
+	_, statError := os.Lstat(fixture.directory)
+	if failed {
+		if statError != nil {
+			t.Fatalf("unproven witnessed reader lost its owned directory despite joined other actors: %v", statError)
+		}
+		if err := fixture.requireEmptyLedger(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	} else if !errors.Is(statError, os.ErrNotExist) {
+		t.Fatalf("successful closed witnessed reader prevented normal owned-root deletion: %v", statError)
 	}
 }
 
