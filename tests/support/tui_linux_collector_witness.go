@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type linuxWitnessOperation uint8
@@ -205,6 +206,17 @@ func linuxWitnessTrapEvent(signal, trapSignal, cause int) int {
 type linuxWitnessHarvest struct {
 	result              linuxStopResult
 	acquired, uncertain bool
+}
+
+// linuxWitnessTerminalRetire reports whether a terminated thread retires as
+// detached without failure evidence. Only a non-leader thread that already
+// exited zero before its first traced stop qualifies: it never entered
+// tracing, so there is nothing to detach. Every other terminal state,
+// including the leader's, stays fail-closed to protect the natural receipt.
+// The harvester can only observe statuses its wait flags match; plain
+// children never reach this decision, so cover it directly.
+func linuxWitnessTerminalRetire(leader bool, status syscall.WaitStatus) bool {
+	return !leader && status.Exited() && status.ExitStatus() == 0
 }
 
 // This consumer owns the complete known-TID scan; the native adapter alone
