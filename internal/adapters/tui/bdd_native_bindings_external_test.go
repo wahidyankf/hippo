@@ -316,7 +316,7 @@ func (fixture *nativeBDDViewports) requireDashboardKeyboardAction(action string)
 	if err != nil {
 		return fmt.Errorf("native dashboard key %q did not %s: %w; rows=%q", fixture.keyboardKey, action, err, frame.Rows)
 	}
-	if len(frame.Rows) > fixture.height || frame.OverflowWrites != 0 {
+	if len(frame.Rows) > fixture.height || frame.CurrentOverflowWrites != 0 {
 		return fmt.Errorf("native dashboard keyboard frame exceeds its row budget: %+v", frame)
 	}
 	for index, row := range frame.Rows {
@@ -445,7 +445,7 @@ func (fixture *nativeBDDViewports) requireDetailKeyboardAction(action string) er
 	if err != nil {
 		return err
 	}
-	if len(frame.Rows) > fixture.height || frame.OverflowWrites != 0 {
+	if len(frame.Rows) > fixture.height || frame.CurrentOverflowWrites != 0 {
 		return fmt.Errorf("native detail/help keyboard frame exceeds its row budget: %+v", frame)
 	}
 	for index, row := range frame.Rows {
@@ -543,7 +543,7 @@ func (fixture *nativeBDDViewports) requireBounds(width, height int) error {
 		return err
 	}
 	frame := fixture.screen.Snapshot()
-	if frame.Width != width || frame.Height != height || len(frame.Rows) > height || frame.OverflowWrites != 0 {
+	if frame.Width != width || frame.Height != height || len(frame.Rows) > height || frame.CurrentOverflowWrites != 0 {
 		return fmt.Errorf("actual native frame exceeds declared %dx%d budget: %+v", width, height, frame)
 	}
 	for index, row := range frame.Rows {

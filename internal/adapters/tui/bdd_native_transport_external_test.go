@@ -152,10 +152,14 @@ func awaitBDDNativeTransportFrame(ctx context.Context, observation bddNativeTran
 		if err := observation.OutputError(); err != nil {
 			return frame, fmt.Errorf("decode actual renderer output: %w", err)
 		}
-		if frame.OverflowWrites != 0 {
-			return frame, errors.New("actual renderer wrote outside the viewport")
-		}
 		if err := ctx.Err(); err != nil {
+			// Sticky history alone never fails liveness: a transitional
+			// write for a retired viewport must wait for the next repaint,
+			// which clears the current viewport. Only an overflow that
+			// survives until the deadline names the renderer.
+			if frame.OverflowWrites != 0 {
+				return frame, fmt.Errorf("actual renderer wrote outside the viewport: %w; rows=%q overflow=%s", err, frame.Rows, frame.OverflowEvidence)
+			}
 			return frame, err
 		}
 		if predicate(frame) {
@@ -166,6 +170,9 @@ func awaitBDDNativeTransportFrame(ctx context.Context, observation bddNativeTran
 		}
 		select {
 		case <-ctx.Done():
+			if frame.OverflowWrites != 0 {
+				return frame, fmt.Errorf("actual renderer wrote outside the viewport: %w; rows=%q overflow=%s", ctx.Err(), frame.Rows, frame.OverflowEvidence)
+			}
 			return frame, ctx.Err()
 		case <-ticker.C:
 		}
@@ -239,31 +246,41 @@ func TestBDDNativeTransportScreenPreservesEOFBoundsAndStyles(t *testing.T) {
 	})
 }
 
-func TestBDDNativeTransportResizeScopesOverflowToCurrentViewport(t *testing.T) {
+func TestBDDNativeTransportAwaitToleratesStaleOverflowUntilRepaint(t *testing.T) {
 	screen := tui.NewBDDNativeTransportScreen(40, 16)
 	if err := screen.Feed([]byte("\x1b[1;41HX")); err != nil {
 		t.Fatal(err)
 	}
-	before := screen.Snapshot()
-	if before.OverflowWrites != 1 {
-		t.Fatalf("out-of-bounds write disappeared at clipping: %+v", before)
+	// A transitional out-of-bounds write must not fail liveness: the await
+	// keeps polling until a repaint clears the current viewport, while the
+	// sticky history remains for audit.
+	observation := &bddNativePublicationObservation{screen: screen}
+	calls := 0
+	var hook func()
+	hook = func() {
+		calls++
+		if calls < 2 {
+			observation.beforeSnapshot = hook
+			return
+		}
+		if err := screen.Feed([]byte("\x1b[2J")); err != nil {
+			t.Errorf("repaint feed failed: %v", err)
+		}
 	}
-	// A resize retires the previous viewport: its overflow history cannot
-	// indict the new size, or one transitional write pins every later frame.
-	screen.Resize(80, 24)
-	resized := screen.Snapshot()
-	if resized.Width != 80 || resized.Height != 24 {
-		t.Fatalf("resize did not adopt the new viewport: %+v", resized)
+	observation.beforeSnapshot = hook
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	frame, err := awaitBDDNativeTransportFrame(ctx, observation, func(frame tui.BDDNativeTransportFrame) bool {
+		return frame.CurrentOverflowWrites == 0
+	})
+	if err != nil {
+		t.Fatalf("stale overflow failed liveness before repaint: %v; rows=%q", err, frame.Rows)
 	}
-	if resized.OverflowWrites != 0 {
-		t.Fatalf("stale-viewport overflow pins the resized viewport: %+v", resized)
+	if frame.OverflowWrites != 1 {
+		t.Fatalf("await concealed sticky overflow history: %+v", frame)
 	}
-	if err := screen.Feed([]byte("\x1b[1;81HX")); err != nil {
-		t.Fatal(err)
-	}
-	after := screen.Snapshot()
-	if after.OverflowWrites != 1 {
-		t.Fatalf("new-viewport overflow disappeared at clipping: %+v", after)
+	if calls < 2 {
+		t.Fatalf("await did not poll through stale overflow: calls=%d", calls)
 	}
 }
 
@@ -406,7 +423,11 @@ func TestBDDNativeTransportSamplingDeadlineAndRefusals(t *testing.T) {
 		{name: "required label never arrives", missing: true, wantError: context.DeadlineExceeded},
 		{name: "already published error", published: published, wantError: published},
 		{name: "error published at snapshot", postError: true, wantError: published},
-		{name: "overflow before matching", overflow: true},
+		// A persistent overflow is still refused, but only at the deadline:
+		// fail-fast cannot tell a transitional write for a retired
+		// viewport from a genuinely broken repaint, so the await polls
+		// for the healing repaint and names the overflow on expiry.
+		{name: "overflow before matching", overflow: true, wantError: context.DeadlineExceeded},
 		{name: "EOF before required label", eof: true, missing: true},
 		{name: "wrong geometry", width: 39, eof: true},
 	} {
@@ -423,7 +444,7 @@ func TestBDDNativeTransportSamplingDeadlineAndRefusals(t *testing.T) {
 			frame, err := awaitBDDNativeTransportFrame(ctx, observation, func(frame tui.BDDNativeTransportFrame) bool {
 				predicates++
 				content := strings.Join(frame.Rows, "\n")
-				return frame.Width == 40 && frame.Height == 16 && frame.Alternate && strings.Contains(content, "HIPPO | Help") && strings.Contains(content, "Enter") && strings.Contains(content, "c:")
+				return frame.Width == 40 && frame.Height == 16 && frame.Alternate && frame.CurrentOverflowWrites == 0 && strings.Contains(content, "HIPPO | Help") && strings.Contains(content, "Enter") && strings.Contains(content, "c:")
 			})
 			if (err == nil) != test.accepted {
 				t.Fatalf("accepted=%t want=%t error=%v; frame=%+v", err == nil, test.accepted, err, frame)
@@ -431,8 +452,11 @@ func TestBDDNativeTransportSamplingDeadlineAndRefusals(t *testing.T) {
 			if test.wantError != nil && !errors.Is(err, test.wantError) {
 				t.Fatalf("lost refusal identity: %v; want %v", err, test.wantError)
 			}
-			if (test.expired || test.delay != 0 || errors.Is(test.wantError, published) || test.overflow) && predicates != 0 {
+			if (test.expired || test.delay != 0 || errors.Is(test.wantError, published)) && predicates != 0 {
 				t.Fatalf("refused publication reached predicate %d times", predicates)
+			}
+			if test.overflow && (err == nil || !strings.Contains(err.Error(), "wrote outside the viewport")) {
+				t.Fatalf("persistent overflow was not named at refusal: %v", err)
 			}
 		})
 	}
