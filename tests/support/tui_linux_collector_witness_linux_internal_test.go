@@ -747,7 +747,36 @@ func linuxHarvestableExitedChild(ctx context.Context, t *testing.T) (*exec.Cmd, 
 	var probe syscall.WaitStatus
 	probed, probeErr := syscall.Wait4(pid, &probe, syscall.WNOHANG, nil)
 	t.Logf("pre-harvest wall-less wait=%d status=%d err=%v", probed, int(probe), probeErr)
+	if parentage, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat")); err != nil {
+		t.Logf("pre-harvest stat=%v", err)
+	} else {
+		t.Logf("pre-harvest self=%d stat=%s", os.Getpid(), fieldOrUnknown(parentage, 3))
+	}
+	type waitOutcome struct {
+		wpid int
+		err  error
+	}
+	waited := make(chan waitOutcome, 1)
+	go func() {
+		var blocking syscall.WaitStatus
+		wpid, err := syscall.Wait4(pid, &blocking, 0, nil)
+		waited <- waitOutcome{wpid, err}
+	}()
+	select {
+	case outcome := <-waited:
+		t.Logf("pre-harvest blocking wait=%d err=%v", outcome.wpid, outcome.err)
+	case <-time.After(3 * time.Second):
+		t.Log("pre-harvest blocking wait timed out")
+	}
 	return command, pid
+}
+
+func fieldOrUnknown(stat []byte, index int) string {
+	fields := strings.Fields(string(stat))
+	if index < 0 || index >= len(fields) {
+		return "unknown"
+	}
+	return fields[index]
 }
 
 func linuxCertainHarvest(ctx context.Context, t *testing.T, observer *linuxCollectorObserver, pid int) (linuxWitnessHarvest, error) {
