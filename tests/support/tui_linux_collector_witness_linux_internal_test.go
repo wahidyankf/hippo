@@ -740,33 +740,14 @@ func linuxHarvestableExitedChild(ctx context.Context, t *testing.T) (*exec.Cmd, 
 			t.Fatal(err)
 		}
 	}
-	// Diagnose the harvest input state: kill-zero tells reaped apart from
-	// present-but-unreportable, and a wall-less wait isolates flag effects.
-	// This probe intentionally runs before harvest and its lines are evidence.
+	// Diagnose the harvest input state without consuming it: kill-zero tells
+	// reaped apart from present, and the stat ppid tells foreign apart from
+	// owned. These lines are evidence for the retirement repair.
 	t.Logf("pre-harvest kill-zero=%v", syscall.Kill(pid, 0))
-	var probe syscall.WaitStatus
-	probed, probeErr := syscall.Wait4(pid, &probe, syscall.WNOHANG, nil)
-	t.Logf("pre-harvest wall-less wait=%d status=%d err=%v", probed, int(probe), probeErr)
 	if parentage, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat")); err != nil {
 		t.Logf("pre-harvest stat=%v", err)
 	} else {
-		t.Logf("pre-harvest self=%d stat=%s", os.Getpid(), fieldOrUnknown(parentage, 3))
-	}
-	type waitOutcome struct {
-		wpid int
-		err  error
-	}
-	waited := make(chan waitOutcome, 1)
-	go func() {
-		var blocking syscall.WaitStatus
-		wpid, err := syscall.Wait4(pid, &blocking, 0, nil)
-		waited <- waitOutcome{wpid, err}
-	}()
-	select {
-	case outcome := <-waited:
-		t.Logf("pre-harvest blocking wait=%d err=%v", outcome.wpid, outcome.err)
-	case <-time.After(3 * time.Second):
-		t.Log("pre-harvest blocking wait timed out")
+		t.Logf("pre-harvest self=%d ppid=%s", os.Getpid(), fieldOrUnknown(parentage, 3))
 	}
 	return command, pid
 }
@@ -800,9 +781,9 @@ func TestLinuxCollectorWitnessHarvestRetiresCleanCloneExit(t *testing.T) {
 	command, pid := linuxHarvestableExitedChild(ctx, t)
 	observer := &linuxCollectorObserver{command: command, leader: -1, reducer: newLinuxCollectorReducer(-1, "/owned/disk"), threads: map[int]*linuxWitnessThread{pid: {}}, stopped: map[int]int{}}
 	harvest, err := linuxCertainHarvest(ctx, t, observer, pid)
-	// Harvest consumes the zombie report; no natural exec.Cmd receipt
-	// remains for this retired clone identity.
-	_ = command.Wait()
+	// The natural receipt result is evidence: success means the zombie
+	// lingered past harvest, ECHILD means something reaped it first.
+	t.Logf("post-harvest natural wait=%v", command.Wait())
 	if err != nil {
 		t.Fatalf("clean clone exit failed harvest: %v", err)
 	}
@@ -820,7 +801,7 @@ func TestLinuxCollectorWitnessHarvestKeepsLeaderExitFailClosed(t *testing.T) {
 	command, pid := linuxHarvestableExitedChild(ctx, t)
 	observer := &linuxCollectorObserver{command: command, leader: pid, reducer: newLinuxCollectorReducer(pid, "/owned/disk"), threads: map[int]*linuxWitnessThread{pid: {}}, stopped: map[int]int{}}
 	_, err := linuxCertainHarvest(ctx, t, observer, pid)
-	_ = command.Wait()
+	t.Logf("post-harvest natural wait=%v", command.Wait())
 	if err == nil {
 		t.Fatal("leader exit became accepted witness evidence")
 	}
