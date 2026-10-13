@@ -25,6 +25,12 @@ first and separately.
 Landing them together looks efficient and removes the only opportunity to prove the foundation works on its own. A gate
 introduced alongside the content it is meant to check has never been observed passing or failing for its own reasons.
 
+## Landing
+
+Independent units land in any order, up to the declared concurrency cap, serializing under host or budget pressure.
+Before landing, each refreshes against the current `main` and re-runs its gates; a unit built on an unlanded sibling is
+reviewed against a state that may never exist.
+
 ## The Cross-Repository Boundary
 
 A plan may coordinate work across several repositories. Coordination is the only thing that crosses the boundary.
