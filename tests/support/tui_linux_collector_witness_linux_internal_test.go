@@ -709,82 +709,82 @@ func TestLinuxCollectorWitnessNativeFaultPreservesForeignChildren(t *testing.T) 
 	}
 }
 
+func linuxHarvestableExitedChild(t *testing.T, ctx context.Context) (*exec.Cmd, int) {
+	t.Helper()
+	command := linuxNativeCommand(ctx, t, "foreign-exited")
+	output, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	var receipt linuxNativeReceipt
+	if err := json.NewDecoder(output).Decode(&receipt); err != nil || receipt.PID != command.Process.Pid || receipt.PID <= 0 {
+		t.Fatalf("exited control did not report its exact positive PID: %+v %v", receipt, err)
+	}
+	// Establish a real terminal status before harvest: the child has exited
+	// zero and only its zombie report remains, exactly the short-lived clone
+	// report the CI collector met.
+	pid := command.Process.Pid
+	statusPath := filepath.Join("/proc", strconv.Itoa(pid), "status")
+	for {
+		data, err := os.ReadFile(statusPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "State:\tZ") {
+			return command, pid
+		}
+		if err := linuxWitnessPause(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func linuxCertainHarvest(t *testing.T, ctx context.Context, observer *linuxCollectorObserver, pid int) (linuxWitnessHarvest, error) {
+	t.Helper()
+	// An interrupted wait reports nothing; only a certain harvest decides
+	// the retirement. The zombie cannot resume or vanish.
+	for {
+		harvest, err := observer.linuxWitnessHarvest(pid, false)
+		if err != nil || !harvest.uncertain {
+			return harvest, err
+		}
+		if ctx.Err() != nil {
+			t.Fatalf("interrupted harvest never settled: %v", ctx.Err())
+		}
+	}
+}
+
 func TestLinuxCollectorWitnessHarvestRetiresCleanCloneExit(t *testing.T) {
-	for _, test := range []struct {
-		name    string
-		leader  bool
-		wantErr bool
-	}{
-		{"clean clone exit retires detached", false, false},
-		{"leader exit stays fail-closed", true, true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
-			defer cancel()
-			command := linuxNativeCommand(ctx, t, "foreign-exited")
-			output, err := command.StdoutPipe()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := command.Start(); err != nil {
-				t.Fatal(err)
-			}
-			var receipt linuxNativeReceipt
-			if err := json.NewDecoder(output).Decode(&receipt); err != nil || receipt.PID != command.Process.Pid || receipt.PID <= 0 {
-				t.Fatalf("exited control did not report its exact positive PID: %+v %v", receipt, err)
-			}
-			// Establish a real terminal status before harvest: the child has
-			// exited zero and only its zombie report remains, exactly the
-			// short-lived clone report the CI collector met.
-			pid := command.Process.Pid
-			statusPath := filepath.Join("/proc", strconv.Itoa(pid), "status")
-			for {
-				data, err := os.ReadFile(statusPath)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if strings.Contains(string(data), "State:\tZ") {
-					break
-				}
-				if err := linuxWitnessPause(ctx); err != nil {
-					t.Fatal(err)
-				}
-			}
-			leader := -1
-			if test.leader {
-				leader = pid
-			}
-			observer := &linuxCollectorObserver{command: command, leader: leader, reducer: newLinuxCollectorReducer(leader, "/owned/disk"), threads: map[int]*linuxWitnessThread{pid: {}}, stopped: map[int]int{}}
-			// An interrupted wait reports nothing; only a certain harvest
-			// decides the retirement. The zombie cannot resume or vanish.
-			var harvest linuxWitnessHarvest
-			for {
-				harvest, err = observer.linuxWitnessHarvest(pid, false)
-				if err != nil || !harvest.uncertain {
-					break
-				}
-				if ctx.Err() != nil {
-					t.Fatalf("interrupted harvest never settled: %v", ctx.Err())
-				}
-			}
-			// Harvest consumes the zombie report either way; no natural
-			// exec.Cmd receipt remains for this retired clone identity.
-			_ = command.Wait()
-			if test.wantErr {
-				if err == nil {
-					t.Fatal("leader exit became accepted witness evidence")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("clean clone exit failed harvest: %v", err)
-			}
-			if harvest != (linuxWitnessHarvest{}) {
-				t.Fatalf("clean clone exit produced harvest evidence: %+v", harvest)
-			}
-			if len(observer.threads) != 0 || observer.detached != 1 {
-				t.Fatal("clean clone exit did not retire as detached")
-			}
-		})
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	command, pid := linuxHarvestableExitedChild(t, ctx)
+	observer := &linuxCollectorObserver{command: command, leader: -1, reducer: newLinuxCollectorReducer(-1, "/owned/disk"), threads: map[int]*linuxWitnessThread{pid: {}}, stopped: map[int]int{}}
+	harvest, err := linuxCertainHarvest(t, ctx, observer, pid)
+	// Harvest consumes the zombie report; no natural exec.Cmd receipt
+	// remains for this retired clone identity.
+	_ = command.Wait()
+	if err != nil {
+		t.Fatalf("clean clone exit failed harvest: %v", err)
+	}
+	if harvest != (linuxWitnessHarvest{}) {
+		t.Fatalf("clean clone exit produced harvest evidence: %+v", harvest)
+	}
+	if len(observer.threads) != 0 || observer.detached != 1 {
+		t.Fatal("clean clone exit did not retire as detached")
+	}
+}
+
+func TestLinuxCollectorWitnessHarvestKeepsLeaderExitFailClosed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	command, pid := linuxHarvestableExitedChild(t, ctx)
+	observer := &linuxCollectorObserver{command: command, leader: pid, reducer: newLinuxCollectorReducer(pid, "/owned/disk"), threads: map[int]*linuxWitnessThread{pid: {}}, stopped: map[int]int{}}
+	_, err := linuxCertainHarvest(t, ctx, observer, pid)
+	_ = command.Wait()
+	if err == nil {
+		t.Fatal("leader exit became accepted witness evidence")
 	}
 }
