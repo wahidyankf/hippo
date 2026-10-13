@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -71,17 +74,11 @@ func (fixture *publicBDDObservation) preparePublicCompleted(ctx context.Context)
 	}
 	fixture.family.beforeTrace = fixture.probe.Trace()
 	fixture.family.completedUpper = fixture.family.lastLive
-	// Last ACK is only a lower bound on completion; never call it completedAt.
-	var last int64
-	for _, event := range fixture.family.beforeTrace.Events {
-		if event.Reading == 2 && event.Phase == "output-ack" {
-			last = max(last, event.ElapsedNanoseconds)
-		}
+	lower, ok := publicRefreshCompletionLower(runtime.GOOS, fixture.family.beforeTrace, fixture.transport.Result().Identity.PID, fixture.family)
+	if !ok {
+		return ctx, errors.New("default refresh lacks an authentic platform completion lower bound")
 	}
-	if last == 0 {
-		return ctx, errors.New("default refresh lacks the real final reading ACK lower bound")
-	}
-	fixture.family.completedLower = fixture.family.probeBefore.Add(time.Duration(last))
+	fixture.family.completedLower = lower
 	return ctx, nil
 }
 
@@ -361,6 +358,7 @@ func (fixture *publicBDDObservation) requirePublicAge(ctx context.Context) error
 
 func (fixture *publicBDDObservation) quitPublicBusy(ctx context.Context) error {
 	fixture.family.before = fixture.screen.Snapshot()
+	fixture.family.beforeTrace = fixture.probe.Trace()
 	if err := fixture.finish(ctx); err != nil {
 		return err
 	}
@@ -370,13 +368,126 @@ func (fixture *publicBDDObservation) quitPublicBusy(ctx context.Context) error {
 
 func (fixture *publicBDDObservation) requirePublicBusyJoined(ctx context.Context) error {
 	trace := fixture.probe.Trace()
-	canceled := false
-	for _, event := range trace.Events {
-		canceled = canceled || event.Phase == "canceled-eof"
-	}
-	if !canceled || trace.Active != 0 || !trace.Closed || !fixture.family.terminal.Joined() {
-		return errors.New("busy public quit lacks actual cancellation/EOF/join")
+	if !publicRefreshCancellation(runtime.GOOS, fixture.family.beforeTrace, trace, fixture.family.gate, fixture.family.terminal.Identity.PID) || !fixture.family.terminal.Joined() {
+		return errors.New("busy public quit lacks authentic platform cancellation and join")
 	}
 	// Joined input/output loops cannot subsequently apply any late observation.
 	return fixture.ledger.VerifyLiveness(ctx)
+}
+
+// A platform receipt supplies only a causal lower bound, never completedAt.
+// On Linux the successful final write precedes closing the still-open original
+// writer, reader EOF, parsing, and collector completion. It is not a reader ACK.
+func publicRefreshCompletionLower(platform string, trace support.PublicTUIHostProbeTrace, candidatePID int, family *publicBDDInteractive) (time.Time, bool) {
+	if candidatePID < 1 || family == nil || family.probeBefore.IsZero() || family.probeAfter.Before(family.probeBefore) || family.completedUpper.Before(family.probeAfter) || !publicRefreshOrderedEvents(trace.Events) {
+		return time.Time{}, false
+	}
+	switch platform {
+	case "darwin":
+		if !publicBDDPostQueryFinalACK(trace, candidatePID) || !publicRefreshDarwinMetadata(trace.Events) {
+			return time.Time{}, false
+		}
+	case "linux":
+		if !publicRefreshLinuxCompleted(trace) {
+			return time.Time{}, false
+		}
+	default:
+		return time.Time{}, false
+	}
+	elapsed := trace.Events[len(trace.Events)-1].ElapsedNanoseconds
+	lower := family.probeBefore.Add(time.Duration(elapsed))
+	if elapsed <= 0 || lower.After(family.completedUpper) {
+		return time.Time{}, false
+	}
+	return lower, true
+}
+
+func publicRefreshOrderedEvents(events []support.PublicTUIHostProbeEvent) bool {
+	if len(events) == 0 {
+		return false
+	}
+	for index, event := range events {
+		if event.Sequence != index+1 || event.ElapsedNanoseconds < 0 {
+			return false
+		}
+		if index > 0 && event.ElapsedNanoseconds < events[index-1].ElapsedNanoseconds {
+			return false
+		}
+	}
+	return true
+}
+
+func publicRefreshDarwinMetadata(events []support.PublicTUIHostProbeEvent) bool {
+	for index, event := range events {
+		if event.Descriptor != 0 || event.PollEvents != 0 {
+			return false
+		}
+		if index%2 == 1 && event.RaceOptions != events[index-1].RaceOptions {
+			return false
+		}
+	}
+	return true
+}
+
+func publicRefreshLinuxFields(event support.PublicTUIHostProbeEvent) bool {
+	return event.PID == 0 && event.ParentPID == 0 && len(event.Arguments) == 0 && event.RaceOptions == ""
+}
+
+func publicRefreshLinuxCompleted(trace support.PublicTUIHostProbeTrace) bool {
+	if trace.Closed || trace.Readings != 2 || trace.Active != 0 || trace.MaximumActive != 1 || len(trace.Events) != 8 {
+		return false
+	}
+	for index, event := range trace.Events {
+		operation := "meminfo"
+		if index%4 >= 2 {
+			operation = "stat"
+		}
+		phase := "start"
+		if index%2 == 1 {
+			phase = "output"
+		}
+		if event.Reading != index/4+1 || event.Operation != operation || event.Phase != phase || !publicRefreshLinuxFields(event) || event.Descriptor != 0 || event.PollEvents != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// The held start has no Linux descriptor provenance. The unchanged native
+// producer authenticates its retained original writer before reporting ERR.
+func publicRefreshCancellation(platform string, before, after support.PublicTUIHostProbeTrace, gate, candidatePID int) bool {
+	if candidatePID < 1 || !publicRefreshCancellationPrefix(before, after, gate) {
+		return false
+	}
+	start, canceled := before.Events[0], after.Events[1]
+	switch platform {
+	case "darwin":
+		return publicRefreshDarwinCancellation(start, canceled, candidatePID) && publicRefreshDarwinMetadata(after.Events)
+	case "linux":
+		return publicRefreshLinuxCancellation(start, canceled)
+	default:
+		return false
+	}
+}
+
+func publicRefreshCancellationPrefix(before, after support.PublicTUIHostProbeTrace, gate int) bool {
+	if gate != 1 || before.Closed || before.Readings != gate || before.Active != 1 || before.MaximumActive != 1 || len(before.Events) != 1 || !publicRefreshOrderedEvents(before.Events) {
+		return false
+	}
+	if !after.Closed || after.Readings != before.Readings || after.Active != 0 || after.MaximumActive != 1 || len(after.Events) != 2 || !publicRefreshOrderedEvents(after.Events) || !reflect.DeepEqual(before.Events[0], after.Events[0]) {
+		return false
+	}
+	start, canceled := before.Events[0], after.Events[1]
+	return start.Phase == "start" && start.Reading == gate && canceled.Reading == gate && canceled.Operation == start.Operation
+}
+
+func publicRefreshDarwinCancellation(start, canceled support.PublicTUIHostProbeEvent, candidatePID int) bool {
+	return start.Operation == "ps" && start.PID > 0 && start.ParentPID == candidatePID && slices.Equal(start.Arguments, []string{"-A", "-o", "%cpu="}) && canceled.Phase == "canceled-eof" && canceled.PID == start.PID && canceled.ParentPID == start.ParentPID && slices.Equal(canceled.Arguments, start.Arguments)
+}
+
+func publicRefreshLinuxCancellation(start, canceled support.PublicTUIHostProbeEvent) bool {
+	// Linux poll ABI masks; the native controls independently exercise these
+	// exact ERR and NVAL bits on the original registered writer descriptor.
+	const pollError, pollInvalid int16 = 0x0008, 0x0020
+	return start.Operation == "meminfo" && publicRefreshLinuxFields(start) && start.Descriptor == 0 && start.PollEvents == 0 && publicRefreshLinuxFields(canceled) && canceled.Phase == "canceled-reader-absent" && canceled.Descriptor >= 0 && canceled.PollEvents&pollError != 0 && canceled.PollEvents&pollInvalid == 0
 }
