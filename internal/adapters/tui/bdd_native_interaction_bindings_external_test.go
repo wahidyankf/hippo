@@ -116,7 +116,7 @@ func (state *nativeBDDInteraction) await(title string, tokens ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	frame, err := awaitBDDNativeTransportFrame(ctx, observation, func(frame tui.BDDNativeTransportFrame) bool {
-		if !frame.Alternate || frame.Width != state.fixture.width || frame.Height != state.fixture.height || frame.OverflowWrites != 0 {
+		if !frame.Alternate || frame.Width != state.fixture.width || frame.Height != state.fixture.height || frame.CurrentOverflowWrites != 0 {
 			return false
 		}
 		content := strings.Join(frame.Rows, "\n")
@@ -141,7 +141,7 @@ func (state *nativeBDDInteraction) await(title string, tokens ...string) error {
 }
 
 func (state *nativeBDDInteraction) bounds(frame tui.BDDNativeTransportFrame) error {
-	if frame.Width != state.fixture.width || frame.Height != state.fixture.height || !frame.Alternate || len(frame.Rows) > frame.Height || frame.OverflowWrites != 0 {
+	if frame.Width != state.fixture.width || frame.Height != state.fixture.height || !frame.Alternate || len(frame.Rows) > frame.Height || frame.CurrentOverflowWrites != 0 {
 		return fmt.Errorf("native interaction frame exceeds %dx%d: %+v", state.fixture.width, state.fixture.height, frame)
 	}
 	for _, row := range frame.Rows {
