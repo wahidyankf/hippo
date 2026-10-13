@@ -183,15 +183,7 @@ func requirePublicHolderSignalDrained(drain context.Context, t *testing.T, contr
 	// returns on a loaded host. Wait bounded for it to join, then require
 	// the exact settled cohort: a genuine leak still fails, as does an
 	// extra reading.
-	joined := time.NewTicker(5 * time.Millisecond)
-	defer joined.Stop()
-	for probe.Trace().Active != 0 {
-		select {
-		case <-drain.Done():
-			t.Fatalf("collector cohort survived: %+v", probe.Trace())
-		case <-joined.C:
-		}
-	}
+	waitPublicHolderSignalCohortJoined(drain, t, probe)
 	trace := probe.Trace()
 	if !trace.Closed || trace.Active != 0 || trace.Readings != reading {
 		t.Fatalf("collector cohort survived or acquired an extra reading: %+v", trace)
@@ -218,6 +210,19 @@ func requirePublicHolderSignalDrained(drain context.Context, t *testing.T, contr
 		t.Fatalf("raw/candidate-only signal was duplicated to holder: %+v", result.HolderSignals)
 	}
 	return result, trace
+}
+
+func waitPublicHolderSignalCohortJoined(drain context.Context, t *testing.T, probe *support.PublicTUIHostProbe) {
+	t.Helper()
+	joined := time.NewTicker(5 * time.Millisecond)
+	defer joined.Stop()
+	for probe.Trace().Active != 0 {
+		select {
+		case <-drain.Done():
+			t.Fatalf("collector cohort survived: %+v", probe.Trace())
+		case <-joined.C:
+		}
+	}
 }
 
 func requirePublicHolderCanceledProbe(t *testing.T, trace support.PublicTUIHostProbeTrace, reading int) {
