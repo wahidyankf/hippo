@@ -709,7 +709,7 @@ func TestLinuxCollectorWitnessNativeFaultPreservesForeignChildren(t *testing.T) 
 	}
 }
 
-func linuxHarvestableExitedChild(t *testing.T, ctx context.Context) (*exec.Cmd, int) {
+func linuxHarvestableExitedChild(ctx context.Context, t *testing.T) (*exec.Cmd, int) {
 	t.Helper()
 	command := linuxNativeCommand(ctx, t, "foreign-exited")
 	output, err := command.StdoutPipe()
@@ -742,7 +742,7 @@ func linuxHarvestableExitedChild(t *testing.T, ctx context.Context) (*exec.Cmd, 
 	}
 }
 
-func linuxCertainHarvest(t *testing.T, ctx context.Context, observer *linuxCollectorObserver, pid int) (linuxWitnessHarvest, error) {
+func linuxCertainHarvest(ctx context.Context, t *testing.T, observer *linuxCollectorObserver, pid int) (linuxWitnessHarvest, error) {
 	t.Helper()
 	// An interrupted wait reports nothing; only a certain harvest decides
 	// the retirement. The zombie cannot resume or vanish.
@@ -760,9 +760,9 @@ func linuxCertainHarvest(t *testing.T, ctx context.Context, observer *linuxColle
 func TestLinuxCollectorWitnessHarvestRetiresCleanCloneExit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
-	command, pid := linuxHarvestableExitedChild(t, ctx)
+	command, pid := linuxHarvestableExitedChild(ctx, t)
 	observer := &linuxCollectorObserver{command: command, leader: -1, reducer: newLinuxCollectorReducer(-1, "/owned/disk"), threads: map[int]*linuxWitnessThread{pid: {}}, stopped: map[int]int{}}
-	harvest, err := linuxCertainHarvest(t, ctx, observer, pid)
+	harvest, err := linuxCertainHarvest(ctx, t, observer, pid)
 	// Harvest consumes the zombie report; no natural exec.Cmd receipt
 	// remains for this retired clone identity.
 	_ = command.Wait()
@@ -780,9 +780,9 @@ func TestLinuxCollectorWitnessHarvestRetiresCleanCloneExit(t *testing.T) {
 func TestLinuxCollectorWitnessHarvestKeepsLeaderExitFailClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
-	command, pid := linuxHarvestableExitedChild(t, ctx)
+	command, pid := linuxHarvestableExitedChild(ctx, t)
 	observer := &linuxCollectorObserver{command: command, leader: pid, reducer: newLinuxCollectorReducer(pid, "/owned/disk"), threads: map[int]*linuxWitnessThread{pid: {}}, stopped: map[int]int{}}
-	_, err := linuxCertainHarvest(t, ctx, observer, pid)
+	_, err := linuxCertainHarvest(ctx, t, observer, pid)
 	_ = command.Wait()
 	if err == nil {
 		t.Fatal("leader exit became accepted witness evidence")
