@@ -209,6 +209,10 @@ func (screen *bddNativeFrameDecoder) resize(width, height int) {
 		screen.reject("viewport resize")
 		return
 	}
+	// Overflow evidence is geometry-bound: every recorded write stamps the
+	// viewport it was judged against. Retiring the old size retires its
+	// history, or one transitional write pins every later viewport.
+	screen.overflow = nil
 	screen.resizeBuffer(&screen.primary, width, height)
 	screen.resizeBuffer(&screen.alternate, width, height)
 	screen.width, screen.height = width, height
@@ -222,8 +226,9 @@ func (screen *bddNativeFrameDecoder) resizeBuffer(buffer *bddNativeFrameBuffer, 
 			resized.cells[row][width-1] = bddNativeFrameCell{}
 		}
 	}
-	// Resize cannot erase evidence or fabricate a producer repaint.
-	resized.currentOverflow, resized.fullClearSequence = buffer.currentOverflow, buffer.fullClearSequence
+	// Resize cannot fabricate a producer repaint. Geometry-bound overflow
+	// evidence retires with the old viewport; the repaint counter survives.
+	resized.fullClearSequence = buffer.fullClearSequence
 	resized.autoWrap = buffer.autoWrap
 	resized.repeatRune, resized.canRepeat = buffer.repeatRune, buffer.canRepeat
 	resized.row, resized.column = min(buffer.row, height-1), min(buffer.column, width-1)

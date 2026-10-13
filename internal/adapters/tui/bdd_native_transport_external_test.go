@@ -239,6 +239,34 @@ func TestBDDNativeTransportScreenPreservesEOFBoundsAndStyles(t *testing.T) {
 	})
 }
 
+func TestBDDNativeTransportResizeScopesOverflowToCurrentViewport(t *testing.T) {
+	screen := tui.NewBDDNativeTransportScreen(40, 16)
+	if err := screen.Feed([]byte("\x1b[1;41HX")); err != nil {
+		t.Fatal(err)
+	}
+	before := screen.Snapshot()
+	if before.OverflowWrites != 1 {
+		t.Fatalf("out-of-bounds write disappeared at clipping: %+v", before)
+	}
+	// A resize retires the previous viewport: its overflow history cannot
+	// indict the new size, or one transitional write pins every later frame.
+	screen.Resize(80, 24)
+	resized := screen.Snapshot()
+	if resized.Width != 80 || resized.Height != 24 {
+		t.Fatalf("resize did not adopt the new viewport: %+v", resized)
+	}
+	if resized.OverflowWrites != 0 {
+		t.Fatalf("stale-viewport overflow pins the resized viewport: %+v", resized)
+	}
+	if err := screen.Feed([]byte("\x1b[1;81HX")); err != nil {
+		t.Fatal(err)
+	}
+	after := screen.Snapshot()
+	if after.OverflowWrites != 1 {
+		t.Fatalf("new-viewport overflow disappeared at clipping: %+v", after)
+	}
+}
+
 type bddNativePublicationObservation struct {
 	screen         *tui.BDDNativeTransportScreen
 	published      error
