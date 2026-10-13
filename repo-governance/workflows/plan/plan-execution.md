@@ -12,10 +12,14 @@ four: every verdict is advisory, so a `FAIL` or `BLOCKED` row has an owner and d
 2. **Confirm the execution checkout.** Which working copy, which branch or worktree, which delivery mode. Executing in
    the wrong checkout is recoverable; noticing late is expensive. Before starting plan execution or creating a new
    worktree, sync the execution checkout from the latest origin/main.
-3. **Work items in order.** An item blocked by something outside the plan is recorded as blocked, with what would
-   unblock it, rather than skipped silently.
-4. **Resolve each item atomically.** Tick the checkbox, record the result, and move on — in that order, as one step. A
-   batch of ticks applied at the end of a session cannot say which item produced which result.
+3. **Work items in dependency order.** Order execution tasks by the plan dependency graph rather than list position, per
+   [Dependency Graph and Recovery](../../conventions/plans/011-dependency-graph-and-recovery.md). An item blocked by
+   something outside the plan is recorded as blocked, with what would unblock it, rather than skipped silently.
+4. **Work ready items concurrently, resolving each atomically.** Dispatch every item whose dependencies are terminal, up
+   to the concurrency cap, reusing the plan's one worktree per repository; a failure blocks only its downstream. Tick
+   the checkbox, record the result, and move on — in that order, as one step. A batch of ticks applied at the end of a
+   session cannot say which item produced which result. A more optimal order found mid-run revises `delivery.md` first,
+   keeping acceptance criteria and the end result; a material change re-passes the quality gate.
 5. **Record results, not only ticks.** What was produced, what changed, what was surprising. A tick says an action
    happened; it does not say what it found. See
    [Verification Routing](../../development/planning-capabilities/006-verification-routing.md).
@@ -23,7 +27,10 @@ four: every verdict is advisory, so a `FAIL` or `BLOCKED` row has an owner and d
    because of this plan's work by the time it ships. Pre-existing is an explanation, not an exemption.
 7. **Route discoveries to `learnings.md`**, or a bug-fix plan's Learnings section, as they happen, not from memory
    afterwards.
-8. **Run [Execution Check](plan-execution-check.md)** once every substantive item is terminal.
+8. **Land each delivery unit** through the [integration path](../../conventions/integration-path.md). Independent units
+   land in any order, each refreshed against the current `main` with its gates re-run, per
+   [Delivery Seams and Ownership](../../development/planning-capabilities/005-delivery-seams-and-ownership.md).
+9. **Run [Execution Check](plan-execution-check.md)** once every substantive item is terminal.
 
 ## Exit
 
