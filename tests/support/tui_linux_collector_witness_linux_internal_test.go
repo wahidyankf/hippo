@@ -734,12 +734,20 @@ func linuxHarvestableExitedChild(ctx context.Context, t *testing.T) (*exec.Cmd, 
 			t.Fatal(err)
 		}
 		if strings.Contains(string(data), "State:\tZ") {
-			return command, pid
+			break
 		}
 		if err := linuxWitnessPause(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}
+	// Diagnose the harvest input state: kill-zero tells reaped apart from
+	// present-but-unreportable, and a wall-less wait isolates flag effects.
+	// This probe intentionally runs before harvest and its lines are evidence.
+	t.Logf("pre-harvest kill-zero=%v", syscall.Kill(pid, 0))
+	var probe syscall.WaitStatus
+	probed, probeErr := syscall.Wait4(pid, &probe, syscall.WNOHANG, nil)
+	t.Logf("pre-harvest wall-less wait=%d status=%d err=%v", probed, int(probe), probeErr)
+	return command, pid
 }
 
 func linuxCertainHarvest(ctx context.Context, t *testing.T, observer *linuxCollectorObserver, pid int) (linuxWitnessHarvest, error) {
