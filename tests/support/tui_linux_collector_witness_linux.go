@@ -215,11 +215,10 @@ func (observer *linuxCollectorObserver) linuxWitnessHarvest(tid int, initial boo
 		return linuxWitnessHarvest{}, nil
 	}
 	if !status.Stopped() {
-		if tid != observer.leader && status.Exited() && status.ExitStatus() == 0 {
+		if linuxWitnessTerminalRetire(tid == observer.leader, status) {
 			// A clone thread that already exited zero before its first
 			// traced stop never entered tracing: retire it as detached
-			// instead of failing the whole collection. The leader keeps
-			// fail-closed semantics so a missing natural receipt stays loud.
+			// instead of failing the whole collection.
 			delete(observer.threads, tid)
 			observer.detached++
 			return linuxWitnessHarvest{}, nil
