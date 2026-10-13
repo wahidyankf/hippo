@@ -82,6 +82,22 @@ func runPublicHolderSignalControl(t *testing.T, control publicHolderSignalContro
 	readingReleased := false
 	t.Cleanup(func() { cleanupPublicHolderSignal(t, transport, probe, reading, &readingReleased) })
 	before := requirePublicHolderSignalReady(journey, t, control, transport, probe, reading, screen)
+	// Ordinary Linux FIFO os.ReadFile is not cancellable. Release its actual
+	// acknowledged reading while the candidate still queries, then settle
+	// before signaling: quitting first orphans the cohort on a slow host
+	// (candidate death ends the query sequence), which no later wait can
+	// complete. Record completion rather than a fabricated Darwin
+	// cancellation/EOF event. The ceiling stays under the candidate watch
+	// interval so settling cannot admit a scheduled extra reading.
+	if runtime.GOOS == "linux" {
+		if err = probe.ReleaseReading(reading); err != nil {
+			t.Fatal(err)
+		}
+		readingReleased = true
+		settled, stopSettled := context.WithTimeout(journey, 5*time.Second)
+		defer stopSettled()
+		waitPublicHolderSignalCohortJoined(settled, t, probe)
+	}
 	action, stop := context.WithTimeout(journey, 500*time.Millisecond)
 	if control.signal != 0 {
 		err = transport.Signal(before.Identity.PID, control.signal)
@@ -91,15 +107,6 @@ func runPublicHolderSignalControl(t *testing.T, control publicHolderSignalContro
 	stop()
 	if err != nil {
 		t.Fatal(err)
-	}
-	// Ordinary Linux FIFO os.ReadFile is not cancellable. Release its actual
-	// acknowledged reading after the signal; record completion rather than a
-	// fabricated Darwin cancellation/EOF event.
-	if runtime.GOOS == "linux" {
-		if err = probe.ReleaseReading(reading); err != nil {
-			t.Fatal(err)
-		}
-		readingReleased = true
 	}
 	drain, stop := context.WithTimeout(journey, 3*time.Second)
 	defer stop()
