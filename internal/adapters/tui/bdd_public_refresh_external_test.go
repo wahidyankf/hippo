@@ -118,6 +118,23 @@ func (fixture *publicBDDObservation) requirePublicDeadline(ctx context.Context) 
 	if err := fixture.live(ctx); err != nil {
 		return err
 	}
+	// Completion can lag liveness by host scheduling jitter: the refresh
+	// observation has started (reading 3) but its second host reading may
+	// still be in flight. Wait bounded for it, then require exactly one
+	// new observation — an extra fifth reading still fails below.
+	completion, stop := context.WithTimeout(ctx, 3*time.Second)
+	defer stop()
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for fixture.probe.Trace().Readings < 4 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-completion.Done():
+			return fmt.Errorf("default refresh observation did not complete: %+v", fixture.probe.Trace())
+		case <-ticker.C:
+		}
+	}
 	if fixture.probe.Trace().Readings != 4 {
 		return errors.New("default refresh did not produce exactly one new real observation")
 	}
