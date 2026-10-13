@@ -20,8 +20,9 @@ CPU-and-memory reservation ledger coordinates repositories; only the owning guar
 $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make test
 ```
 
-**Verification note:** installation, host-state, guarded-workload and contributor-test examples on this page have not
-been exercised against the current build. They require a pinned release or an owned project with controlled host state.
+**Verification note:** installation and contributor-test examples remain unexercised. Host-state and guarded-workload
+examples were exercised on a landed-source binary with synthetic fixtures; numbers vary and `make test` is the reader's
+own command.
 
 ## ✨ Highlights
 

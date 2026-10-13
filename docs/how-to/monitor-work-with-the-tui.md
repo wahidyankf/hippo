@@ -20,7 +20,9 @@ hippo tui --help
 ```
 
 **Verification note:** the interactive launch examples on this page have not yet been exercised against the final
-release build. Help was checked against a development build; final interactive verification remains pending.
+release build. `hippo tui --help` exits `0` on a binary built from the landed source, with the flags shown below, and
+piped streams, `TERM=dumb`, and a sub-second `--interval` are each refused with exit `2` naming `hippo.args.invalid`.
+Final interactive verification remains pending.
 
 The default refresh delay is **5 seconds after each collection finishes**, not every 5 seconds on a fixed clock.
 Collection takes two host readings one second apart, so a complete refresh cycle takes longer than the delay. To wait 10
