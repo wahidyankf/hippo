@@ -11,6 +11,10 @@ failure mode is unknown, and the two false passes in this repository's recent hi
 
 **REFACTOR.** Improve the shape with the test still green. Nothing new; if a behaviour changes, that is a new RED.
 
+## Modules
+
+1. [Batched Cycles in Planned Delivery](test-driven-development/001-batched-cycles-in-planned-delivery.md)
+
 ## Evidence
 
 "Tested locally" is not evidence. The name of the test, the boundary it ran at, and its output before and after are. A
