@@ -179,6 +179,19 @@ func requirePublicHolderSignalDrained(drain context.Context, t *testing.T, contr
 	if err = probe.Close(drain); err != nil {
 		t.Fatal(err)
 	}
+	// A cohort can still be landing its in-flight reading when Close
+	// returns on a loaded host. Wait bounded for it to join, then require
+	// the exact settled cohort: a genuine leak still fails, as does an
+	// extra reading.
+	joined := time.NewTicker(5 * time.Millisecond)
+	defer joined.Stop()
+	for probe.Trace().Active != 0 {
+		select {
+		case <-drain.Done():
+			t.Fatalf("collector cohort survived: %+v", probe.Trace())
+		case <-joined.C:
+		}
+	}
 	trace := probe.Trace()
 	if !trace.Closed || trace.Active != 0 || trace.Readings != reading {
 		t.Fatalf("collector cohort survived or acquired an extra reading: %+v", trace)
