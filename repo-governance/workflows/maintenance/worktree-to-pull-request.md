@@ -18,9 +18,12 @@ One worktree per plan or task, reused for every delivery unit that work produces
 
 ## 2. Sync
 
-`git fetch origin && git rebase origin/main`, before starting and before resuming. Never auto-stash, discard, or
-auto-resolve. When the rebase brings in commits the branch lacked, read the whole incoming diff and reconcile the
-current task against it before continuing.
+`git fetch origin && git rebase origin/main`, before starting and before resuming. Never auto-stash, discard, or blindly
+auto-resolve; an unclean tree, or a conflict outside the
+[owned, settled sync contract](../../conventions/no-destructive-git-operations/001-authorized-task-branch-sync.md),
+stops the work. Within an authorized task that contract also covers the lease push of a rewritten branch with no further
+prompt, and the new head earns its checks again. When the rebase brings in commits the branch lacked, read the whole
+incoming diff and reconcile the current task against it before continuing.
 
 ## 3. Work
 
