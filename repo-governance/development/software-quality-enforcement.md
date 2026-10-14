@@ -5,7 +5,8 @@ A change is not done when it compiles. It is done when the gates that would have
 ## Required Before Done
 
 - The quick gate, locally, on the change as it will be pushed.
-- The full gate before a release, and in CI on every supported platform.
+- The full gate before a release: its post-merge run on `main` passes for the release commit, on both operating systems
+  it covers ([In CI](quality-gates.md#in-ci)).
 - The scenario or test that was red before the change and is green after it, named — see
   [test-driven development](test-driven-development.md).
 

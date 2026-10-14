@@ -68,8 +68,8 @@ diagnostics use exact task selection and satisfy no acceptance scenario.
 
 Race retains cmd/internal/support/unit/integration patterns, adds contract self-tests/relocated Unit and explicitly
 selects relocated Integration. Retain `govulncheck`. Selector fixtures must fail on removal of any host, mode, coverage,
-Integration/E2E, race or serial compliance registration. Preserve host/artifact/release inventory. Full remains the
-release gate on `ubuntu-24.04`/`macos-15`.
+Integration/E2E, race or serial compliance registration. Preserve host/artifact/release inventory. Full runs after merge
+on `main`: see [In CI](#in-ci).
 
 The [terminal contract](../conventions/command-line-interface/007-terminal-and-environment.md) requires genuine PTY
 lifecycle and separate native host proof; fake callbacks do not establish terminal restoration.
@@ -83,11 +83,10 @@ summary-text check enforces that distinction.
 
 ## In CI
 
-[`pr-quality-gate.yml`](../../.github/workflows/pr-quality-gate.yml) mirrors hooks and retired `ci.yml`. Its aggregate
-`Quality gate` fails skipped/cancelled jobs because skipped required checks never report. The ruleset requires it and
-`leak-review`, published by [`leak-review.yml`](../../.github/workflows/leak-review.yml) from the posted
-[leak review](../workflows/quality/pr-leak-review/003-enforcement.md). Keep storage within the free allowance:
-[GitHub Actions storage](github-actions-storage.md).
+The pull-request gate, `pr-quality-gate.yml`, mirrors the hooks and nothing heavier: formatting, the repository contract
+(`quick`: typecheck, lint, unit), the pinned RHINO bootstrap, and the release build. The full gate runs after merge on
+`main`, in `main-test.yml`, so regressions can reach `main` first. A failure is fixed forward or reverted before any
+release cut. Job detail: [CI placement](quality-gates/001-ci-placement.md).
 
 ## Never Nx
 

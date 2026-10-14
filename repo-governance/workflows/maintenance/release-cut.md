@@ -9,7 +9,10 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
   not assumed.
 - The working tree is clean **including untracked files**. `scripts/build-release.sh` verifies this itself and refuses
   otherwise.
-- `scripts/test.sh` — the full gate — passes.
+- The [post-merge main test](../../../.github/workflows/main-test.yml) run of the exact commit passed: the full gate,
+  `scripts/test.sh`, on both operating systems. Wait for it before pushing the tag. `release.yml` refuses a commit with
+  no passing run: a run still in progress is fixed by re-running that workflow, but a failed run means the commit is not
+  releasable, and the next version is the fix.
 - A [docs quality gate](../quality/docs-quality-gate.md) verdict on subject `all` is recorded, so `CHANGELOG.md`,
   `README.md`, and `docs/` are checked against the binary being cut. A documented contract the binary breaks is fixed in
   code before the tag. Output they quote, diagnostics included, is measured on a binary built with the Go release
@@ -33,8 +36,8 @@ Assets are built **only** through that script. It clones the checkout, detaches 
 platform matrix from that one commit with CGO disabled, on the Go release that commit's `go.mod` names — fetched when
 the local Go differs — and without the host's Go settings. `scripts/release-archive` then writes each archive with the
 commit's time in place of the build's, so the archives do not depend on the machine that produced them: a rebuild at a
-release commit reproduces that release's `checksums.txt` byte for byte. The pull-request gate proves it by rebuilding
-every change on macOS and requiring the Linux checksums. A hand-built asset is an asset nobody can reproduce.
+release commit reproduces that release's `checksums.txt` byte for byte. The post-merge main test proves it by rebuilding
+every merged commit on macOS and requiring the Linux checksums. A hand-built asset is an asset nobody can reproduce.
 
 Go also stamps the module version into each binary from the tags the checkout holds, so a rebuild matches only with the
 same tags present. To check a published release, build its tag's commit in a checkout that has fetched its tags, into an
@@ -54,5 +57,6 @@ A mistake in a published release is fixed by publishing the next version.
 
 ## Afterwards
 
-The pull-request gate builds the same matrix on every pull request, so a break in the asset build is found before the
-tag exists rather than during the cut.
+The pull-request gate builds the Linux assets on every pull request, so a break in the asset build is found before
+merge. The macOS reproducibility check runs after merge. A failure on `main` blocks the cut until it is fixed, as
+[quality gates](../../development/quality-gates.md#in-ci) states.

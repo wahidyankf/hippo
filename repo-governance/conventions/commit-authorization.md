@@ -14,8 +14,8 @@ deliver a named task is the ongoing form, defined below.
 A release is authorized separately, with one standing exception. A merged HIPPO defect fix, whether filed here under a
 consumer's adopted [upstream tool defects](../development/upstream-tool-defects.md) standard or found and fixed here, is
 released through [release cut](../workflows/maintenance/release-cut.md) without a further prompt once its regression
-test and the full gate pass on the exact revision. That skips no release-cut step, and a fix that moves the
-[public contract](../development/public-contract.md) still needs its own authorization.
+test passes and the full gate's post-merge run passes on the exact revision. That skips no release-cut step, and a fix
+that moves the [public contract](../development/public-contract.md) still needs its own authorization.
 
 ## Ongoing Task Delivery
 
