@@ -16,8 +16,9 @@ Read it before acting; this skill exists to make sure it is the thing that gets 
    [worktree location](../../../repo-governance/conventions/worktree-location.md). Then `npm ci`, which activates the
    hooks.
 2. **Sync** with `git fetch origin && git rebase origin/main`. Never auto-stash, discard, or blindly auto-resolve. The
-   [authorized task sync][task-sync] covers owned, settled conflicts and the lease push of a rewritten branch; anything
-   else stops the work.
+   [authorized task sync][task-sync] covers only the owned task branch: its owned, settled conflicts, a recovery copy of
+   the pre-sync commits, and a rewrite pushed only with the recorded expected SHA as its lease plus
+   `--force-if-includes`. A conflict or effect outside the contract stops the work.
 3. **Work**, in thematic commits, each verified locally and each diff inspected for prohibited data.
 4. **Push and open as a draft**, with a body carrying why, what was decided, and how it was proved.
 5. **Mark ready**, then wait for the run that starts _because_ you marked it ready. The earlier run is not the required
