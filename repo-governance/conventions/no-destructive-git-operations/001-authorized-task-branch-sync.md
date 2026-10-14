@@ -43,7 +43,7 @@ new authorization decision.
    [push review](../../workflows/quality/pr-leak-review/002-push-review.md) of every outgoing commit still precedes the
    push, and a failing hook is fixed at its cause under [push hook verification](../push-hook-verification.md).
 8. Run ordinary hooks, safety screens, affected tests, exact-head reviews, and required CI; invalidate prior head-bound
-   evidence after a rewrite, because the earlier `Quality gate` result and posted leak review no longer name the new
+   evidence after a rewrite, because the earlier `Quality gate` result and leak-review verdict no longer name the new
    head. Merge only when every [merge precondition](../pull-request-merge.md) holds for it.
 
 This contract never permits force-pushing the trunk, rewriting another actor's commits, discarding uncommitted work,

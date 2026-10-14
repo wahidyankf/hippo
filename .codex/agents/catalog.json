@@ -33,6 +33,11 @@
       "digest": "ff7da2dc523f718af6c670350ce191972eaa861114ad5609de59b519a99f40a4"
     },
     {
+      "id": "agent/leak-reviewer",
+      "path": ".agents/agents/leak-reviewer.md",
+      "digest": "eaf3b315def83cb0b387501125b7f660e2aa330062bc7bccbfbee0d888465634"
+    },
+    {
       "id": "agent/plan-checker",
       "path": ".agents/agents/plan-checker.md",
       "digest": "e6a1362fa58000c3506763dffa66654f8f0ed37eef1a8eb2239b3d1312b3b8bb"
@@ -215,7 +220,7 @@
     {
       "id": "instruction",
       "path": "AGENTS.md",
-      "digest": "4e7d521b71ee13e9cc586415c2765d963286ede6e09a08047f39b4ee0b20b421"
+      "digest": "9c100ffb1290191149896e3bfab3f208d2839e7f589ae546ba2b584cf0900ef8"
     }
   ]
 }
