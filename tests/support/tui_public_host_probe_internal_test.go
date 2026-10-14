@@ -211,6 +211,93 @@ func publicHostPreRequestDirectory(t *testing.T) string {
 	return directory
 }
 
+// The candidate cancels its in-flight collector when its terminal output fails.
+// The killed helper's kernel then ends the loopback connection after the harness
+// wrote its response: a clean close gives the harness an EOF, but a helper that
+// dies with the response still unread resets the connection instead. Both are
+// cancellation, each under the phase naming its own kernel evidence.
+func TestPublicHostProbeCanceledAcceptedHelperDisconnect(t *testing.T) {
+	for _, test := range []struct {
+		name, phase string
+		reset       bool
+	}{
+		{name: "eof", phase: "canceled-eof"},
+		{name: "reset", phase: "canceled-reset", reset: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			probe, owner := newPublicHostPreRequestControl(t)
+			closeError, ownerError := cancelAcceptedPublicHostHelper(t, probe, owner, test.reset)
+			if err := errors.Join(closeError, ownerError); err != nil {
+				t.Fatal("canceled accepted helper poisoned joined retirement", err)
+			}
+			if len(owner.sets) != 0 || probe.wrappers != nil {
+				t.Fatal("joined canceled handler retained its wrapper borrower")
+			}
+			trace := probe.Trace()
+			if !trace.Closed || trace.Active != 0 || trace.Readings != 1 || len(trace.Events) != 2 ||
+				trace.Events[0].Phase != tuiStartPhase || trace.Events[1].Phase != test.phase ||
+				trace.Events[1].PID != 17 || trace.Events[1].ParentPID != 23 {
+				t.Fatalf("canceled accepted helper lost its %s witness: %+v", test.phase, trace)
+			}
+		})
+	}
+}
+
+// cancelAcceptedPublicHostHelper plays a helper that sent a valid request, then
+// disconnects after the harness wrote its response and before any acknowledgement.
+// SO_LINGER zero makes Close send the reset a killed helper's kernel sends.
+func cancelAcceptedPublicHostHelper(t *testing.T, probe *PublicTUIHostProbe, owner *publicTUIHostWrapperOwner, reset bool) (error, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	var dialer net.Dialer
+	connection, err := dialer.DialContext(ctx, "tcp4", probe.listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := probe.listener.Accept()
+	if err != nil {
+		t.Fatal(errors.Join(err, connection.Close()))
+	}
+	probe.connections[server] = 0
+	done := make(chan struct{})
+	probe.done = append(probe.done, done)
+	go func() { probe.handleDarwin(server); close(done) }()
+
+	request := publicHostProtocolRequest()
+	request.Executable = probe.executable
+	if err := connection.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(errors.Join(err, connection.Close()))
+	}
+	if err := json.NewEncoder(connection).Encode(request); err != nil {
+		t.Fatal(errors.Join(err, connection.Close()))
+	}
+	// The response is read before the disconnect, so it was written first.
+	var response publicHostResponse
+	if err := json.NewDecoder(connection).Decode(&response); err != nil || response.Error != "" {
+		t.Fatal("harness refused the helper request", response.Error, errors.Join(err, connection.Close()))
+	}
+	if reset {
+		tcp, ok := connection.(*net.TCPConn)
+		if !ok {
+			t.Fatal("loopback helper connection is not TCP", connection.Close())
+		}
+		if err := tcp.SetLinger(0); err != nil {
+			t.Fatal(errors.Join(err, connection.Close()))
+		}
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("real accepted handler did not join", ctx.Err())
+	}
+	closeError := probe.Close(ctx)
+	return closeError, owner.close()
+}
+
 func TestPublicHostProbeExactProtocolRejectsForeignAndOutOfOrder(t *testing.T) {
 	for _, test := range []struct {
 		name   string

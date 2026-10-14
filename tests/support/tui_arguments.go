@@ -39,6 +39,7 @@ const (
 	tuiOversizedAnnotation         = "larger than 512 bytes"
 	linuxMeminfoName               = "meminfo"
 	tuiCanceledEOFPhase            = "canceled-eof"
+	tuiCanceledResetPhase          = "canceled-reset"
 	tuiActiveState                 = "active"
 	tuiAnnotationFaultVariant      = "annotation-fault"
 	publicHolderPostChildPhase     = "post-child"
