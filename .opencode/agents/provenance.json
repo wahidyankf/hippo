@@ -210,12 +210,12 @@
     {
       "id": "skill/worktree-to-pr",
       "path": ".agents/skills/worktree-to-pr/SKILL.md",
-      "digest": "c8a8c1f8a66ff6a05b29516bd5597ffbbe80fff2e28046a6fa6daead5ebcff88"
+      "digest": "974b3f3aa3d0a6e00f8f045f8b134a9c2fe8a5b6c485d93be85e0d174e6d2e69"
     },
     {
       "id": "instruction",
       "path": "AGENTS.md",
-      "digest": "9e882d5cce3b2e6dd1033f6a80c23fcb90beb992a24fa0b5ba02d5112156f805"
+      "digest": "52ff12280d88866f2a2072ad0b743b5416df3829cd1294e6559f60c685e837a4"
     }
   ]
 }
