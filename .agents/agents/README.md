@@ -34,6 +34,11 @@ changes nothing; each fixer runs its family's propagation on a frozen ledger.
 - [specs-checker](specs-checker.md) and [specs-fixer](specs-fixer.md) — specification folders.
 - [pr-review-checker](pr-review-checker.md) and [pr-review-fixer](pr-review-fixer.md) — one pull request.
 
+## Delivery Review
+
+- [leak-reviewer](leak-reviewer.md) — judges one pinned head or outgoing range for the three leak classes; read-only,
+  and the delivery harness alone acts on its verdict.
+
 ## Software Development
 
 Adopted from the shared catalog. Each loads a project's stack skill and standard on demand from the inventory; see the

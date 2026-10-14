@@ -45,8 +45,8 @@ starts now. Check no more often than [every three minutes](../../conventions/git
 ## 6. Merge
 
 Run the [leak review](../quality/pr-leak-review.md) on the exact head being merged. When every
-[merge precondition](../../conventions/pull-request-merge.md) holds, including its `leak-review` status, rebase-merge
-that head.
+[merge precondition](../../conventions/pull-request-merge.md) holds, including that head's leak review verdict,
+rebase-merge that head.
 
 ## 7. Land the Next Unit, or Clean Up
 

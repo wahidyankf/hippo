@@ -15,9 +15,8 @@ to rebase and wait for macOS.
 - `Release build`: every release asset, and the Linux checksum inventory.
 
 The aggregate `Quality gate` is the required check. It fails skipped or cancelled jobs, because a skipped required check
-never reports. The ruleset also requires `leak-review`, published by
-[`leak-review.yml`](../../../.github/workflows/leak-review.yml). Keep storage within the
-[GitHub Actions storage](../github-actions-storage.md) allowance.
+never reports. The [leak review](../../workflows/quality/pr-leak-review/003-enforcement.md) is a local harness verdict,
+not a required check. Keep storage within the [GitHub Actions storage](../github-actions-storage.md) allowance.
 
 ## After Merge
 
