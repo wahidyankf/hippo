@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -484,35 +485,78 @@ func TestHeldCoordinationLockWithRefusedReceiptReportsTheRefusal(t *testing.T) {
 	}
 }
 
+// queuedWaiter is one reservation admission that pauses once, after it has queued
+// and released the shared root, and stays paused until finish. While it is paused
+// it holds no lock and makes no attempt, so a probe the test runs meanwhile cannot
+// land inside one of its retry attempts and be refused by the lock instead of by
+// the policy under test.
+type queuedWaiter struct {
+	parked  chan struct{}
+	resume  func()
+	session chan *guard.Session
+	err     chan error
+}
+
+func startQueuedWaiter(t *testing.T, root string, plan coordination.ReservationPlan, owners int, wait time.Duration) *queuedWaiter {
+	t.Helper()
+	resume := make(chan struct{})
+	waiter := &queuedWaiter{
+		parked:  make(chan struct{}),
+		resume:  sync.OnceFunc(func() { close(resume) }),
+		session: make(chan *guard.Session, 1),
+		err:     make(chan error, 1),
+	}
+	t.Cleanup(waiter.resume)
+	paused := false
+	go func() {
+		session, err := runtimewiring.AcquireReservationWithOptions(
+			context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, owners, wait,
+			guard.ReservationAdmissionOptions{Pause: func(context.Context, time.Duration) error {
+				if !paused {
+					paused = true
+					waiter.parked <- struct{}{}
+					<-resume
+				}
+
+				return nil
+			}},
+		)
+		waiter.session <- session
+		waiter.err <- err
+	}()
+
+	return waiter
+}
+
+// awaitQueued returns once the waiter has queued and parked, and fails the test
+// if it stopped first or the shared root does not show it queued.
+func (waiter *queuedWaiter) awaitQueued(t *testing.T, root string) {
+	t.Helper()
+	select {
+	case <-waiter.parked:
+	case err := <-waiter.err:
+		t.Fatalf("waiter stopped before it queued: error=%v", err)
+	}
+	totals, err := guard.ReservationStatus(context.Background(), root)
+	if err != nil || totals.WaitingOwners != 1 {
+		t.Fatalf("waiter did not enqueue: totals=%+v error=%v", totals, err)
+	}
+}
+
+// finish lets the parked waiter continue and returns its admission outcome.
+func (waiter *queuedWaiter) finish() (*guard.Session, error) {
+	waiter.resume()
+
+	return <-waiter.session, <-waiter.err
+}
+
 func TestReservationAdmissionIsAtomicAndFIFO(t *testing.T) {
 	root := t.TempDir()
 	owner := acquireReservation(t, root, policy.TaskService, fixedPlan(2, 512*policy.MiB, 3, 768*policy.MiB))
-	largeResult := make(chan *guard.Session, 1)
-	largeError := make(chan error, 1)
-	go func() {
-		// The waiter budget must outlast the main-side sequencing
-		// (status checks, FIFO refusal probe, release) plus loaded-host
-		// scheduling jitter; CI runners stall past one second while the
-		// budget below used to expire before the release landed.
-		session, err := runtimewiring.AcquireReservation(
-			context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
-			fixedPlan(2, 512*policy.MiB, 3, 768*policy.MiB), 20, 10*time.Second,
-		)
-		largeResult <- session
-		largeError <- err
-	}()
-
-	deadline := time.Now().Add(time.Second)
-	for {
-		totals, err := guard.ReservationStatus(context.Background(), root)
-		if err == nil && totals.WaitingOwners == 1 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("large FIFO head did not enqueue")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	// The waiter stays paused while the main side sequences the FIFO probe and the
+	// release, so the budget below only has to cover its admission after resume.
+	largeWaiter := startQueuedWaiter(t, root, fixedPlan(2, 512*policy.MiB, 3, 768*policy.MiB), 20, 10*time.Second)
+	largeWaiter.awaitQueued(t, root)
 
 	small, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskService, "balanced", "",
@@ -528,9 +572,9 @@ func TestReservationAdmissionIsAtomicAndFIFO(t *testing.T) {
 	if err = guard.ReleaseReservation(root, owner); err != nil {
 		t.Fatal(err)
 	}
-	large := <-largeResult
-	if err = <-largeError; err != nil || large == nil {
-		t.Fatalf("FIFO head was not admitted after capacity release: session=%+v error=%v", large, err)
+	large, largeError := largeWaiter.finish()
+	if largeError != nil || large == nil {
+		t.Fatalf("FIFO head was not admitted after capacity release: session=%+v error=%v", large, largeError)
 	}
 	if err = guard.ReleaseReservation(root, large); err != nil {
 		t.Fatal(err)
@@ -562,27 +606,8 @@ func TestReservationOwnerLimitIsConservativeAcrossLiveOwnersAndWaiters(t *testin
 	root := t.TempDir()
 	plan := fixedPlan(1, 256*policy.MiB, 4, policy.GiB)
 	owner := acquireReservation(t, root, policy.TaskService, plan)
-	strictResult := make(chan *guard.Session, 1)
-	strictError := make(chan error, 1)
-	go func() {
-		session, err := runtimewiring.AcquireReservation(
-			context.Background(), root, "", policy.TaskEphemeral, "balanced", "", plan, 1, time.Second,
-		)
-		strictResult <- session
-		strictError <- err
-	}()
-
-	deadline := time.Now().Add(time.Second)
-	for {
-		totals, err := guard.ReservationStatus(context.Background(), root)
-		if err == nil && totals.WaitingOwners == 1 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("strict shared-root waiter did not enqueue")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	strictWaiter := startQueuedWaiter(t, root, plan, 1, time.Second)
+	strictWaiter.awaitQueued(t, root)
 	loose, err := runtimewiring.AcquireReservation(
 		context.Background(), root, "", policy.TaskTransactional, "balanced", "", plan, 20, 0,
 	)
@@ -592,9 +617,9 @@ func TestReservationOwnerLimitIsConservativeAcrossLiveOwnersAndWaiters(t *testin
 	if err = guard.ReleaseReservation(root, owner); err != nil {
 		t.Fatal(err)
 	}
-	strict := <-strictResult
-	if err = <-strictError; err != nil || strict == nil {
-		t.Fatalf("strict waiter was not admitted: session=%+v error=%v", strict, err)
+	strict, strictError := strictWaiter.finish()
+	if strictError != nil || strict == nil {
+		t.Fatalf("strict waiter was not admitted: session=%+v error=%v", strict, strictError)
 	}
 	defer func() { _ = guard.ReleaseReservation(root, strict) }()
 	loose, err = runtimewiring.AcquireReservation(
