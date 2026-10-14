@@ -490,9 +490,13 @@ func TestReservationAdmissionIsAtomicAndFIFO(t *testing.T) {
 	largeResult := make(chan *guard.Session, 1)
 	largeError := make(chan error, 1)
 	go func() {
+		// The waiter budget must outlast the main-side sequencing
+		// (status checks, FIFO refusal probe, release) plus loaded-host
+		// scheduling jitter; CI runners stall past one second while the
+		// budget below used to expire before the release landed.
 		session, err := runtimewiring.AcquireReservation(
 			context.Background(), root, "", policy.TaskEphemeral, "balanced", "",
-			fixedPlan(2, 512*policy.MiB, 3, 768*policy.MiB), 20, 500*time.Millisecond,
+			fixedPlan(2, 512*policy.MiB, 3, 768*policy.MiB), 20, 10*time.Second,
 		)
 		largeResult <- session
 		largeError <- err
