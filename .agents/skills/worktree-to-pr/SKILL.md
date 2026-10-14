@@ -15,7 +15,9 @@ Read it before acting; this skill exists to make sure it is the thing that gets 
 1. **Provision** below the repository location with the command in the workflow's Provision step, per
    [worktree location](../../../repo-governance/conventions/worktree-location.md). Then `npm ci`, which activates the
    hooks.
-2. **Sync** with `git fetch origin && git rebase origin/main`. Never auto-stash, discard, or auto-resolve.
+2. **Sync** with `git fetch origin && git rebase origin/main`. Never auto-stash, discard, or blindly auto-resolve. The
+   [authorized task sync][task-sync] covers owned, settled conflicts and the lease push of a rewritten branch; anything
+   else stops the work.
 3. **Work**, in thematic commits, each verified locally and each diff inspected for prohibited data.
 4. **Push and open as a draft**, with a body carrying why, what was decided, and how it was proved.
 5. **Mark ready**, then wait for the run that starts _because_ you marked it ready. The earlier run is not the required
@@ -35,3 +37,4 @@ Read it before acting; this skill exists to make sure it is the thing that gets 
 - Check GitHub no more often than every three minutes, and never with a watching mode.
 
 [worktree-workflow]: ../../../repo-governance/workflows/maintenance/worktree-to-pull-request.md
+[task-sync]: ../../../repo-governance/conventions/no-destructive-git-operations/001-authorized-task-branch-sync.md

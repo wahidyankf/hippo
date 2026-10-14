@@ -79,10 +79,10 @@ a sibling `*-worktrees/` path—per [worktree location](repo-governance/conventi
 Committing and pushing need [authorization](repo-governance/conventions/commit-authorization.md). Never commit what
 [data safety](repo-governance/conventions/public-repository-data-safety.md) prohibits. A
 [leak review](repo-governance/workflows/quality/pr-leak-review.md) of each outgoing commit precedes every push; every
-merge needs its posted `pass` for the exact head, which the `leak-review` status enforces. Never bypass a
+merge needs its posted `pass` for the exact head, which `leak-review` enforces. Never bypass a
 [push hook](repo-governance/conventions/push-hook-verification.md). Never destroy work or history without
-[approval for that one command](repo-governance/conventions/no-destructive-git-operations.md). Keep the
-[working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub
+[approval for that one command](repo-governance/conventions/no-destructive-git-operations.md), except authorized
+task-branch sync. Keep the [working tree](repo-governance/conventions/working-tree.md) clean and poll GitHub
 [no faster than three minutes](repo-governance/conventions/github-polling.md).
 
 Releases: [release cut](repo-governance/workflows/maintenance/release-cut.md).
