@@ -18,6 +18,7 @@ and above the [workflows](../workflows/README.md).
 - [Public contract](public-contract.md) — exit codes, evidence readers, configuration compatibility.
 - [Quality](quality/README.md) — the software-development standards adopted from the shared catalog.
 - [Quality gates](quality-gates.md) — what runs, where, and in what order.
+- [Quality gates modules](quality-gates/README.md) — the ordered modules of that standard.
 - [Resource-aware development](resource-aware-development.md) — the guard, and why this repository cannot use it on
   itself.
 - [Software quality enforcement](software-quality-enforcement.md) — the gates that must pass before a change is done.

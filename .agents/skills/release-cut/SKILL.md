@@ -14,7 +14,7 @@ The authoritative procedure is
 
 - On `main`, synced, in a worktree. This repository's clone is bare, so there is no primary checkout to prefer.
 - Working tree clean **including untracked files** — the build script verifies this itself and refuses otherwise.
-- `scripts/test.sh` passes.
+- The post-merge main test run of the exact commit passed (`scripts/test.sh` on both operating systems).
 - A [docs quality gate](../../../repo-governance/workflows/quality/docs-quality-gate.md) verdict on subject `all` is
   recorded.
 - The cut is authorized.
