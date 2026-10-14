@@ -141,6 +141,20 @@ func (capture bddNativeTransportCapture) Result() support.NativeTUIResult {
 	return capture.transport.Result()
 }
 
+// bddNativeAwaitExpired reports the context error, or DeadlineExceeded once the
+// clock has passed the deadline. A snapshot taken after the deadline is stale
+// whether or not the timer goroutine has delivered cancellation yet: on a loaded
+// scheduler a sampler that slept past the deadline can run before it.
+func bddNativeAwaitExpired(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
 func awaitBDDNativeTransportFrame(ctx context.Context, observation bddNativeTransportObservation, predicate func(tui.BDDNativeTransportFrame) bool) (tui.BDDNativeTransportFrame, error) {
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
@@ -152,7 +166,7 @@ func awaitBDDNativeTransportFrame(ctx context.Context, observation bddNativeTran
 		if err := observation.OutputError(); err != nil {
 			return frame, fmt.Errorf("decode actual renderer output: %w", err)
 		}
-		if err := ctx.Err(); err != nil {
+		if err := bddNativeAwaitExpired(ctx); err != nil {
 			// Sticky history alone never fails liveness: a transitional
 			// write for a retired viewport must wait for the next repaint,
 			// which clears the current viewport. Only an overflow that
@@ -457,6 +471,42 @@ func TestBDDNativeTransportSamplingDeadlineAndRefusals(t *testing.T) {
 			}
 			if test.overflow && (err == nil || !strings.Contains(err.Error(), "wrote outside the viewport")) {
 				t.Fatalf("persistent overflow was not named at refusal: %v", err)
+			}
+		})
+	}
+}
+
+// staleDeadlineContext has a deadline that has passed on the clock while its
+// cancellation has not been delivered. A loaded scheduler leaves a real timer
+// context in exactly this state: when the cancel timer and a sleeping sampler
+// both expire in one scheduling window, the sampler can run first and still
+// read a nil Err.
+type staleDeadlineContext struct{ deadline time.Time }
+
+func (ctx staleDeadlineContext) Deadline() (time.Time, bool) { return ctx.deadline, true }
+func (staleDeadlineContext) Done() <-chan struct{}           { return nil }
+func (staleDeadlineContext) Err() error                      { return nil }
+func (staleDeadlineContext) Value(any) any                   { return nil }
+
+func TestBDDNativeTransportAwaitRefusesSnapshotAfterDeadlineBeforeCancellation(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		deadline time.Duration
+		accepted bool
+	}{
+		{"deadline passed before cancellation arrived", -time.Millisecond, false},
+		{"deadline still ahead", time.Minute, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			observation := bddNativeSamplingCase{}.observation(t, nil)
+			ctx := staleDeadlineContext{deadline: time.Now().Add(test.deadline)}
+			predicates := 0
+			_, err := awaitBDDNativeTransportFrame(ctx, observation, func(tui.BDDNativeTransportFrame) bool { predicates++; return true })
+			if (err == nil) != test.accepted {
+				t.Fatalf("accepted=%t want=%t error=%v", err == nil, test.accepted, err)
+			}
+			if !test.accepted && (!errors.Is(err, context.DeadlineExceeded) || predicates != 0) {
+				t.Fatalf("expired snapshot lost its refusal: %v; predicates=%d", err, predicates)
 			}
 		})
 	}
