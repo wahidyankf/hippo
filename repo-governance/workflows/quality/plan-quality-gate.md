@@ -11,8 +11,8 @@ post-write gate.
 
 An adopting repository lists only the callers it has, chosen from this set.
 
-Creating, editing, or executing a plan never starts it alone. Each run serves one named checkpoint: before execution, or
-after a material change.
+Creating, editing, or executing a plan never starts it alone. Each run serves one named checkpoint: an optional
+manual check before execution, or a check after a material change. Neither checkpoint is required by execution.
 
 ## Inputs
 
