@@ -13,7 +13,8 @@ A convention chooses a path. It does not authorize anyone to walk it; see
 - [Command-line interface](command-line-interface.md) — the two-layer contract a command-line tool presents to its
   callers.
 - [Command-line interface modules](command-line-interface/README.md) — the ordered modules of that contract.
-- [Commit authorization](commit-authorization.md) — when committing and pushing are permitted.
+- [Commit authorization](commit-authorization.md) — when committing and pushing are permitted, and what an ongoing task
+  grant covers.
 - [Delegated agent concurrency](delegated-agent-concurrency.md) — at most three delegated agents at once, at any depth.
 - [Directory maps](directory-maps.md) — every mapped directory lists its siblings.
 - [Documentation architecture](documentation-architecture.md) — Diátaxis, and what `docs/` may not contradict.
@@ -26,7 +27,8 @@ A convention chooses a path. It does not authorize anyone to walk it; see
 - [Markdown line length](markdown-line-length.md) — 120 characters per line, tables and code included.
 - [Markdown visualizations](markdown-visualizations.md) — ASCII diagrams, with the meaning also in prose.
 - [No destructive Git operations](no-destructive-git-operations.md) — approval for any Git command that destroys work or
-  history.
+  history, outside bounded owned-task sync.
+- [Authorized task sync modules](no-destructive-git-operations/README.md) — bounded owned-branch sync and its proofs.
 - [Plan lifecycle](plan-lifecycle.md) — the local rules layered on the plans convention.
 - [Plan validator contract](plan-validator-contract.md) — what the plan validator reads, reports and exits with.
 - [Plan validator contract modules](plan-validator-contract/README.md) — the ordered modules of that contract.

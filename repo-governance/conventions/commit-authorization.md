@@ -7,14 +7,25 @@ Committing and pushing are separate from deciding what to change. This document 
 Commit or push only when the user has authorized it, or when an approved plan's execution reaches a step that says to.
 Absent either, prepare the change, verify it, and stop.
 
-Authorization is specific. Permission to commit one change is not permission to commit the next one, and permission
-given for a plan covers the steps that plan describes.
+Authorization is specific. A single-action grant covers that action once: permission to commit one change is not
+permission to commit the next one, and permission given for a plan covers the steps that plan describes. A grant to
+deliver a named task is the ongoing form, defined below.
 
 A release is authorized separately, with one standing exception. A merged HIPPO defect fix, whether filed here under a
 consumer's adopted [upstream tool defects](../development/upstream-tool-defects.md) standard or found and fixed here, is
 released through [release cut](../workflows/maintenance/release-cut.md) without a further prompt once its regression
 test and the full gate pass on the exact revision. That skips no release-cut step, and a fix that moves the
 [public contract](../development/public-contract.md) still needs its own authorization.
+
+## Ongoing Task Delivery
+
+Authorization to deliver a named task covers its staging, thematic commits, synchronization, publication, and landing
+until that task is finished. Do not request permission again for those routine steps;
+[authorized task sync](no-destructive-git-operations/001-authorized-task-branch-sync.md) owns the rebase and lease-push
+safeguards, and each step keeps its own gates: the [push review](../workflows/quality/pr-leak-review/002-push-review.md)
+before a push and the [merge preconditions](pull-request-merge.md) before landing. Resuming the same unfinished task
+retains its recorded authority after scope and current state are verified. It covers no other repository, unrelated
+work, later task, hook bypass, or release.
 
 ## Why It Is Separate
 

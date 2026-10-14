@@ -14,9 +14,11 @@ deletion for every actor, including the repository owner. There is no bypass.
 - Initialize a new worktree from its own root, before any Git mutation or gate run, with `npm ci`. That activates its
   hooks; a worktree whose hooks never ran pushes unverified work.
 - Sync before starting and before resuming: `git fetch origin`, then `git rebase origin/main`. Never auto-stash,
-  discard, or auto-resolve — an unclean tree or a conflict stops the work and goes to the user. When the sync brings in
-  commits the branch lacked, read the whole incoming diff and reconcile the current task against it before continuing. A
-  rebase of a branch already pushed needs a force push, which follows
+  discard, or blindly auto-resolve. An unclean tree stops the work. Resolve only owned, already settled conflicts under
+  [authorized task sync](no-destructive-git-operations/001-authorized-task-branch-sync.md); foreign work, uncertain
+  intent, or a new material choice stops the sync and goes to its owner. When the sync brings in commits the branch
+  lacked, read the whole incoming diff and reconcile the current task against it before continuing. A rebase of a branch
+  already pushed needs a force push: an authorized task's own branch follows that sync contract, and any other follows
   [no destructive Git operations](no-destructive-git-operations.md).
 - Provision at most one worktree per plan or task and reuse it for every delivery unit that work produces. A second
   `git worktree add` for the same work is a defect. Units land serially: land one, sync from `origin/main`, branch the
