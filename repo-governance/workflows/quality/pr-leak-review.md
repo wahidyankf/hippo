@@ -19,9 +19,8 @@ Two entry points share one judgement:
 
 - **Push.** Before any push to `origin`, review the outgoing range privately per
   [push review](pr-leak-review/002-push-review.md). Nothing is posted; a finding blocks the push.
-- **Merge.** A pull request is open, and no `pass` record from the repository owner exists for its current head. The
-  delivery harness runs this workflow for that head before merge. `pull-request` (`string`, required): its number or
-  address.
+- **Merge.** A pull request has no owner `pass` record for its head. The delivery harness runs it before merge.
+  `pull-request` (`string`, required): its number or address.
 
 ## Sequence
 
@@ -76,8 +75,8 @@ Run the push leak review for the commits this branch is about to push.
 
 ## One Head, One Review
 
-A moved head needs one new review from a new subagent. Earlier passes say nothing about the merging head, so the run
-neither retries nor waits for a clean streak. An unposted pass is indistinguishable from no review, so step 7 posts
-every result. [Enforcement](pr-leak-review/003-enforcement.md) makes the precondition mechanical.
+A moved head needs one new review from a new subagent. Earlier passes say nothing about the merging head. An unposted
+pass is indistinguishable from no review, so step 7 posts every result. [Enforcement](pr-leak-review/003-enforcement.md)
+makes the precondition mechanical.
 
 [Worktree to pull request](../maintenance/worktree-to-pull-request.md) runs both entry points in order.
