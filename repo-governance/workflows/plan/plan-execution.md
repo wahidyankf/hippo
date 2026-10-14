@@ -3,8 +3,8 @@
 ## Entry
 
 A plan in `plans/in-progress/` with its checklist ready. A [quality-gate](../quality/plan-quality-gate.md) verdict, when
-recorded, is advisory history: a `FAIL` or `BLOCKED` row keeps the owner the gate gave it. Execution starts with or
-without a verdict, records a missing one as `plan-quality-gate: not run (manual-only)`, and never runs the gate itself.
+recorded, is advisory history: a `FAIL` or `BLOCKED` row keeps its owner. Execution starts with or without a verdict and
+never runs the gate itself; a missing verdict is recorded as `plan-quality-gate: not run (manual-only)`.
 
 ## Sequence
 
