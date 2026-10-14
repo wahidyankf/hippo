@@ -112,6 +112,7 @@ type linuxWitnessFailureMetadata struct {
 	Retry          bool
 	RetryTID       int
 	Context        linuxWitnessContextMetadata
+	GroupExit      linuxWitnessGroupExit
 }
 
 type linuxWitnessContextMetadata uint8
@@ -217,6 +218,172 @@ type linuxWitnessHarvest struct {
 // children never reach this decision, so cover it directly.
 func linuxWitnessTerminalRetire(leader bool, status syscall.WaitStatus) bool {
 	return !leader && status.Exited() && status.ExitStatus() == 0
+}
+
+// linuxWitnessVanishedDecision reports whether a thread that vanished
+// between its stop report and a follow-up kernel query retires as detached.
+// Only a reaped clean non-leader exit qualifies; every wait failure, every
+// unreaped thread and every other terminal state stays fail-closed. Any wait
+// error, including an interrupted wait, counts as unobserved.
+func linuxWitnessVanishedDecision(waitErr error, wpid int, status syscall.WaitStatus, leader bool) bool {
+	if waitErr != nil || wpid == 0 {
+		return false
+	}
+	return linuxWitnessTerminalRetire(leader, status)
+}
+
+// linuxWitnessGroupExit is the whole-process exit the observed child has asked
+// for through exit_group. The kernel then marks every thread of the group for
+// death with SIGKILL, so a sibling's stop can be invalidated and a zapped thread
+// may die without ever reporting PTRACE_EVENT_EXIT (ptrace(2) BUGS): that is the
+// explanation for a thread that vanishes after the request, and only then.
+type linuxWitnessGroupExit uint8
+
+const (
+	linuxWitnessGroupExitNone linuxWitnessGroupExit = iota
+	linuxWitnessGroupExitClean
+	linuxWitnessGroupExitFailed
+)
+
+func (exit linuxWitnessGroupExit) String() string {
+	switch exit {
+	case linuxWitnessGroupExitNone:
+		return "none"
+	case linuxWitnessGroupExitClean:
+		return "clean"
+	case linuxWitnessGroupExitFailed:
+		return "failed"
+	default:
+		return "unknown"
+	}
+}
+
+// observe folds one request into the exit seen so far. Any nonzero request
+// stays failed, even beside an earlier clean one, so a clean exit is explained
+// only when every observed exit_group asked for status zero.
+func (exit linuxWitnessGroupExit) observe(request linuxWitnessGroupExit) linuxWitnessGroupExit {
+	return max(exit, request)
+}
+
+// linuxWitnessGroupExitRequest classifies one decoded syscall stop. Only the
+// ENTRY of exit_group counts: an EXIT stop carries a result, and a single
+// thread's exit leaves its siblings alive. The kernel keeps the low eight bits
+// of the status, so the request is clean exactly when those are zero.
+func linuxWitnessGroupExitRequest(info linuxSyscallInfo, exitGroup uint64) linuxWitnessGroupExit {
+	if info.Operation != 1 || info.Data[0] != exitGroup {
+		return linuxWitnessGroupExitNone
+	}
+	if info.Data[1]&0xff != 0 {
+		return linuxWitnessGroupExitFailed
+	}
+	return linuxWitnessGroupExitClean
+}
+
+// linuxWitnessGroupExitVanished reports whether a failed ptrace request on a
+// thread is the kernel's own SIGKILL of an exiting group. ptrace refuses a
+// tracee with a fatal signal pending with ESRCH, and the stop that was just
+// reported is cleared when the tracee wakes to die. Only ESRCH after a clean
+// exit_group the witness itself observed and released qualifies; every other
+// errno, and ESRCH with no released or with a failed group exit, stays a
+// fail-closed failure.
+func linuxWitnessGroupExitVanished(original error, exit linuxWitnessGroupExit) bool {
+	return exit == linuxWitnessGroupExitClean && errors.Is(original, syscall.ESRCH)
+}
+
+type linuxWitnessTaskState uint8
+
+const (
+	linuxWitnessTaskUnknown linuxWitnessTaskState = iota
+	linuxWitnessTaskLive
+	linuxWitnessTaskStopped
+	linuxWitnessTaskZombie
+)
+
+// linuxWitnessTaskSnapshot is what procfs says about the leader without
+// consuming any wait status: its task state and the count of unreleased threads
+// in its group. A zombie ptracee stays counted until its tracer reaps it, so a
+// count of one means the leader is the only thread left and is reapable.
+type linuxWitnessTaskSnapshot struct {
+	state   linuxWitnessTaskState
+	threads int
+}
+
+// linuxWitnessTaskSnapshotOf reads the first State: and Threads: lines of
+// /proc/<pid>/status. Anything unreadable stays unknown or zero, which every
+// decision treats as fail-closed. Only Z counts as a zombie; X and x do not.
+func linuxWitnessTaskSnapshotOf(status []byte) linuxWitnessTaskSnapshot {
+	var snapshot linuxWitnessTaskSnapshot
+	stateSeen, threadsSeen := false, false
+	for line := range strings.SplitSeq(string(status), "\n") {
+		if value, found := strings.CutPrefix(line, "State:"); found && !stateSeen {
+			stateSeen = true
+			snapshot.state = linuxWitnessTaskStateOf(strings.TrimSpace(value))
+		} else if value, found := strings.CutPrefix(line, "Threads:"); found && !threadsSeen {
+			threadsSeen = true
+			if count, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && count > 0 {
+				snapshot.threads = count
+			}
+		}
+	}
+	return snapshot
+}
+
+func linuxWitnessTaskStateOf(value string) linuxWitnessTaskState {
+	if value == "" {
+		return linuxWitnessTaskUnknown
+	}
+	switch value[0] {
+	case 'Z':
+		return linuxWitnessTaskZombie
+	case 't', 'T':
+		return linuxWitnessTaskStopped
+	case 'R', 'S', 'D', 'I', 'P', 'K', 'W':
+		return linuxWitnessTaskLive
+	default:
+		return linuxWitnessTaskUnknown
+	}
+}
+
+type linuxWitnessLeaderAction uint8
+
+const (
+	// linuxWitnessLeaderWait takes the ordinary consuming wait, which keeps
+	// every stop and every unexplained terminal state exactly as before.
+	linuxWitnessLeaderWait linuxWitnessLeaderAction = iota
+	// linuxWitnessLeaderIdle has nothing to harvest this pass.
+	linuxWitnessLeaderIdle
+	// linuxWitnessLeaderRetire drops an exited leader without reaping it.
+	linuxWitnessLeaderRetire
+)
+
+// linuxWitnessLeaderHarvestAction decides what to do with the leader once
+// procfs has described it. The leader's terminal status is the natural receipt
+// that exec.Cmd.Wait must still reap, and a leader zapped by a sibling's
+// exit_group may die with no PTRACE_EVENT_EXIT stop to detach from; a
+// consuming wait on it would reap that exit and leave nothing for the natural
+// Wait. After a clean exit_group, a zombie leader is therefore never waited on:
+// it retires, unreaped, only as the last thread of its group, and waits for
+// the natural Wait, which still reports a nonzero or signaled outcome. A
+// zombie with siblings left, or a running leader, has nothing to harvest yet.
+// Every stop, every unknown state and every exit the witness was not told to
+// expect take the consuming wait and its fail-closed handling.
+func linuxWitnessLeaderHarvestAction(exit linuxWitnessGroupExit, snapshot linuxWitnessTaskSnapshot) linuxWitnessLeaderAction {
+	if exit != linuxWitnessGroupExitClean {
+		return linuxWitnessLeaderWait
+	}
+	switch snapshot.state {
+	case linuxWitnessTaskZombie:
+		switch {
+		case snapshot.threads == 1:
+			return linuxWitnessLeaderRetire
+		case snapshot.threads > 1:
+			return linuxWitnessLeaderIdle
+		}
+	case linuxWitnessTaskLive:
+		return linuxWitnessLeaderIdle
+	case linuxWitnessTaskStopped, linuxWitnessTaskUnknown:
+	}
+	return linuxWitnessLeaderWait
 }
 
 // This consumer owns the complete known-TID scan; the native adapter alone

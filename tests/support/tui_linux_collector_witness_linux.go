@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -56,6 +58,8 @@ type linuxWitnessThread struct {
 	call            *linuxWitnessEvent
 	paired, initial bool
 	cloneAllowed    bool
+	// exitRequest is the exit_group this thread's held ENTRY asked for.
+	exitRequest linuxWitnessGroupExit
 }
 
 func linuxWitnessObserved(event *linuxWitnessEvent) linuxStopResult {
@@ -73,6 +77,10 @@ type linuxCollectorObserver struct {
 	leader     int
 	detached   int
 	lastResume linuxWitnessResumeMetadata
+	// exit is the exit_group the child has been released to execute: the thread
+	// held at its observed ENTRY was resumed, so the kernel may already be
+	// killing every sibling. A request still held at its stop explains nothing.
+	exit linuxWitnessGroupExit
 }
 
 // RunPublicLinuxCollectorWitness observes real procfs syscalls of the exact selected
@@ -135,14 +143,32 @@ func (observer *linuxCollectorObserver) observe(ctx context.Context) error {
 			continue
 		}
 		initial = false
-		for _, tid := range observer.sortedStopped() {
-			if err := syscall.PtraceSyscall(tid, observer.stopped[tid]); err != nil {
-				metadata := observer.resumeFailureMetadata(tid, ctx.Err())
-				return linuxWitnessResumeError(tid, err, metadata)
-			}
-			observer.lastResume = linuxWitnessSuccessfulResume(tid, observer.stopped[tid], observer.heldStopMetadata(tid))
-			delete(observer.stopped, tid)
+		if err := observer.resumeStopped(ctx); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+// resumeStopped resumes every held thread in TID order. Once the child has
+// asked for a clean exit_group, a thread resumed after its sibling executed it
+// is already marked for death and refuses with ESRCH: it is no longer held, and
+// it stays owned so its own exit report is still harvested.
+func (observer *linuxCollectorObserver) resumeStopped(ctx context.Context) error {
+	for _, tid := range observer.sortedStopped() {
+		if err := syscall.PtraceSyscall(tid, observer.stopped[tid]); err != nil {
+			if linuxWitnessGroupExitVanished(err, observer.exit) {
+				delete(observer.stopped, tid)
+				continue
+			}
+			metadata := observer.resumeFailureMetadata(tid, ctx.Err())
+			return linuxWitnessResumeError(tid, err, metadata)
+		}
+		observer.lastResume = linuxWitnessSuccessfulResume(tid, observer.stopped[tid], observer.heldStopMetadata(tid))
+		if thread := observer.threads[tid]; thread != nil {
+			observer.exit = observer.exit.observe(thread.exitRequest)
+		}
+		delete(observer.stopped, tid)
 	}
 	return nil
 }
@@ -158,7 +184,7 @@ func (observer *linuxCollectorObserver) resumeFailureMetadata(tid int, contextEr
 	metadata := linuxWitnessFailureMetadata{
 		Leader: observer.leader, TID: tid, Signal: observer.stopped[tid], Last: observer.lastResume, Stop: observer.heldStopMetadata(tid),
 		RegisteredHeld: observer.linuxWitnessHeld(tid), Owned: len(observer.threads), Held: len(observer.stopped), Detached: observer.detached,
-		Context: linuxWitnessContextObservation(contextError),
+		Context: linuxWitnessContextObservation(contextError), GroupExit: observer.exit,
 	}
 	return observer.reducer.failureMetadata(metadata)
 }
@@ -203,6 +229,11 @@ func (observer *linuxCollectorObserver) linuxWitnessHeld(tid int) bool {
 }
 
 func (observer *linuxCollectorObserver) linuxWitnessHarvest(tid int, initial bool) (linuxWitnessHarvest, error) {
+	if tid == observer.leader && observer.exit == linuxWitnessGroupExitClean {
+		if settled, err := observer.linuxWitnessPeekLeader(tid); settled {
+			return linuxWitnessHarvest{}, err
+		}
+	}
 	var status syscall.WaitStatus
 	pid, err := syscall.Wait4(tid, &status, syscall.WNOHANG|syscall.WALL, nil)
 	if errors.Is(err, syscall.EINTR) {
@@ -223,10 +254,33 @@ func (observer *linuxCollectorObserver) linuxWitnessHarvest(tid int, initial boo
 			observer.detached++
 			return linuxWitnessHarvest{}, nil
 		}
-		return linuxWitnessHarvest{}, fmt.Errorf("owned linux thread %d terminated before detach handoff: status=%d", tid, status)
+		return linuxWitnessHarvest{}, fmt.Errorf("owned linux thread %d terminated before detach handoff: status=%d leader=%d", tid, status, observer.leader)
 	}
 	result, err := observer.stop(tid, status, initial)
 	return linuxWitnessHarvest{result: result, acquired: true}, err
+}
+
+// linuxWitnessPeekLeader describes the leader through procfs, consuming no
+// wait status, once the child has been released to a clean exit_group. A
+// sibling's exit_group kills the leader too, and the leader may then die with no
+// PTRACE_EVENT_EXIT stop to detach from; the consuming wait would reap that exit
+// and leave nothing for exec.Cmd.Wait. It reports settled when this pass has
+// nothing left to harvest from the leader.
+func (observer *linuxCollectorObserver) linuxWitnessPeekLeader(tid int) (bool, error) {
+	status, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
+	if err != nil {
+		return true, fmt.Errorf("read owned linux thread %d status: %w", tid, err)
+	}
+	switch linuxWitnessLeaderHarvestAction(observer.exit, linuxWitnessTaskSnapshotOf(status)) {
+	case linuxWitnessLeaderIdle:
+		return true, nil
+	case linuxWitnessLeaderRetire:
+		delete(observer.threads, tid)
+		observer.detached++
+		return true, nil
+	case linuxWitnessLeaderWait:
+	}
+	return false, nil
 }
 
 func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus, initial bool) (linuxStopResult, error) {
@@ -281,14 +335,7 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		return linuxStopResult{}, errors.New("linux witness refuses unexpected exec or fork event")
 	}
 	if signal == syscall.Signal(int(syscall.SIGTRAP)|0x80) {
-		info, err := linuxWitnessSyscallInfo(tid)
-		if err != nil {
-			return linuxStopResult{}, err
-		}
-		thread.observation.held.Kind = 4
-		thread.observation.syscall(info.Operation, info.Data[0])
-		observer.stopped[tid] = 0
-		return observer.syscall(tid, info)
+		return observer.linuxWitnessSyscallStop(tid, thread)
 	}
 	if signal == syscall.SIGSTOP && thread.initial {
 		thread.observation.held.Kind = 5
@@ -301,6 +348,47 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 	thread.observation.held.Kind = 6
 	observer.stopped[tid] = int(signal)
 	return linuxStopResult{}, nil
+}
+
+// linuxWitnessSyscallStop classifies one TRACESYSGOOD stop. A thread that
+// died between its stop report and the info query retires as detached;
+// every other failure stays fail-closed.
+func (observer *linuxCollectorObserver) linuxWitnessSyscallStop(tid int, thread *linuxWitnessThread) (linuxStopResult, error) {
+	info, err := linuxWitnessSyscallInfo(tid)
+	if err != nil {
+		if linuxWitnessGroupExitVanished(err, observer.exit) {
+			// The group's SIGKILL cleared this stop before the query. No syscall
+			// evidence is invented; the thread stays owned, unheld, and its own
+			// exit report or terminal status is harvested on a later pass.
+			return linuxStopResult{}, nil
+		}
+		if observer.linuxWitnessRetiredVanished(tid, err) {
+			return linuxStopResult{}, nil
+		}
+		return linuxStopResult{}, err
+	}
+	thread.observation.held.Kind = 4
+	thread.observation.syscall(info.Operation, info.Data[0])
+	observer.stopped[tid] = 0
+	return observer.syscall(tid, info)
+}
+
+// linuxWitnessRetiredVanished retires a thread that vanished between its
+// stop report and a follow-up kernel query. Only a reaped clean non-leader
+// exit qualifies; a wait failure, an unreaped thread and every other
+// terminal state propagate the original failure.
+func (observer *linuxCollectorObserver) linuxWitnessRetiredVanished(tid int, original error) bool {
+	if !errors.Is(original, syscall.ESRCH) {
+		return false
+	}
+	var status syscall.WaitStatus
+	pid, err := syscall.Wait4(tid, &status, syscall.WNOHANG|syscall.WALL, nil)
+	if !linuxWitnessVanishedDecision(err, pid, status, tid == observer.leader) {
+		return false
+	}
+	delete(observer.threads, tid)
+	observer.detached++
+	return true
 }
 
 func linuxWitnessSyscallInfo(tid int) (linuxSyscallInfo, error) {
@@ -338,6 +426,7 @@ func (observer *linuxCollectorObserver) syscall(tid int, info linuxSyscallInfo) 
 			return linuxStopResult{}, err
 		}
 		thread.call, thread.paired, thread.cloneAllowed, thread.initial = call, true, clone, false
+		thread.exitRequest = linuxWitnessGroupExitRequest(info, uint64(syscall.SYS_EXIT_GROUP))
 		return linuxWitnessObserved(call), nil
 	}
 	if !thread.paired {
