@@ -1,0 +1,114 @@
+name: Main Test
+
+# The full gate runs here, after a change has merged, rather than on every pull
+# request. Its two operating systems took 22 to 38 minutes, and the strict
+# up-to-date ruleset sent every other pull request back to rebase and wait after
+# each merge. The cost is accepted: a regression can reach main before this
+# detects it. A failure here is an immediate defect to fix forward or revert
+# before any release is cut, and the release workflow refuses a commit that has
+# no passing run.
+#
+# The pull-request gate keeps everything the hooks already run. What moves here
+# is what a hook must not make anyone wait for: the full suite, race detection,
+# the vulnerability scan, and the macOS release reproducibility check.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Each main commit keeps its own result. The group is per commit, so a later
+# push never cancels the run for an earlier one; a shared group would cancel
+# every commit that waited behind the running one.
+concurrency:
+  group: main-test-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      # A superset of the quick gate `.husky/pre-push` runs. This adds the
+      # integration and E2E adapters, race detection, and a vulnerability scan
+      # -- boundaries a hook has no business making someone wait for, on two
+      # operating systems a workstation cannot provide at once.
+      - run: ./scripts/test.sh
+
+  release-build:
+    name: Release build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The Linux inventory is the reference the macOS rebuild must reproduce.
+      - name: Build all supported assets
+        run: ./scripts/build-release.sh v0.0.0 "$GITHUB_SHA" dist
+
+      - name: Verify asset inventory
+        run: ./tests/artifacts/release-assets.sh dist v0.0.0 "$GITHUB_SHA"
+
+      - name: Record the checksum inventory
+        id: inventory
+        run: |
+          cat dist/checksums.txt
+          {
+            echo "checksums<<EOF"
+            cat dist/checksums.txt
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+    outputs:
+      checksums: ${{ steps.inventory.outputs.checksums }}
+
+  release-reproducibility:
+    name: Release reproducibility
+    # The archives must depend on the commit alone, not on the machine that
+    # built them: macOS ships a different tar, gzip, and filesystem from the
+    # Linux runner that publishes releases. Rebuilding the same commit here and
+    # requiring the Linux job's checksums byte for byte proves it after every
+    # merge, before a release tag relies on it.
+    needs: [release-build]
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build all supported assets
+        run: ./scripts/build-release.sh v0.0.0 "$GITHUB_SHA" dist
+
+      - name: Require the Linux checksum inventory
+        env:
+          LINUX_CHECKSUMS: ${{ needs.release-build.outputs.checksums }}
+        run: printf '%s\n' "${LINUX_CHECKSUMS}" | diff -u - dist/checksums.txt

@@ -183,3 +183,9 @@ Feature: HIPPO build artifacts
     Given the CI release asset build and validation steps
     When their command arguments are compared
     Then the validator receives the same exact commit as the builder
+
+  @e2e-exempt
+  Scenario: Release workflow requires a passing post-merge run for the tagged commit
+    Given the release workflow publishes a tagged commit
+    When the release workflow checks for a passing post-merge test run
+    Then publishing requires a successful main test run on the exact commit

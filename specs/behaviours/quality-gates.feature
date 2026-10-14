@@ -30,6 +30,14 @@ Feature: HIPPO quality gates
     And the quick gate invokes deterministic core coverage at 99 percent
 
   @e2e-exempt
+  Scenario: Full gate runs after merge on main, not on pull requests
+    When post-merge gate wiring is inspected
+    Then the pull request gate runs no full gate matrix
+    And the post-merge workflow runs the full gate on push to main on both operating systems
+    And the post-merge workflow is never cancelled by a later commit
+    And the macOS release reproducibility check runs after merge only
+
+  @e2e-exempt
   Scenario: Stable lifecycle wiring is complete
     When stable lifecycle wiring is inspected
     Then the hooks and pull request caller dispatch only closed v0.4 surfaces

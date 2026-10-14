@@ -191,6 +191,7 @@ type Driver struct {
 	e2ePlacement             bool
 	conventionalCommits      bool
 	pullRequestOnlyGate      bool
+	postMerge                postMergeWiring
 	sharedDocumentationCheck bool
 	pinnedValidatorsRun      bool
 	threeHarnessProfiles     bool

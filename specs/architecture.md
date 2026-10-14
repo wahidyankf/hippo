@@ -382,8 +382,9 @@ while a `release monitor` that reaches its own duration exits `0`.
 - Tagged release assets are immutable and originate from the exact full lowercase `HEAD` commit in a clean checkout. The
   owned script builds from an isolated exact-commit materialization for the supported OS/architecture matrix. Validation
   requires exactly four checksummed archives, one regular mode-755 member each, matching clean VCS/native identity, and
-  rejects link or special members before extraction. The workflow peels the tag and requires its commit to be reachable
-  from `origin/main` without adding Actions artifact, package, or cache storage.
+  rejects link or special members before extraction. The workflow peels the tag, requires its commit to be reachable
+  from `origin/main`, and requires a successful post-merge main-test run for that commit before publishing, without
+  adding Actions artifact, package, or cache storage.
 
 ## Behaviour Traceability
 

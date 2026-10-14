@@ -898,6 +898,9 @@ func (driver *Driver) artifactBindings() []contract.StepBinding {
 		step(`^the CI release asset build and validation steps$`, prepare("CI release commit identity", requireV04CIValidatorCommit)),
 		step(`^their command arguments are compared$`, driver.exerciseReservationScenarioV04),
 		step(`^the validator receives the same exact commit as the builder$`, assert("CI release commit identity")),
+		step(`^the release workflow publishes a tagged commit$`, prepare("release post-merge test", requireV04ReleasePostMergeTestGate)),
+		step(`^the release workflow checks for a passing post-merge test run$`, driver.exerciseReservationScenarioV04),
+		step(`^publishing requires a successful main test run on the exact commit$`, assert("release post-merge test")),
 	}
 }
 
@@ -924,6 +927,11 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^contributor gate wiring is inspected$`, driver.inspectContributorEnforcement),
 		step(`^one commit-message gate binds the canonical hook message and reviewed pull request range$`, driver.requireConventionalCommits),
 		step(`^the quality gate runs on pull requests rather than pushes$`, driver.requirePullRequestOnlyGate),
+		step(`^post-merge gate wiring is inspected$`, driver.inspectPostMergeGate),
+		step(`^the pull request gate runs no full gate matrix$`, driver.requireNoFullGateOnPullRequests),
+		step(`^the post-merge workflow runs the full gate on push to main on both operating systems$`, driver.requirePostMergeFullGate),
+		step(`^the post-merge workflow is never cancelled by a later commit$`, driver.requirePostMergeNotCancelled),
+		step(`^the macOS release reproducibility check runs after merge only$`, driver.requireReproducibilityAfterMerge),
 		step(`^stable lifecycle wiring is inspected$`, driver.inspectDocumentationGate),
 		step(`^the hooks and pull request caller dispatch only closed v0.4 surfaces$`, driver.requireSharedDocumentationCheck),
 		step(`^the declared main and pull request runners retain every owned policy validator$`, driver.requirePinnedValidatorsRun),

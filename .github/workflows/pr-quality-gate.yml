@@ -44,42 +44,13 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
-      # `scripts/test.sh` runs this too, inside a job that takes minutes on two
-      # operating systems. Named again here because the pre-commit format gate only ever sees
-      # staged paths, so formatting is the one hook contract with no independent
+      # `scripts/test.sh` runs this too, after merge in the main test workflow.
+      # Named here because the pre-commit format gate only ever sees staged
+      # paths, so formatting is the one hook contract with no independent
       # signal -- and a formatting failure should be legible in the job list
       # rather than found by reading a long test log.
       - name: Formatters and Prettier across the repository
         run: ./scripts/format-check.sh
-
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci --ignore-scripts
-
-      # A superset of the quick gate `.husky/pre-push` runs. This adds the
-      # integration and E2E adapters, race detection, and a vulnerability scan
-      # -- boundaries a hook has no business making someone wait for, on two
-      # operating systems a workstation cannot provide at once.
-      - run: ./scripts/test.sh
 
   repository-contract:
     name: Repository contract
@@ -180,47 +151,13 @@ jobs:
     outputs:
       checksums: ${{ steps.inventory.outputs.checksums }}
 
-  release-reproducibility:
-    name: Release reproducibility
-    # The archives must depend on the commit alone, not on the machine that
-    # built them: macOS ships a different tar, gzip, and filesystem from the
-    # Linux runner that publishes releases. Rebuilding the same commit here and
-    # requiring the Linux job's checksums byte for byte proves it on every pull
-    # request, before a release tag ever relies on it.
-    needs: [release-build]
-    runs-on: macos-15
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Build all supported assets
-        run: ./scripts/build-release.sh v0.0.0 "$GITHUB_SHA" dist
-
-      - name: Require the Linux checksum inventory
-        env:
-          LINUX_CHECKSUMS: ${{ needs.release-build.outputs.checksums }}
-        run: printf '%s\n' "${LINUX_CHECKSUMS}" | diff -u - dist/checksums.txt
-
   quality-gate:
     name: Quality gate
     # The single required status check. Branch protection names one context, so
     # adding or splitting a job below never means editing the ruleset -- and a
     # job that is added but forgotten here still cannot pass unnoticed, because
     # `needs` fails the aggregate when any dependency does.
-    needs:
-      [
-        formatting,
-        test,
-        repository-contract,
-        consumer-bootstrap,
-        release-build,
-        release-reproducibility,
-      ]
+    needs: [formatting, repository-contract, consumer-bootstrap, release-build]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

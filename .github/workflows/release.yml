@@ -6,6 +6,7 @@ on:
       - "v*.*.*"
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -26,6 +27,19 @@ jobs:
           tag_commit=$(git rev-parse "$GITHUB_REF_NAME^{}")
           test "$tag_commit" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$tag_commit" origin/main
+      # The full gate runs after merge, so a commit can reach main before its
+      # test run has passed. A tag is permanent: refuse to publish until that run
+      # passes, and re-run this workflow once it does.
+      - name: Require a passing main test run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          passed=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/main-test.yml/runs?head_sha=$GITHUB_SHA&status=success" --jq '.total_count')
+          if [ "${passed}" -lt 1 ]; then
+            echo "No passing main-test run exists for $GITHUB_SHA." >&2
+            exit 1
+          fi
       - name: Build release assets
         run: ./scripts/build-release.sh "$GITHUB_REF_NAME" "$GITHUB_SHA" dist
       - name: Verify release assets
