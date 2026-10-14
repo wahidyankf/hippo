@@ -9,8 +9,10 @@ when_to_use: >-
 # Authorized Task Branch Sync
 
 Adapted from the catalog contract of the same name at commit `9e15c702ef01187f5a3fafca975d2891854c0495`. What changed:
-steps 3, 7, and 8 name this repository's clean-up, push review, hook verification, and merge preconditions, and the
-closing paragraph names [data safety](../public-repository-data-safety.md) for the secret boundaries.
+step 2 starts from `git fetch origin`; step 3 retires the recovery copy under this repository's clean-up; step 6 links
+the incoming diff review at [integration path](../integration-path.md#requirements); steps 7 and 8 name this
+repository's push review, hook verification, and merge preconditions; and the closing paragraph names
+[data safety](../public-repository-data-safety.md) for the secret boundaries.
 
 ## Contract
 
