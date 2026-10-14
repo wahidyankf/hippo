@@ -223,7 +223,7 @@ func (observer *linuxCollectorObserver) linuxWitnessHarvest(tid int, initial boo
 			observer.detached++
 			return linuxWitnessHarvest{}, nil
 		}
-		return linuxWitnessHarvest{}, fmt.Errorf("owned linux thread %d terminated before detach handoff: status=%d", tid, status)
+		return linuxWitnessHarvest{}, fmt.Errorf("owned linux thread %d terminated before detach handoff: status=%d leader=%d", tid, status, observer.leader)
 	}
 	result, err := observer.stop(tid, status, initial)
 	return linuxWitnessHarvest{result: result, acquired: true}, err
