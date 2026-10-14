@@ -228,6 +228,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Behavior adapter wiring is complete", Boundary: testHarnessBoundary, Reason: "adapter registration is outside the compiled binary boundary"},
 		{Scenario: "Contributor gate wiring is complete", Boundary: repositoryConfigBoundary, Reason: "hooks and CI configuration are outside the compiled binary boundary"},
 		{Scenario: "Stable lifecycle wiring is complete", Boundary: repositoryConfigBoundary, Reason: "gate script and workflow text are outside the compiled binary boundary"},
+		{Scenario: "Full gate runs after merge on main, not on pull requests", Boundary: repositoryConfigBoundary, Reason: "workflow text is outside the compiled binary boundary"},
+		{Scenario: "Release workflow requires a passing post-merge run for the tagged commit", Boundary: repositoryConfigBoundary, Reason: "release workflow text is outside the compiled binary boundary"},
 		{Scenario: "Gate scripts clear the redirecting Git environment", Boundary: repositoryConfigBoundary, Reason: "gate script text is outside the compiled binary boundary"},
 		{Scenario: "Every package with tests runs in a gate", Boundary: repositoryConfigBoundary, Reason: "gate script text and the package tree are outside the compiled binary boundary"},
 		{Scenario: "Hexagonal dependency boundaries stay enforced", Boundary: repositoryConfigBoundary, Reason: "production source imports and architecture fixtures are outside the compiled binary boundary"},
