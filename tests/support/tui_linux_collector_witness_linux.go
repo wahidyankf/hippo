@@ -281,14 +281,7 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 		return linuxStopResult{}, errors.New("linux witness refuses unexpected exec or fork event")
 	}
 	if signal == syscall.Signal(int(syscall.SIGTRAP)|0x80) {
-		info, err := linuxWitnessSyscallInfo(tid)
-		if err != nil {
-			return linuxStopResult{}, err
-		}
-		thread.observation.held.Kind = 4
-		thread.observation.syscall(info.Operation, info.Data[0])
-		observer.stopped[tid] = 0
-		return observer.syscall(tid, info)
+		return observer.linuxWitnessSyscallStop(tid, thread)
 	}
 	if signal == syscall.SIGSTOP && thread.initial {
 		thread.observation.held.Kind = 5
@@ -301,6 +294,41 @@ func (observer *linuxCollectorObserver) stop(tid int, status syscall.WaitStatus,
 	thread.observation.held.Kind = 6
 	observer.stopped[tid] = int(signal)
 	return linuxStopResult{}, nil
+}
+
+// linuxWitnessSyscallStop classifies one TRACESYSGOOD stop. A thread that
+// died between its stop report and the info query retires as detached;
+// every other failure stays fail-closed.
+func (observer *linuxCollectorObserver) linuxWitnessSyscallStop(tid int, thread *linuxWitnessThread) (linuxStopResult, error) {
+	info, err := linuxWitnessSyscallInfo(tid)
+	if err != nil {
+		if observer.linuxWitnessRetiredVanished(tid, err) {
+			return linuxStopResult{}, nil
+		}
+		return linuxStopResult{}, err
+	}
+	thread.observation.held.Kind = 4
+	thread.observation.syscall(info.Operation, info.Data[0])
+	observer.stopped[tid] = 0
+	return observer.syscall(tid, info)
+}
+
+// linuxWitnessRetiredVanished retires a thread that vanished between its
+// stop report and a follow-up kernel query. Only a reaped clean non-leader
+// exit qualifies; a wait failure, an unreaped thread and every other
+// terminal state propagate the original failure.
+func (observer *linuxCollectorObserver) linuxWitnessRetiredVanished(tid int, original error) bool {
+	if !errors.Is(original, syscall.ESRCH) {
+		return false
+	}
+	var status syscall.WaitStatus
+	pid, err := syscall.Wait4(tid, &status, syscall.WNOHANG|syscall.WALL, nil)
+	if !linuxWitnessVanishedDecision(err, pid, status, tid == observer.leader) {
+		return false
+	}
+	delete(observer.threads, tid)
+	observer.detached++
+	return true
 }
 
 func linuxWitnessSyscallInfo(tid int) (linuxSyscallInfo, error) {
