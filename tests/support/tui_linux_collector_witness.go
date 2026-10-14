@@ -219,6 +219,18 @@ func linuxWitnessTerminalRetire(leader bool, status syscall.WaitStatus) bool {
 	return !leader && status.Exited() && status.ExitStatus() == 0
 }
 
+// linuxWitnessVanishedDecision reports whether a thread that vanished
+// between its stop report and a follow-up kernel query retires as detached.
+// Only a reaped clean non-leader exit qualifies; every wait failure, every
+// unreaped thread and every other terminal state stays fail-closed. Any wait
+// error, including an interrupted wait, counts as unobserved.
+func linuxWitnessVanishedDecision(waitErr error, wpid int, status syscall.WaitStatus, leader bool) bool {
+	if waitErr != nil || wpid == 0 {
+		return false
+	}
+	return linuxWitnessTerminalRetire(leader, status)
+}
+
 // This consumer owns the complete known-TID scan; the native adapter alone
 // owns Wait4, stop classification, cohort changes and held-stop retirement.
 type linuxWitnessFrontierSource interface {
