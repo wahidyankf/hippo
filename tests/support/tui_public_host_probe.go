@@ -834,9 +834,16 @@ func (probe *PublicTUIHostProbe) handleDarwin(connection net.Conn) {
 	err = acknowledged.err
 	if err != nil {
 		phase := "read-error"
-		if errors.Is(err, io.EOF) {
+		switch {
+		case errors.Is(err, io.EOF):
 			phase = tuiCanceledEOFPhase
-		} else {
+		case errors.Is(err, syscall.ECONNRESET):
+			// The candidate cancels its collector when its terminal output fails.
+			// A helper killed with this response still unread resets the
+			// connection instead of closing it. The earlier waits have sent the
+			// helper nothing, so only an EOF can end them.
+			phase = tuiCanceledResetPhase
+		default:
 			probe.retainError(publicHostRetainedDecodeError(acknowledged))
 		}
 		probe.completeDarwin(reading, request, phase)
