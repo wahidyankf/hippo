@@ -19,8 +19,9 @@ Two entry points share one judgement:
 
 - **Push.** Before any push to `origin`, review the outgoing range privately per
   [push review](pr-leak-review/002-push-review.md). Nothing is posted; a finding blocks the push.
-- **Merge.** A pull request is open, and no `pass` record from the repository owner exists for its current head.
-  `pull-request` (`string`, required): its number or address.
+- **Merge.** A pull request is open, and no `pass` record from the repository owner exists for its current head. The
+  delivery harness runs this workflow for that head before merge. `pull-request` (`string`, required): its number or
+  address.
 
 ## Sequence
 
