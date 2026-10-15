@@ -46,7 +46,8 @@ A convention chooses a path. It does not authorize anyone to walk it; see
 - [Structure](structure/README.md) — where each kind of adopted catalog artifact lives.
 - [SWE agent procedures](swe-agent-procedures/README.md) — the procedure sections moved out of three `swe-*` agent
   definitions to fit their word budget.
-- [SWE delegation](swe-delegation.md) — coding work goes to the fitting `swe-*` agent, with three exceptions.
+- [SWE delegation](swe-delegation.md) — every change to code or declarative configuration goes to the fitting `swe-*`
+  agent, with two exceptions.
 - [Task tracking](task-tracking.md) — task state lives in the repository.
 - [Thematic commits](thematic-commits.md) — one theme per commit.
 - [Working tree](working-tree.md) — what stays ignored.

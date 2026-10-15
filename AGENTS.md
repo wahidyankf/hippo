@@ -58,7 +58,7 @@ done: [software quality enforcement](repo-governance/development/software-qualit
 Go and shell stack standards, and every local deviation: the
 [repository adapter](repo-governance/development/quality/stacks/repository-adapter.md).
 
-Coding work: [SWE delegation](repo-governance/conventions/swe-delegation.md).
+Coding work, including configuration and trivial edits: [SWE delegation](repo-governance/conventions/swe-delegation.md).
 
 A pinned RHINO or FERRET defect: [upstream tool defects](repo-governance/development/upstream-tool-defects.md).
 
