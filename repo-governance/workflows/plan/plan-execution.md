@@ -4,7 +4,10 @@
 
 A plan in `plans/in-progress/` with its checklist ready. A [quality-gate](../quality/plan-quality-gate.md) verdict, when
 recorded, is advisory history: a `FAIL` or `BLOCKED` row keeps its owner. Execution starts with or without a verdict and
-never runs the gate itself; a missing verdict is recorded as `plan-quality-gate: not run (manual-only)`.
+never runs the gate itself; a missing verdict is recorded as `plan-quality-gate: not run (manual-only)`. Before
+starting, resolve every dependency the plan declares under
+[Plan-Order Graph](../../conventions/plans/012-plan-order-graph.md): each must already be satisfied, or the run stops
+and names the unmet one. A missing declaration reads as no dependencies.
 
 ## Sequence
 
