@@ -71,3 +71,9 @@ The test for `delivery.md` is whether an executor with no memory of the plan can
 That means recording results, not only ticks. A ticked box says an action happened; it does not say what it produced,
 what it changed, or what surprised the person doing it. Each completed item carries enough of that to be audited later
 without re-running it.
+
+## Delivery Units Reach Review Together
+
+Cycles run batched per delivery unit: one RED and GREEN per unit, except small changes and single fixes. Each unit lands
+in its own pull request at its boundary unless a hard constraint joins them. Unrelated failures in one RED run mean the
+unit is too large: split it.
