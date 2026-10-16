@@ -35,10 +35,10 @@ missing declaration reads as no dependencies.
 | solid arrow       | hard dependency: the predecessor is done first                            |
 | dotted arrow      | soft order: the predecessor should land first, without blocking           |
 
-Every graph carries a title line and a description line naming the live plans and their dependencies. This
-repository draws conceptual diagrams as ASCII text: `[🔜 plan]` is backlog (blue fill `#0173B2`), `[🏗️ plan]` is
-in progress (teal fill `#029E73`), `-->` is a hard dependency, and `-.->` is soft order. Plans with no
-arrow between them may run in parallel.
+Every graph carries a title line and a description line naming the live plans and their dependencies. This repository
+draws conceptual diagrams as ASCII text: `[🔜 plan]` is backlog (blue fill `#0173B2`), `[🏗️ plan]` is in progress (teal
+fill `#029E73`), `-->` is a hard dependency, and `-.->` is soft order. Plans with no arrow between them may run in
+parallel.
 
 ```text
 [🔜 plan-a] --> [🏗️ plan-b]
