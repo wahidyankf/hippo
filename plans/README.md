@@ -40,3 +40,11 @@ change from here would be the blind propagation that document exists to prevent.
 - [Done](done/README.md) holds completed plans as dated delivery records.
 - [Ideas](ideas/README.md) holds two-pager briefs, grouped by urgency and importance.
 - [In progress](in-progress/README.md) holds the plans being executed now.
+
+## Plan Order
+
+No live plans: `backlog/` and `in-progress/` are both empty. The legend stays so the convention is visible where plans
+will appear. The graph is updated in the same change that moves, adds, or removes a plan, per
+[Plan-Order Graph](../repo-governance/conventions/plans/012-plan-order-graph.md).
+
+Legend: 🔜 blue = backlog; 🏗️ teal = in progress. Hexagon credentialed-machine steps do not apply here.
