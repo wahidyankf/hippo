@@ -13,3 +13,10 @@ node_modules/
 # Fixture data whose bytes are the fixture; a reformat changes what the suite tests.
 # See specs/fixtures/README.md.
 specs/fixtures/
+
+# Rhino owns these generated adapter bytes; formatting them would diverge from
+# the canonical `agents/` source.
+.agents/agents/*/AGENT.md
+.agents/agents/catalog.json
+.agents/agents/provenance.json
+

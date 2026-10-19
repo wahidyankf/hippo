@@ -458,6 +458,39 @@ harness:
               - mcp__serena__edit_memory
               - mcp__serena__execute_shell_command
               - mcp__serena__remove_project
+    - id: muse
+      supports:
+        capabilities:
+          - repository-read
+          - repository-write
+          - shell
+          - network
+          - subagent
+        constraints:
+          - read-only
+          - inline-result-only
+        routes:
+          - canonical-import
+        identities:
+          - description
+      agent-adapter:
+        path: ".agents/agents/{name}/AGENT.md"
+        format: front-matter
+        route-field: body
+        route:
+          "Before acting, read the complete canonical agent definition at the repository-root path\n{path} and follow it
+          as authoritative.\nIf it cannot be read, stop and report the missing path."
+        identity:
+          name: name
+          description: description
+        tier-fields:
+          model: model
+          effort: effort
+      tiers:
+        ultra: { model: muse-wonder-1.0, effort: high }
+        plan: { model: muse-spark-1.3, effort: xhigh }
+        execution: { model: muse-spark-1.3, effort: high }
+        fast: { model: muse-spark-1.3, effort: medium }
 policies:
   markdown:
     metadata:

@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "profile": "muse",
+  "sources": [
+    {
+      "id": "skill/applying-maker-checker-fixer",
+      "path": ".agents/skills/applying-maker-checker-fixer/SKILL.md",
+      "digest": "50c63c9084c1ce85e8a0284d2ad04af1608dbce77cb94aa47110b8aad188d664"
+    },
+    {
+      "id": "skill/assessing-criticality-confidence",
+      "path": ".agents/skills/assessing-criticality-confidence/SKILL.md",
+      "digest": "aff10b0a534e974dc7340a1ac55bbc64a5498c9223cf55fafb61ad22f38d4d51"
+    },
+    {
+      "id": "skill/building-command-line-interfaces",
+      "path": ".agents/skills/building-command-line-interfaces/SKILL.md",
+      "digest": "f7bab65b25c90b9fb216e2cb5087d846f7ff3c6588e2d20e51340428c072d2d0"
+    },
+    {
+      "id": "skill/developing-applications",
+      "path": ".agents/skills/developing-applications/SKILL.md",
+      "digest": "f15973c72b05de53c5f40d9ce9654e2f63971a12697a34677c5820cb83b6d582"
+    },
+    {
+      "id": "skill/generating-validation-reports",
+      "path": ".agents/skills/generating-validation-reports/SKILL.md",
+      "digest": "c3243bf1d0c2ce5827fa52773502331be2ca03e0594b8c7d63646d4cf4fa3b46"
+    },
+    {
+      "id": "skill/grill-me",
+      "path": ".agents/skills/grill-me/SKILL.md",
+      "digest": "4ace858d988ce3621b624d7e98a091ddf9893d03373ed2ab0d11fe4ee01ebe45"
+    },
+    {
+      "id": "skill/modeling-threats",
+      "path": ".agents/skills/modeling-threats/SKILL.md",
+      "digest": "9cea48d60621545d894b27574804988d478a3beb2cc01f611fffa8e2fcb5f694"
+    },
+    {
+      "id": "skill/plan-creating-project-plans",
+      "path": ".agents/skills/plan-creating-project-plans/SKILL.md",
+      "digest": "8ab8de225060c176ce26739608ff40da6b04d42ec0411066a7fe7868d6de30dd"
+    },
+    {
+      "id": "skill/plan-grooming-idea-briefs",
+      "path": ".agents/skills/plan-grooming-idea-briefs/SKILL.md",
+      "digest": "26f4ae89d4ae1189f58bf5d84ffdc5879166f3586fc678f28c41eeba09a28e14"
+    },
+    {
+      "id": "skill/plan-validating-quality",
+      "path": ".agents/skills/plan-validating-quality/SKILL.md",
+      "digest": "4c125c5101e186ce51ff3a236e2c0dfe7632fb051c59ade13c8dcb475f42bc2d"
+    },
+    {
+      "id": "skill/plan-verifying-execution",
+      "path": ".agents/skills/plan-verifying-execution/SKILL.md",
+      "digest": "1bf36e33d8a8e7e6eee592a91c66ab86d57273652c394e5469e59206fe85604a"
+    },
+    {
+      "id": "skill/plan-writing-gherkin-criteria",
+      "path": ".agents/skills/plan-writing-gherkin-criteria/SKILL.md",
+      "digest": "c8f6cbaa5d7a7bf6c13514ddfd6de1c343887b4aa839d4af348e2d3c2b16a29d"
+    },
+    {
+      "id": "skill/producing-review-findings",
+      "path": ".agents/skills/producing-review-findings/SKILL.md",
+      "digest": "3e33a15b55cba1966dee10af101a5b7075d73de18102894fb78df2d9e265c974"
+    },
+    {
+      "id": "skill/programming-golang",
+      "path": ".agents/skills/programming-golang/SKILL.md",
+      "digest": "bdbf64e108b9386861c33e4895abd91d0ba898dd84a41ce3d81655f8e1bc831a"
+    },
+    {
+      "id": "skill/programming-shell",
+      "path": ".agents/skills/programming-shell/SKILL.md",
+      "digest": "d7443b1701533049575fec22b26f472673af2ae32e105f2bc1cc9d5d7a981bb1"
+    },
+    {
+      "id": "skill/release-cut",
+      "path": ".agents/skills/release-cut/SKILL.md",
+      "digest": "e626b8b08eb13400a395f7e1b98af1bbb480be5a378c7f7c53be8b67675d6366"
+    },
+    {
+      "id": "skill/spec-impact-assessment",
+      "path": ".agents/skills/spec-impact-assessment/SKILL.md",
+      "digest": "499e9153dc8c89e2da27b5babb934c83079848d7964782ec1e2f802b0bb1a366"
+    },
+    {
+      "id": "skill/usability-heuristic-evaluation",
+      "path": ".agents/skills/usability-heuristic-evaluation/SKILL.md",
+      "digest": "ee53e3e0275e04c3100dea8455be73183ab9487ba1e7bd7dddc22d49e06c97b6"
+    },
+    {
+      "id": "skill/worktree-to-pr",
+      "path": ".agents/skills/worktree-to-pr/SKILL.md",
+      "digest": "3898127c579f58f62c4a948264c3a02ac6be917993471400df90f1f096e6c34e"
+    },
+    {
+      "id": "instruction",
+      "path": "AGENTS.md",
+      "digest": "3d9369a3af3e7239f16fda1e15b23736ab3c90fffa955f5f248cd90a96f0c630"
+    },
+    {
+      "id": "agent/ci-checker",
+      "path": "agents/ci-checker.md",
+      "digest": "e1919ece40dc14c5aefce8858d9c57154f518b661a74ddf5c0e616fdb18db855"
+    },
+    {
+      "id": "agent/ci-fixer",
+      "path": "agents/ci-fixer.md",
+      "digest": "5b95b92965ae0c40945d628fa4f7efb3ac4e122c4d671a1b7d89e3e02c31bdb7"
+    },
+    {
+      "id": "agent/docs-checker",
+      "path": "agents/docs-checker.md",
+      "digest": "a5b67079cb74f74c2e3ad103500dce1961e0da5dc8d1383f4781bd96453cd619"
+    },
+    {
+      "id": "agent/docs-fixer",
+      "path": "agents/docs-fixer.md",
+      "digest": "0fdc3d0418e70c562712cbd4fae01599e9cab36a974e8255fe55e84064d2cf06"
+    },
+    {
+      "id": "agent/harness-checker",
+      "path": "agents/harness-checker.md",
+      "digest": "8817c086500ceab30799c50172376e94110a110eac7b819b2ff8a5ab1bc70717"
+    },
+    {
+      "id": "agent/harness-fixer",
+      "path": "agents/harness-fixer.md",
+      "digest": "8f5be34c0a10a12e38d7fdcc47913da02222ddb2ea934ad0195b49348ebd7837"
+    },
+    {
+      "id": "agent/leak-reviewer",
+      "path": "agents/leak-reviewer.md",
+      "digest": "0d89afbc5f369ff6f9fb717317bc3a516544bc64ac4ec72f62f81b51fd0726e7"
+    },
+    {
+      "id": "agent/plan-checker",
+      "path": "agents/plan-checker.md",
+      "digest": "3b37143c0b4499bbd452fadbd3d2589065b0f2546733d10d24aff4359a798961"
+    },
+    {
+      "id": "agent/plan-execution-checker",
+      "path": "agents/plan-execution-checker.md",
+      "digest": "3e43aeeaf49633376388636733f8ac3fab0fa26d6903e411b8f985a3a8512d7c"
+    },
+    {
+      "id": "agent/plan-fixer",
+      "path": "agents/plan-fixer.md",
+      "digest": "a07edcb60c332fcd5c2ef11ec86ab9189b9c69244799aba8e2cc03e11b0b742a"
+    },
+    {
+      "id": "agent/plan-maker",
+      "path": "agents/plan-maker.md",
+      "digest": "80b389040d54797d17c614ed88efd9a20f18b289a6752aaaa037ff24ac3cbaa8"
+    },
+    {
+      "id": "agent/pr-review-checker",
+      "path": "agents/pr-review-checker.md",
+      "digest": "b2efa1a43812b5e87cf9e2cb6d1fc4d4b66d9f0720cff491a93b976e74effec7"
+    },
+    {
+      "id": "agent/pr-review-fixer",
+      "path": "agents/pr-review-fixer.md",
+      "digest": "c5c0281dba60368ad61a3a2da9ffc3fc1f0d05b3f889dd526e1ca9b2bf3c4118"
+    },
+    {
+      "id": "agent/rules-checker",
+      "path": "agents/rules-checker.md",
+      "digest": "5f74aa9cb30cea90bc0f5e46148de9f8eb39fa39bc0233670a54c3ad6e4ab62c"
+    },
+    {
+      "id": "agent/rules-fixer",
+      "path": "agents/rules-fixer.md",
+      "digest": "5757ea436fee7daf6af01f926cab7c7a6ce9741401ae9355f1fca1dc8f5b5c71"
+    },
+    {
+      "id": "agent/specs-checker",
+      "path": "agents/specs-checker.md",
+      "digest": "d7605735f2bb198094a8b5de00aa68c5c47a31f1ca01345ee28eab423f416c1c"
+    },
+    {
+      "id": "agent/specs-fixer",
+      "path": "agents/specs-fixer.md",
+      "digest": "3863d3ab9882e9e722d5f2d854b1247fba2a0068b25ca91ee18e195c082e0665"
+    },
+    {
+      "id": "agent/swe-architect",
+      "path": "agents/swe-architect.md",
+      "digest": "225e86fcf5f7de36ccac0c2347b1e6dd1aae6957a5af29923fce3d59b9daaf6c"
+    },
+    {
+      "id": "agent/swe-debugger",
+      "path": "agents/swe-debugger.md",
+      "digest": "1e565ada181ec98fd8f105d6df8c8a91fd1d0eee63de0797e47664eb73dbef6a"
+    },
+    {
+      "id": "agent/swe-developer",
+      "path": "agents/swe-developer.md",
+      "digest": "48062fbdebb853e888c8d1907a35dca625407a2c7dae4dd7e6b828b33f6b8858"
+    },
+    {
+      "id": "agent/swe-orchestrator",
+      "path": "agents/swe-orchestrator.md",
+      "digest": "1d1465d7acd0c62c187212944c7e9db771c520e0818886713d4d8a257c7357f3"
+    },
+    {
+      "id": "agent/swe-releaser",
+      "path": "agents/swe-releaser.md",
+      "digest": "954a62e6455ddc43af52f607683141879a7004d1778f0e0a640796bad9e359d2"
+    },
+    {
+      "id": "agent/swe-reviewer",
+      "path": "agents/swe-reviewer.md",
+      "digest": "5da4614aae7eb2ace8985ddc2b090b0b02e4a15c2671e2df1ae59342e6cb1573"
+    },
+    {
+      "id": "agent/swe-usability-tester",
+      "path": "agents/swe-usability-tester.md",
+      "digest": "b53461880ada8a7aa603ff85eb6483877f36778e11f04e5f5a7d17a863eaa908"
+    }
+  ]
+}
