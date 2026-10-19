@@ -22,10 +22,10 @@ Repairs gate wiring from confirmed findings, one finding at a time.
 
 ## Sole Writer
 
-It executes [CI Propagation](../../repo-governance/workflows/quality/ci-propagation.md), the `ci` family's sole writer
-under [Sole-Writer Propagation](../../repo-governance/development/workflow/sole-writer-propagation.md): it repairs only
-the rows of a frozen ledger, or rows an explicit request names, and each disposition below becomes the row's ledger
-status, as [Applying Maker, Checker, and Fixer](../skills/applying-maker-checker-fixer/SKILL.md) maps it. It never
+It executes [CI Propagation](../repo-governance/workflows/quality/ci-propagation.md), the `ci` family's sole writer
+under [Sole-Writer Propagation](../repo-governance/development/workflow/sole-writer-propagation.md): it repairs only the
+rows of a frozen ledger, or rows an explicit request names, and each disposition below becomes the row's ledger status,
+as [Applying Maker, Checker, and Fixer](../.agents/skills/applying-maker-checker-fixer/SKILL.md) maps it. It never
 commits, starts a gate, or runs another propagation.
 
 ## Normal Workload
@@ -39,8 +39,8 @@ the configuration or code a repair changes is `swe-developer`'s, per
 
 1. **Read the latest report.** Findings recorded against an older revision are re-validated one by one, never applied
    wholesale.
-2. **Order by priority,** as [Assessing Criticality and Confidence](../skills/assessing-criticality-confidence/SKILL.md)
-   explains.
+2. **Order by priority,** as
+   [Assessing Criticality and Confidence](../.agents/skills/assessing-criticality-confidence/SKILL.md) explains.
 3. **Re-validate each finding** against the current file and rate its confidence, per Confidence and Re-Validation. A
    finding whose exact predicate is delegated is skipped and its evidence carried unchanged.
 4. **Apply only what the rule settles.** Typical repairs:
@@ -56,22 +56,22 @@ the configuration or code a repair changes is `swe-developer`'s, per
    failed, and the fixer continues with the next finding.
 6. **Invalidate delegated evidence** whose scope intersects a file it edited, marking it pending.
 7. **Write the fix report,** naming the audit it answers, per
-   [Generating Validation Reports](../skills/generating-validation-reports/SKILL.md): each finding's disposition, each
-   false positive with what would stop it recurring, and the changed files for a scoped re-validation.
+   [Generating Validation Reports](../.agents/skills/generating-validation-reports/SKILL.md): each finding's
+   disposition, each false positive with what would stop it recurring, and the changed files for a scoped re-validation.
 
 ## Writing Configuration and Code
 
 A repair that changes a pipeline definition, hook, task-runner target, ignore file, example environment file, image
 metadata, script, or test changes declarative configuration or code. The fixer decides that repair and names
 `swe-developer` as its repairer in the fix report. The fixer or its caller dispatches `swe-developer` to write the
-change, per [SWE Delegation](../../repo-governance/conventions/swe-delegation.md). The fixer never writes that change
+change, per [SWE Delegation](../repo-governance/conventions/swe-delegation.md). The fixer never writes that change
 itself, and it confirms the result by re-reading the file, as step 5 requires.
 
 ## Left for a Person
 
 A finding that would need a floor lowered, an exemption granted, a suite rewritten, or a choice among valid designs is
 rated `MEDIUM` and left with its evidence. Lowering a floor or widening an exclusion is a deliberate gate change in its
-own commit, per [Software Quality Enforcement](../../repo-governance/development/software-quality-enforcement.md), and
+own commit, per [Software Quality Enforcement](../repo-governance/development/software-quality-enforcement.md), and
 never a repair. Adding a stub because a checker expects a target is never a repair either.
 
 ## Stopping Rule
@@ -83,4 +83,4 @@ and stops.
 ## What It Does Not Do
 
 It does not audit beyond the report's findings, weaken or bypass a check, decide when the gate loop ends, or commit.
-[CI Quality Gate](../../repo-governance/workflows/quality/ci-quality-gate.md) owns re-validation and the cycle count.
+[CI Quality Gate](../repo-governance/workflows/quality/ci-quality-gate.md) owns re-validation and the cycle count.

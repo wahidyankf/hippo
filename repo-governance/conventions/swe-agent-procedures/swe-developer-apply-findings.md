@@ -8,8 +8,8 @@ when_to_use: >-
 
 # SWE Developer Apply Findings
 
-Moved verbatim from [swe-developer](../../../.agents/agents/swe-developer.md), which links each section here, per
-Document Word Budget.
+Moved verbatim from [swe-developer](../../../agents/swe-developer.md), which links each section here, per Document Word
+Budget.
 
 ## Apply Findings
 

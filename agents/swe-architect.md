@@ -41,7 +41,7 @@ Before implementation, when a task touches a module boundary, adds a dependency,
 settles.
 
 The rest of this section is in
-[SWE Architect Modes](../../repo-governance/conventions/swe-agent-procedures/swe-architect-modes.md#design); read it in
+[SWE Architect Modes](../repo-governance/conventions/swe-agent-procedures/swe-architect-modes.md#design); read it in
 full before acting.
 
 ### Final Review
@@ -59,8 +59,8 @@ accepts the coordinator's placement. A new tradeoff also names the rule that wou
 plan-only change under Plan Document Route, it judges the design decisions the plan makes.
 
 The rest of this section is in
-[SWE Architect Modes](../../repo-governance/conventions/swe-agent-procedures/swe-architect-modes.md#lens); read it in
-full before acting.
+[SWE Architect Modes](../repo-governance/conventions/swe-agent-procedures/swe-architect-modes.md#lens); read it in full
+before acting.
 
 ## Adopter Decision: ADR location
 

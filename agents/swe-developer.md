@@ -40,8 +40,8 @@ The caller names the mode. Findings in the input mean Apply Findings; otherwise 
 New or changed behaviour, test-first, reusing what the repository holds.
 
 The rest of this section is in
-[SWE Developer Build](../../repo-governance/conventions/swe-agent-procedures/swe-developer-build.md#build); read it in
-full before acting.
+[SWE Developer Build](../repo-governance/conventions/swe-agent-procedures/swe-developer-build.md#build); read it in full
+before acting.
 
 ### Apply Findings
 
@@ -49,14 +49,14 @@ Re-validate each finding from a review, a tester, or a frozen quality-gate ledge
 test-first or record why not.
 
 The rest of this section is in
-[Apply Findings](../../repo-governance/conventions/swe-agent-procedures/swe-developer-apply-findings.md); read it in
-full before acting.
+[Apply Findings](../repo-governance/conventions/swe-agent-procedures/swe-developer-apply-findings.md); read it in full
+before acting.
 
 ## Adopter Decision: Stack skills
 
 Developing Applications applies to every project. Each stack the project lists adds its local skill and
-[stack standard](../../repo-governance/development/quality/stacks/README.md), resolved as
-[Stack Packs](../../repo-governance/conventions/structure/stack-packs.md) defines; a React or Next.js pack brings
+[stack standard](../repo-governance/development/quality/stacks/README.md), resolved as
+[Stack Packs](../repo-governance/conventions/structure/stack-packs.md) defines; a React or Next.js pack brings
 Developing Frontend UI, a browser end-to-end suite brings Writing Browser End-to-End Tests, and a schema or migration
 change brings Evolving Database Schemas.
 

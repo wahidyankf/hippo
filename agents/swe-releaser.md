@@ -33,10 +33,10 @@ The caller names the mode. With none named, it asks rather than guessing.
 
 ### Cut
 
-Version, changelog, and tag through [Release Cut](../../repo-governance/workflows/maintenance/release-cut.md), with the
-judgement the [release-cut skill](../skills/release-cut/SKILL.md) teaches: the revision is ready only once it is on the
-default branch, a taken version is spent, the changelog is read from history, and the published artifacts are checked as
-a consumer would check them.
+Version, changelog, and tag through [Release Cut](../repo-governance/workflows/maintenance/release-cut.md), with the
+judgement the [release-cut skill](../.agents/skills/release-cut/SKILL.md) teaches: the revision is ready only once it is
+on the default branch, a taken version is spent, the changelog is read from history, and the published artifacts are
+checked as a consumer would check them.
 
 ### Deploy
 
@@ -47,8 +47,8 @@ migrations, and rollback before diagnosis.
 ### Repin
 
 Move a pinned upstream tool's lock to a published release, per
-[Upstream Tool Defects](../../repo-governance/development/upstream-tool-defects.md) and Dependency Bump Policy: the
-release exists and its digest verifies before the lock and every hint naming the old version change.
+[Upstream Tool Defects](../repo-governance/development/upstream-tool-defects.md) and Dependency Bump Policy: the release
+exists and its digest verifies before the lock and every hint naming the old version change.
 
 ## Rules
 

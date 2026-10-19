@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.13.0/schemas/repo-config/v2.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.15.0/schemas/repo-config/v2.schema.json
 # HIPPO owns this consumer policy. RHINO owns the schema and renderer; the
 # repository declares only its lifecycle, canonical harness, and validators.
 
@@ -18,6 +18,7 @@ scan:
     - worktrees
 
 harness:
+  agents-root: agents
   canonical:
     agents:
       name: name
@@ -463,9 +464,9 @@ policies:
       surfaces:
         - glob: ".agents/skills/*/SKILL.md"
           schema: skill
-        - glob: ".agents/agents/*.md"
+        - glob: "agents/*.md"
           schema: agent
-        - glob: ".agents/agents/README.md"
+        - glob: "agents/README.md"
           schema: governance
     internal-link:
       exclude-sources:
@@ -493,7 +494,7 @@ policies:
     # Owner: repo-governance/development/workflow/quality-gate-adapter.md
     quality-gates:
       root: repo-governance/workflows
-      agents: .agents/agents
+      agents: agents
       groups: [plan, quality, maintenance]
       gate-group: quality
       gate-headings:

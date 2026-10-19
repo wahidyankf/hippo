@@ -11,7 +11,7 @@ when_to_use: >-
 Canonical agent definitions. Each declares its identity, its tier, the capabilities it needs, the constraints it keeps,
 and nothing about any particular harness. The per-harness wrappers under `.claude/`, `.codex/`, and `.opencode/` are
 generated from these only by `./rhino harness adapters generate` and are never edited in place; see the
-[coding harness contract](../../repo-governance/conventions/coding-harness-contract.md).
+[coding harness contract](../repo-governance/conventions/coding-harness-contract.md).
 
 ## Planning
 
@@ -23,7 +23,7 @@ generated from these only by `./rhino harness adapters generate` and are never e
 ## Quality Gates
 
 One checker and one fixer per gate family, under the
-[quality gate contract](../../repo-governance/development/workflow/quality-gate-contract.md). Each checker reports and
+[quality gate contract](../repo-governance/development/workflow/quality-gate-contract.md). Each checker reports and
 changes nothing; each fixer runs its family's propagation on a frozen ledger.
 
 - [docs-checker](docs-checker.md) and [docs-fixer](docs-fixer.md) — human-facing documents.
@@ -42,7 +42,7 @@ changes nothing; each fixer runs its family's propagation on a frozen ledger.
 ## Software Development
 
 Adopted from the shared catalog. Each loads a project's stack skill and standard on demand from the inventory; see the
-[repository adapter](../../repo-governance/development/quality/stacks/repository-adapter.md).
+[repository adapter](../repo-governance/development/quality/stacks/repository-adapter.md).
 
 - [swe-architect](swe-architect.md) — designing boundaries before a build, reviewing it after, and the architecture
   review lens
