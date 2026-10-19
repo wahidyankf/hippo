@@ -1,8 +1,8 @@
 # Command Code Bindings
 
 The Command Code profile in [`repo-config.yml`](../repo-config.yml) selects native leaf agents. Their adapters import
-the authoritative definitions in [`.agents/agents/`](../.agents/agents/README.md).
-[`agents/catalog.json`](agents/catalog.json) records the generated native selection.
+the authoritative definitions in [`agents/`](../agents/README.md). [`agents/catalog.json`](agents/catalog.json) records
+the generated native selection.
 
 Generate adapters with `./rhino harness adapters generate`; validate them with `./rhino harness adapters validate`.
 Change the canonical definitions or profile instead of editing generated routes.

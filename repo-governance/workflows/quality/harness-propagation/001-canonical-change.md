@@ -7,8 +7,8 @@ automatically, with no ledger. The contract itself is
 
 ## 1. Change the Canon First
 
-`AGENTS.md`, `.agents/skills/<name>/SKILL.md`, or `.agents/agents/<name>.md`. Never an adapter first — an adapter edited
-ahead of the canon is a divergence that the validator will report as the adapter's fault.
+`AGENTS.md`, `.agents/skills/<name>/SKILL.md`, or `agents/<name>.md`. Never an adapter first — an adapter edited ahead
+of the canon is a divergence that the validator will report as the adapter's fault.
 
 ## 2. Prove the Divergence
 
