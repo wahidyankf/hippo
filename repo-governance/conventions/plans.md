@@ -21,6 +21,7 @@ is what a validator checks against.
 10. [Bug-Fix Plan](plans/010-bug-fix-plan.md)
 11. [Dependency Graph and Recovery](plans/011-dependency-graph-and-recovery.md)
 12. [Plan-Order Graph](plans/012-plan-order-graph.md)
+13. [Migration Numbers](plans/013-migration-numbers.md)
 
 ## What This Convention Does Not Decide
 
