@@ -3,7 +3,7 @@
 One canonical instruction body, expressed in each harness's own surface. Harnesses do not get their own rules; they get
 their own spelling of the same rules.
 
-`./rhino harness adapters validate` compares the complete native adapter tree with the canonical sources and four
+`./rhino harness adapters validate` compares the complete native adapter tree with the canonical sources and five
 profiles declared in [`repo-config.yml`](../../repo-config.yml). Generated catalog and provenance artifacts identify the
 exact sources and their digests.
 
@@ -11,10 +11,12 @@ exact sources and their digests.
 
 - **Instructions**: root [`AGENTS.md`](../../AGENTS.md). It is the only instruction body. Every other harness-facing
   instruction file is an adapter that routes to it and adds nothing.
-- **Skills**: `.agents/skills/<name>/SKILL.md`. Codex and OpenCode read that path natively; Claude receives the
-  generated native route.
+- **Skills**: `.agents/skills/<name>/SKILL.md`. Muse, Codex, OpenCode, and Command Code read that path natively; Claude
+  Code does not read it and receives the generated native route instead.
 - **Agents**: `agents/<name>.md`, carrying its own declaration — its tier, the capabilities it needs, the constraints it
-  keeps, and any agents it dispatches.
+  keeps, and any agents it dispatches. Generated `.agents/agents/<id>/AGENT.md` adapters are read as project subagents
+  only by Muse: their model and effort pins are the `muse` profile's tier mapping, not canonical content, and no other
+  harness reads that tree.
 
 ## Adapters
 
