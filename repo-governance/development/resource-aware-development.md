@@ -39,7 +39,9 @@ one status need opposite responses.
   admission would deadlock on itself.
 
 Never bypass the guard in a repository that uses it, and never abandon a deferred invocation rather than waiting. See
-[public contract](public-contract.md).
+[public contract](public-contract.md). A pre-push hook the guard stopped before any check started may take the one-push
+exception in [Capacity-Held Hook](../conventions/push-hook-verification/001-capacity-held-hook.md); reaching it never
+bypasses this guard, and the guard's admission stays exactly as declared.
 
 ## External Nx Cache Eviction
 

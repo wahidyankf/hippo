@@ -5,7 +5,9 @@ When a hook fails, fix the cause. Never bypass it.
 ## The Rule
 
 `--no-verify` is prohibited without explicit authorization from the user for that specific push. There is no standing
-permission, and no situation in which "the hook is slow" or "the failure is unrelated" is sufficient reason.
+permission, and no situation in which "the hook is slow" or "the failure is unrelated" is sufficient reason. The one
+exception — a guard stop before any check started, on a human-authorized push of a task-owned branch whose hosted
+pull-request gate mirrors the hook — lives in [Capacity-Held Hook](push-hook-verification/001-capacity-held-hook.md).
 
 The hooks are `commit-msg` (Conventional Commits), `pre-commit` (staged formatting), and `pre-push` (the quick gate and
 the documentation gates). Each mirrors a job in the [pull-request gate](../development/quality-gates.md), so a bypassed
