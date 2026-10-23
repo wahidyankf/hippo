@@ -7,6 +7,18 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.8.6] — Unreleased
+
+### Changed
+
+- Automatic CPU capacity now uses every CPU the host reports available. HIPPO held one CPU back for itself, so a 12-core
+  host offered 11 CPU, and a profile's concurrency was one lower than the host's CPU count. Capacity is now the
+  available parallelism, never below one CPU, and `maxCpu` still lowers it when set; a value at or above the host's CPU
+  count leaves every CPU available. Automatic shares divide the full count, so a `minimal` owner on a 12-core host now
+  reserves 12 CPU where it reserved 11, and a profile's concurrency follows the same count. A Mac that wants one CPU
+  kept for the desktop sets `maxCpu` to the core count minus one. No configuration key, exit status, or `hippo.*` code
+  changed.
+
 ## [v0.8.5] — 2026-10-07
 
 ### Fixed

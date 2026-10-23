@@ -106,10 +106,14 @@ before activating schema 3; a schema-3 launch returns protocol-mismatch exit `12
 | Field                  | Type    | Constraint                                                     |
 | ---------------------- | ------- | -------------------------------------------------------------- |
 | `mode`                 | string  | Omitted, empty, or `"reservation"`; any other value is refused |
-| `maxCpu`               | integer | Nonnegative. `0` means no extra cap                            |
+| `maxCpu`               | integer | Nonnegative. `0` means all host CPUs; see below                |
 | `maxMemoryMiB`         | integer | Nonnegative. If set, must be at least `256`                    |
 | `maxActiveOwners`      | integer | Nonnegative, at most `20`. `0` means the default of 20         |
 | `automaticOwnerShares` | object  | Profile name → share count, each between `1` and `20`          |
+
+`maxCpu` is the most CPUs HIPPO may allocate. `0`, or any value at or above the host's CPU count, leaves every CPU
+available. A Mac owner who wants one CPU kept for the desktop sets it to the core count minus one, for example `11` on a
+12-core machine.
 
 These fields may only _tighten_ safety. `maxMemoryMiB` below 256 and `maxActiveOwners` above 20 are rejected at load
 time with exit `125` naming `hippo.config.unreadable`, so a local file cannot weaken the compiled floors.
