@@ -27,6 +27,30 @@ Feature: Shared vector reservations
     Then both vector dimensions retain their exact four-share and two-share ceilings
 
   @e2e-exempt
+  Scenario Outline: Automatic CPU capacity is every host CPU up to the configured maximum
+    Given a host with <cpus> available CPUs and <setting>
+    When the safe CPU capacity of an automatic reservation is planned
+    Then the capacity is <capacity> CPUs
+
+    Examples:
+      | cpus | setting                     | capacity |
+      | 12   | no maximum CPU setting      | 12       |
+      | 12   | a maximum CPU setting of 8  | 8        |
+      | 12   | a maximum CPU setting of 16 | 12       |
+      | 1    | no maximum CPU setting      | 1        |
+
+  @e2e-exempt
+  Scenario Outline: Profile concurrency offers every host CPU
+    Given a host with <cpus> available CPUs
+    When the balanced profile is resolved on that host
+    Then the profile concurrency is <concurrency>
+
+    Examples:
+      | cpus | concurrency |
+      | 12   | 12          |
+      | 1    | 1           |
+
+  @e2e-exempt
   Scenario: Every development class consumes reservation capacity
     Given enough capacity for one owner of each development class
     When service ephemeral and transactional sessions are admitted

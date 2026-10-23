@@ -87,7 +87,9 @@ func v04Plan(cpu int, memory int64) guard.ReservationPlan {
 
 func requireV04Planning() error {
 	settings := v04ReservationPolicy()
-	for profile, expectedCPU := range map[policy.ProfileName]int{profileBalanced: 2, profileConstrained: 4, profileMinimal: 8} {
+	// The 9 host CPUs of v04ReservationSample, divided into 4, 2, and 1 owner
+	// shares and rounded up: every CPU is in the planned capacity.
+	for profile, expectedCPU := range map[policy.ProfileName]int{profileBalanced: 3, profileConstrained: 5, profileMinimal: 9} {
 		plan, err := coordination.PlanReservation(
 			v04ReservationSample(),
 			policy.Resolution{ResolvedProfile: profile, MemoryReserve: 4 * policy.GiB},

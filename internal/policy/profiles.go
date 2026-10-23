@@ -347,8 +347,7 @@ func profilePolicy(profile Profile, sample Sample) (Policy, int64, int64, int) {
 	}
 
 	diskReserve := clampPercent(diskCapacity, profile.DiskReservePercent, profile.DiskReserveMinBytes, profile.DiskReserveMaxBytes)
-	parallelism := max(1, sample.AvailableParallelism)
-	concurrency := max(1, parallelism-1)
+	concurrency := max(1, sample.AvailableParallelism)
 	if profile.MaxConcurrency > 0 {
 		concurrency = min(concurrency, profile.MaxConcurrency)
 	}

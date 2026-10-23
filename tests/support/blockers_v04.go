@@ -446,8 +446,8 @@ func requireV04CustomProfileReservation(root string) error {
 		Enabled: true, MaxCPU: configured.Coordination.MaxCPU, MaxMemoryBytes: configured.Coordination.MaxMemoryBytes,
 		MaxActiveOwners: configured.Coordination.MaxActiveOwners, OwnerShares: configured.Coordination.OwnerShares,
 	}, 0, 0)
-	if err != nil || plan.Allocated.CPU != 4 {
-		return fmt.Errorf("custom constrained allocation=%+v want cpu=4: %w", plan.Allocated, err)
+	if err != nil || plan.Allocated.CPU != 5 {
+		return fmt.Errorf("custom constrained allocation=%+v want cpu=5: %w", plan.Allocated, err)
 	}
 	concurrencyPath := filepath.Join(root, "concurrency")
 	settings := v04FastPolicy()
@@ -465,8 +465,8 @@ func requireV04CustomProfileReservation(root string) error {
 		return fmt.Errorf("custom profile guarded run: exit=%d error=%w", exit, runError)
 	}
 	concurrency, err := os.ReadFile(concurrencyPath)
-	if err != nil || string(concurrency) != "4" {
-		return fmt.Errorf("fixed allocation concurrency=%q want=4: %w", concurrency, err)
+	if err != nil || string(concurrency) != "5" {
+		return fmt.Errorf("fixed allocation concurrency=%q want=5: %w", concurrency, err)
 	}
 	summary, err := readOnlySummaryV04(filepath.Join(root, "shared"))
 	if err != nil || summary.Concurrency != plan.Allocated.CPU {
@@ -502,7 +502,7 @@ func requireV04MaximumAutomaticShares(string) error {
 			Enabled: true, OwnerShares: map[policy.ProfileName]int{testCase.profile: testCase.shares},
 		}, 0, 0)
 		want := guard.ReservationVector{
-			CPU:         int(exactCeilingV04(int64(math.MaxInt-1), int64(testCase.shares))),
+			CPU:         int(exactCeilingV04(int64(math.MaxInt), int64(testCase.shares))),
 			MemoryBytes: exactCeilingV04(math.MaxInt64, int64(testCase.shares)),
 		}
 		if err != nil || plan.Allocated != want {

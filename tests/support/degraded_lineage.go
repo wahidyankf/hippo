@@ -302,7 +302,7 @@ func (driver *Driver) requireOwnerShares(shares string) error {
 	}
 
 	sample := driver.samples[0]
-	cpuCapacity := int64(max(guard.MinimumReservationCPU, sample.AvailableParallelism-1))
+	cpuCapacity := int64(max(guard.MinimumReservationCPU, sample.AvailableParallelism))
 	memoryCapacity := sample.EffectiveMemoryLimitBytes - driver.resolution.MemoryReserve
 	vector := func(owners int) guard.ReservationVector {
 		return guard.ReservationVector{

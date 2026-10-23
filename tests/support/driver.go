@@ -201,6 +201,11 @@ type Driver struct {
 	resolution               policy.Resolution
 	automaticPlan            guard.ReservationPlan
 	automaticPlanError       error
+	cpuSample                policy.Sample
+	cpuMaximum               int
+	cpuCapacity              int
+	cpuCapacityError         error
+	cpuConcurrency           int
 	requestedProfile         policy.ProfileName
 	corruptionKind           string
 	taskClass                policy.TaskClass
@@ -707,7 +712,7 @@ func (driver *Driver) inspectGuardedEnvironment() error {
 }
 
 func (driver *Driver) requireCanonicalConcurrencyOnly() error {
-	if driver.exitCode != 0 || driver.output != "balanced:7:unset:unset:unset:unset\n" {
+	if driver.exitCode != 0 || driver.output != "balanced:8:unset:unset:unset:unset\n" {
 		return fmt.Errorf("exit=%d stdout=%q stderr=%q", driver.exitCode, driver.output, driver.errorOutput)
 	}
 
@@ -715,7 +720,7 @@ func (driver *Driver) requireCanonicalConcurrencyOnly() error {
 }
 
 func (driver *Driver) requireMappedConcurrency() error {
-	if driver.exitCode != 0 || driver.output != "balanced:7:7:3:unset:unset\n" {
+	if driver.exitCode != 0 || driver.output != "balanced:8:8:3:unset:unset\n" {
 		return fmt.Errorf("exit=%d stdout=%q stderr=%q", driver.exitCode, driver.output, driver.errorOutput)
 	}
 

@@ -94,6 +94,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Automatic reservations divide capacity by profile owner shares", Boundary: reservationCapacityBoundary, Reason: "requires deterministic synthetic CPU and memory capacity unavailable through the compiled binary"},
 		{Scenario: "Automatic owner shares follow the profile lineage", Boundary: reservationCapacityBoundary, Reason: "requires deterministic synthetic CPU and memory capacity, and the binary always plans with the configuration's filled share map"},
 		{Scenario: "Maximum-width automatic shares do not overflow ceiling division", Boundary: reservationCapacityBoundary, Reason: "requires maximum-width synthetic CPU and memory capacity unavailable through the compiled binary"},
+		{Scenario: "Automatic CPU capacity is every host CPU up to the configured maximum", Boundary: reservationCapacityBoundary, Reason: "requires synthetic host CPU counts unavailable through the compiled binary"},
+		{Scenario: "Profile concurrency offers every host CPU", Boundary: reservationCapacityBoundary, Reason: "requires synthetic host CPU counts unavailable through the compiled binary"},
 		{Scenario: "Every development class consumes reservation capacity", Boundary: leaseOwnershipBoundary, Reason: "requires concurrent private reservation ownership and deterministic capacity"},
 		{Scenario: "Explicit reservations may be smaller than automatic shares", Boundary: reservationCapacityBoundary, Reason: "requires deterministic synthetic capacity and direct allocation inspection"},
 		{Scenario: "Reservation floors reject unsafe requests", Boundary: reservationCapacityBoundary, Reason: "requires direct pre-enqueue allocation inspection"},
