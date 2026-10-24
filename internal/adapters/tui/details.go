@@ -113,7 +113,7 @@ func (state *model) capacityLines() []string {
 	if state.snapshot.QueueRegistered {
 		queue = fmt.Sprintf("%d registered waiters", len(state.snapshot.Queue))
 	}
-	lines := []string{
+	return append([]string{
 		"Host capacity and pressure",
 		"Host parallelism: " + positiveText(sample.AvailableParallelism),
 		"Host CPU utilization: " + state.cpuText(),
@@ -148,9 +148,7 @@ func (state *model) capacityLines() []string {
 		fmt.Sprintf("Class service: %d", totals.Service),
 		fmt.Sprintf("Class transactional: %d", totals.Transactional),
 		"Allocations describe reservations, not process RSS or CPU usage.",
-	}
-
-	return append(lines, swapCountingLines(state.snapshot.Status)...)
+	}, swapCountingLines(state.snapshot.Status)...)
 }
 
 // swapCountingLines describes the swap allowance and the memory it adds, and only

@@ -156,7 +156,7 @@ func adaptiveCoordination(decoded file, result Coordination, configured *coordin
 		return Coordination{}, errors.New("schema 3 requires adaptive coordination")
 	}
 	result.SchemaVersion = schemaVersionAdaptive
-	result.CountSwap = configured.CountSwap != nil && *configured.CountSwap
+	result.CountSwap = countSwapSetting(configured)
 	if configured.MaxCPU <= 0 || configured.MaxMemoryMiB <= 0 || configured.BaseActiveOwners <= 0 ||
 		configured.MaxActiveOwners <= 0 {
 		return Coordination{}, errors.New("schema 3 requires positive pool and owner limits")
@@ -202,18 +202,8 @@ func adaptiveCoordination(decoded file, result Coordination, configured *coordin
 		}
 		result.Tiers[name.String()] = tier
 	}
-	// An optional tier is validated only when the file declares it, so a file
-	// without it loads exactly as it did before the tier existed.
-	for _, name := range coordination.OptionalResourceTiers() {
-		configuredTier, declared := configured.Tiers[name.String()]
-		if !declared {
-			continue
-		}
-		tier, tierError := buildTier(name, configuredTier, result)
-		if tierError != nil {
-			return Coordination{}, tierError
-		}
-		result.Tiers[name.String()] = tier
+	if err := buildOptionalTiers(configured, &result); err != nil {
+		return Coordination{}, err
 	}
 	// A key that no known tier names, such as a typo, is refused here.
 	if len(configured.Tiers) != len(result.Tiers) {
@@ -221,6 +211,29 @@ func adaptiveCoordination(decoded file, result Coordination, configured *coordin
 	}
 
 	return result, nil
+}
+
+// countSwapSetting reads coordination.countSwap. An absent key is off.
+func countSwapSetting(configured *coordinationFile) bool {
+	return configured.CountSwap != nil && *configured.CountSwap
+}
+
+// buildOptionalTiers validates each optional tier only when the file declares it,
+// so a file without it loads exactly as it did before the tier existed.
+func buildOptionalTiers(configured *coordinationFile, result *Coordination) error {
+	for _, name := range coordination.OptionalResourceTiers() {
+		configuredTier, declared := configured.Tiers[name.String()]
+		if !declared {
+			continue
+		}
+		tier, tierError := buildTier(name, configuredTier, *result)
+		if tierError != nil {
+			return tierError
+		}
+		result.Tiers[name.String()] = tier
+	}
+
+	return nil
 }
 
 // buildTier compiles one declared tier against the pool it must fit. The bounds

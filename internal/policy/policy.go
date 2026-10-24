@@ -188,6 +188,30 @@ func psiWarningBand(sample Sample) bool {
 	return sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 10 && !swapWithinAllowance(sample)
 }
 
+// recordSwapCounting fills the counted-memory fields when the sample carries an
+// allowance, and reports swap use beyond it as an advisory.
+func recordSwapCounting(result *Assessment, sample Sample) {
+	if sample.SwapAllowanceBytes != nil {
+		result.SwapHeadroomBytes = SwapHeadroomBytes(sample)
+		result.CountedAvailableMemoryBytes = availableMemory(sample)
+	}
+	if swapOverAllowance(sample) {
+		result.Advisories = []string{SwapOverAllowanceAdvisory}
+	}
+}
+
+// memoryReason names the evidence behind a memory state: PSI when a PSI band
+// applies, otherwise the state itself.
+func memoryReason(sample Sample, state State) string {
+	if psiCriticalBand(sample) {
+		return "memory-psi"
+	}
+	if psiWarningBand(sample) {
+		return "memory-psi"
+	}
+	return "memory-" + string(state)
+}
+
 func hasCapability(sample Sample, expected string) bool {
 	return slices.Contains(sample.Capabilities, expected)
 }
@@ -282,13 +306,7 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 		Reason:                      string(StateNormal), State: StateNormal, SwapState: current.SwapState,
 	}
 
-	if current.SwapAllowanceBytes != nil {
-		result.SwapHeadroomBytes = SwapHeadroomBytes(current)
-		result.CountedAvailableMemoryBytes = availableMemory(current)
-	}
-	if swapOverAllowance(current) {
-		result.Advisories = []string{SwapOverAllowanceAdvisory}
-	}
+	recordSwapCounting(&result, current)
 
 	if current.DiskFreeBytes == nil {
 		result.Reason, result.State, result.StorageBlocked = "disk-unavailable", StateCritical, true
@@ -319,16 +337,12 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 	}
 
 	if state := MemoryState(current, policy); state != StateNormal {
-		reason := "memory-" + string(state)
-		if psiCriticalBand(current) || psiWarningBand(current) {
-			reason = "memory-psi"
-		}
-		candidates = append(candidates, candidate{reason: reason, state: state})
+		candidates = append(candidates, candidate{reason: memoryReason(current, state), state: state})
 	}
 
 	// While swap counts and PSI is readable, PSI is the memory signal, so the
 	// swap-out rate is not assessed.
-	swapRateAssessed := !(countsAllowance(current) && psiReadable(current))
+	swapRateAssessed := !countsAllowance(current) || !psiReadable(current)
 	if swapRateAssessed && current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutCriticalBytes) {
 		result.SwapState = "stressed"
 		candidates = append(candidates, candidate{reason: "swap-critical", state: StateCritical})

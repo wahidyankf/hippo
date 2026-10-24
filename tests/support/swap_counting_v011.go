@@ -1,6 +1,7 @@
 package support
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -10,6 +11,9 @@ import (
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
+
+// swapStateUnavailable is the swap state a host reports when its swap cannot be read.
+const swapStateUnavailable = "unavailable"
 
 // swapCountingBindings are the steps for the optional swap allowance: a Linux
 // or macOS host sample with swap evidence, the setting switched on, and the
@@ -58,7 +62,7 @@ func parseSwapBytes(text string) (int64, error) {
 // currentSwapSample is the host sample the scenario builds next.
 func (driver *Driver) currentSwapSample() (*policy.Sample, error) {
 	if len(driver.samples) == 0 {
-		return nil, fmt.Errorf("the scenario has no host sample")
+		return nil, errors.New("the scenario has no host sample")
 	}
 
 	return &driver.samples[len(driver.samples)-1], nil
@@ -75,7 +79,7 @@ func (driver *Driver) hostSample(platform, memory, available string) error {
 	}
 	sample := capacitySample(memoryBytes, availableBytes)
 	sample.Platform = platform
-	sample.SwapState = "unavailable"
+	sample.SwapState = swapStateUnavailable
 	driver.samples = []policy.Sample{sample}
 
 	return nil
@@ -126,7 +130,7 @@ func (driver *Driver) hostWithoutSwap() error {
 	sample.SwapTotalBytes = new(int64(0))
 	sample.SwapUsedBytes = new(int64(0))
 	sample.SwapFreeBytes = new(int64(0))
-	sample.SwapState = "unavailable"
+	sample.SwapState = swapStateUnavailable
 
 	return nil
 }

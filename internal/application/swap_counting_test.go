@@ -1,4 +1,4 @@
-package application
+package application //nolint:testpackage // The notice and clone checks exercise unexported application helpers.
 
 import (
 	"bytes"
@@ -35,10 +35,17 @@ func swapCountingReading() policy.Reading {
 	return policy.Reading{Sample: allowance}
 }
 
-func TestWithSwapCountingLeavesTheCollectorAloneWhenOff(t *testing.T) {
+func TestWithSwapCountingLeavesTheReadingAloneWhenOff(t *testing.T) {
 	inner := &fakeSwapCollector{reading: swapCountingReading()}
-	if WithSwapCounting(inner, false) != policy.Collector(inner) {
-		t.Fatal("counting off wrapped the collector instead of returning it unchanged")
+	reading, err := WithSwapCounting(inner, false).Collect(context.Background(), nil, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inner.calls != 1 {
+		t.Fatalf("inner collector ran %d times, want once", inner.calls)
+	}
+	if reading.Sample.SwapAllowanceBytes != nil {
+		t.Fatalf("counting off attached an allowance of %d bytes", *reading.Sample.SwapAllowanceBytes)
 	}
 }
 

@@ -176,9 +176,19 @@ func TestCountedAvailableMemoryAddsHeadroomAndSaturates(t *testing.T) {
 	}
 }
 
-// TestSwapCountingAssessmentFollowsTheAllowance walks the pressure matrix: each
-// row fixes the swap in use, the pressure readings, and whether counting is on.
-func TestSwapCountingAssessmentFollowsTheAllowance(t *testing.T) {
+// swapAssessmentCase is one row of the pressure matrix: the swap in use, the
+// pressure readings, and whether counting is on, with the expected outcome.
+type swapAssessmentCase struct {
+	name       string
+	sample     func() []policy.Sample
+	counting   bool
+	state      policy.State
+	reason     string
+	advisories []string
+}
+
+// swapAssessmentCases is the pressure matrix the assessment test walks.
+func swapAssessmentCases() []swapAssessmentCase {
 	psi := func(some, full float64) func(policy.Sample) policy.Sample {
 		return func(sample policy.Sample) policy.Sample {
 			sample.MemoryPSISomeAvg10 = new(some)
@@ -186,14 +196,7 @@ func TestSwapCountingAssessmentFollowsTheAllowance(t *testing.T) {
 			return sample
 		}
 	}
-	cases := []struct {
-		name       string
-		sample     func() []policy.Sample
-		counting   bool
-		state      policy.State
-		reason     string
-		advisories []string
-	}{
+	return []swapAssessmentCase{
 		{
 			name: "within the allowance the counted memory keeps the host normal",
 			sample: func() []policy.Sample {
@@ -294,7 +297,12 @@ func TestSwapCountingAssessmentFollowsTheAllowance(t *testing.T) {
 			counting: true, state: policy.StateCritical, reason: "memory-critical",
 		},
 	}
-	for _, testCase := range cases {
+}
+
+// TestSwapCountingAssessmentFollowsTheAllowance walks the pressure matrix: each
+// row fixes the swap in use, the pressure readings, and whether counting is on.
+func TestSwapCountingAssessmentFollowsTheAllowance(t *testing.T) {
+	for _, testCase := range swapAssessmentCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			samples := testCase.sample()
 			for index := range samples {
@@ -326,8 +334,8 @@ func TestSwapCountingFieldsAreAdditive(t *testing.T) {
 		t.Fatal("counting off serialized swapAllowanceBytes on the sample")
 	}
 
-	on := policy.WithSwapAllowance(off, true)
-	onAssessment := policy.ResourceAssessment([]policy.Sample{on}, swapAssessmentPolicy())
+	counted := policy.WithSwapAllowance(off, true)
+	onAssessment := policy.ResourceAssessment([]policy.Sample{counted}, swapAssessmentPolicy())
 	onJSON := marshalFields(t, onAssessment)
 	if got := onJSON["swapHeadroomBytes"]; got != float64(3*policy.GiB) {
 		t.Fatalf("swapHeadroomBytes = %v, want 3 GiB", got)
@@ -335,7 +343,7 @@ func TestSwapCountingFieldsAreAdditive(t *testing.T) {
 	if got := onJSON["countedAvailableMemoryBytes"]; got != float64(6*policy.GiB) {
 		t.Fatalf("countedAvailableMemoryBytes = %v, want 6 GiB", got)
 	}
-	if got := marshalFields(t, on)["swapAllowanceBytes"]; got != float64(4*policy.GiB) {
+	if got := marshalFields(t, counted)["swapAllowanceBytes"]; got != float64(4*policy.GiB) {
 		t.Fatalf("swapAllowanceBytes = %v, want 4 GiB", got)
 	}
 }
