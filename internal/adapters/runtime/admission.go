@@ -181,6 +181,14 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 
 		return application.AdmissionResult{}, ErrReservationDeferred
 	}
+	if !coordination.FitsLedgerCapacity(ledger, minimum) {
+		// Live owners keep the shared pool at its smaller size, so this request waits
+		// without a queue place. The bounded wait still ends in a never-started receipt
+		// and a capacity deferral, and the ledger is never written with an unfitting waiter.
+		_ = releaseCoordinationLock(coordinationLock)
+
+		return application.AdmissionResult{Waiting: true, Status: coordination.ReservationWaitStatus{RunID: value, Remaining: max(deadline.Sub(current), 0)}}, nil
+	}
 	if !queued {
 		if options.Metadata.Source != "" {
 			if lockError = writeReservationMetadata(

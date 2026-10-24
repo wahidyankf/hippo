@@ -7,8 +7,13 @@ import (
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
-// Enqueue registers one identity in FIFO order without performing effects.
+// Enqueue registers one identity in FIFO order without performing effects. A waiter
+// that the ledger's current pool cannot hold is refused, because the ledger would
+// reject it on its next read and every client on the root would fail with it.
 func Enqueue(ledger *Ledger, waiter Waiter) error {
+	if !FitsLedgerCapacity(*ledger, waiter.Requested) {
+		return ErrReservationDeferred
+	}
 	if ledger.NextSequence == ^uint64(0) {
 		if len(ledger.Owners) != 0 || len(ledger.Waiters) != 0 {
 			return ErrReservationDeferred

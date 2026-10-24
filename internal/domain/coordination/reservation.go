@@ -605,6 +605,13 @@ func UpdateCapacity(ledger *Ledger, capacity ReservationVector) bool {
 	return true
 }
 
+// FitsLedgerCapacity reports whether one request fits the ledger's current pool by
+// itself. Live owners can keep that pool smaller than a new client's own pool, so a
+// request can be valid for its client and still never fit the shared ledger.
+func FitsLedgerCapacity(ledger Ledger, request ReservationVector) bool {
+	return VectorFits(ReservationVector{}, request, ledger.Capacity)
+}
+
 // ReservationMetadata is privacy-safe context supplied before queue registration.
 type ReservationMetadata struct {
 	Source string

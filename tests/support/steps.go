@@ -42,6 +42,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.annotationFailureBindings(),
 		driver.childUsageBindings(),
 		driver.resourceTierBindings(),
+		driver.ledgerCapacityBindings(),
 	)
 }
 
