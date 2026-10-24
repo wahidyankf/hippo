@@ -26,7 +26,7 @@ of its result.
 
 3. **Remove the scratch class.** Delete files, remove worktrees, delete task branches that have served their purpose.
 
-   A rebase merge gives the landed commits new identifiers, so `git branch -d` refuses. After
+   A squash merge puts one new commit on `main` and never the branch's own commits, so `git branch -d` refuses. After
    `git fetch origin --prune`, `git branch -D <branch>` may delete a task branch no worktree holds
    (`git worktree list --porcelain` names no `branch refs/heads/<branch>`) that either **landed**, its pull request
    `MERGED` with `headRefOid` equal to the tip or `git cherry origin/main <branch>` printing only `-` lines, or is
