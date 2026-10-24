@@ -19,6 +19,24 @@ Entries are reconstructed from the repository's own history. For the complete co
   kept for the desktop sets `maxCpu` to the core count minus one. No configuration key, exit status, or `hippo.*` code
   changed.
 
+## [v0.9.0] — 2026-10-13
+
+### Added
+
+- `hippo tui` opens a keyboard-driven terminal view of running work, the registered FIFO queue, and machine capacity. It
+  creates no job or reservation, and quitting it does not stop guarded work. It accepts `--interval` (default `5s`,
+  minimum `1s`), `--disk-path`, `--source`, a repeatable `--tag` filter, and the shared `--config` and `--profile`
+  flags. Both stdin and stdout must be terminals, and `TERM=dumb` is refused. Those refusals and an interval below `1s`
+  exit `2` naming `hippo.args.invalid`. `q` exits `0`, Ctrl-C exits `130`, and SIGTERM exits `143` when no other failure
+  takes precedence. The reference documentation still lists terminal lifecycle acceptance against the release build as
+  pending.
+- `hippo run --label <text>` sets a private display label for a live run, which only the TUI shows. Without the flag the
+  label is the executable's basename. The label has no effect on admission, status totals, or receipts. An explicit
+  label must be 1 to 64 ASCII characters, begin with a letter or digit, and use only letters, digits, spaces, and `.`,
+  `_`, `:`, `@`, `+`, or `-`. Any other value exits `2` naming `hippo.args.invalid` before the run is queued.
+- A run with a display label keeps it in a `run-display/` directory under the state root, as one small JSON record. Only
+  the TUI reads it. A missing or unreadable record shows the label as unavailable and does not change accounting.
+
 ## [v0.8.5] — 2026-10-07
 
 ### Fixed
