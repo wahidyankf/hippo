@@ -52,9 +52,47 @@ Feature: Bounded runtime evidence
     When <failure> before its child starts
     Then it exits 125 naming <reason>, its child never starts, and its lifetime summary records the outcome admission-failed
     And history filtered to the outcome admission-failed lists that run
+    And its lifetime summary carries no child usage fields
 
     Examples:
       | failure                                                    | reason                    |
       | its host evidence becomes unreadable                       | hippo.host.unreadable     |
       | a signal stops it and its never-started receipt is refused | hippo.evidence.unwritable |
       | its command stops being executable                         | hippo.supervision.failed  |
+
+  Scenario: A passed run records the CPU and wall time its child used
+    Given an empty evidence root for guarded runs
+    When a guarded child keeps one CPU busy for about one second
+    And JSON history is requested for thirty days
+    Then the history row records at least 0.8 seconds of child CPU and at least 1 second of child wall time
+    And the history row carries no command, argument, working directory, or path
+
+  Scenario: A waited grandchild counts toward the run's child CPU
+    Given an empty evidence root for guarded runs
+    When a guarded child waits for a grandchild that keeps one CPU busy for about one second
+    And JSON history is requested for thirty days
+    Then the history row records at least 0.8 seconds of child CPU
+
+  Scenario: A failed run still records the CPU its child used
+    Given an empty evidence root for guarded runs
+    When a guarded child keeps one CPU busy for about one second and then exits 3
+    And JSON history is requested for thirty days
+    Then the history row outcome reads task-failed and records at least 0.8 seconds of child CPU
+
+  @e2e-exempt
+  Scenario: A shed run records only a lower bound of its child usage
+    Given an empty evidence root for guarded runs
+    When a guarded child starts a CPU-busy grandchild that the guard never waits for and critical pressure sheds it
+    And JSON history is requested for thirty days
+    Then the history row reads pressure-shed and records less than 0.5 seconds of child CPU
+
+  Scenario: Compacting a summary keeps its child usage
+    Given a passed run from the previous day that recorded its child usage
+    When a later guarded run completes
+    And JSON history is requested for thirty days
+    Then the history row still records at least 0.8 seconds of child CPU and at least 1 second of child wall time
+
+  Scenario: A summary written before child usage was recorded still reads
+    Given a passed run whose summary predates child usage fields
+    When JSON history is requested for thirty days
+    Then the history row reads passed and carries no child usage fields

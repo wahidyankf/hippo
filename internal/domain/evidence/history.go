@@ -38,7 +38,11 @@ type Summary struct {
 	SwapOutsDelta                          int64                    `json:"swapOutsDelta,omitempty"`
 	PeakOwnerCount                         int                      `json:"peakOwnerCount,omitempty"`
 	BudgetOutcome                          RecordedBudgetOutcome    `json:"budgetOutcome,omitzero"`
-	AggregateCount                         int                      `json:"aggregateCount,omitempty"`
+	// ChildCPUSeconds and ChildWallSeconds are per-run data. A compacting
+	// binary must keep them, so they live here as well as on RunSummary.
+	ChildCPUSeconds  *float64 `json:"childCpuSeconds,omitempty"`
+	ChildWallSeconds *float64 `json:"childWallSeconds,omitempty"`
+	AggregateCount   int      `json:"aggregateCount,omitempty"`
 }
 
 // Query selects history rows without exposing commands, arguments, or paths.
@@ -160,6 +164,7 @@ func EvaluatePromotion(rows []Summary, criteria PromotionCriteria) (PromotionEva
 
 // AggregateHistoryRows groups summaries by source, exact tags, class, tier, and outcome.
 // Each synthetic aggregate combines represented run counts, safety extrema, and swap-out deltas.
+// Child usage is per-run data, so no aggregate carries it.
 func AggregateHistoryRows(rows []Summary) []Summary {
 	groups := map[string]Summary{}
 	for _, row := range rows {

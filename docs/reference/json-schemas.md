@@ -248,7 +248,9 @@ Schema 5. The aggregate covers **every** sample taken during the session, even a
   "allocatedMemoryBytes": 7516192768,
   "reservationWaitMilliseconds": 6,
   "peakOwnerCount": 1,
-  "budgetOutcome": "admitted"
+  "budgetOutcome": "admitted",
+  "childCpuSeconds": 1.033,
+  "childWallSeconds": 1.009
 }
 ```
 
@@ -261,6 +263,7 @@ Schema 5. The aggregate covers **every** sample taken during the session, even a
 - **Resolved policy** — `requestedProfile`, `resolvedProfile`, `fallbackChain`, `concurrency`, `configHash`
 - **Reservation** — `requestedCpu`, `requestedMemoryBytes`, `allocatedCpu`, `allocatedMemoryBytes`,
   `reservationWaitMilliseconds`, `peakOwnerCount`, `budgetOutcome`
+- **Child usage** — `childCpuSeconds`, `childWallSeconds`, present only when measured; see [child usage](#child-usage)
 
 `outcome` is one of these values, and no other:
 
@@ -306,6 +309,22 @@ Schema-4 fields keep their meanings; labels and timestamps are the schema-5 addi
 atomically by every admission event during the child's lifetime, so an owner that was admitted and released between
 host-sampling ticks is still counted.
 
+### Child usage
+
+`childCpuSeconds` is the user and system CPU of the child's process tree. `childWallSeconds` is the time from launch to
+reap. Both are in seconds, rounded to milliseconds. HIPPO writes a field only when it measured it. A run that never
+started, a run whose retirement HIPPO could not confirm, and any other unmeasured run omit both fields. They never write
+`0`.
+
+- The CPU covers each descendant the child waited for. A descendant that was orphaned, or never waited for, is not
+  counted.
+- A run that HIPPO shed or cancelled reports a **lower bound**. HIPPO stops the whole process group, and a helper that
+  nothing waited for is lost with it.
+- CPU can exceed wall time when the child runs several threads.
+- A guard that runs inside another guard's child counts that work in the outer run. If the inner guard also writes its
+  own row, summing rows counts the work twice.
+- Neither field names a command, argument, working directory, or path.
+
 ## `history --json`
 
 ```json
@@ -332,10 +351,15 @@ The example row is abridged. A row carries every field below that has a value; e
 - **Result** — `outcome`, `budgetOutcome`, `peakOwnerCount`, `aggregateCount`
 - **Host summary** — `availableNonCompressedEstimateMinBytes`, `memoryPressureLevelMax`, `cpuUtilizationP95Percent`,
   `swapOutsDelta`
+- **Child usage** — `childCpuSeconds`, `childWallSeconds`, per run only; see [child usage](#child-usage)
 
 History rows are the queryable safe subset of lifetime summaries. Under the 128 MiB history cap, the oldest daily
 archive is first aggregated by source, exact tags, class, tier, and outcome; `aggregateCount` then reports how many
-original runs the row represents. Aggregates never qualify for owner promotion.
+original runs the row represents. Aggregates never qualify for owner promotion. An aggregate omits `childCpuSeconds` and
+`childWallSeconds`, because each describes one run.
+
+Readers must ignore row fields they do not know. This version adds fields such as the child usage pair without a schema
+change, so a reader that rejects an unknown field breaks on a row this version wrote.
 
 A row whose `outcome` or `budgetOutcome` this version does not know, such as one a later HIPPO wrote into the same state
 root, is listed with the word exactly as recorded, never refused and never replaced by a default. A row with an unknown
