@@ -202,8 +202,8 @@ directories, or repository paths.
 `--json` and `--jsonl` are mutually exclusive.
 
 A filter value no recorded run can carry is a usage mistake (`2`, `hippo.args.invalid`), not an empty result: `--class`
-takes `ephemeral`, `service`, `transactional`, or `release`; `--resource-tier` takes `light`, `standard`, or `heavy`;
-and `--outcome` takes `passed`, `task-failed`, `supervision-failed`, `pressure-shed`, `storage-shed`,
+takes `ephemeral`, `service`, `transactional`, or `release`; `--resource-tier` takes `light`, `standard`, `heavy`, or
+`very-heavy`; and `--outcome` takes `passed`, `task-failed`, `supervision-failed`, `pressure-shed`, `storage-shed`,
 `emergency-safety-stop`, `capacity-deferred`, `storage-blocked`, `admission-cancelled`, or `admission-failed`. A valid
 filter that matches nothing exits `1`. A row a later version recorded with another outcome or class is listed as
 recorded, but no `--outcome` or `--class` value selects it.
@@ -258,7 +258,8 @@ hippo run [flags] -- <command> [arguments...]
   - Meaning: Fixed memory reservation in MiB; `0` selects the automatic fair share
 - `--resource-tier <name>`
   - Default: unset
-  - Meaning: `light`, `standard`, or `heavy`; required by schema 3
+  - Meaning: `light`, `standard`, `heavy`, or `very-heavy`; required by schema 3. `very-heavy` runs only where the
+    configuration declares it, and is refused with exit `2` otherwise; it is a last resort
 - `--source <label>`
   - Default: identity
   - Meaning: Override the discovered `hippo.identity.json` source
@@ -445,17 +446,20 @@ $ echo $?
 Every command refuses a `--color` other than `always`, `never`, or `auto`, and an `--output` other than `text` or
 `json`, the same way. `run` checks its flag values before it reads configuration, host evidence, or coordination state:
 a `--class` other than `ephemeral`, `service`, or `transactional`; a `--resource-tier` other than `light`, `standard`,
-or `heavy`; a malformed `--tag` or `--source`; a negative `--wait-for-admission`; a `--lease-port` outside 1–65535,
-outside `--lease-min`..`--lease-max`, or without a valid lowercase `--lease-owner`; and a `--lease-owner`,
+`heavy`, or `very-heavy`; a malformed `--tag` or `--source`; a negative `--wait-for-admission`; a `--lease-port` outside
+1–65535, outside `--lease-min`..`--lease-max`, or without a valid lowercase `--lease-owner`; and a `--lease-owner`,
 `--lease-min`, or `--lease-max` without `--lease-port` are each usage errors (`2`, `hippo.args.invalid`, diagnostic
 only), as is a non-positive `monitor --interval`. Once the configuration is read, `run` also refuses
-`--wait-for-admission` under schema 1 the same way. A run with no identity source — no `--source`, and no
-`hippo.identity.json` through `HIPPO_IDENTITY`, upward discovery, or `HIPPO_DEFAULT_IDENTITY`, while `--tag` or schema 3
-needs one — is refused the same way, naming `--source` in the diagnostic. An identity file that is found but cannot be
-used is not a usage mistake: the run exits `125` naming `hippo.identity.invalid`, and the diagnostic names the file.
-Invalid `--concurrency-env` _names_ are usage errors (`2`, `hippo.args.invalid`, diagnostic only). Invalid mapped
-_values_ inherited from the caller's environment are not: they return `125`, `hippo.policy.replan-required`. The rules
-live in [Environment variables](./environment-variables.md#name-rules); see also [Exit codes](./exit-codes.md).
+`--wait-for-admission` under schema 1 the same way. A `--resource-tier very-heavy` that the loaded configuration does
+not declare, under schema 1, schema 2, or with no file, is refused with exit `2` naming `hippo.args.invalid` before
+identity, host evidence, or coordination state is read; the diagnostic names the tiers that configuration has. A run
+with no identity source — no `--source`, and no `hippo.identity.json` through `HIPPO_IDENTITY`, upward discovery, or
+`HIPPO_DEFAULT_IDENTITY`, while `--tag` or schema 3 needs one — is refused the same way, naming `--source` in the
+diagnostic. An identity file that is found but cannot be used is not a usage mistake: the run exits `125` naming
+`hippo.identity.invalid`, and the diagnostic names the file. Invalid `--concurrency-env` _names_ are usage errors (`2`,
+`hippo.args.invalid`, diagnostic only). Invalid mapped _values_ inherited from the caller's environment are not: they
+return `125`, `hippo.policy.replan-required`. The rules live in
+[Environment variables](./environment-variables.md#name-rules); see also [Exit codes](./exit-codes.md).
 
 ## Related
 

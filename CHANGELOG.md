@@ -19,6 +19,22 @@ Entries are reconstructed from the repository's own history. For the complete co
   run, so summing rows counts it twice when the inner guard also writes a row. Aggregated history rows omit both fields.
   A `v0.10.0` binary that compacts a `v0.11.0` summary drops both fields, so per-run data is complete only once every
   binary that writes to a state root runs `v0.11.0`. The summary and history schema versions are unchanged.
+- An optional `very-heavy` resource tier, a last resort above `heavy`. A schema-3 file may declare it beside the three
+  required tiers, with its own bounds and queue deadline; HIPPO compiles no bounds for it.
+  `run --resource-tier very-heavy` exits `2` naming `hippo.args.invalid`, before identity or host sampling, unless the
+  loaded file declares the tier, and the refusal names the tiers that file has. The flag and `history --resource-tier`
+  accept `very-heavy` whatever the file declares. A declared tier outside the pool, a `null` or `{}` tier, or a bad
+  queue deadline refuses the file with exit `125`, as the required tiers already do.
+
+### Compatibility
+
+- Declaring `very-heavy` is a breaking change for every binary before v0.11.0. A v0.10.0 binary, and every schema-3
+  release before it, refuses such a file with exit `125` naming `hippo.config.unreadable` and "schema 3 contains an
+  unknown resource tier", which stops every guarded command that loads the file on that machine. Roll out in this order:
+  release v0.11.0; repin every consumer on the machine and check each with `hippo version --json`; then add the
+  `very-heavy` block to that machine's file. Rollback is deleting the block. Machines whose files do not declare the
+  tier are unaffected. A v0.10.0 `history --resource-tier very-heavy` is refused as an unknown filter. In practice only
+  the desktop needs the tier.
 
 ## [v0.10.0] — 2026-10-24
 

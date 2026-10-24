@@ -90,6 +90,36 @@ rejects it because it has no FIFO queue to bound. Upgrade every consumer first a
 before activating schema 3; a schema-3 launch returns protocol-mismatch exit `125` naming
 `hippo.coordination.protocol-mismatch` before enqueue or child launch when a mixed legacy ledger remains.
 
+The optional `very-heavy` tier needs the same care, with a sharper edge. A v0.10.0 binary, and every schema-3 release
+before this one, refuses a file that declares `very-heavy` with exit `125` naming `hippo.config.unreadable` and "schema
+3 contains an unknown resource tier". That stops every guarded command which loads the file on that binary. Repin every
+consumer on the machine first, check each with `hippo version --json`, and only then add the block. To roll back, delete
+the block; the file then loads on every binary again.
+
+## Optional very-heavy tier
+
+A schema-3 file may declare a fourth tier, `very-heavy`, as a last resort. It is optional: a file without it loads
+exactly as before, and a run may name `--resource-tier very-heavy` only where the file declares it. HIPPO compiles no
+bounds for this tier, so its values come only from the file. They are checked like the required tiers: the bounds must
+fit inside the pool, and the queue deadline must parse as a positive duration. Its bounds need not order against
+`heavy`.
+
+Declare it as a sibling of the three required tiers under `tiers`:
+
+```json
+"very-heavy": {
+  "minimumCpu": 4,
+  "maximumCpu": 6,
+  "minimumMemoryMiB": 6144,
+  "maximumMemoryMiB": 10240,
+  "queueDeadline": "4h"
+}
+```
+
+A declared tier that is `null`, `{}`, or outside the pool refuses the whole file with exit `125`. A key spelled
+`very_heavy` is refused as an unknown tier. A run that names `very-heavy` where the file does not declare it exits `2`
+naming `hippo.args.invalid`, before any child starts.
+
 ## Minimal reservation configuration
 
 ```json
@@ -122,9 +152,9 @@ time with exit `125` naming `hippo.config.unreadable`, so a local file cannot we
 and `"adaptive"` included, with exit `125` naming `hippo.config.unreadable`. Schema 1 takes no `coordination` object at
 all, so a schema-1 file that carries one, `mode` or not, is refused the same way.
 
-Schema 3 additionally requires positive `maxCpu`, `maxMemoryMiB`, `baseActiveOwners`, and `maxActiveOwners`; exactly the
+Schema 3 additionally requires positive `maxCpu`, `maxMemoryMiB`, `baseActiveOwners`, and `maxActiveOwners`; the
 `light`, `standard`, and `heavy` tiers; a positive deadline per tier; and minimum/maximum vectors that fit inside the
-pool.
+pool. It may also declare the optional `very-heavy` tier, described below. Any other tier name is refused.
 
 ```console
 $ hippo status --config weakened.json --disk-path .

@@ -20,22 +20,26 @@ const bddSuiteVariable = "HIPPO_BDD_SUITE"
 // how the product behaves. Every other HIPPO_ variable is removed, so one the
 // product learns to read later is isolated without an edit here.
 var harnessInputs = map[string]bool{
-	"HIPPO_BIN":                         true, // the binary the adapters run
-	"HIPPO_BDD_ADAPTER":                 true, // the boundary the behaviour suite executes at
-	bddSuiteVariable:                    true, // the executing suite selected by the composed TUI harness
-	"HIPPO_E2E_TEMP_PARENT":             true, // where tests/e2e/run.sh builds its binary
-	"HIPPO_E2E_OLD_ARCHIVE":             true, // cached immutable v0.8.4 archive, verified by the E2E preparer
-	"HIPPO_E2E_V085_ARCHIVE":            true, // cached immutable v0.8.5 archive, independently verified
-	"HIPPO_GO_BINARY":                   true, // the Go toolchain tests/e2e/run.sh invokes
-	"HIPPO_PUBLIC_HOST_HELPER":          true, // prebuilt external collector fixture, never the subject
-	"HIPPO_PUBLIC_HOST_HELPER_SHA256":   true, // exact artifact selected by the harness
-	"HIPPO_PUBLIC_OLD_BIN":              true, // independently verified old release used only by the harness
-	"HIPPO_PUBLIC_OLD_BIN_SHA256":       true, // exact old executable digest, never a product option
-	"HIPPO_PUBLIC_OLD_VERSION_RECEIPT":  true, // retained actual old release identity, not a runtime hook
-	"HIPPO_PUBLIC_V085_BIN":             true, // verified v0.8.5 artifact for the required mixed-version leaf
-	"HIPPO_PUBLIC_V085_BIN_SHA256":      true, // exact v0.8.5 executable digest, never a product option
-	"HIPPO_PUBLIC_V085_VERSION_RECEIPT": true, // retained actual v0.8.5 identity, independently qualified
-	"HIPPO_LOAD_SATURATED":              true, // scripts/test-loaded.sh declaring a saturated host
+	"HIPPO_BIN":                          true, // the binary the adapters run
+	"HIPPO_BDD_ADAPTER":                  true, // the boundary the behaviour suite executes at
+	bddSuiteVariable:                     true, // the executing suite selected by the composed TUI harness
+	"HIPPO_E2E_TEMP_PARENT":              true, // where tests/e2e/run.sh builds its binary
+	"HIPPO_E2E_OLD_ARCHIVE":              true, // cached immutable v0.8.4 archive, verified by the E2E preparer
+	"HIPPO_E2E_V085_ARCHIVE":             true, // cached immutable v0.8.5 archive, independently verified
+	"HIPPO_E2E_V0100_ARCHIVE":            true, // cached immutable v0.10.0 archive, independently verified
+	"HIPPO_GO_BINARY":                    true, // the Go toolchain tests/e2e/run.sh invokes
+	"HIPPO_PUBLIC_HOST_HELPER":           true, // prebuilt external collector fixture, never the subject
+	"HIPPO_PUBLIC_HOST_HELPER_SHA256":    true, // exact artifact selected by the harness
+	"HIPPO_PUBLIC_OLD_BIN":               true, // independently verified old release used only by the harness
+	"HIPPO_PUBLIC_OLD_BIN_SHA256":        true, // exact old executable digest, never a product option
+	"HIPPO_PUBLIC_OLD_VERSION_RECEIPT":   true, // retained actual old release identity, not a runtime hook
+	"HIPPO_PUBLIC_V085_BIN":              true, // verified v0.8.5 artifact for the required mixed-version leaf
+	"HIPPO_PUBLIC_V085_BIN_SHA256":       true, // exact v0.8.5 executable digest, never a product option
+	"HIPPO_PUBLIC_V085_VERSION_RECEIPT":  true, // retained actual v0.8.5 identity, independently qualified
+	"HIPPO_PUBLIC_V0100_BIN":             true, // verified v0.10.0 artifact for the mixed-version very-heavy leaf
+	"HIPPO_PUBLIC_V0100_BIN_SHA256":      true, // exact v0.10.0 executable digest, never a product option
+	"HIPPO_PUBLIC_V0100_VERSION_RECEIPT": true, // retained actual v0.10.0 identity, independently qualified
+	"HIPPO_LOAD_SATURATED":               true, // scripts/test-loaded.sh declaring a saturated host
 }
 
 // RunIsolated runs a test package against coordination state of its own: no

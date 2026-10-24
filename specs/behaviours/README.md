@@ -13,6 +13,7 @@ exemption fails behavior compliance.
 - [`evidence.feature`](evidence.feature) specifies bounded runtime evidence and lifetime summaries.
 - [`execution.feature`](execution.feature) specifies coordination modes, leases, generic concurrency mapping, and
   child-process stream behavior.
+- [`resource-tiers.feature`](resource-tiers.feature) specifies the optional `very-heavy` tier and its refusals.
 - [`public-cli.feature`](public-cli.feature) specifies the safe executable and Unix stream boundary.
 - [`portability.feature`](portability.feature) specifies normalized macOS, Linux, cgroup, swap, and PSI evidence.
 - [`quality-gates.feature`](quality-gates.feature) specifies strict module-local Go lint, NilAway, the domain literal

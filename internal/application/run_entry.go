@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
@@ -89,6 +91,41 @@ func admissionWaitConflict(schemaVersion int, resourceTier string, wait time.Dur
 	}
 }
 
+// tierDeclaredConflict refuses --resource-tier very-heavy unless the loaded
+// configuration declares that tier. Schema 1 and schema 2 declare no tiers, and
+// neither does a missing file, so each refuses it; the refusal names the tiers
+// this configuration has. It is decided from the configuration and the flag
+// alone, before identity, host evidence, or coordination state is read.
+func tierDeclaredConflict(declared map[string]coordination.ResourceTierPolicy, resourceTier string) error {
+	if coordination.ResourceTier(resourceTier) != coordination.ResourceTierVeryHeavy {
+		return nil
+	}
+	if _, present := declared[resourceTier]; present {
+		return nil
+	}
+	names := make([]string, 0, len(coordination.KnownResourceTiers()))
+	for _, tier := range coordination.KnownResourceTiers() {
+		if _, present := declared[tier.String()]; present || slices.Contains(coordination.RequiredResourceTiers(), tier) {
+			names = append(names, tier.String())
+		}
+	}
+
+	return status.Fail(
+		status.CodeArgsInvalid,
+		"--resource-tier very-heavy: this configuration does not declare the very-heavy tier; choose %s",
+		joinChoices(names),
+	)
+}
+
+// joinChoices reads a list as English alternatives: "a, b, or c".
+func joinChoices(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+
+	return strings.Join(names[:len(names)-1], ", ") + ", or " + names[len(names)-1]
+}
+
 // runIdentity resolves the source and tags a run carries. A run that needs no identity
 // — no source or tags requested, no identity file present, schema below 3 — is
 // unlabeled rather than refused. Display labels do not participate in this identity.
@@ -125,7 +162,7 @@ func (application RunEntryServices) Execute(ctx context.Context, options RunRequ
 	return application.executePrepared(ctx, options, label)
 }
 
-func (application RunEntryServices) executePrepared(ctx context.Context, options RunRequest, label identity.DisplayLabel) (int, error) { //nolint:cyclop,funlen,gocognit // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
+func (application RunEntryServices) executePrepared(ctx context.Context, options RunRequest, label identity.DisplayLabel) (int, error) { //nolint:cyclop,funlen,gocognit,gocyclo // Admission, identity, tier, and guarded-lifecycle setup must stay in one auditable pre-launch path.
 	if options.WorkingDir != "" {
 		absolute, err := application.Configuration.AbsolutePath(options.WorkingDir)
 		if err != nil {
@@ -150,6 +187,9 @@ func (application RunEntryServices) executePrepared(ctx context.Context, options
 		configuration.Coordination.SchemaVersion, options.ResourceTier, options.WaitForAdmission,
 	); waitError != nil {
 		return 0, waitError
+	}
+	if declaredError := tierDeclaredConflict(configuration.Coordination.Tiers, options.ResourceTier); declaredError != nil {
+		return 0, declaredError
 	}
 	runIdentity, identityError := application.runIdentity(options, configuration.Coordination.SchemaVersion)
 	if identityError != nil {

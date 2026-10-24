@@ -402,6 +402,19 @@ func requireBDDGateCall(t *testing.T, calls []bddGateCall, command, argument str
 	return bddGateCall{}
 }
 
+// v0100ReleaseStandIn records the v0.10.0 preparation without acquiring an archive.
+const v0100ReleaseStandIn = `#!/bin/sh
+# Recording stand-in only: actual provenance belongs to preparation controls.
+public_v0100_release_prepare() {
+ [ "${HIPPO_GATE_V0100_FAIL:-}" != 73 ] || return 73
+ HIPPO_PUBLIC_V0100_BIN=$2/recorded-v0100-hippo
+ HIPPO_PUBLIC_V0100_BIN_SHA256=recorded-v0100-digest
+ HIPPO_PUBLIC_V0100_VERSION_RECEIPT=$2/recorded-v0100-version
+ export HIPPO_PUBLIC_V0100_BIN HIPPO_PUBLIC_V0100_BIN_SHA256 HIPPO_PUBLIC_V0100_VERSION_RECEIPT
+ printf '%s\n' V0100_PREPARED >>"$HIPPO_GATE_RECORD"
+}
+`
+
 func recordBDDGate(t *testing.T, script, fail string) ([]bddGateCall, int) {
 	t.Helper()
 	return recordBDDGateInputs(t, script, fail, nil)
@@ -461,6 +474,7 @@ public_v085_release_prepare() {
  printf '%s\n' V085_PREPARED >>"$HIPPO_GATE_RECORD"
 }
 `))
+	write("tests/e2e/v0100-release.sh", []byte(v0100ReleaseStandIn))
 	for _, path := range []string{"go.mod", "go.sum", "tests/support/hostprobe/protocol.go"} {
 		write(path, []byte("recording preparation source fixture\n"))
 	}
@@ -593,8 +607,8 @@ func requireBDDGateFullOrdinary(t *testing.T, calls []bddGateCall) {
 		if !slices.Contains(call.args, "./tests/integration") {
 			continue
 		}
-		if bddGateFlag(call, "-run") == "^TestMixedVersionV085DisplayInteroperability$" {
-			continue // The separate required leaf is checked by its registration control.
+		if run := bddGateFlag(call, "-run"); run == "^TestMixedVersionV085DisplayInteroperability$" || run == "^TestMixedVersionV0100VeryHeavyCompatibility$" {
+			continue // The separate required leaves are checked by their registration controls.
 		}
 		excluded := bddGateEntryNames()
 		if slices.Contains(call.args, "./internal/...") {
@@ -867,7 +881,7 @@ func parseBDDGateRecording(t *testing.T, data []byte) []bddGateCall {
 	t.Helper()
 	var calls []bddGateCall
 	for line := range strings.SplitSeq(strings.TrimSuffix(string(data), "\n"), "\n") {
-		if line == "OLD_PREPARED" || line == "V085_PREPARED" {
+		if line == "OLD_PREPARED" || line == "V085_PREPARED" || line == "V0100_PREPARED" {
 			continue
 		}
 		if line == "CALL" {
