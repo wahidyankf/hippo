@@ -7,17 +7,17 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
-## [v0.10.0] — Unreleased
+## [v0.10.0] — 2026-10-24
 
 ### Changed
 
 - Automatic CPU capacity now uses every CPU the host reports available. HIPPO held one CPU back for itself, so a 12-core
-  host offered 11 CPU, and a profile's concurrency was one lower than the host's CPU count. Capacity is now the
-  available parallelism, never below one CPU, and `maxCpu` still lowers it when set; a value at or above the host's CPU
-  count leaves every CPU available. Automatic shares divide the full count, so a `minimal` owner on a 12-core host now
-  reserves 12 CPU where it reserved 11, and a profile's concurrency follows the same count. A Mac that wants one CPU
-  kept for the desktop sets `maxCpu` to the core count minus one. No configuration key, exit status, or `hippo.*` code
-  changed.
+  host offered 11 CPU, and a `balanced` profile's concurrency was one lower than the host's CPU count. Capacity is now
+  the available parallelism, never below one CPU, and `maxCpu` still lowers it when set; a value at or above the host's
+  CPU count leaves every CPU available. Automatic shares divide the full count, so a `minimal` owner on a 12-core host
+  now reserves 12 CPU where it reserved 11, and `balanced` concurrency follows the same count. The built-in
+  `constrained` and `minimal` profiles cap concurrency at 2 and 1. A Mac that wants one CPU kept for the desktop sets
+  `maxCpu` to the core count minus one. No configuration key, exit status, or `hippo.*` code changed.
 
 ## [v0.9.0] — 2026-10-13
 
@@ -562,6 +562,9 @@ Entries are reconstructed from the repository's own history. For the complete co
 
 - First standalone release, published as Resource Guard.
 
+[v0.10.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.10.0
+[v0.9.0]: https://github.com/wahidyankf/hippo/releases/tag/v0.9.0
+[v0.8.5]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.5
 [v0.8.4]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.4
 [v0.8.3]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.3
 [v0.8.2]: https://github.com/wahidyankf/hippo/releases/tag/v0.8.2
