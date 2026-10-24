@@ -24,7 +24,9 @@ Squash. The `main` ruleset's pull request rule allows only squash merges, so Git
 Merge with `gh pr merge <number> --squash --match-head-commit <head>`, where `<head>` is the exact head the checks and
 the leak review covered. The squash commit takes the pull request title as its subject when the branch has several
 commits, so write that title as a Conventional Commit. The branch's [thematic commits](thematic-commits.md) stay in the
-pull request; `main` receives one commit.
+pull request; `main` receives one commit. The squash body, which replaces GitHub's default list of branch commits, says
+what changed and why: the failing case or missing rule, what was decided and what was rejected, and what the change
+deliberately leaves out. It must stand without the pull request number.
 
 ## Afterwards
 

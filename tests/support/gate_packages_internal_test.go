@@ -127,7 +127,8 @@ func TestGateTestPatternsRejectCompileOnlyAndSkipAll(t *testing.T) {
 		for _, pattern := range []string{"^TestFeatureCompliance$", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$"} {
 			for _, flag := range []string{prefix + "skip='" + pattern + "'", prefix + "skip '" + pattern + "'"} {
 				patterns := fixtureGatePatterns(t, flag)
-				if !slices.Equal(patterns, []string{"./internal/adapters/tui", "./internal/adapters/tui", "./internal/adapters/tui"}) {
+				// One healthy bounded pattern per gate script that runs tests.
+				if !slices.Equal(patterns, slices.Repeat([]string{"./internal/adapters/tui"}, len(testRunningScripts))) {
 					t.Fatalf("healthy bounded skip rejected for %s: %v", flag, patterns)
 				}
 			}

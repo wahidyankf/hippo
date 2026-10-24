@@ -61,11 +61,11 @@ Exclusive heavy work reports its holder directly in the deferral message, includ
 ## Upgrade to adaptive schema 3
 
 Upgrade every consumer binary and wrapper to a build that reports a protocol mismatch under its own reason code, shows
-live exclusive owners in status, and bounds activation contention; the current tagged baseline is v0.8.5. Verify each
-exact binary with `version --json` and its release checksum instead of inferring capability from SemVer ordering. Keep
-schema 2 active until `hippo status --json` reports no owners or waiters with `legacy: true`, then atomically install
-the schema-3 policy. A schema-3 launch returns `125` naming `hippo.coordination.protocol-mismatch` before enqueue or
-child launch when legacy ledger entries remain.
+live exclusive owners in status, and bounds activation contention; the [changelog](../../CHANGELOG.md) lists each tagged
+release and what changed in it. Verify each exact binary with `version --json` and its release checksum instead of
+inferring capability from SemVer ordering. Keep schema 2 active until `hippo status --json` reports no owners or waiters
+with `legacy: true`, then atomically install the schema-3 policy. A schema-3 launch returns `125` naming
+`hippo.coordination.protocol-mismatch` before enqueue or child launch when legacy ledger entries remain.
 
 Schema 3 requires an identity and a resource tier:
 

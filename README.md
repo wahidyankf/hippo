@@ -38,8 +38,8 @@ own command.
   failure names a reason: `hippo: [hippo.area.reason]`. Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters, promotion state, and
   bounded run outcomes without exposing commands or paths.
-- **Interactive monitoring (unreleased).** `hippo tui` shows running jobs, queue positions, and capacity with keyboard
-  navigation and a compact layout for narrow terminals. See
+- **Interactive monitoring.** `hippo tui`, added in v0.9.0, shows running jobs, queue positions, and capacity with
+  keyboard navigation and a compact layout for narrow terminals. See
   [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md). Final interactive verification is pending;
   the v0.8.5 installation pin below does not provide this feature.
 - **Burst-safe activation.** Simultaneous repository clients wait through brief coordination contention after launch
@@ -90,7 +90,7 @@ Inspect the host. The example status wraps to fit; HIPPO prints one line.
 
 ```console
 $ hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
+state=normal reason=normal profile=balanced concurrency=12 swap=active availableGiB=11.20 diskFreeGiB=96.33 cpu=23.5%
   owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
@@ -121,7 +121,7 @@ Hand the allocation to your build tool:
 ```console
 $ hippo run --resource-tier standard --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS \
     -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS"'
-BUILD_WORKERS=11 TEST_JOBS=11
+BUILD_WORKERS=12 TEST_JOBS=12
 ```
 
 Walk through it properly: [Guard your first command](./docs/tutorials/guard-your-first-command.md).

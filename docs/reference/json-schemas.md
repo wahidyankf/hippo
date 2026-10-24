@@ -22,8 +22,9 @@ compatibility contract. Field _order_ is not part of any contract.
 ## `version --json`
 
 The smallest public document has three required fields: integer `schemaVersion` `1`, the release string in `version`,
-and the exact source commit in `commit`. Release builds currently report `v0.8.5`; source builds report `dev` and
-`unknown`, and the repository's test builds report `v0.0.0-test` with an all-zero commit.
+and the exact source commit in `commit`. Release builds report the release tag they were built from, and the
+[changelog](../../CHANGELOG.md) lists those tags; source builds report `dev` and `unknown`, and the repository's test
+builds report `v0.0.0-test` with an all-zero commit.
 
 ## `monitor --json`
 
@@ -84,7 +85,7 @@ Schema 5. The latest host sample at the top level, plus the current assessment, 
     "resolvedProfile": "balanced",
     "fallbackChain": ["balanced"],
     "strict": false,
-    "concurrency": 11,
+    "concurrency": 12,
     "memoryReserveBytes": 4294967296,
     "diskReserveBytes": 21474836480,
     "decision": "run",
@@ -95,7 +96,7 @@ Schema 5. The latest host sample at the top level, plus the current assessment, 
   "coordination": {
     "schemaVersion": 5,
     "mode": "reservation",
-    "capacity": { "cpu": 11, "memoryBytes": 30064771072 },
+    "capacity": { "cpu": 12, "memoryBytes": 30064771072 },
     "allocated": { "cpu": 4, "memoryBytes": 6442450944 },
     "waiting": { "cpu": 0, "memoryBytes": 0 },
     "activeOwners": 1,
@@ -152,7 +153,7 @@ requested/allocated vectors, tier minimum/maximum, registration time, and deadli
 directories, or repository paths. `legacyEntries` counts live compatibility owners and live schema-2 records without
 metadata; schema-3 launches refuse to mix with them until they drain.
 
-The unreleased TUI's display label is separate from these identity source/tag fields. It comes from a private
+The TUI's display label is separate from these identity source/tag fields. It comes from a private
 [display annotation](./state-root.md#display-annotations), outside the public status/watch schema. `run --label` adds no
 display field to status, summaries, receipts, the reservation ledger, or strict owner metadata.
 

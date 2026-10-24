@@ -84,8 +84,8 @@ summary-text check enforces that distinction.
 ## In CI
 
 The pull-request gate, `pr-quality-gate.yml`, mirrors the hooks and nothing heavier: formatting, the repository contract
-(`quick`: typecheck, lint, unit), the pinned RHINO bootstrap, and the release build. The full gate runs after merge on
-`main`, in `main-test.yml`, so regressions can reach `main` first. A failure is fixed forward or reverted before any
+(`quick`: typecheck, lint, unit), the pinned RHINO bootstrap, and the release build, plus one bounded released-binary
+leaf. The full gate runs after merge on `main`, in `main-test.yml`. A failure is fixed forward or reverted before any
 release cut. Job detail: [CI placement](quality-gates/001-ci-placement.md).
 
 ## Never Nx

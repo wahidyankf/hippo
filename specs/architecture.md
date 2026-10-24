@@ -84,7 +84,8 @@ evidence records in a shared per-user state root. HIPPO instances launched by di
 that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded
 command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
 `hippo tui` uses the same Go process for interactive observation; it introduces no daemon, separate runtime container,
-job, or resource reservation. The TUI source is unreleased, and final terminal/native acceptance remains pending.
+job, or resource reservation. The TUI is included from v0.9.0, and final terminal and native acceptance against the
+release build remains pending.
 
 ## Component View
 

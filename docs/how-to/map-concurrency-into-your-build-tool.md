@@ -28,7 +28,7 @@ hippo run \
 ```console
 $ hippo run --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS \
     -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
-BUILD_WORKERS=11 TEST_JOBS=11 HIPPO_CONCURRENCY=11
+BUILD_WORKERS=12 TEST_JOBS=12 HIPPO_CONCURRENCY=12
 ```
 
 ## Common target variables
@@ -91,7 +91,7 @@ allocation beside it.
 ```console
 $ BUILD_WORKERS=64 hippo run --disk-path . --concurrency-env BUILD_WORKERS \
     -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
-BUILD_WORKERS=64 HIPPO_CONCURRENCY=11
+BUILD_WORKERS=64 HIPPO_CONCURRENCY=12
 ```
 
 Two consequences are worth planning around. A stale `BUILD_WORKERS=64` inherited from a shell profile or a `.env`

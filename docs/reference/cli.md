@@ -3,8 +3,8 @@
 Complete command and flag inventory for the `hippo` executable. Maintained by hand from the binary's own help output,
 with no generator behind it; run `hippo <command> --help` to confirm against the version you have installed.
 
-The TUI and `run --label` additions below describe unreleased source. Their help and interactive behavior have not yet
-been checked against the final release build. The v0.8.5 installation pin does not establish their availability.
+The `hippo tui` command and the `run --label` flag were added in v0.9.0. Their help and interactive behavior have not
+yet been checked against the final release build. The v0.8.5 installation pin does not establish their availability.
 
 **Verification note:** version, host-state, guarded-workload, history, refusal, and completion examples below have been
 exercised on a binary built from the landed source with synthetic fixtures; host-derived numbers vary and `version`
@@ -122,7 +122,7 @@ Long output lines below are wrapped to fit, with continuation lines indented; ea
 
 ```console
 $ hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=16.64 diskFreeGiB=63.05 cpu=27.4%
+state=normal reason=normal profile=balanced concurrency=12 swap=active availableGiB=16.64 diskFreeGiB=63.05 cpu=27.4%
   owners=2 waiters=1 ownerLimit=2 promotion=insufficient-overlap-runs
 active run=a161efd79fbf2947e02cc76b1f84f865 position=0 source=hippo class=ephemeral tier=standard cpu=4 memoryMiB=6144
   deadline=2026-09-26T08:50:52.086019Z

@@ -16,6 +16,7 @@ var testRunningScripts = []string{
 	filepath.Join("scripts", "test-quick.sh"),
 	filepath.Join("scripts", "test.sh"),
 	filepath.Join("tests", "e2e", "run.sh"),
+	filepath.Join("tests", "e2e", "mixed-version.sh"),
 }
 
 // goTestInvocation finds a `go test` command, including the end-to-end

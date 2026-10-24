@@ -36,12 +36,12 @@ The first run compiles the binary. When it finishes you will see a single line:
 Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
 
 ```console
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
+state=normal reason=normal profile=balanced concurrency=12 swap=active availableGiB=11.20 diskFreeGiB=96.33 cpu=23.5%
   owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
 Read it left to right. The host is in the `normal` state, HIPPO resolved the `balanced` profile, and it would tell a
-guarded command it may use `11` parallel workers. The `owners` and `waiters` fields count guarded commands that hold or
+guarded command it may use `12` parallel workers. The `owners` and `waiters` fields count guarded commands that hold or
 await a reservation; with none running, they read `0`.
 
 **Your numbers will differ**, and that is the point — `concurrency` is derived from your machine, not from a constant.
@@ -80,7 +80,7 @@ exports `HIPPO_SESSION` and `HIPPO_BIN`; see
 ```
 
 ```console
-profile=balanced concurrency=11
+profile=balanced concurrency=12
 ```
 
 This is the whole integration surface for most consumers. A build script reads `HIPPO_CONCURRENCY` and sizes itself
