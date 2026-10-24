@@ -231,6 +231,19 @@ func (config RunConfig) noteDeferralf(format string, arguments ...any) {
 	_, _ = fmt.Fprintf(config.Stderr, format, arguments...)
 }
 
+// childUsage is the waited child's CPU and launch-to-reap wall time, as the
+// lifetime summary records them. The zero value is unmeasured.
+type childUsage struct {
+	cpu, wall time.Duration
+	measured  bool
+}
+
+// usageOf translates a child completion and its wall time into the usage the
+// summary records.
+func usageOf(completion ChildCompletion, wall time.Duration) childUsage {
+	return childUsage{cpu: completion.CPU, wall: wall, measured: completion.CPUMeasured}
+}
+
 func childStatus(config RunConfig, completion ChildCompletion) int {
 	if config.ObserveChildStatus != nil {
 		config.ObserveChildStatus(completion.ExitCode)
@@ -492,6 +505,9 @@ func (services RunServices) Run(ctx context.Context, config RunConfig) (exitCode
 	// No outcome is decided yet: every way out of this lifetime names its own,
 	// and finalOutcome refuses to record one that never did.
 	var outcome evidencedomain.Outcome
+	// The child's usage is captured by whichever path reaps it, so every
+	// outcome records it. A run that never launched stays unmeasured.
+	var child childUsage
 	launched, finalized := false, false
 	finalize := func() error {
 		if finalized {
@@ -510,6 +526,7 @@ func (services RunServices) Run(ctx context.Context, config RunConfig) (exitCode
 			}
 		}
 		recorded, outcomeError := FinalOutcome(outcome)
+		writer.SetChildUsage(child.cpu, child.wall, child.measured)
 		finalizeError := writer.Finalize(config.TaskClass, recorded, 0)
 		cleanupError := services.Evidence.Cleanup(config.EvidenceRoot, config.Now())
 
@@ -642,11 +659,13 @@ admission:
 	}
 	launched = true
 	ownershipRetired = false
+	launchedAt := config.Now()
 	stopLifetime := func() (ChildCompletion, error) {
-		waitError, stopError := services.Workload.Stop(config, lifetime)
+		completion, stopError := services.Workload.Stop(config, lifetime)
 		ownershipRetired = !errors.Is(stopError, ErrChildRetirementUnconfirmed)
+		child = usageOf(completion, config.Now().Sub(launchedAt))
 
-		return waitError, stopError
+		return completion, stopError
 	}
 	if config.ReservationPolicy.Enabled {
 		if activationError := services.Workload.Activate(config, session, lifetime); activationError != nil {
@@ -664,6 +683,7 @@ admission:
 		select {
 		case waitError := <-lifetime.Done:
 			ownershipRetired = true
+			child = usageOf(waitError, config.Now().Sub(launchedAt))
 			if !waitError.Failed {
 				outcome = evidencedomain.OutcomePassed
 			} else {

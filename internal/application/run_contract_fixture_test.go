@@ -44,6 +44,9 @@ type runContractFixture struct {
 	selectionHook                                                                                                                              func() (bool, coordination.ShedCause, error)
 	victimHook                                                                                                                                 func() (coordination.ReservationOwner, bool, error)
 	presentHook                                                                                                                                func(context.Context) (bool, error)
+	childUsage                                                                                                                                 []childUsageRecord
+	stopCPU                                                                                                                                    time.Duration
+	stopCPUMeasured                                                                                                                            bool
 	collectCalls                                                                                                                               int
 }
 
@@ -155,7 +158,18 @@ func (fixture *runContractFixture) Start(_ context.Context, config application.R
 func (fixture *runContractFixture) Stop(application.RunConfig, *application.Workload) (application.ChildCompletion, error) {
 	fixture.stops++
 	fixture.record("stop")
-	return application.ChildCompletion{ExitCode: 137, Failed: true}, fixture.stopError
+	return application.ChildCompletion{ExitCode: 137, Failed: true, CPU: fixture.stopCPU, CPUMeasured: fixture.stopCPUMeasured}, fixture.stopError
+}
+
+// childUsageRecord is one SetChildUsage call the run made on its lifetime sink.
+type childUsageRecord struct {
+	cpu, wall time.Duration
+	measured  bool
+}
+
+func (fixture *runContractFixture) recordChildUsage(cpu, wall time.Duration, measured bool) {
+	fixture.record("child-usage")
+	fixture.childUsage = append(fixture.childUsage, childUsageRecord{cpu: cpu, wall: wall, measured: measured})
 }
 
 func (fixture *runContractFixture) Activate(application.RunConfig, *application.Lease, *application.Workload) error {
@@ -209,7 +223,7 @@ func (fixture *runContractFixture) Cleanup(string, time.Time) error {
 
 func (fixture *runContractFixture) Open(application.RunConfig) (application.RunSink, error) {
 	fixture.record("open")
-	return application.RunSink{RunID: "run", SetIdentity: func(coordination.ReservationMetadata) { fixture.record("identity") }, SetContext: func(policy.Resolution, string) { fixture.record("context") }, SetReservationContext: func(*application.Lease, int, evidence.BudgetOutcome) { fixture.record("reservation-context") }, ObserveReservationOwners: func(int) { fixture.observedOwners++; fixture.record("observe-owners") }, Append: func(policy.Sample) error {
+	return application.RunSink{RunID: "run", SetChildUsage: fixture.recordChildUsage, SetIdentity: func(coordination.ReservationMetadata) { fixture.record("identity") }, SetContext: func(policy.Resolution, string) { fixture.record("context") }, SetReservationContext: func(*application.Lease, int, evidence.BudgetOutcome) { fixture.record("reservation-context") }, ObserveReservationOwners: func(int) { fixture.observedOwners++; fixture.record("observe-owners") }, Append: func(policy.Sample) error {
 		fixture.appends++
 		fixture.record("append")
 		if fixture.appends == fixture.appendErrorAt {

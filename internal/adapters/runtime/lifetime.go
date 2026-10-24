@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -35,6 +36,41 @@ type supervisedLifetime struct {
 	command      *exec.Cmd
 	processGroup int
 	exited       chan error
+	// usage is a pointer because Engine.Stop copies the struct by value; the
+	// copy shares this record, which the wait goroutine writes exactly once.
+	usage *childUsage
+}
+
+// childUsage is the rusage of the launcher the guard reaped. The launcher's
+// own wait folds in every descendant the payload waited for, so this covers the
+// whole tree that terminated and was reaped. The record is written before the
+// exit is sent, and the mutex makes a read that races the exit well defined.
+type childUsage struct {
+	mutex    sync.Mutex
+	cpu      time.Duration
+	measured bool
+}
+
+// record stores the user and system CPU of a reaped launcher. A nil state is
+// unmeasured, so the record stays empty.
+func (usage *childUsage) record(state *os.ProcessState) {
+	if usage == nil || state == nil {
+		return
+	}
+	usage.mutex.Lock()
+	defer usage.mutex.Unlock()
+	usage.cpu, usage.measured = state.UserTime()+state.SystemTime(), true
+}
+
+// snapshot returns the recorded CPU time, and whether a reap recorded it.
+func (usage *childUsage) snapshot() (time.Duration, bool) {
+	if usage == nil {
+		return 0, false
+	}
+	usage.mutex.Lock()
+	defer usage.mutex.Unlock()
+
+	return usage.cpu, usage.measured
 }
 
 // init is the process boundary for the private launcher. It deliberately runs
@@ -207,8 +243,14 @@ func startSupervisedLifetimeWithLauncher(
 		return nil, err
 	}
 	_ = reportWriter.Close()
-	lifetime := &supervisedLifetime{command: command, exited: make(chan error, 1)}
-	go func() { lifetime.exited <- command.Wait() }()
+	usage := &childUsage{}
+	lifetime := &supervisedLifetime{command: command, exited: make(chan error, 1), usage: usage}
+	go func() {
+		waitError := command.Wait()
+		// The usage is recorded before the exit is sent, so the send orders it.
+		usage.record(command.ProcessState)
+		lifetime.exited <- waitError
+	}()
 	handshake, handshakeError := awaitLifetimeHandshake(ctx, reportReader, handshakeTimeout)
 	if handshakeError != nil {
 		return lifetime, errors.New("lifetime launcher did not confirm payload activation")

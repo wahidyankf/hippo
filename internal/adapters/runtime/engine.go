@@ -236,7 +236,8 @@ func (engine *Engine) Start(ctx context.Context, config application.RunConfig, l
 		select {
 		case waitError := <-lifetime.exited:
 			entry.stopExited <- waitError
-			done <- application.ChildCompletion{ExitCode: waitStatusCode(waitError), Failed: waitError != nil}
+			cpu, measured := lifetime.usage.snapshot()
+			done <- application.ChildCompletion{ExitCode: waitStatusCode(waitError), Failed: waitError != nil, CPU: cpu, CPUMeasured: measured}
 		case <-entry.cancel:
 		}
 	}()
@@ -255,7 +256,12 @@ func (engine *Engine) Stop(config application.RunConfig, workload *application.W
 	if !errors.Is(stopError, errChildRetirementUnconfirmed) {
 		entry.closeBridge()
 	}
-	return application.ChildCompletion{ExitCode: waitStatusCode(waitError), Failed: waitError != nil}, stopError
+	// An unconfirmed retirement has no reap to measure, so its usage is omitted
+	// even if the launcher was reaped after the guard stopped waiting.
+	cpu, measured := lifetime.usage.snapshot()
+	measured = measured && !errors.Is(stopError, errChildRetirementUnconfirmed)
+
+	return application.ChildCompletion{ExitCode: waitStatusCode(waitError), Failed: waitError != nil, CPU: cpu, CPUMeasured: measured}, stopError
 }
 
 // Activate records the owned child group under the same coordination identity.
@@ -322,7 +328,7 @@ func (*Engine) Open(config application.RunConfig) (application.RunSink, error) {
 		return application.RunSink{}, err
 	}
 	return application.RunSink{
-		RunID: writer.RunID(), SetIdentity: writer.SetIdentity, SetContext: writer.SetContext,
+		RunID: writer.RunID(), SetIdentity: writer.SetIdentity, SetContext: writer.SetContext, SetChildUsage: writer.SetChildUsage,
 		SetReservationContext: func(lease *application.Lease, peak int, outcome evidence.BudgetOutcome) {
 			writer.SetReservationContext(&Session{Requested: lease.Requested, Allocation: lease.Allocation, WaitDuration: lease.WaitDuration}, peak, outcome)
 		},

@@ -202,6 +202,7 @@ func (fixture *annotationMemoryRun) Open(application.RunConfig) (application.Run
 	return application.RunSink{
 		RunID: "memory-run", SetIdentity: func(coordination.ReservationMetadata) {},
 		SetContext: func(policy.Resolution, string) {}, SetReservationContext: func(*application.Lease, int, evidencedomain.BudgetOutcome) {},
+		SetChildUsage:            func(time.Duration, time.Duration, bool) {},
 		ObserveReservationOwners: func(int) {}, Append: func(policy.Sample) error { return nil },
 		Finalize: func(_ policy.TaskClass, outcome evidencedomain.Outcome, _ int) error {
 			fixture.heldFinalized.Add(1)

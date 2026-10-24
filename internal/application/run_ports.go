@@ -73,6 +73,10 @@ type PortLease struct{ ID string }
 type ChildCompletion struct {
 	ExitCode int
 	Failed   bool
+	// CPU is the user and system CPU of the waited child tree. It is meaningful
+	// only when CPUMeasured is true: an unreaped or unconfirmed child has none.
+	CPU         time.Duration
+	CPUMeasured bool
 }
 
 // Workload is an opaque owned workload with one typed completion event.
@@ -153,6 +157,7 @@ type RunSink struct {
 	SetIdentity              func(coordination.ReservationMetadata)
 	SetContext               func(policy.Resolution, string)
 	SetReservationContext    func(*Lease, int, evidencedomain.BudgetOutcome)
+	SetChildUsage            func(cpu, wall time.Duration, measured bool)
 	ObserveReservationOwners func(int)
 	Append                   func(policy.Sample) error
 	Finalize                 func(policy.TaskClass, evidencedomain.Outcome, int) error
