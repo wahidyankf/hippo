@@ -89,7 +89,7 @@ $ TERM=xterm HIPPO_COLOR=1 hippo --config missing.json status 2>&1 | cat -v
 $ hippo run --disk-path . \
     -- sh -c \
     'echo "profile=$HIPPO_PROFILE concurrency=$HIPPO_CONCURRENCY reserved=${HIPPO_RESERVED_MEMORY_BYTES:-<unset>}"'
-profile=balanced concurrency=11 reserved=<unset>
+profile=balanced concurrency=12 reserved=<unset>
 ```
 
 That run used the default schema-1 exclusive mode, so no memory reservation was exported. With reservation mode enabled:
@@ -108,7 +108,7 @@ HIPPO learning about that tool. The flag is repeatable.
 ```console
 $ hippo run --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS \
     -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS HIPPO_CONCURRENCY=$HIPPO_CONCURRENCY"'
-BUILD_WORKERS=11 TEST_JOBS=11 HIPPO_CONCURRENCY=11
+BUILD_WORKERS=12 TEST_JOBS=12 HIPPO_CONCURRENCY=12
 ```
 
 ### Name rules

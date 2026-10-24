@@ -90,7 +90,7 @@ Inspect the host. The example status wraps to fit; HIPPO prints one line.
 
 ```console
 $ hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=15.36 diskFreeGiB=78.64 cpu=16.9%
+state=normal reason=normal profile=balanced concurrency=12 swap=active availableGiB=11.20 diskFreeGiB=96.33 cpu=23.5%
   owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
@@ -121,7 +121,7 @@ Hand the allocation to your build tool:
 ```console
 $ hippo run --resource-tier standard --disk-path . --concurrency-env BUILD_WORKERS --concurrency-env TEST_JOBS \
     -- sh -c 'echo "BUILD_WORKERS=$BUILD_WORKERS TEST_JOBS=$TEST_JOBS"'
-BUILD_WORKERS=11 TEST_JOBS=11
+BUILD_WORKERS=12 TEST_JOBS=12
 ```
 
 Walk through it properly: [Guard your first command](./docs/tutorials/guard-your-first-command.md).

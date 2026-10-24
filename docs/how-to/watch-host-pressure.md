@@ -74,7 +74,7 @@ hippo status --disk-path .
 Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
 
 ```console
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=13.76 diskFreeGiB=78.67 cpu=15.5%
+state=normal reason=normal profile=balanced concurrency=12 swap=active availableGiB=11.20 diskFreeGiB=96.33 cpu=23.5%
   owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 

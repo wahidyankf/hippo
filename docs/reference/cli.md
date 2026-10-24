@@ -122,7 +122,7 @@ Long output lines below are wrapped to fit, with continuation lines indented; ea
 
 ```console
 $ hippo status --disk-path .
-state=normal reason=normal profile=balanced concurrency=11 swap=active availableGiB=16.64 diskFreeGiB=63.05 cpu=27.4%
+state=normal reason=normal profile=balanced concurrency=12 swap=active availableGiB=16.64 diskFreeGiB=63.05 cpu=27.4%
   owners=2 waiters=1 ownerLimit=2 promotion=insufficient-overlap-runs
 active run=a161efd79fbf2947e02cc76b1f84f865 position=0 source=hippo class=ephemeral tier=standard cpu=4 memoryMiB=6144
   deadline=2026-09-26T08:50:52.086019Z
