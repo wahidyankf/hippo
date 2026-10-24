@@ -25,7 +25,8 @@ rather than on memory: a file added three commits ago is still being published b
 
 This repository's history is linear and its releases are cut from it. A commit is the unit a bisect lands on, the unit a
 revert removes, and the unit a release note is written from. Each of those reads a commit as one idea; a commit holding
-two serves none of them.
+two serves none of them. Pull requests land by squash merge, so the unit on `main` is one commit per pull request, which
+is one delivery boundary. The branch's commits keep one theme each for review and supply the squash body.
 
 Committing and pushing require [authorization](commit-authorization.md) separately from this convention.
 
