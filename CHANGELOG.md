@@ -26,6 +26,17 @@ Entries are reconstructed from the repository's own history. For the complete co
   accept `very-heavy` whatever the file declares. A declared tier outside the pool, a `null` or `{}` tier, or a bad
   queue deadline refuses the file with exit `125`, as the required tiers already do.
 
+### Fixed
+
+- A request larger than a shared pool that live owners keep smaller no longer poisons the shared root. While the ledger
+  is busy, the pool stays at the smallest size any client declared, and HIPPO queued a new client's minimum without
+  checking it against that size. The next command then read a ledger it refuses, so every client on the root exited
+  `125` naming `hippo.supervision.failed`. Such a request now waits without taking a queue place. Its bounded wait ends
+  in the usual `124` naming `hippo.limit.capacity-deferred`, with its never-started receipt, and the ledger stays valid.
+  A root that an earlier binary already poisoned still needs the manual recovery in the
+  [inspection guide](docs/how-to/inspect-evidence-and-abandoned-groups.md#when-the-root-will-not-admit-anything). No
+  configuration key, exit status, or record changed, and a request that already fits the pool behaves as before.
+
 ### Compatibility
 
 - Declaring `very-heavy` is a breaking change for every binary before v0.11.0. A v0.10.0 binary, and every schema-3

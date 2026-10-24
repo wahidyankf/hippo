@@ -72,6 +72,11 @@ Each of these deadlines bounds the queue alone. Host pressure is judged afterwar
 window, so a host that never becomes safe to admit within it defers the work early with a `never-started` receipt — see
 [Tell never-started from started](../how-to/respond-to-exit-codes.md#tell-never-started-from-started).
 
+A request that the shared pool cannot hold at its current size is not queued. While the ledger is busy, the pool stays
+at the smallest size any client declared, so a client with a larger pool can ask for more than the shared pool holds.
+Such a request waits without a FIFO place and ends in the same bounded `124` with a `never-started` receipt. It is
+admitted once the live owners leave, the ledger goes idle, and the next client sets the pool again.
+
 ## The effective owner limit is a minimum, not a maximum
 
 Every live owner and every queued waiter contributes its own configured `maxActiveOwners`, and HIPPO uses the

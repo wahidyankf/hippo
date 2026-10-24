@@ -90,6 +90,16 @@ Feature: Shared vector reservations
     And the deferral writes a never-started receipt even when the wait's budget is nearly spent
 
   @e2e-exempt
+  Scenario: A request larger than a shrunk shared pool is deferred without poisoning the root
+    Given a live owner holds a shared root whose pool is smaller than a second client's pool
+    When the second client requests a minimum that only its own pool can hold
+    Then the request is deferred with exit 124 naming hippo.limit.capacity-deferred and queues no waiter
+    And the shared root still reads with the live owner alone
+    When the live owner releases its reservation
+    And the second client requests the same minimum again
+    Then the second client is admitted
+
+  @e2e-exempt
   Scenario: A free coordination gate is taken at once however little of the wait is left
     Given a reservation root that no other admission is updating
     When a fitting reservation reaches the coordination gate with one nanosecond of its wait left, 200 times
