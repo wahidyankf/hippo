@@ -22,4 +22,6 @@ type Configuration struct {
 	Promotion                     Promotion
 	EmergencyAvailableMemoryBytes int64
 	Tiers                         map[string]ResourceTierPolicy
+	// CountSwap is coordination.countSwap: whether swap counts toward memory.
+	CountSwap bool
 }

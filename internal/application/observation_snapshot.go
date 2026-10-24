@@ -37,6 +37,7 @@ func cloneObservationSample(sample policy.Sample) policy.Sample {
 	sample.SwapTotalBytes = cloneObservationPointer(sample.SwapTotalBytes)
 	sample.SwapUsedBytes = cloneObservationPointer(sample.SwapUsedBytes)
 	sample.SwapFreeBytes = cloneObservationPointer(sample.SwapFreeBytes)
+	sample.SwapAllowanceBytes = cloneObservationPointer(sample.SwapAllowanceBytes)
 	sample.MemoryPSISomeAvg10 = cloneObservationPointer(sample.MemoryPSISomeAvg10)
 	sample.MemoryPSIFullAvg10 = cloneObservationPointer(sample.MemoryPSIFullAvg10)
 	sample.OOMEvents = cloneObservationPointer(sample.OOMEvents)

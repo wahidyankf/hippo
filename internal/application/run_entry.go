@@ -204,7 +204,8 @@ func (application RunEntryServices) executePrepared(ctx context.Context, options
 		probeDiskPath = "."
 	}
 
-	probe, collectError := application.Collector.Collect(ctx, nil, probeDiskPath)
+	collector := WithSwapCounting(application.Collector, configuration.Coordination.CountSwap)
+	probe, collectError := collector.Collect(ctx, nil, probeDiskPath)
 	if collectError != nil {
 		return 1, collectError
 	}
@@ -312,7 +313,7 @@ func (application RunEntryServices) executePrepared(ctx context.Context, options
 		LeaseMaximum:           options.LeaseMaximum,
 		PortLeaseRoot:          application.PortLeaseRoot,
 		ConcurrencyEnvironment: options.ConcurrencyEnvironment,
-		Collector:              application.Collector,
+		Collector:              collector,
 		Policy:                 resolution.Policy,
 		Resolution:             resolution,
 		ReservationPolicy:      reservationPolicy,
