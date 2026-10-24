@@ -53,10 +53,10 @@ task ownership or authorization.
 ## Unused Task Branches
 
 Deleting the worktree and both copies of the branch once every unit that used them has landed is required cleanup, not
-an operation this rule gates. A rebase merge gives the landed commits new identifiers, so `git branch -d` refuses.
-`git branch -D` on a task branch is the one exception to the list above, and only under the landed or stale proof and
-the preservation step of [dev artifact clean-up](../workflows/maintenance/dev-artifact-clean-up.md) step 3. Any other
-`-D` still needs approval.
+an operation this rule gates. A squash merge puts one new commit on `main` and never the branch's own commits, so
+`git branch -d` refuses. `git branch -D` on a task branch is the one exception to the list above, and only under the
+landed or stale proof and the preservation step of
+[dev artifact clean-up](../workflows/maintenance/dev-artifact-clean-up.md) step 3. Any other `-D` still needs approval.
 
 ## Asking for Approval
 

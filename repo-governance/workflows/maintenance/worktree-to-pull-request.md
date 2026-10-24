@@ -46,7 +46,7 @@ starts now. Check no more often than [every three minutes](../../conventions/git
 
 Run the [leak review](../quality/pr-leak-review.md) on the exact head being merged. When every
 [merge precondition](../../conventions/pull-request-merge.md) holds, including that head's leak review verdict,
-rebase-merge that head.
+squash-merge that head with `gh pr merge <number> --squash --match-head-commit <head>`.
 
 ## 7. Land the Next Unit, or Clean Up
 

@@ -20,13 +20,18 @@ The preconditions for merging. All of them, every time; there is no bypass in th
 
 ## Method
 
-Rebase. Linear history is required by the ruleset, so a merge commit is refused; squashing is available but loses the
-[thematic commits](thematic-commits.md) the branch was built from.
+Squash. The `main` ruleset's pull request rule allows only squash merges, so GitHub refuses a rebase or a merge commit.
+Merge with `gh pr merge <number> --squash --match-head-commit <head>`, where `<head>` is the exact head the checks and
+the leak review covered. The squash commit takes the pull request title as its subject when the branch has several
+commits, so write that title as a Conventional Commit. The branch's [thematic commits](thematic-commits.md) stay in the
+pull request; `main` receives one commit.
 
 ## Afterwards
 
 Delete the branch on `origin`, the local branch, and the worktree — but only once every delivery unit that used that
-worktree has landed. See [integration path](integration-path.md).
+worktree has landed. A squash leaves the local tip unmerged by SHA, so `git branch -d` refuses; the proof in
+[dev artifact clean-up](../workflows/maintenance/dev-artifact-clean-up.md) step 3 permits `-D`. See
+[integration path](integration-path.md).
 
 Check status no more often than [three minutes](github-polling.md). A gate that takes eight minutes is not made faster
 by being asked three times.
