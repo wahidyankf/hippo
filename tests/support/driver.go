@@ -3,6 +3,8 @@ package support
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2774,20 +2776,26 @@ case "$1" in
   *) exit 64 ;;
 esac
 `
-	// Confine the executable write to the directory this fixture created and owns.
+	// Confine the executable writes to the directory this fixture created and owns.
 	fakeRoot, err := os.OpenRoot(fakeDirectory)
 	if err != nil {
 		return err
 	}
-	if err := errors.Join(fakeRoot.WriteFile("go", []byte(program), 0o700), fakeRoot.Close()); err != nil {
+	helperDigest, helperError := writeStandInHostHelper(fakeRoot)
+	if err := errors.Join(fakeRoot.WriteFile("go", []byte(program), 0o700), helperError, fakeRoot.Close()); err != nil {
 		return err
 	}
 
 	command := exec.Command(filepath.Join(repository, "tests", e2eMode, "run.sh"))
+	// The harness is handed a prepared host helper, as a gate hands it to every dependent test. Without one,
+	// run.sh would build a race-instrumented helper itself, which this fake toolchain cannot do and which
+	// belongs to an admitted gate caller rather than to a behaviour scenario.
 	command.Env = environmentWith(map[string]string{
-		"FAKE_GO_TEST_EXIT":     strconv.Itoa(testExit),
-		"HIPPO_E2E_TEMP_PARENT": temporaryParent,
-		"HIPPO_GO_BINARY":       fakeGo,
+		"FAKE_GO_TEST_EXIT":               strconv.Itoa(testExit),
+		"HIPPO_E2E_TEMP_PARENT":           temporaryParent,
+		"HIPPO_GO_BINARY":                 fakeGo,
+		"HIPPO_PUBLIC_HOST_HELPER":        filepath.Join(fakeDirectory, standInHostHelperName),
+		"HIPPO_PUBLIC_HOST_HELPER_SHA256": helperDigest,
 	})
 	// Each release preparer must establish its own receipt before exporting it.
 	// Inherited exported receipts would mask a broken fake-validator dispatch.
@@ -2817,6 +2825,17 @@ esac
 	}
 
 	return nil
+}
+
+const standInHostHelperName = "hostprobe"
+
+// writeStandInHostHelper writes an executable that does nothing into the fixture directory and returns its SHA-256,
+// the two inputs tests/support/hostprobe/prepare.sh validates in place of building the real host helper.
+func writeStandInHostHelper(fixture *os.Root) (string, error) {
+	body := []byte("#!/bin/sh\nexit 0\n")
+	digest := sha256.Sum256(body)
+
+	return hex.EncodeToString(digest[:]), fixture.WriteFile(standInHostHelperName, body, 0o700)
 }
 
 func (driver *Driver) inspectE2ELifecycle() error {
