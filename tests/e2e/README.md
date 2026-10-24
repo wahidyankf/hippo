@@ -31,6 +31,13 @@ test timeout, and the same current candidate used by the retained v0.8.4 public 
 existing v0.8.4 inputs remain separate. These artifact inputs never become product environment. A preparation or
 compatibility failure stops the gate; no missing-input skip exists.
 
+`hippo-v0100.lock` pins v0.10.0, commit `bfa025459816c031fbc5d7708ec9da2290a12e1a`, and four host archive checksums,
+checked the same way. `tests/e2e/v0100-release.sh` prepares that archive for `tests/e2e/mixed-version.sh` and `run.sh`,
+exporting `HIPPO_PUBLIC_V0100_BIN`, `HIPPO_PUBLIC_V0100_BIN_SHA256`, and `HIPPO_PUBLIC_V0100_VERSION_RECEIPT`. The
+`TestMixedVersionV0100VeryHeavyCompatibility` leaf runs once with `-tags=mixedversion -count=1` and a 120-second
+timeout. It checks that the released v0.10.0 binary refuses a declared very-heavy tier with exit `125`, and that it
+lists a live very-heavy owner from the current build. Offline acquisition uses `HIPPO_E2E_V0100_ARCHIVE`.
+
 This v0.8.5 compatibility fixture reserves one CPU and one GiB per real owner: two concurrent owners allocate two CPUs
 and two GiB. Its scoped configuration caps CPU capacity at two and memory capacity at three GiB, so the exact oracle
 also applies on a standard runner with seven GB RAM after the production safety reserve. The released build subtracts

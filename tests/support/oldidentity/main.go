@@ -19,6 +19,10 @@ func verifyV085Receipt(reader io.Reader) error {
 	return verifyReleaseReceipt(reader, "v0.8.5", "456d24bc2a20ee23a7b81746c1789133cd5c3a97")
 }
 
+func verifyV0100Receipt(reader io.Reader) error {
+	return verifyReleaseReceipt(reader, "v0.10.0", "bfa025459816c031fbc5d7708ec9da2290a12e1a")
+}
+
 func verifyReleaseReceipt(reader io.Reader, version, commit string) error {
 	var identity struct {
 		SchemaVersion int    `json:"schemaVersion"`
@@ -59,6 +63,13 @@ func readReleaseReceipt(path string, verify func(io.Reader) error) error {
 func main() {
 	if len(os.Args) == 3 && os.Args[1] == "--v085" {
 		if err := readReleaseReceipt(os.Args[2], verifyV085Receipt); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--v0100" {
+		if err := readReleaseReceipt(os.Args[2], verifyV0100Receipt); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

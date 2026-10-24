@@ -12,10 +12,10 @@ to rebase and wait for macOS.
 - `Repository contract`: `./rhino gate run --surface pull-request`. That surface runs the `quick` gate (typecheck, lint,
   unit, and behaviour adapters) with the documentation and configuration gates.
 - `Pinned RHINO bootstrap`: only when the consumer boundary changes.
-- `Mixed-version compatibility`: `tests/e2e/mixed-version.sh`, the one tagged leaf that compares the released v0.8.5
-  binary with the current build on a shared ledger. Its result depends on the host's CPU count, so the runner's own
-  count is the evidence. It runs on the same `ubuntu-24.04` runner as the other jobs and nothing else from the full
-  suite.
+- `Mixed-version compatibility`: `tests/e2e/mixed-version.sh`, the tagged leaves that compare the released v0.8.5 and
+  v0.10.0 binaries with the current build on a shared ledger. Its result depends on the host's CPU count, so the
+  runner's own count is the evidence. It runs on the same `ubuntu-24.04` runner as the other jobs and nothing else from
+  the full suite.
 - `Release build`: every release asset, and the Linux checksum inventory.
 
 The aggregate `Quality gate` is the required check. It fails skipped or cancelled jobs, because a skipped required check

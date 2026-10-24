@@ -11,6 +11,11 @@ import (
 
 const mixedVersionLeafSelector = "^TestMixedVersionV085DisplayInteroperability$"
 
+// mixedVersionVeryHeavySelector is the v0.10.0 leaf that pins the very-heavy tier.
+const mixedVersionVeryHeavySelector = "^TestMixedVersionV0100VeryHeavyCompatibility$"
+
+var mixedVersionLeafSelectors = []string{mixedVersionLeafSelector, mixedVersionVeryHeavySelector}
+
 // These recording-shell checks prove the pull-request gate's bounded share of the
 // v0.8.5 compatibility leaf. The main workflow still runs the same selector through
 // tests/e2e/run.sh after merge, so the pull request gate never replaces that run.
@@ -40,9 +45,35 @@ func TestPullRequestMixedVersionLeafRunsExactlyOnceWithCandidate(t *testing.T) {
 		t.Fatalf("pull-request v0.8.5 leaf executions=%d, want one", count)
 	}
 	for _, call := range calls {
-		if call.args[0] == "test" && !slices.Contains(call.args, "-c") && bddGateFlag(call, "-run") != mixedVersionLeafSelector {
-			t.Fatalf("pull-request mixed-version script ran a broader test than its leaf: %+v", call)
+		if call.args[0] == "test" && !slices.Contains(call.args, "-c") && !slices.Contains(mixedVersionLeafSelectors, bddGateFlag(call, "-run")) {
+			t.Fatalf("pull-request mixed-version script ran a broader test than its leaves: %+v", call)
 		}
+	}
+}
+
+// The very-heavy leaf runs once with the same candidate and the verified v0.10.0
+// preparation, and nothing else in the pull-request gate names its selector.
+func TestPullRequestVeryHeavyLeafRunsExactlyOnceWithCandidate(t *testing.T) {
+	calls, code := recordBDDGate(t, "tests/e2e/mixed-version.sh", "")
+	if code != 0 {
+		t.Fatalf("recorded pull-request mixed-version script exited %d", code)
+	}
+	candidate := bddGateFlag(requireBDDGateCall(t, calls, "build", "./cmd/hippo"), "-o")
+	count := 0
+	for _, call := range calls {
+		if bddGateFlag(call, "-run") != mixedVersionVeryHeavySelector {
+			continue
+		}
+		count++
+		if call.args[0] != "test" || call.binary != candidate || bddGateFlag(call, "-tags") != "mixedversion" || bddGateFlag(call, "-count") != "1" || bddGateFlag(call, "-timeout") != "120s" || bddGateFlag(call, "-p") != "2" {
+			t.Errorf("pull-request very-heavy leaf lost uncached bounded candidate routing: %+v", call)
+		}
+		if !slices.Contains(call.args, "./tests/integration") || len(bddGateFlagValues(call, "-run")) != 1 || len(bddGateFlagValues(call, "-skip")) != 0 {
+			t.Errorf("pull-request very-heavy leaf became nonexecuting or lost its sole selector: %+v", call)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("pull-request very-heavy compatibility executions=%d, want one", count)
 	}
 }
 
