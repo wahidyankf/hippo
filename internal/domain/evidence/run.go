@@ -1,6 +1,8 @@
 package evidence
 
 import (
+	"time"
+
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
@@ -42,6 +44,10 @@ type RunSummary struct {
 	ReservationWaitMilliseconds            int64                `json:"reservationWaitMilliseconds,omitempty"`
 	PeakOwnerCount                         int                  `json:"peakOwnerCount,omitempty"`
 	BudgetOutcome                          BudgetOutcome        `json:"budgetOutcome,omitempty"`
+	// ChildCPUSeconds is the user and system CPU of the waited child tree, and
+	// ChildWallSeconds the time from launch to reap. Both are nil when unmeasured.
+	ChildCPUSeconds  *float64 `json:"childCpuSeconds,omitempty"`
+	ChildWallSeconds *float64 `json:"childWallSeconds,omitempty"`
 }
 
 // RunAccumulator keeps fixed-memory aggregates for one workload lifetime.
@@ -92,6 +98,28 @@ func (writer *RunAccumulator) ObserveReservationOwners(activeOwners int) {
 	}
 
 	writer.summary.PeakOwnerCount = max(writer.summary.PeakOwnerCount, activeOwners)
+}
+
+// SetChildUsage records the waited child tree's CPU and wall time, rounded to
+// milliseconds. An unmeasured run carries neither field. Each call allocates
+// fresh values, so a summary returned earlier keeps the usage it was given.
+func (writer *RunAccumulator) SetChildUsage(cpu, wall time.Duration, measured bool) {
+	if writer == nil {
+		return
+	}
+	if !measured {
+		writer.summary.ChildCPUSeconds, writer.summary.ChildWallSeconds = nil, nil
+
+		return
+	}
+	cpuSeconds, wallSeconds := wholeMilliseconds(cpu), wholeMilliseconds(wall)
+	writer.summary.ChildCPUSeconds, writer.summary.ChildWallSeconds = &cpuSeconds, &wallSeconds
+}
+
+// wholeMilliseconds divides a whole millisecond count by 1000, so the seconds
+// value is the nearest float to its decimal form and encodes without noise.
+func wholeMilliseconds(value time.Duration) float64 {
+	return float64(max(value, 0).Round(time.Millisecond).Milliseconds()) / 1000
 }
 
 // SetContext attaches resolved, non-sensitive policy metadata to the summary.
