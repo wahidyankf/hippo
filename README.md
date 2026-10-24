@@ -38,8 +38,8 @@ own command.
   failure names a reason: `hippo: [hippo.area.reason]`. Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters, promotion state, and
   bounded run outcomes without exposing commands or paths.
-- **Interactive monitoring (unreleased).** `hippo tui` shows running jobs, queue positions, and capacity with keyboard
-  navigation and a compact layout for narrow terminals. See
+- **Interactive monitoring.** `hippo tui`, added in v0.9.0, shows running jobs, queue positions, and capacity with
+  keyboard navigation and a compact layout for narrow terminals. See
   [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md). Final interactive verification is pending;
   the v0.8.5 installation pin below does not provide this feature.
 - **Burst-safe activation.** Simultaneous repository clients wait through brief coordination contention after launch

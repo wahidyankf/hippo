@@ -55,8 +55,8 @@ and is not `dumb`, and `HIPPO_COLOR` is exactly `1`. HIPPO does not test whether
 `auto` is always something the caller opts into. `--color always` and `--color never` ignore all three variables. The
 machine-readable body is never coloured.
 
-The unreleased TUI uses that same policy for optional decoration, including colour and emphasis. Disabling decoration
-keeps required cursor/alternate-screen controls and text markers such as `WAIT`, `STALE`, and `ERROR`. Explicit
+The TUI uses that same policy for optional decoration, including colour and emphasis. Disabling decoration keeps
+required cursor/alternate-screen controls and text markers such as `WAIT`, `STALE`, and `ERROR`. Explicit
 `--color always` does not bypass interactive entry requirements: stdin and stdout must be terminals, and `TERM=dumb` is
 refused. Global `--output json` selects only failure diagnostics after terminal restoration, never JSON frames. See the
 [TUI command reference](./cli.md#hippo-tui); final interactive release verification remains pending.
