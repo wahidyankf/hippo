@@ -9,12 +9,21 @@ import (
 	"github.com/wahidyankf/hippo/internal/application"
 )
 
-// usageBusyRound keeps one CPU-bound helper busy for a second, and the payload
-// reaps it. The helper is therefore a waited descendant of the guard's child.
-const usageBusyRound = "/usr/bin/yes >/dev/null & p=$!; /bin/sleep 1; kill $p; wait $p 2>/dev/null"
+// usageBusyRound keeps one CPU-bound helper running until the helper has itself
+// used one CPU-second, then reaps it, so the helper is a waited descendant of
+// the guard's child. A wall-clock bound would not do: a helper that spins for
+// one second of wall time gets only the share of a core the host leaves it, and
+// a contended host delivers well under a CPU-second. ps reports the helper's
+// own CPU time, whole seconds on Linux and hundredths on macOS, and the payload
+// polls it until it reads at least one second. The poll is capped, so a host
+// without ps fails the assertion below rather than hanging.
+const usageBusyRound = `/usr/bin/yes >/dev/null & p=$!; n=0; while [ $n -lt 1200 ]; do ` +
+	`set -- $(/bin/ps -o time= -p $p); case $1 in 0:00.*|00:00:00|"") ;; *) break;; esac; ` +
+	`n=$((n+1)); /bin/sleep 0.05; done; kill $p; wait $p 2>/dev/null`
 
-// usageFloor is the lower bound a one-second busy helper must clear. It is
-// generous: a loaded host still burns most of a second of CPU in that window.
+// usageFloor is the lower bound the helper must clear. The helper ends only
+// after one full CPU-second, so the margin below that covers how a kernel
+// rounds the usage it reports, and nothing else.
 const usageFloor = 800 * time.Millisecond
 
 // startUsageEngine returns an engine whose launches use the real launcher, with

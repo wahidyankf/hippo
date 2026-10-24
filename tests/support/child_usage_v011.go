@@ -21,13 +21,20 @@ import (
 )
 
 // Child usage is the CPU and wall time of the process tree a guarded run
-// waited for. The payloads below keep one CPU-bound helper busy for about one
-// second. The helper and sleep use absolute paths, so no payload needs PATH.
+// waited for. The payloads below keep one CPU-bound helper busy for one
+// CPU-second. The helper and sleep use absolute paths, so no payload needs PATH.
 const (
 	cpuBusyHelper = "/usr/bin/yes"
-	// busyRound runs the helper beside the payload, lets it burn for a second,
-	// and reaps it: the helper is then a waited descendant of the guard's child.
-	busyRound = cpuBusyHelper + " >/dev/null & p=$!; /bin/sleep 1; kill $p; wait $p 2>/dev/null"
+	// busyRound keeps the helper running until the helper has itself used one
+	// CPU-second, then reaps it: the helper is then a waited descendant of the
+	// guard's child. A wall-clock bound would not do, because a helper timed by
+	// the wall clock gets only the share of a core a contended host leaves it.
+	// ps reports the helper's own CPU time, whole seconds on Linux and hundredths
+	// on macOS, and the payload polls it until it reads at least one second. The
+	// poll is capped, so a host without ps fails the assertion rather than hangs.
+	busyRound = cpuBusyHelper + " >/dev/null & p=$!; n=0; while [ $n -lt 1200 ]; do " +
+		`set -- $(/bin/ps -o time= -p $p); case $1 in 0:00.*|00:00:00|"") ;; *) break;; esac; ` +
+		"n=$((n+1)); /bin/sleep 0.05; done; kill $p; wait $p 2>/dev/null"
 	// grandchildRound runs the busy round in a nested shell the payload waits for.
 	grandchildRound = "/bin/sh -c '" + busyRound + "'"
 	// unreapedRound never waits for its helper, so a shed leaves the helper's CPU unrecorded.
@@ -230,8 +237,9 @@ func (driver *Driver) childUsageRowFor(runID string) (childUsageRow, error) {
 	return matched[0], nil
 }
 
-// minimumChildCPUSeconds is the CPU a passed or failed run must show. Its
-// one-second busy helper burns about a second, so the bar sits well below that.
+// minimumChildCPUSeconds is the CPU a passed or failed run must show. Its busy
+// helper ends only after a full CPU-second, so the bar sits just below that to
+// cover how a kernel rounds the usage it reports.
 const minimumChildCPUSeconds = 0.8
 
 // Field-name and output fragments that the privacy check forbids. Naming them
