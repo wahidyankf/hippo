@@ -18,11 +18,10 @@ func TestPublicV084CompatibilityRouteKeepsNativeBudgetSeparate(t *testing.T) {
 	t.Setenv("HIPPO_PUBLIC_OLD_BIN", "")
 	for _, test := range []struct {
 		name, variant string
-		ownerCPU      int
 		memoryCap     int64
 	}{
-		{"canonical-v084", publicBDDMixedV084Variant, 1, 3 * policy.GiB},
-		{"native-default", "mixed", 2, 8 * policy.GiB},
+		{"canonical-v084", publicBDDMixedV084Variant, 3 * policy.GiB},
+		{"native-default", "mixed", 8 * policy.GiB},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			driver := newComposedBDDDriver(contract.Adapter{Name: contract.E2E})
@@ -49,7 +48,7 @@ func TestPublicV084CompatibilityRouteKeepsNativeBudgetSeparate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if configured.Coordination.MaxMemoryBytes != test.memoryCap || configured.Coordination.MaxCPU != 8 || configured.Coordination.MaxActiveOwners != 2 || publicBDDMixedOwnerCPU(fixture.variant) != test.ownerCPU {
+			if configured.Coordination.MaxMemoryBytes != test.memoryCap || configured.Coordination.MaxCPU != 2 || configured.Coordination.MaxActiveOwners != 2 {
 				t.Fatalf("public/native routing changed the exact scoped budget: %+v", configured.Coordination)
 			}
 			if config, err := readPublicMixedConfiguration(fixture.directory, fixture.ledger.Configuration()); err != nil || len(config) == 0 {

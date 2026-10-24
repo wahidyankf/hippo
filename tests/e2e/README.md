@@ -30,19 +30,20 @@ The existing v0.8.4 inputs remain separate. These artifact inputs never become p
 compatibility failure stops the gate; no missing-input skip exists.
 
 This v0.8.5 compatibility fixture reserves one CPU and one GiB per real owner: two concurrent owners allocate two CPUs
-and two GiB. Its scoped configuration caps memory capacity at three GiB, so the exact oracle also applies on a standard
-runner with seven GB RAM after the production safety reserve. Production admission offers every logical CPU, so the
-fixture requires at least two logical CPUs, one for each of its two owners. Its three one-CPU FIFO peers remain
+and two GiB. Its scoped configuration caps CPU capacity at two and memory capacity at three GiB, so the exact oracle
+also applies on a standard runner with seven GB RAM after the production safety reserve. The released build subtracts
+one CPU from the host before applying the cap, so the fixture requires at least three logical CPUs. On such a host the
+released and current builds both offer two CPUs and share one ledger budget. Its three one-CPU FIFO peers remain
 genuinely queued behind the existing two-owner limit throughout display transitions. The 90-second owner context,
 120-second leaf timeout, complete metadata and public-reader assertions, and natural zero retirement checks remain
 mandatory.
 
-The canonical v0.8.4 public E2E row uses a separate compatibility variant with the same one-CPU owner requests,
-three-GiB memory cap and two-CPU host minimum. It retains its original four steps, 20-second journey, three-second
-retirement budget, real old/current binaries, current status and TUI assertions, unchanged coordination schemas, FIFO
-vectors and natural retirement with joined exit 0. The default native mixed fixture separately keeps two CPUs per owner,
-its four-CPU host minimum and eight-GiB memory cap. These scoped compatibility budgets do not change production
-reservation policy or either suite's selectors.
+The canonical v0.8.4 public E2E row uses a separate compatibility variant with the same one-CPU owner requests, two-CPU
+cap, three-GiB memory cap and three-CPU host minimum. It retains its original four steps, 20-second journey,
+three-second retirement budget, real old/current binaries, current status and TUI assertions, unchanged coordination
+schemas, FIFO vectors and natural retirement with joined exit 0. The default native mixed fixture uses the same one-CPU
+owners, two-CPU cap, three-CPU host minimum and eight-GiB memory cap. These scoped compatibility budgets do not change
+production reservation policy or either suite's selectors.
 
 For offline acquisition, set `HIPPO_E2E_OLD_ARCHIVE` and `HIPPO_E2E_V085_ARCHIVE` to absolute regular archive paths for
 the matching host and release. Each goes through the same checksum, member, and executable identity checks:

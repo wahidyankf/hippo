@@ -268,22 +268,22 @@ func (fixture *PublicTUILedger) RequireReadOnly(before map[string]string) error 
 // executables. It never launches an executable or supplies an observation.
 // IDs/PIDs come from each command's owned readiness and actual Process receipt.
 func (fixture *PublicTUILedger) AdoptMixedOwners(ctx context.Context, ids []string, pids []int) error {
-	return fixture.adoptMixedOwners(ctx, ids, pids, 2, publicTUIMixedVariant)
+	return fixture.adoptMixedOwners(ctx, ids, pids, publicTUIMixedVariant)
 }
 
-// AdoptV084MixedOwners owns the public v0.8.4 compatibility route. The native
-// mixed fixture keeps its separate two-CPU contract.
+// AdoptV084MixedOwners owns the public v0.8.4 compatibility route with the same
+// one-CPU owners and two-CPU cap as the native mixed fixture.
 func (fixture *PublicTUILedger) AdoptV084MixedOwners(ctx context.Context, ids []string, pids []int) error {
-	return fixture.adoptMixedOwners(ctx, ids, pids, 1, publicTUIMixedV084Variant)
+	return fixture.adoptMixedOwners(ctx, ids, pids, publicTUIMixedV084Variant)
 }
 
 // AdoptV085MixedOwners retains the real two-version compatibility fixture with
-// one CPU per owner. The ordinary native/BDD mixed fixture remains two CPUs.
+// the same one-CPU owners and two-CPU cap as the native mixed fixture.
 func (fixture *PublicTUILedger) AdoptV085MixedOwners(ctx context.Context, ids []string, pids []int) error {
-	return fixture.adoptMixedOwners(ctx, ids, pids, 1, publicTUIMixedV085Variant)
+	return fixture.adoptMixedOwners(ctx, ids, pids, publicTUIMixedV085Variant)
 }
 
-func (fixture *PublicTUILedger) adoptMixedOwners(ctx context.Context, ids []string, pids []int, ownerCPU int, variant string) error {
+func (fixture *PublicTUILedger) adoptMixedOwners(ctx context.Context, ids []string, pids []int, variant string) error {
 	if fixture.variant != variant || len(ids) != 2 || len(pids) != 2 || ids[0] == ids[1] || pids[0] <= 0 || pids[1] <= 0 || pids[0] == pids[1] {
 		return errors.New("mixed input requires two distinct real owned executables")
 	}
@@ -291,8 +291,8 @@ func (fixture *PublicTUILedger) adoptMixedOwners(ctx context.Context, ids []stri
 	if err != nil {
 		return err
 	}
-	vector := coordination.ReservationVector{CPU: ownerCPU, MemoryBytes: policy.GiB}
-	if err := validateMixedOwnerBudget(actual, runtime.NumCPU(), ownerCPU); err != nil {
+	vector := coordination.ReservationVector{CPU: mixedPublicOwnerCPU, MemoryBytes: policy.GiB}
+	if err := mixedPublicBudgetValidator(variant)(actual, runtime.NumCPU()); err != nil {
 		return err
 	}
 	for index, runID := range ids {
@@ -317,7 +317,7 @@ func (fixture *PublicTUILedger) adoptMixedOwners(ctx context.Context, ids []stri
 		}
 	}
 	fixture.expected.WaitingOwners = 3
-	fixture.expected.Waiting = coordination.ReservationVector{CPU: 3 * ownerCPU, MemoryBytes: 3 * policy.GiB}
+	fixture.expected.Waiting = coordination.ReservationVector{CPU: 3 * mixedPublicOwnerCPU, MemoryBytes: 3 * policy.GiB}
 	for _, row := range fixture.expected.Waiters {
 		if err := evidenceadapter.RemoveDisplay(fixture.root, row.RunID); err != nil {
 			return err
@@ -326,32 +326,49 @@ func (fixture *PublicTUILedger) adoptMixedOwners(ctx context.Context, ids []stri
 	return fixture.VerifyLiveness(ctx)
 }
 
+// Every mixed public fixture pins maxCpu to two and gives each owner one CPU.
+// Released v0.8.4 and v0.8.5 builds subtract one CPU from the host before the
+// cap, while the current build does not. Both therefore offer exactly two CPUs
+// on any host with at least three logical CPUs, so one shared ledger agrees.
+const (
+	mixedPublicMaxCPU            = 2
+	mixedPublicOwnerCPU          = 1
+	mixedPublicMinimumLogicalCPU = mixedPublicMaxCPU + 1
+)
+
+// mixedPublicBudgetValidator selects the budget for the route that owns the
+// fixture. The native route keeps its eight-GiB cap; compatibility routes use three.
+func mixedPublicBudgetValidator(variant string) func(coordination.ReservationTotals, int) error {
+	switch variant {
+	case publicTUIMixedV084Variant:
+		return validateMixedV084PublicOwnerBudget
+	case publicTUIMixedV085Variant:
+		return validateMixedV085PublicOwnerBudget
+	default:
+		return validateMixedPublicOwnerBudget
+	}
+}
+
 // validateMixedPublicOwnerBudget checks real owners against independently declared
 // host/configuration inputs, before their snapshot is adopted as a preservation baseline.
 func validateMixedPublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
-	return validateMixedOwnerBudget(actual, logicalCPUs, 2)
+	return validateMixedOwnerBudget(actual, logicalCPUs, 8*policy.GiB)
 }
 
 func validateMixedV084PublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
-	return validateMixedOwnerBudget(actual, logicalCPUs, 1)
+	return validateMixedOwnerBudget(actual, logicalCPUs, 3*policy.GiB)
 }
 
 func validateMixedV085PublicOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int) error {
-	return validateMixedOwnerBudget(actual, logicalCPUs, 1)
+	return validateMixedOwnerBudget(actual, logicalCPUs, 3*policy.GiB)
 }
 
-func validateMixedOwnerBudget(actual coordination.ReservationTotals, logicalCPUs, ownerCPU int) error {
-	// Public reservation policy offers every logical CPU, lowered only by the
-	// configured maxCpu, which this fixture's explicit configuration sets to eight.
-	memoryCapacity := 8 * policy.GiB
-	if ownerCPU == 1 {
-		memoryCapacity = 3 * policy.GiB
+func validateMixedOwnerBudget(actual coordination.ReservationTotals, logicalCPUs int, memoryCapacity int64) error {
+	if logicalCPUs < mixedPublicMinimumLogicalCPU {
+		return fmt.Errorf("mixed public owners require at least %d logical CPUs so released and current builds both offer %d CPUs: host has %d", mixedPublicMinimumLogicalCPU, mixedPublicMaxCPU, logicalCPUs)
 	}
-	capacity := coordination.ReservationVector{CPU: min(8, max(1, logicalCPUs)), MemoryBytes: memoryCapacity}
-	allocated := coordination.ReservationVector{CPU: 2 * ownerCPU, MemoryBytes: 2 * policy.GiB}
-	if capacity.CPU < allocated.CPU {
-		return fmt.Errorf("mixed public owners require at least %d logical CPUs for two declared %d-CPU owners: host has %d", allocated.CPU, ownerCPU, logicalCPUs)
-	}
+	capacity := coordination.ReservationVector{CPU: mixedPublicMaxCPU, MemoryBytes: memoryCapacity}
+	allocated := coordination.ReservationVector{CPU: 2 * mixedPublicOwnerCPU, MemoryBytes: 2 * policy.GiB}
 	if actual.SchemaVersion != 5 || actual.Mode != reservationMode || actual.ActiveOwners != 2 || actual.WaitingOwners != 0 || actual.Capacity != capacity || actual.Allocated != allocated {
 		return fmt.Errorf("real mixed commands changed declared input counts/budget: %+v", actual)
 	}
@@ -432,6 +449,12 @@ func (fixture *PublicTUILedger) initializeObservation(variant string) error {
 		document = strings.ReplaceAll(interruptionConfig, `"maxMemoryMiB": 16384`, `"maxMemoryMiB": `+memoryMiB)
 		document = strings.ReplaceAll(document, `"maximumMemoryMiB": 16384`, `"maximumMemoryMiB": `+memoryMiB)
 		document = strings.ReplaceAll(document, `"maxActiveOwners": 3`, `"maxActiveOwners": 2`)
+		// Schema three requires every tier to fit the cap, so all tiers are
+		// pinned to the two-CPU pool that both released and current builds offer.
+		document = strings.ReplaceAll(document, `"maxCpu": 8`, `"maxCpu": 2`)
+		document = strings.ReplaceAll(document, `"minimumCpu": 4`, `"minimumCpu": 2`)
+		document = strings.ReplaceAll(document, `"maximumCpu": 4`, `"maximumCpu": 2`)
+		document = strings.ReplaceAll(document, `"maximumCpu": 8`, `"maximumCpu": 2`)
 		if variant == publicTUIMixedV085Variant || variant == publicTUIMixedV084Variant {
 			// Schema three requires every tier to fit the pool, including unused
 			// standard/heavy tiers. Light retains its declared one/two-GiB bounds.

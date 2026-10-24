@@ -29,12 +29,9 @@ func (fixture *publicBDDObservation) isMixedObservation() bool {
 	return fixture.variant == "mixed" || fixture.variant == publicBDDMixedV084Variant
 }
 
-func publicBDDMixedOwnerCPU(variant string) int {
-	if variant == publicBDDMixedV084Variant {
-		return 1
-	}
-	return 2
-}
+// publicBDDMixedOwnerCPU is one CPU for every mixed route. The shared two-CPU cap
+// then offers two CPUs on any host the released and current builds both admit.
+const publicBDDMixedOwnerCPU = 1
 
 // These are actual guarded command lifetimes. Their readiness token comes from
 // the real HIPPO_SESSION published into the ordinary shell child's environment.
@@ -194,7 +191,7 @@ func (fixture *publicBDDObservation) startMixedOwner(parent context.Context, exe
 		return closeUnstarted(err)
 	}
 	job.stage = "command-construction"
-	arguments := []string{"run", "--config", fixture.ledger.Configuration(), "--cwd", directory, "--disk-path", directory, "--profile", "balanced", "--class", "ephemeral", "--resource-tier", "light", "--source", "owner", "--tag", "role=owner", "--reserve-cpu", strconv.Itoa(publicBDDMixedOwnerCPU(fixture.variant)), "--reserve-memory-mib", "1024"}
+	arguments := []string{"run", "--config", fixture.ledger.Configuration(), "--cwd", directory, "--disk-path", directory, "--profile", "balanced", "--class", "ephemeral", "--resource-tier", "light", "--source", "owner", "--tag", "role=owner", "--reserve-cpu", strconv.Itoa(publicBDDMixedOwnerCPU), "--reserve-memory-mib", "1024"}
 	if current {
 		arguments = append(arguments, "--label", "current-owner")
 	}
