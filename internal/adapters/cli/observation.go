@@ -22,6 +22,16 @@ func (boundary Application) status(ctx context.Context, options statusOptions) (
 	return renderStatus(boundary.Stdout, options.jsonOutput, view)
 }
 
+// swapAllowanceToken names the swap allowance in the text status only while
+// coordination.countSwap is on, so a counting-off status line is unchanged.
+func swapAllowanceToken(allowance *int64) string {
+	if allowance == nil {
+		return ""
+	}
+
+	return fmt.Sprintf(" swapAllowanceGiB=%.2f", float64(*allowance)/float64(policy.GiB))
+}
+
 func renderStatus(destination io.Writer, jsonOutput bool, view application.StatusView) (int, error) {
 	if jsonOutput {
 		encoded, err := json.Marshal(view)
@@ -52,7 +62,7 @@ func renderStatus(destination io.Writer, jsonOutput bool, view application.Statu
 
 	_, err = fmt.Fprintf(
 		destination,
-		"state=%s reason=%s profile=%s concurrency=%d swap=%s availableGiB=%s diskFreeGiB=%s cpu=%s owners=%d waiters=%d ownerLimit=%d promotion=%s\n",
+		"state=%s reason=%s profile=%s concurrency=%d swap=%s availableGiB=%s diskFreeGiB=%s cpu=%s owners=%d waiters=%d ownerLimit=%d promotion=%s%s\n",
 		view.Resource.State,
 		view.Resource.Reason,
 		view.Profile.ResolvedProfile,
@@ -65,6 +75,7 @@ func renderStatus(destination io.Writer, jsonOutput bool, view application.Statu
 		totals.WaitingOwners,
 		view.Promotion.EffectiveOwners,
 		view.Promotion.Reason,
+		swapAllowanceToken(view.SwapAllowanceBytes),
 	)
 	if err != nil {
 		return 1, err
