@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/wahidyankf/hippo/internal/application"
+	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"github.com/wahidyankf/hippo/internal/domain/evidence"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -68,5 +69,25 @@ func TestHistoryRequestValidationPrecedenceLeavesEffectsUntouched(t *testing.T) 
 				t.Fatalf("code=%d error=%v effects=%v", code, err, fixture.calls)
 			}
 		})
+	}
+}
+
+func TestHistoryFilterAcceptsEveryKnownTierWhateverTheConfigurationDeclares(t *testing.T) {
+	for _, tier := range coordination.KnownResourceTiers() {
+		fixture := newObservationFixture()
+		history := &observationContractHistory{}
+		services := observationServices(fixture)
+		services.Evidence = history
+		_, code, err := services.History(application.HistoryFlags{Since: "1h", Tier: tier.String()})
+		if err != nil || code != 1 || history.query.Tier != tier.String() {
+			t.Fatalf("--resource-tier %s: code=%d error=%v query=%+v", tier, code, err, history.query)
+		}
+	}
+	fixture := newObservationFixture()
+	_, code, err := observationServices(fixture).History(application.HistoryFlags{Since: "1h", Tier: "very_heavy"})
+	failure, classified := errors.AsType[status.Failure](err)
+	if code != 0 || !classified || failure.Code != status.CodeArgsInvalid ||
+		!strings.Contains(failure.Message, "light, standard, heavy, or very-heavy") || len(fixture.calls) != 0 {
+		t.Fatalf("typo tier code=%d error=%v effects=%v", code, err, fixture.calls)
 	}
 }

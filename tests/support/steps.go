@@ -41,6 +41,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.tuiGateBindings(),
 		driver.annotationFailureBindings(),
 		driver.childUsageBindings(),
+		driver.resourceTierBindings(),
 	)
 }
 

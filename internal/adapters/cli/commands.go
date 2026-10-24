@@ -402,7 +402,7 @@ func (application Application) runCommand(execution *commandExecution) *cobra.Co
 	command.Flags().IntVar(&options.leaseMaximum, "lease-max", 0, "maximum allowed leased port; requires --lease-port")
 	command.Flags().IntVar(&options.reserveCPU, "reserve-cpu", 0, "fixed CPU reservation; zero selects an automatic fair share")
 	command.Flags().Int64Var(&options.reserveMemoryMiB, "reserve-memory-mib", 0, "fixed memory reservation in MiB; zero selects an automatic fair share")
-	command.Flags().StringVar(&options.resourceTier, "resource-tier", "", "resource tier: light, standard, or heavy")
+	command.Flags().StringVar(&options.resourceTier, "resource-tier", "", "resource tier: light, standard, heavy, or very-heavy (very-heavy only where the configuration declares it; a last resort)")
 	command.Flags().StringVar(&options.source, "source", "", "privacy-safe source label overriding hippo.identity.json")
 	command.Flags().StringVar(&options.label, "label", "", "privacy-safe display label; defaults to executable basename")
 	command.Flags().StringArrayVar(&options.tags, "tag", nil, "privacy-safe key=value label; repeatable")

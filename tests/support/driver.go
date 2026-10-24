@@ -2760,12 +2760,12 @@ case "$1" in
     exit "${FAKE_GO_TEST_EXIT:-0}"
     ;;
   run)
-    # Only the two declared immutable-release receipt validators use real Go.
+    # Only the declared immutable-release receipt validators use real Go.
     if [ "$#" -eq 4 ] && [ "$2" = -p=1 ] && [ "$3" = ./tests/support/oldidentity ]; then
       exec ` + shellQuoteV04(realGo) + ` "$@"
     fi
     if [ "$#" -eq 5 ] && [ "$2" = -p=1 ] && [ "$3" = ./tests/support/oldidentity ] &&
-      [ "$4" = --v085 ]; then
+      { [ "$4" = --v085 ] || [ "$4" = --v0100 ]; }; then
       exec ` + shellQuoteV04(realGo) + ` "$@"
     fi
     exit 64
@@ -2792,7 +2792,8 @@ esac
 	// Inherited exported receipts would mask a broken fake-validator dispatch.
 	command.Env = slices.DeleteFunc(command.Env, func(entry string) bool {
 		return strings.HasPrefix(entry, "HIPPO_PUBLIC_OLD_VERSION_RECEIPT=") ||
-			strings.HasPrefix(entry, "HIPPO_PUBLIC_V085_VERSION_RECEIPT=")
+			strings.HasPrefix(entry, "HIPPO_PUBLIC_V085_VERSION_RECEIPT=") ||
+			strings.HasPrefix(entry, "HIPPO_PUBLIC_V0100_VERSION_RECEIPT=")
 	})
 
 	output, runError := command.CombinedOutput()

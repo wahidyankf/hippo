@@ -85,8 +85,10 @@ func readHistoryFilters(request HistoryFlags) (historyFilters, error) {
 	if err != nil {
 		return historyFilters{}, err
 	}
-	if _, known := coordination.DefaultResourceTiers()[request.Tier]; request.Tier != "" && !known {
-		return historyFilters{}, status.Fail(status.CodeArgsInvalid, "--resource-tier must be light, standard, or heavy")
+	// The filter reads the closed tier set, whatever the configuration declares:
+	// a row may carry a tier this configuration does not declare.
+	if _, parseError := coordination.ParseResourceTier(request.Tier); request.Tier != "" && parseError != nil {
+		return historyFilters{}, status.Fail(status.CodeArgsInvalid, "--resource-tier must be light, standard, heavy, or very-heavy")
 	}
 	outcome, err := outcomeFilter(request.OutcomeFlag)
 	if err != nil {

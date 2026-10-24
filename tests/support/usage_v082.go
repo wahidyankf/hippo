@@ -83,7 +83,7 @@ func invalidFlagValues() [][]string {
 			leaseMinimumFlagName, "8000", leaseMaximumFlagName, "9000",
 		}, payload...),
 		append([]string{runCommandName, tagFlagName, malformedTag}, payload...),
-		append([]string{runCommandName, "--resource-tier", unknownSubcommand}, payload...),
+		append([]string{runCommandName, resourceTierFlag, unknownSubcommand}, payload...),
 		append([]string{runCommandName, sourceFlagName, malformedSource}, payload...),
 		append([]string{runCommandName, waitForAdmissionFlag, "-1s"}, payload...),
 		append([]string{runCommandName, leaseMinimumFlagName, "8000"}, payload...),

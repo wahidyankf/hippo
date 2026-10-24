@@ -142,7 +142,7 @@ func reservationCoordination() Coordination {
 	}
 }
 
-func adaptiveCoordination(decoded file, result Coordination, configured *coordinationFile) (Coordination, error) { //nolint:cyclop,gocyclo // Every required adaptive field and bound is validated explicitly.
+func adaptiveCoordination(decoded file, result Coordination, configured *coordinationFile) (Coordination, error) {
 	if decoded.SchemaVersion != schemaVersionAdaptive {
 		return result, nil
 	}
@@ -183,42 +183,68 @@ func adaptiveCoordination(decoded file, result Coordination, configured *coordin
 	if err != nil {
 		return Coordination{}, err
 	}
-	result.Tiers = make(map[string]guard.ResourceTierPolicy, 3)
-	for _, name := range []string{"light", "standard", "heavy"} {
-		configuredTier, exists := configured.Tiers[name]
+	result.Tiers = make(map[string]guard.ResourceTierPolicy, len(coordination.KnownResourceTiers()))
+	for _, name := range coordination.RequiredResourceTiers() {
+		configuredTier, exists := configured.Tiers[name.String()]
 		if !exists {
 			return Coordination{}, fmt.Errorf("schema 3 requires %s resource tier", name)
 		}
-		minimumMemory, conversionError := policy.MiBToBytes(configuredTier.MinimumMemoryMiB)
-		if conversionError != nil {
-			return Coordination{}, conversionError
+		tier, tierError := buildTier(name, configuredTier, result)
+		if tierError != nil {
+			return Coordination{}, tierError
 		}
-		maximumMemory, conversionError := policy.MiBToBytes(configuredTier.MaximumMemoryMiB)
-		if conversionError != nil {
-			return Coordination{}, conversionError
-		}
-		deadline, durationError := time.ParseDuration(configuredTier.QueueDeadline)
-		if durationError != nil || deadline <= 0 {
-			return Coordination{}, fmt.Errorf("schema 3 %s queue deadline is invalid", name)
-		}
-		tier := guard.ResourceTierPolicy{
-			Minimum:       guard.ReservationVector{CPU: configuredTier.MinimumCPU, MemoryBytes: minimumMemory},
-			Maximum:       guard.ReservationVector{CPU: configuredTier.MaximumCPU, MemoryBytes: maximumMemory},
-			QueueDeadline: deadline,
-		}
-		if tier.Minimum.CPU < guard.MinimumReservationCPU ||
-			tier.Minimum.MemoryBytes < guard.MinimumReservationMemoryBytes ||
-			tier.Maximum.CPU < tier.Minimum.CPU || tier.Maximum.MemoryBytes < tier.Minimum.MemoryBytes ||
-			tier.Maximum.CPU > result.MaxCPU || tier.Maximum.MemoryBytes > result.MaxMemoryBytes {
-			return Coordination{}, fmt.Errorf("schema 3 %s resource tier is outside the pool", name)
-		}
-		result.Tiers[name] = tier
+		result.Tiers[name.String()] = tier
 	}
+	// An optional tier is validated only when the file declares it, so a file
+	// without it loads exactly as it did before the tier existed.
+	for _, name := range coordination.OptionalResourceTiers() {
+		configuredTier, declared := configured.Tiers[name.String()]
+		if !declared {
+			continue
+		}
+		tier, tierError := buildTier(name, configuredTier, result)
+		if tierError != nil {
+			return Coordination{}, tierError
+		}
+		result.Tiers[name.String()] = tier
+	}
+	// A key that no known tier names, such as a typo, is refused here.
 	if len(configured.Tiers) != len(result.Tiers) {
 		return Coordination{}, errors.New("schema 3 contains an unknown resource tier")
 	}
 
 	return result, nil
+}
+
+// buildTier compiles one declared tier against the pool it must fit. The bounds
+// are checked before the queue deadline, so a declaration with no bounds at all,
+// such as null or {}, is refused as outside the pool.
+func buildTier(name coordination.ResourceTier, configured tierFile, pool Coordination) (guard.ResourceTierPolicy, error) {
+	minimumMemory, conversionError := policy.MiBToBytes(configured.MinimumMemoryMiB)
+	if conversionError != nil {
+		return guard.ResourceTierPolicy{}, conversionError
+	}
+	maximumMemory, conversionError := policy.MiBToBytes(configured.MaximumMemoryMiB)
+	if conversionError != nil {
+		return guard.ResourceTierPolicy{}, conversionError
+	}
+	tier := guard.ResourceTierPolicy{
+		Minimum: guard.ReservationVector{CPU: configured.MinimumCPU, MemoryBytes: minimumMemory},
+		Maximum: guard.ReservationVector{CPU: configured.MaximumCPU, MemoryBytes: maximumMemory},
+	}
+	if tier.Minimum.CPU < guard.MinimumReservationCPU ||
+		tier.Minimum.MemoryBytes < guard.MinimumReservationMemoryBytes ||
+		tier.Maximum.CPU < tier.Minimum.CPU || tier.Maximum.MemoryBytes < tier.Minimum.MemoryBytes ||
+		tier.Maximum.CPU > pool.MaxCPU || tier.Maximum.MemoryBytes > pool.MaxMemoryBytes {
+		return guard.ResourceTierPolicy{}, fmt.Errorf("schema 3 %s resource tier is outside the pool", name)
+	}
+	deadline, durationError := time.ParseDuration(configured.QueueDeadline)
+	if durationError != nil || deadline <= 0 {
+		return guard.ResourceTierPolicy{}, fmt.Errorf("schema 3 %s queue deadline is invalid", name)
+	}
+	tier.QueueDeadline = deadline
+
+	return tier, nil
 }
 
 func buildCoordination(decoded file, catalog policy.Catalog) (Coordination, error) { //nolint:cyclop,gocognit // Validation enumerates schema compatibility and profile inheritance invariants.

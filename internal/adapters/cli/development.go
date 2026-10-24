@@ -59,8 +59,8 @@ func runClass(flag string) (policy.TaskClass, error) {
 // evidence, or coordination state is read, and reported as a usage mistake
 // rather than as HIPPO failing.
 func runArgumentMistake(options runOptions) error {
-	if _, known := coordination.DefaultResourceTiers()[options.resourceTier]; options.resourceTier != "" && !known {
-		return status.Fail(status.CodeArgsInvalid, "resource tier must be light, standard, or heavy")
+	if _, parseError := coordination.ParseResourceTier(options.resourceTier); options.resourceTier != "" && parseError != nil {
+		return status.Fail(status.CodeArgsInvalid, "resource tier must be light, standard, heavy, or very-heavy")
 	}
 	if options.waitForAdmission < 0 {
 		return status.Fail(status.CodeArgsInvalid, "--wait-for-admission must not be negative")
