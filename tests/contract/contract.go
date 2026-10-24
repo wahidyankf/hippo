@@ -26,6 +26,9 @@ const (
 	E2E = "e2e"
 	// syntheticHostPressureReason documents scenarios that require deterministic host samples.
 	syntheticHostPressureReason = "requires synthetic samples that cannot be injected through the compiled binary"
+	// syntheticSwapCountingReason covers swap evidence the public host state cannot hold: an allowance, a headroom, or a
+	// swap read that fails, none of which a real host can be made to report on demand.
+	syntheticSwapCountingReason = "requires synthetic swap evidence that the public host state cannot hold"
 	hostEvidenceBoundary        = "host evidence"
 	leaseOwnershipBoundary      = "lease ownership"
 	processControlBoundary      = "process control"
@@ -182,6 +185,18 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Linux reclaimable file cache stays available", Boundary: hostEvidenceBoundary, Reason: "requires synthetic proc and cgroup files instead of the public host filesystem"},
 		{Scenario: "Linux without swap remains usable", Boundary: hostEvidenceBoundary, Reason: "requires synthetic swap capabilities instead of the public host state"},
 		{Scenario: "Linux PSI detects active memory contention", Boundary: hostEvidenceBoundary, Reason: "requires synthetic PSI evidence instead of the public host state"},
+		{Scenario: "Linux swap counts toward the allowance when counting is on", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "The swap allowance is the smaller of memory and swap, rounded up to whole GiB", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "A Linux host without swap has no swap allowance", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "A Linux host whose swap cannot be read has no swap allowance", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "A macOS host never counts swap", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "Swap is not counted when the setting is off", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "Swap headroom counts as memory while the host is within its allowance", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "Without swap counting the same host is critical on memory", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "Swap use beyond the allowance is reported without changing the state", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "Critical memory pressure stays critical within the allowance", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "The memory PSI warning band counts only beyond the swap allowance", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
+		{Scenario: "Swap-out growth is left to memory PSI while counting is on", Boundary: hostEvidenceBoundary, Reason: syntheticSwapCountingReason},
 		{Scenario: "An exclusive session advertises compatibility coordination", Boundary: leaseOwnershipBoundary, Reason: "requires deterministic inspection of private coordination ownership unavailable through the compiled binary"},
 		{Scenario: "A live heavy lease defers a second owner", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
 		{Scenario: "A long-lived service never holds the heavy-work lease", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},

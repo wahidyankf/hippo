@@ -43,6 +43,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.childUsageBindings(),
 		driver.resourceTierBindings(),
 		driver.ledgerCapacityBindings(),
+		driver.swapCountingBindings(),
 	)
 }
 

@@ -58,6 +58,7 @@ type Sample struct {
 	SwapTotalBytes                      *int64   `json:"swapTotalBytes"`
 	SwapUsedBytes                       *int64   `json:"swapUsedBytes"`
 	SwapFreeBytes                       *int64   `json:"swapFreeBytes"`
+	SwapAllowanceBytes                  *int64   `json:"swapAllowanceBytes,omitempty"`
 	SwapState                           string   `json:"swapState,omitempty"`
 	MemoryPSISomeAvg10                  *float64 `json:"memoryPsiSomeAvg10,omitempty"`
 	MemoryPSIFullAvg10                  *float64 `json:"memoryPsiFullAvg10,omitempty"`
@@ -145,6 +146,11 @@ type Assessment struct {
 	State                       State   `json:"state"`
 	StorageBlocked              bool    `json:"storageBlocked"`
 	SwapState                   string  `json:"swapState,omitempty"`
+	// SwapHeadroomBytes and CountedAvailableMemoryBytes are present only while
+	// swap counting is on. Advisories never change State.
+	SwapHeadroomBytes           *int64   `json:"swapHeadroomBytes,omitempty"`
+	CountedAvailableMemoryBytes *int64   `json:"countedAvailableMemoryBytes,omitempty"`
+	Advisories                  []string `json:"advisories,omitempty"`
 }
 
 func ptrFinite[T ~int | ~int64](value *T) bool {
@@ -157,11 +163,29 @@ func EssentialReadingsValid(sample Sample) bool {
 	return ptrFinite(availableMemory(sample)) && timeError == nil && sample.DiskFreeBytes != nil && sample.AvailableParallelism > 0
 }
 
+// availableMemory is the memory every threshold reads: the raw reading plus the
+// swap headroom a counting sample adds. Without counting it is the raw reading.
 func availableMemory(sample Sample) *int64 {
-	if sample.AvailableMemoryBytes != nil {
-		return sample.AvailableMemoryBytes
+	available := rawAvailableMemory(sample)
+	headroom := SwapHeadroomBytes(sample)
+	if available == nil || headroom == nil {
+		return available
 	}
-	return sample.AvailableNonCompressedEstimateBytes
+	counted := saturatingAdd(*available, *headroom)
+
+	return &counted
+}
+
+// psiCriticalBand is the memory pressure that is critical whatever the swap.
+func psiCriticalBand(sample Sample) bool {
+	return sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 25 ||
+		sample.MemoryPSIFullAvg10 != nil && *sample.MemoryPSIFullAvg10 >= 5
+}
+
+// psiWarningBand is the some-average warning band. Within the swap allowance
+// swapping is expected, so the band does not count there.
+func psiWarningBand(sample Sample) bool {
+	return sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 10 && !swapWithinAllowance(sample)
 }
 
 func hasCapability(sample Sample, expected string) bool {
@@ -179,17 +203,13 @@ func MemoryState(sample Sample, policy Policy) State {
 	compressorFailed := sample.CompressorAvailable != nil &&
 		!*sample.CompressorAvailable &&
 		(sample.Platform == "" || hasCapability(sample, "compressor"))
-	psiCritical := sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 25 ||
-		sample.MemoryPSIFullAvg10 != nil && *sample.MemoryPSIFullAvg10 >= 5
-
-	if criticalPressure || compressorFailed || psiCritical || *available < policy.CriticalMemoryBytes {
+	if criticalPressure || compressorFailed || psiCriticalBand(sample) || *available < policy.CriticalMemoryBytes {
 		return StateCritical
 	}
 
 	warningPressure := sample.MemoryPressureLevel != nil && *sample.MemoryPressureLevel == 2
-	psiWarning := sample.MemoryPSISomeAvg10 != nil && *sample.MemoryPSISomeAvg10 >= 10
 
-	if warningPressure || psiWarning || *available < policy.AdmissionMemoryBytes {
+	if warningPressure || psiWarningBand(sample) || *available < policy.AdmissionMemoryBytes {
 		return StateWarning
 	}
 
@@ -262,6 +282,14 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 		Reason:                      string(StateNormal), State: StateNormal, SwapState: current.SwapState,
 	}
 
+	if current.SwapAllowanceBytes != nil {
+		result.SwapHeadroomBytes = SwapHeadroomBytes(current)
+		result.CountedAvailableMemoryBytes = availableMemory(current)
+	}
+	if swapOverAllowance(current) {
+		result.Advisories = []string{SwapOverAllowanceAdvisory}
+	}
+
 	if current.DiskFreeBytes == nil {
 		result.Reason, result.State, result.StorageBlocked = "disk-unavailable", StateCritical, true
 
@@ -292,17 +320,19 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 
 	if state := MemoryState(current, policy); state != StateNormal {
 		reason := "memory-" + string(state)
-		if current.MemoryPSISomeAvg10 != nil && *current.MemoryPSISomeAvg10 >= 10 ||
-			current.MemoryPSIFullAvg10 != nil && *current.MemoryPSIFullAvg10 >= 5 {
+		if psiCriticalBand(current) || psiWarningBand(current) {
 			reason = "memory-psi"
 		}
 		candidates = append(candidates, candidate{reason: reason, state: state})
 	}
 
-	if current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutCriticalBytes) {
+	// While swap counts and PSI is readable, PSI is the memory signal, so the
+	// swap-out rate is not assessed.
+	swapRateAssessed := !(countsAllowance(current) && psiReadable(current))
+	if swapRateAssessed && current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutCriticalBytes) {
 		result.SwapState = "stressed"
 		candidates = append(candidates, candidate{reason: "swap-critical", state: StateCritical})
-	} else if current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutWarningBytes) {
+	} else if swapRateAssessed && current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutWarningBytes) {
 		result.SwapState = "stressed"
 		candidates = append(candidates, candidate{reason: "swap-warning", state: StateWarning})
 	}
