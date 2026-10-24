@@ -91,7 +91,8 @@ Some evidence carries its own fixed level, independent of profile (`MemoryState`
 
 - **macOS memory pressure** — level 2 is warning; level 4, or an unavailable compressor, is critical.
 - **Linux PSI** — `some avg10` of 10 or more is warning; `some avg10` of 25 or more, or `full avg10` of 5 or more, is
-  critical, reported as `memory-psi`.
+  critical, reported as `memory-psi`. While swap counting is on, the warning band does not count within the swap
+  allowance (see [Swap allowance](#swap-allowance)).
 - **OOM counters** — any increase in `oomEvents` or `oomKillEvents` between samples is critical, reported as
   `memory-oom`.
 
@@ -135,12 +136,40 @@ guaranteed capacity: it opens only after the configured healthy-evidence gate an
 pressure is not normal. All repositories may enqueue one plan at once; the pool deliberately admits only the safe subset
 and keeps the rest visible in FIFO order.
 
+## Swap allowance
+
+With `coordination.countSwap` set to `true` on a schema-3 Linux host, HIPPO counts unused swap as memory, up to an
+allowance. The allowance is the smaller of swap total and the effective memory limit, rounded up to a whole GiB. Swap in
+use is subtracted from the allowance, and the remainder is the headroom. The headroom is added to available memory
+before every memory threshold reads it: admission, the memory states, shedding, and the emergency floor. Reserves and
+the raw evidence are unchanged, so `availableMemoryBytes` in the output stays the raw reading.
+
+| Condition                                       | Effect                                                    |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| Swap in use is at or below the allowance        | Headroom counts; the PSI warning band does not            |
+| Swap in use is above the allowance              | No headroom counts; `swap-over-allowance` is reported     |
+| Memory PSI is readable and the allowance is set | The swap-out rate is not assessed; PSI decides            |
+| Memory PSI is unreadable                        | The swap-out rate rules apply as they do without counting |
+| Critical PSI                                    | Critical whatever the swap                                |
+| macOS, no swap, or swap unreadable              | No allowance; behaviour is identical to counting off      |
+
+`swap-over-allowance` is an advisory. It never changes the state, never starts a grace timer, and never sheds work for
+swap alone. The first time a run sees it, the run writes one line to standard error:
+`HIPPO warning: swap use exceeds its allowance; not shedding for swap alone.`
+
+The swap allowance enters the reservation pool. See [Reservation capacity](#reservation-capacity). The schema-3 tier
+minimums are checked against that pool, so a tier may need the allowance to be planned.
+
+Do not enable counting on zram-backed swap: zram is carved from RAM, so the same memory would count twice. Counting does
+not change promotion: a third owner still needs zero swap-outs over its window.
+
 ## Reservation capacity
 
 Reservation capacity in each dimension is:
 
 - **CPU** — the host's available parallelism, every CPU, lowered only by `maxCpu` when that is set
-- **Memory** — effective memory, minus the resolved profile's memory reserve
+- **Memory** — effective memory, minus the resolved profile's memory reserve; with swap counting on, plus the swap
+  allowance before the reserve is taken away. `maxMemoryMiB`, when set, still caps the result.
 
 Optional schema-2, or required schema-3, `maxCpu` and `maxMemoryMiB` caps tighten either dimension further.
 

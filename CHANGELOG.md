@@ -25,6 +25,15 @@ Entries are reconstructed from the repository's own history. For the complete co
   loaded file declares the tier, and the refusal names the tiers that file has. The flag and `history --resource-tier`
   accept `very-heavy` whatever the file declares. A declared tier outside the pool, a `null` or `{}` tier, or a bad
   queue deadline refuses the file with exit `125`, as the required tiers already do.
+- An optional `coordination.countSwap` setting, off by default, for a schema-3 Linux host. When it is on, unused swap
+  counts as memory up to an allowance: the smaller of swap total and the effective memory limit, rounded up to a whole
+  GiB. Admission, the reservation pool, shedding, and the emergency floor read the counted memory, and critical PSI
+  stays critical. Swap in use above the allowance is reported as the `swap-over-allowance` advisory. It never changes
+  the state or sheds work alone, and a run writes one line to standard error the first time it sees it. `status`,
+  `watch`, `monitor`, and the TUI show the allowance, the headroom, and the counted memory. The status JSON gains
+  `swapAllowanceBytes`, `resource.swapHeadroomBytes`, `resource.countedAvailableMemoryBytes`, and `resource.advisories`.
+  macOS ignores the setting, and it must not be used on zram-backed swap. Without the setting, every output is
+  unchanged.
 
 ### Fixed
 
@@ -46,6 +55,11 @@ Entries are reconstructed from the repository's own history. For the complete co
   `very-heavy` block to that machine's file. Rollback is deleting the block. Machines whose files do not declare the
   tier are unaffected. A v0.10.0 `history --resource-tier very-heavy` is refused as an unknown filter. In practice only
   the desktop needs the tier.
+- Setting `coordination.countSwap` is a breaking change for every binary before v0.11.0. A v0.10.0 binary refuses a file
+  that contains the key with exit `125` naming `hippo.config.unreadable` and `json: unknown field "countSwap"`, on every
+  command that loads the file. Roll out in the same order as `very-heavy`: release v0.11.0; repin every consumer on the
+  machine and check each with `hippo version --json`; then add `"countSwap": true` to that machine's file. Rollback is
+  deleting the key. A schema-2 file that names the key is refused with exit `125` naming `hippo.config.unreadable`.
 
 ## [v0.10.0] — 2026-10-24
 

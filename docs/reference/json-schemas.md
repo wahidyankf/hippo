@@ -135,6 +135,19 @@ Schema 5. The latest host sample at the top level, plus the current assessment, 
 }
 ```
 
+With `coordination.countSwap` on, the status gains these additive fields. Without it, none of them appears, and the
+output is byte-identical to the earlier release. Status stays schema 5.
+
+- `swapAllowanceBytes` at the top level, beside the host sample: the allowance the sample counts. Zero where swap cannot
+  be counted, such as macOS.
+- `resource.swapHeadroomBytes`: the allowance less swap in use, never negative. Zero when swap in use is unreadable.
+- `resource.countedAvailableMemoryBytes`: the available memory the policy decides on, the raw reading plus the headroom.
+- `resource.advisories`: an array holding `"swap-over-allowance"` while swap in use exceeds the allowance. The field is
+  absent otherwise. An advisory never changes `resource.state`.
+
+The text status line gains `swapAllowanceGiB=<n>` at its end, only with counting on. The `available` figure stays the
+raw reading. Read these fields by name and ignore unknown ones, as with every field in this document.
+
 `profile.degradedAdmission` is `true` when the resolved profile may use
 [degraded admission on macOS](./resource-policy.md#degraded-admission-on-macos): the built-in `balanced` profile, or a
 configured profile whose `extends` lineage reaches it. It is a property of the profile, not a prediction: `status` takes
@@ -185,13 +198,17 @@ The same object written one per line into raw development evidence, and embedded
   `memoryPressureLevel`, `physicalMemoryBytes`
 - **Compressor** — `compressorAvailable`, `compressorPayloadBytes`, `compressorStoredPages`, `compressorOccupiedPages`
 - **CPU and disk** — `availableParallelism`, `cpuUtilizationPercent`, `diskFreeBytes`, `diskTotalBytes`
-- **Swap** — `pageSizeBytes`, `swapIns`, `swapOuts`, `swapTotalBytes`, `swapUsedBytes`, `swapFreeBytes`, `swapState`
+- **Swap** — `pageSizeBytes`, `swapIns`, `swapOuts`, `swapTotalBytes`, `swapUsedBytes`, `swapFreeBytes`, `swapState`,
+  and `swapAllowanceBytes`, which appears only while `coordination.countSwap` is on
 - **Linux pressure** — `memoryPsiSomeAvg10`, `memoryPsiFullAvg10`, `oomEvents`, `oomKillEvents`
 
 `capabilities` is fixed per platform: `["compressor", "memory-pressure", "swap"]` on macOS and
 `["cgroup-v2", "memory-psi"]` on Linux, whatever the host could read. The Linux pressure group appears only in Linux
 samples: the two PSI fields are omitted when no pressure file parses, and `oomEvents` and `oomKillEvents` are always
 present, reading `0` when `memory.events` is unreadable. See [resource policy](./resource-policy.md#supported-evidence).
+
+`swapAllowanceBytes` is written by the optional swap count only. It is absent from a sample taken with the setting off,
+so that sample is the same object as before. See [swap allowance](./resource-policy.md#swap-allowance).
 
 ## Run identity
 
