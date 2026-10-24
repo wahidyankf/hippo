@@ -20,7 +20,7 @@ checksums.txt
 ## Download, verify, extract
 
 ```sh
-VERSION=v0.8.5
+VERSION=v0.10.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 [ "$ARCH" = x86_64 ] && ARCH=amd64
@@ -42,17 +42,19 @@ tar -xzf "$ASSET"
 ```
 
 ```console
-hippo_v0.8.5_darwin_arm64.tar.gz: OK
+hippo_v0.10.0_darwin_arm64.tar.gz: OK
 ```
 
 Each archive contains exactly one regular mode-755 member named `hippo`.
 
 ## Confirm what you got
 
+Run this in the same shell, so `$VERSION` is still the tag you pinned above:
+
 ```sh
-./hippo version --json | jq -e '
+./hippo version --json | jq -e --arg version "$VERSION" '
   .schemaVersion == 1 and
-  .version == "v0.8.5" and
+  .version == $version and
   (.commit | type == "string" and length > 0 and . != "unknown")
 '
 ```

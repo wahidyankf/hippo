@@ -4,10 +4,10 @@
 then runs direct and composed public tests serially. `npm test` invokes this same entrypoint as part of the full gate.
 Preparation needs no caller-supplied binary, digest, or receipt.
 
-For this release, the acceptance owner deferred six forced public terminal-fault rows: startup, input read, live output
-write, restoration, restoration failure taking precedence over interruption, and global JSON restoration-before-report.
-Their three scenario names and concrete boundaries are recorded in [tests/contract/contract.go](../contract/contract.go)
-with matching `@e2e-exempt` tags; they are deferred, never counted as PASS. Unit and native-I/O Integration retain every
+Six forced public terminal-fault rows are deferred by the acceptance owner: startup, input read, live output write,
+restoration, restoration failure taking precedence over interruption, and global JSON restoration-before-report. Their
+three scenario names and concrete boundaries are recorded in [tests/contract/contract.go](../contract/contract.go) with
+matching `@e2e-exempt` tags; they are deferred, never counted as PASS. Unit and native-I/O Integration retain every
 original predicate, including the six-row/29-step fault selection.
 
 The declared `TestTUIBDDPublicSessionHolderSignals` entry also runs `readonly-output/plain` and

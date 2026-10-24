@@ -20,9 +20,9 @@ CPU-and-memory reservation ledger coordinates repositories; only the owning guar
 $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make test
 ```
 
-**Verification note:** installation and contributor-test examples remain unexercised. Host-state and guarded-workload
-examples were exercised on a landed-source binary with synthetic fixtures; numbers vary and `make test` is the reader's
-own command.
+**Verification note:** installation matches the v0.10.0 archive. Host-state and guarded-workload examples ran on a
+landed-source binary with synthetic fixtures; numbers vary; `make test` is the reader's command. Contributor-test
+examples remain unexercised.
 
 ## ✨ Highlights
 
@@ -40,8 +40,7 @@ own command.
   bounded run outcomes without exposing commands or paths.
 - **Interactive monitoring.** `hippo tui`, added in v0.9.0, shows running jobs, queue positions, and capacity with
   keyboard navigation and a compact layout for narrow terminals. See
-  [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md). Final interactive verification is pending;
-  the v0.8.5 installation pin below does not provide this feature.
+  [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md). Final interactive verification is pending.
 - **Burst-safe activation.** Simultaneous repository clients wait through brief coordination contention after launch
   instead of cutting an already started payload.
 - **No daemon.** One short-lived process per guarded command, plus files in a shared state root.
@@ -62,7 +61,7 @@ Download a tagged archive for `darwin` or `linux` on `amd64` or `arm64`, and ver
 `checksums.txt`. **Pin both the tag and the expected SHA-256; never follow `main` at runtime.**
 
 ```sh
-VERSION=v0.8.5
+VERSION=v0.10.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
@@ -78,8 +77,8 @@ tar -xzf "hippo_${VERSION}_${OS}_${ARCH}.tar.gz"
 ./hippo version --json
 ```
 
-The checksum command prints `hippo_v0.8.5_<os>_<arch>.tar.gz: OK`; `version --json` reports `v0.8.5` and the exact
-release commit.
+The checksum command prints `hippo_<version>_<os>_<arch>.tar.gz: OK`; `version --json` reports that version and its
+exact release commit.
 
 From a source checkout, the tracked `./hippo` bootstrap compiles the CLI once and caches it. Details:
 [How to install a pinned release](./docs/how-to/install-a-pinned-release.md).
@@ -94,7 +93,8 @@ state=normal reason=normal profile=balanced concurrency=12 swap=active available
   owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
-Guard a command. Schema 3 requires a resource tier; arguments after `--` belong to the child:
+Guard a command. Under schema 3 (`hippo.local.json`), `--resource-tier` is required: `light`, `standard`, `heavy`, three
+reservations sized by that file. Schema 1 ignores it. Arguments after `--` belong to the child:
 
 ```console
 $ hippo run --class ephemeral --resource-tier light --disk-path . -- sh -c 'echo build-started; echo build-finished'

@@ -3,13 +3,13 @@
 Complete command and flag inventory for the `hippo` executable. Maintained by hand from the binary's own help output,
 with no generator behind it; run `hippo <command> --help` to confirm against the version you have installed.
 
-The `hippo tui` command and the `run --label` flag were added in v0.9.0. Their help and interactive behavior have not
-yet been checked against the final release build. The v0.8.5 installation pin does not establish their availability.
+The `hippo tui` command and the `run --label` flag were added in v0.9.0 and are present in v0.10.0. Interactive terminal
+behavior has not yet been verified against the final release build.
 
-**Verification note:** version, host-state, guarded-workload, history, refusal, and completion examples below have been
-exercised on a binary built from the landed source with synthetic fixtures; host-derived numbers vary and `version`
-values await release stamping. Release-fixture, deployment, and endpoint examples remain unexercised; they require a
-matching release, controlled state, or live endpoints.
+**Verification note:** host-state, guarded-workload, history, refusal, and completion examples below have been exercised
+on a binary built from the landed source with synthetic fixtures; host-derived numbers vary. The `version` examples
+match the published v0.10.0 archive. Release-fixture, deployment, and endpoint examples remain unexercised; they require
+a matching release, controlled state, or live endpoints.
 
 ## Command tree
 
@@ -94,10 +94,10 @@ Without a request for help, each of those mistakes still exits `2` naming `hippo
 
 ```console
 $ hippo version
-v0.8.5 (<commit>)
+v0.10.0 (<commit>)
 
 $ hippo version --json
-{"schemaVersion":1,"version":"v0.8.5","commit":"<commit>"}
+{"schemaVersion":1,"version":"v0.10.0","commit":"<commit>"}
 ```
 
 The text form reports the release followed by its exact source commit. The JSON form carries the same values in
