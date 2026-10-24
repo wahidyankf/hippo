@@ -27,21 +27,21 @@ refuses the first pair and wastes the machine.
 
 So admission works on both dimensions at once:
 
-- **CPU capacity** is the host's available parallelism minus one safety unit.
+- **CPU capacity** is every CPU the host reports available, or the `maxCpu` ceiling when that is lower.
 - **Memory capacity** is effective memory minus the resolved profile's reserve.
 
 Both must fit **together**. The check uses checked subtraction specifically so that integer overflow cannot wrap an
 exhausted vector around into an apparent admission — a bug class that would be catastrophic and silent.
 
-## Why capacity is smaller than the machine
+## Why memory keeps a reserve
 
-The safety unit and the profile reserve are not conservatism for its own sake. The machine still has to run an editor, a
-browser, a window server, and HIPPO itself. Handing out every core and every byte would reproduce exactly the overload
-HIPPO exists to prevent, just with better bookkeeping.
+Memory keeps a profile reserve. The machine still has to run an editor, a browser, a window server, and HIPPO itself,
+and handing out every byte would reproduce exactly the overload HIPPO exists to prevent. CPU is different: HIPPO offers
+every core by default. An owner who wants a core kept for the desktop sets `maxCpu` to the core count minus one.
 
-Concretely, on a 12-core host with 32 GiB running `balanced`: capacity is 11 CPU and 28 GiB, and the automatic share is
-a quarter of that, rounded up — 3 CPU and 7 GiB. Three such owners fit; a fourth would need 12 CPU of 11, so it waits.
-See [resource policy](../reference/resource-policy.md#reservation-capacity) for the rounding.
+Concretely, on a 12-core host with 32 GiB running `balanced`: capacity is 12 CPU and 28 GiB, and the automatic share is
+a quarter of that, rounded up — 3 CPU and 7 GiB. Four such owners fit exactly; a fifth would need 15 CPU of 12, so it
+waits. See [resource policy](../reference/resource-policy.md#reservation-capacity) for the rounding.
 
 ## Why fitting the vector is not the end of the story
 

@@ -53,7 +53,7 @@ sample's `swapState` is `unavailable`.
 | `constrained` | 10%, 512 MiB – 2 GiB | 15%, 512 MiB – 2 GiB   | 5%, 1–8 GiB         | 2               | 92%         |
 | `minimal`     | 5%, 128–512 MiB      | 10%, 256–768 MiB       | 2%, 256 MiB – 1 GiB | 1               | 98%         |
 
-Concurrency is the available parallelism minus one, at least one, and never above the profile's cap.
+Concurrency is the available parallelism, at least one, and never above the profile's cap.
 
 ### Derived thresholds
 
@@ -135,7 +135,7 @@ and keeps the rest visible in FIFO order.
 
 Reservation capacity in each dimension is:
 
-- **CPU** — the host's available parallelism, minus one safety unit
+- **CPU** — the host's available parallelism, every CPU, lowered only by `maxCpu` when that is set
 - **Memory** — effective memory, minus the resolved profile's memory reserve
 
 Optional schema-2, or required schema-3, `maxCpu` and `maxMemoryMiB` caps tighten either dimension further.
@@ -148,11 +148,11 @@ An idle root reports zero capacity until an owner registers:
 
 ```console
 $ hippo status --config reservation.json --json --disk-path . | ...
-"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":11,"memoryBytes":30064771072},...
+"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":12,"memoryBytes":30064771072},...
 ```
 
-`11` is 12 available parallelism minus one safety unit. `30064771072` is 28 GiB — 32 GiB effective memory minus the 4
-GiB balanced reserve. The automatic `balanced` share of that is one quarter, rounded up:
+`12` is the host's 12 available parallelism, every CPU it has. `30064771072` is 28 GiB — 32 GiB effective memory minus
+the 4 GiB balanced reserve. The automatic `balanced` share of that is one quarter, rounded up:
 
 ```console
 $ hippo run --config reservation.json --disk-path . \
@@ -160,8 +160,8 @@ $ hippo run --config reservation.json --disk-path . \
 cpu=3 mem=7516192768
 ```
 
-`7516192768` is exactly 7 GiB, one quarter of 28 GiB. CPU 3 is a quarter of 11 rounded up, so three automatic owners fit
-in 11 CPU and a fourth waits.
+`7516192768` is exactly 7 GiB, one quarter of 28 GiB. CPU 3 is a quarter of 12 rounded up, so four automatic owners fit
+exactly in 12 CPU and a fifth waits.
 
 An explicit `--reserve-cpu` / `--reserve-memory-mib` may be smaller than the automatic share but never below one CPU or
 256 MiB.

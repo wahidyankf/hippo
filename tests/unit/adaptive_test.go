@@ -32,10 +32,32 @@ func adaptiveSample(memory, available, diskFree, diskTotal int64, swapState stri
 	}
 }
 
+// TestProfileConcurrencyOffersEveryHostCPU holds a profile's concurrency to the
+// host's CPUs, lowered only by the profile's own cap.
+func TestProfileConcurrencyOffersEveryHostCPU(t *testing.T) {
+	for _, row := range []struct {
+		profile policy.ProfileName
+		cpus    int
+		want    int
+	}{
+		{"balanced", 12, 12},
+		{"balanced", 1, 1},
+		{"constrained", 12, 2},
+		{"minimal", 12, 1},
+	} {
+		sample := adaptiveSample(32*policy.GiB, 20*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active")
+		sample.AvailableParallelism = row.cpus
+		resolution, err := policy.BuiltinCatalog().Resolve(row.profile, "ephemeral", sample)
+		if err != nil || resolution.ResolvedProfile != row.profile || resolution.Concurrency != row.want {
+			t.Errorf("%s on %d CPUs resolved %q with concurrency %d (%v), want %d", row.profile, row.cpus, resolution.ResolvedProfile, resolution.Concurrency, err, row.want)
+		}
+	}
+}
+
 func TestAdaptiveProfileSelectionAndThresholds(t *testing.T) { //nolint:cyclop // One table-like test proves every profile transition and terminal decision.
 	catalog := policy.BuiltinCatalog()
 	balanced, err := catalog.Resolve("balanced", "ephemeral", adaptiveSample(32*policy.GiB, 20*policy.GiB, 100*policy.GiB, 512*policy.GiB, "active"))
-	if err != nil || balanced.ResolvedProfile != "balanced" || balanced.MemoryReserve != 4*policy.GiB || balanced.Concurrency != 3 {
+	if err != nil || balanced.ResolvedProfile != "balanced" || balanced.MemoryReserve != 4*policy.GiB || balanced.Concurrency != 4 {
 		t.Fatalf("unexpected balanced resolution %+v error=%v", balanced, err)
 	}
 

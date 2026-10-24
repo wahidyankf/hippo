@@ -156,8 +156,9 @@ func TestMixedPublicOwnerBudgetUsesDeclaredHostParallelism(t *testing.T) {
 		parallelism int
 		cpuCapacity int
 	}{
-		{"five-CPU-host-fits-both-declared-owners", 5, 4},
-		{"eight-CPU-host-reserves-one", 8, 7},
+		{"four-CPU-host-fits-both-declared-owners", 4, 4},
+		{"five-CPU-host-fits-both-declared-owners", 5, 5},
+		{"eight-CPU-host-uses-every-CPU", 8, 8},
 		{"nine-CPU-host-reaches-configured-cap", 9, 8},
 		{"sixteen-CPU-host-keeps-configured-cap", 16, 8},
 	} {
@@ -180,7 +181,7 @@ func TestMixedPublicOwnerBudgetRejectsHostsBelowDeclaredOwnerCapacity(t *testing
 		parallelism int
 		safeCPU     int
 	}{
-		{0, 1}, {1, 1}, {2, 1}, {3, 2}, {4, 3},
+		{0, 1}, {1, 1}, {2, 2}, {3, 3},
 	} {
 		t.Run(fmt.Sprintf("%d-logical-CPUs", host.parallelism), func(t *testing.T) {
 			for _, cpuCapacity := range []int{host.safeCPU, 8} {
@@ -212,7 +213,7 @@ func mixedCompatibilityBudgetControls(t *testing.T, validate func(coordination.R
 	for _, host := range []struct {
 		parallelism int
 		cpuCapacity int
-	}{{3, 2}, {4, 3}, {8, 7}, {9, 8}, {16, 8}} {
+	}{{2, 2}, {3, 3}, {4, 4}, {8, 8}, {9, 8}, {16, 8}} {
 		t.Run(fmt.Sprintf("%d-logical-CPUs", host.parallelism), func(t *testing.T) {
 			declared := coordination.ReservationTotals{
 				SchemaVersion: 5, Mode: reservationMode, ActiveOwners: 2,
@@ -266,10 +267,10 @@ func mixedCompatibilityImpossibleHostControls(t *testing.T, validate func(coordi
 	for _, logicalCPUs := range []int{0, 1, 2, 3, 4, 8} {
 		t.Run(fmt.Sprintf("%d-logical-CPUs", logicalCPUs), func(t *testing.T) {
 			for _, allocatedCPU := range []int{2, 4} {
-				if logicalCPUs >= 3 && allocatedCPU == 2 {
+				if logicalCPUs >= 2 && allocatedCPU == 2 {
 					continue
 				}
-				for _, cpuCapacity := range []int{max(1, logicalCPUs-1), 8} {
+				for _, cpuCapacity := range []int{max(1, logicalCPUs), 8} {
 					actual := coordination.ReservationTotals{
 						SchemaVersion: 5, Mode: reservationMode, ActiveOwners: 2,
 						Capacity:  coordination.ReservationVector{CPU: cpuCapacity, MemoryBytes: 3 * policy.GiB},
@@ -399,7 +400,7 @@ func mixedCompatibilityRAMControls(t *testing.T, configured configadapter.Result
 				}
 				settings := coordination.ReservationPolicy{Enabled: true, MaxCPU: configured.Coordination.MaxCPU, MaxMemoryBytes: configured.Coordination.MaxMemoryBytes, MaxActiveOwners: configured.Coordination.MaxActiveOwners, OwnerShares: configured.Coordination.OwnerShares}
 				plan, err := coordination.PlanReservation(sample, resolution, settings, 1, policy.GiB)
-				if err != nil || plan.Capacity != (coordination.ReservationVector{CPU: logicalCPUs - 1, MemoryBytes: 3 * policy.GiB}) || plan.Requested != (coordination.ReservationVector{CPU: 1, MemoryBytes: policy.GiB}) || plan.Allocated != plan.Requested {
+				if err != nil || plan.Capacity != (coordination.ReservationVector{CPU: logicalCPUs, MemoryBytes: 3 * policy.GiB}) || plan.Requested != (coordination.ReservationVector{CPU: 1, MemoryBytes: policy.GiB}) || plan.Allocated != plan.Requested {
 					t.Fatalf("standard RAM exact safe plan differs: %+v error=%v", plan, err)
 				}
 			})

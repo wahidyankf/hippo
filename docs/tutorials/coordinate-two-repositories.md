@@ -94,7 +94,7 @@ state root.
 Long output lines below are wrapped to fit, with continuation lines indented; each is one line in real output.
 
 ```console
-"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":11,"memoryBytes":30064771072},
+"coordination":{"schemaVersion":5,"mode":"reservation","capacity":{"cpu":12,"memoryBytes":30064771072},
   "allocated":{"cpu":2,"memoryBytes":1073741824},"waiting":{"cpu":0,"memoryBytes":0},"activeOwners":1,"waitingOwners":0,
   "ephemeral":1,"service":0,"transactional":0,"owners":[{"runId":"7d7f9d4609ff45eade9945e0b61d9858","state":"active",
   "class":"ephemeral","profile":"balanced","source":"hippo"
@@ -104,9 +104,9 @@ There is a lot in that line. This time it ends partway through an `owners` array
 `grep` pattern stops at the owner's `source`. That label is `hippo` because the checkout's tracked
 [run identity](../reference/json-schemas.md#run-identity) file names it. Read three things:
 
-- **`capacity`** is now populated: `11` CPU and `30064771072` bytes. That is this machine's 12-way parallelism minus one
-  safety unit, and 28 GiB — its 32 GiB of memory minus the balanced profile's 4 GiB reserve. HIPPO never offers the
-  whole machine.
+- **`capacity`** is now populated: `12` CPU and `30064771072` bytes. That is every one of this machine's 12 CPUs, and 28
+  GiB — its 32 GiB of memory minus the balanced profile's 4 GiB reserve. HIPPO offers every CPU by default, and `maxCpu`
+  lowers that when set.
 - **`allocated`** is `2` CPU and `1073741824` bytes, exactly what we asked for. The reservation is real and it is
   recorded.
 - **`activeOwners`** is `1`, and `ephemeral` is `1` — one owner, of the default task class.

@@ -7,6 +7,36 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.10.0] — Unreleased
+
+### Changed
+
+- Automatic CPU capacity now uses every CPU the host reports available. HIPPO held one CPU back for itself, so a 12-core
+  host offered 11 CPU, and a profile's concurrency was one lower than the host's CPU count. Capacity is now the
+  available parallelism, never below one CPU, and `maxCpu` still lowers it when set; a value at or above the host's CPU
+  count leaves every CPU available. Automatic shares divide the full count, so a `minimal` owner on a 12-core host now
+  reserves 12 CPU where it reserved 11, and a profile's concurrency follows the same count. A Mac that wants one CPU
+  kept for the desktop sets `maxCpu` to the core count minus one. No configuration key, exit status, or `hippo.*` code
+  changed.
+
+## [v0.9.0] — 2026-10-13
+
+### Added
+
+- `hippo tui` opens a keyboard-driven terminal view of running work, the registered FIFO queue, and machine capacity. It
+  creates no job or reservation, and quitting it does not stop guarded work. It accepts `--interval` (default `5s`,
+  minimum `1s`), `--disk-path`, `--source`, a repeatable `--tag` filter, and the shared `--config` and `--profile`
+  flags. Both stdin and stdout must be terminals, and `TERM=dumb` is refused. Those refusals and an interval below `1s`
+  exit `2` naming `hippo.args.invalid`. `q` exits `0`, Ctrl-C exits `130`, and SIGTERM exits `143` when no other failure
+  takes precedence. The reference documentation still lists terminal lifecycle acceptance against the release build as
+  pending.
+- `hippo run --label <text>` sets a private display label for a live run, which only the TUI shows. Without the flag the
+  label is the executable's basename. The label has no effect on admission, status totals, or receipts. An explicit
+  label must be 1 to 64 ASCII characters, begin with a letter or digit, and use only letters, digits, spaces, and `.`,
+  `_`, `:`, `@`, `+`, or `-`. Any other value exits `2` naming `hippo.args.invalid` before the run is queued.
+- A run with a display label keeps it in a `run-display/` directory under the state root, as one small JSON record. Only
+  the TUI reads it. A missing or unreadable record shows the label as unavailable and does not change accounting.
+
 ## [v0.8.5] — 2026-10-07
 
 ### Fixed

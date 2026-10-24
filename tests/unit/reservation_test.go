@@ -201,7 +201,8 @@ func reservationPolicy() guard.ReservationPolicy {
 }
 
 func TestAutomaticAndExplicitReservationPlanning(t *testing.T) {
-	for profile, expectedCPU := range map[policy.ProfileName]int{"balanced": 2, "constrained": 4, "minimal": 8} {
+	// Nine host CPUs in four, two, and one owner shares, each rounded up.
+	for profile, expectedCPU := range map[policy.ProfileName]int{"balanced": 3, "constrained": 5, "minimal": 9} {
 		plan, err := coordination.PlanReservation(reservationSample(), reservationResolution(profile), reservationPolicy(), 0, 0)
 		if err != nil {
 			t.Fatalf("%s planning failed: %v", profile, err)
@@ -218,10 +219,37 @@ func TestAutomaticAndExplicitReservationPlanning(t *testing.T) {
 	for _, request := range []struct {
 		cpu    int
 		memory int64
-	}{{-1, 256 * policy.MiB}, {1, 255 * policy.MiB}, {9, policy.GiB}, {1, 29 * policy.GiB}} {
+	}{{-1, 256 * policy.MiB}, {1, 255 * policy.MiB}, {10, policy.GiB}, {1, 29 * policy.GiB}} {
 		if _, planError := coordination.PlanReservation(reservationSample(), reservationResolution("balanced"), reservationPolicy(), request.cpu, request.memory); !errors.Is(planError, guard.ErrReservationReplan) {
 			t.Fatalf("unsafe vector (%d,%d) returned %v", request.cpu, request.memory, planError)
 		}
+	}
+}
+
+// TestAutomaticCPUCapacityUsesEveryHostCPU holds the capacity to the host's
+// parallelism: no CPU is held back for the host, and maxCpu only lowers it.
+func TestAutomaticCPUCapacityUsesEveryHostCPU(t *testing.T) {
+	for _, row := range []struct {
+		name        string
+		parallelism int
+		maximum     int
+		want        int
+	}{
+		{name: "no maximum uses all twelve", parallelism: 12, maximum: 0, want: 12},
+		{name: "a maximum below the cores lowers it", parallelism: 12, maximum: 8, want: 8},
+		{name: "a maximum above the cores does not raise it", parallelism: 12, maximum: 16, want: 12},
+		{name: "one CPU stays one CPU", parallelism: 1, maximum: 0, want: 1},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			sample := reservationSample()
+			sample.AvailableParallelism = row.parallelism
+			settings := reservationPolicy()
+			settings.MaxCPU = row.maximum
+			plan, err := coordination.PlanReservation(sample, reservationResolution("balanced"), settings, 0, 0)
+			if err != nil || plan.Capacity.CPU != row.want {
+				t.Fatalf("capacity = %+v, want %d CPUs: %v", plan.Capacity, row.want, err)
+			}
+		})
 	}
 }
 
@@ -867,19 +895,19 @@ func TestAutomaticOwnerSharesDefaultByLineage(t *testing.T) {
 	for _, row := range []struct {
 		lineage policy.Lineage
 		shares  int
+		cpu     int
 	}{
-		{policy.LineageBalanced, 4},
-		{policy.LineageConstrained, 2},
-		{policy.LineageMinimal, 1},
-		{policy.LineageUnset, 1},
+		{policy.LineageBalanced, 4, 3},
+		{policy.LineageConstrained, 2, 5},
+		{policy.LineageMinimal, 1, 9},
+		{policy.LineageUnset, 1, 9},
 	} {
 		// A name the old switch never knew, and one it knew for another lineage.
 		for _, name := range []policy.ProfileName{"local-profile", "balanced"} {
 			resolution := policy.Resolution{ResolvedProfile: name, Lineage: row.lineage, MemoryReserve: 4 * policy.GiB}
 			settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: 20, OwnerShares: map[policy.ProfileName]int{}}
 			plan, err := coordination.PlanReservation(reservationSample(), resolution, settings, 0, 0)
-			wantCPU := (8 + row.shares - 1) / row.shares
-			if err != nil || plan.Requested.CPU != wantCPU ||
+			if err != nil || plan.Requested.CPU != row.cpu ||
 				plan.Requested.MemoryBytes != (28*policy.GiB+int64(row.shares)-1)/int64(row.shares) {
 				t.Errorf("profile %q of lineage %d planned %+v (%v), want %d owner shares", name, row.lineage, plan.Requested, err, row.shares)
 			}
@@ -891,7 +919,7 @@ func TestAConfiguredOwnerShareOutranksTheLineageDefault(t *testing.T) {
 	resolution := policy.Resolution{ResolvedProfile: "local-profile", Lineage: policy.LineageBalanced, MemoryReserve: 4 * policy.GiB}
 	settings := guard.ReservationPolicy{Enabled: true, MaxActiveOwners: 20, OwnerShares: map[policy.ProfileName]int{"local-profile": 2}}
 	plan, err := coordination.PlanReservation(reservationSample(), resolution, settings, 0, 0)
-	if err != nil || plan.Requested.CPU != 4 {
-		t.Errorf("a profile configured for two shares planned %+v (%v), want four CPUs", plan.Requested, err)
+	if err != nil || plan.Requested.CPU != 5 {
+		t.Errorf("a profile configured for two shares planned %+v (%v), want five CPUs", plan.Requested, err)
 	}
 }

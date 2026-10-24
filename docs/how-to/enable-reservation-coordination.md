@@ -112,6 +112,9 @@ cpu=2 mem=4294967296
 
 That is 6 CPU and 16 GiB divided four ways.
 
+Without a `maxCpu` cap HIPPO may use every CPU the host reports. To keep one CPU on a 12-core Mac for the desktop, set
+`"maxCpu": 11`; a value of 12 or more leaves all 12 usable.
+
 Caps may only _tighten_. `maxMemoryMiB` below 256 and `maxActiveOwners` above 20 are rejected at load time with exit
 `125`:
 

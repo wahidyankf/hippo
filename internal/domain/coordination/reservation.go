@@ -267,7 +267,7 @@ func PlanReservation(
 		return ReservationPlan{}, fmt.Errorf("%w: explicit reservations must be nonnegative", ErrReservationReplan)
 	}
 
-	cpuCapacity := max(MinimumReservationCPU, sample.AvailableParallelism-1)
+	cpuCapacity := max(MinimumReservationCPU, sample.AvailableParallelism)
 	if settings.MaxCPU > 0 {
 		cpuCapacity = min(cpuCapacity, settings.MaxCPU)
 	}

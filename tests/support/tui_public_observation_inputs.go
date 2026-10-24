@@ -341,16 +341,16 @@ func validateMixedV085PublicOwnerBudget(actual coordination.ReservationTotals, l
 }
 
 func validateMixedOwnerBudget(actual coordination.ReservationTotals, logicalCPUs, ownerCPU int) error {
-	// Public reservation policy retains one safety unit (at least one CPU),
-	// while this fixture's explicit configuration caps the epoch at eight.
+	// Public reservation policy offers every logical CPU, lowered only by the
+	// configured maxCpu, which this fixture's explicit configuration sets to eight.
 	memoryCapacity := 8 * policy.GiB
 	if ownerCPU == 1 {
 		memoryCapacity = 3 * policy.GiB
 	}
-	capacity := coordination.ReservationVector{CPU: min(8, max(1, logicalCPUs-1)), MemoryBytes: memoryCapacity}
+	capacity := coordination.ReservationVector{CPU: min(8, max(1, logicalCPUs)), MemoryBytes: memoryCapacity}
 	allocated := coordination.ReservationVector{CPU: 2 * ownerCPU, MemoryBytes: 2 * policy.GiB}
 	if capacity.CPU < allocated.CPU {
-		return fmt.Errorf("mixed public owners require at least %d logical CPUs for two declared %d-CPU owners: host has %d", allocated.CPU+1, ownerCPU, logicalCPUs)
+		return fmt.Errorf("mixed public owners require at least %d logical CPUs for two declared %d-CPU owners: host has %d", allocated.CPU, ownerCPU, logicalCPUs)
 	}
 	if actual.SchemaVersion != 5 || actual.Mode != reservationMode || actual.ActiveOwners != 2 || actual.WaitingOwners != 0 || actual.Capacity != capacity || actual.Allocated != allocated {
 		return fmt.Errorf("real mixed commands changed declared input counts/budget: %+v", actual)
