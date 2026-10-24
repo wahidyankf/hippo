@@ -307,7 +307,9 @@ while a `release monitor` that reaches its own duration exits `0`.
   `hippo.limit.storage-blocked` or `hippo.limit.pressure-shed`.
 - Decoded reservation state must satisfy strict token, class, sequence, nonnegative-vector, checked-total, owner/waiter,
   owner-limit, and shedding-state invariants. Corruption fails closed and preserves bytes; admission uses
-  subtraction-based vector checks so aggregate arithmetic cannot wrap.
+  subtraction-based vector checks so aggregate arithmetic cannot wrap. Admission never enqueues a request that the
+  shared pool, as live owners leave it, cannot hold: that request waits without a queue place, so an accepted epoch
+  stays valid.
 - A missing reservation ledger is an empty epoch only when mode and identity evidence positively prove it; unknown
   identity errors retain accounting. Lifecycle lock waits are bounded, failed release retains owner identity evidence,
   cancelled waiter cleanup receives a fresh bounded lock wait and takes a free lock however late it starts, and

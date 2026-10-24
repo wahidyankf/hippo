@@ -175,6 +175,7 @@ type Driver struct {
 	lifecycleOK              bool
 	e2eSelection             e2eBinarySelection
 	gate                     coordinationGateScenario
+	sharedPool               sharedPoolState
 	cacheRoot                string
 	historicalCaches         []string
 	lintConfiguration        string

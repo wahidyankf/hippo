@@ -107,6 +107,23 @@ func (driver *Driver) quietHostEnvironment(environment []string) ([]string, erro
 	return append(result, "PATH="+directory+string(os.PathListSeparator)+path), nil
 }
 
+// QuietHostEnvironment returns environment with fixed idle host evidence for a
+// compiled run of a build stamped by StampedBuildLinkerFlags, and the release
+// that removes what it published. A test whose subject must be admitted or
+// deferred by its own inputs uses it, so the runner's CPU load, which parallel
+// test packages raise on a small runner, cannot decide admission.
+func QuietHostEnvironment(environment []string) ([]string, func(), error) {
+	var driver Driver
+	prepared, err := driver.quietHostEnvironment(environment)
+	if err != nil {
+		driver.Close()
+
+		return nil, func() {}, err
+	}
+
+	return prepared, driver.Close, nil
+}
+
 // PrepareNativeAnnotationEnvironment reuses this native driver's owned quiet host fixture.
 // Annotation subjects retain actual CLI/runtime ownership and process behavior.
 func (driver *Driver) PrepareNativeAnnotationEnvironment(environment []string) ([]string, error) {

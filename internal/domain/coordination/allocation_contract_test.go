@@ -1,7 +1,9 @@
 package coordination_test
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
@@ -84,6 +86,32 @@ func TestCapacityUpdatePreservesEpochWhenOwnersOrWaitersCannotFit(t *testing.T) 
 				t.Fatal("capacity update abandoned a live or pending commitment")
 			}
 		})
+	}
+}
+
+// A shrunk pool keeps the epoch's smaller capacity, so a new request that only the
+// larger pool could hold can never be admitted. Enqueue must refuse it and leave
+// the ledger valid, instead of writing a waiter that poisons the shared root.
+func TestEnqueueRefusesAWaiterThatCannotFitTheShrunkPool(t *testing.T) {
+	ledger := validCoordinationLedger()
+	ledger.Waiters = nil
+	if !coordination.UpdateCapacity(&ledger, coordination.ReservationVector{CPU: 8, MemoryBytes: 8 * policy.GiB}) {
+		t.Fatal("a larger pool was refused while the live owner still fits")
+	}
+	if want := (coordination.ReservationVector{CPU: 4, MemoryBytes: 4 * policy.GiB}); ledger.Capacity != want {
+		t.Fatalf("shrunk capacity=%+v, want %+v", ledger.Capacity, want)
+	}
+	before := copyCoordinationLedger(ledger)
+	waiter := coordination.Waiter{
+		Token: strings.Repeat("c", 32), PID: 3, Class: policy.TaskService, Profile: "balanced",
+		Requested: coordination.ReservationVector{CPU: 6, MemoryBytes: 6 * policy.GiB},
+		MaxOwners: 2, IdentityDevice: 1, IdentityInode: 4,
+	}
+	if err := coordination.Enqueue(&ledger, waiter); !errors.Is(err, coordination.ErrReservationDeferred) || !reflect.DeepEqual(ledger, before) {
+		t.Fatalf("enqueue of a waiter larger than the shrunk pool returned %v or changed the ledger", err)
+	}
+	if err := coordination.ValidateLedger(ledger); err != nil {
+		t.Fatalf("ledger after a refused enqueue is invalid: %v", err)
 	}
 }
 
