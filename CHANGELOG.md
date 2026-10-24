@@ -7,6 +7,19 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.11.0] — unreleased
+
+### Added
+
+- A lifetime summary and its `history --json` row record the CPU and wall time the child's process tree used, as
+  `childCpuSeconds` and `childWallSeconds`. CPU is user plus system time, and wall time runs from launch to reap. Both
+  are in seconds, rounded to milliseconds. HIPPO omits both fields when it did not measure the run, as for a run that
+  never started, so an absent field never means zero. A run that HIPPO shed or cancelled reports a lower bound, because
+  a helper that nothing waited for is not counted. A guard nested in another guard's child counts that work in the outer
+  run, so summing rows counts it twice when the inner guard also writes a row. Aggregated history rows omit both fields.
+  A `v0.10.0` binary that compacts a `v0.11.0` summary drops both fields, so per-run data is complete only once every
+  binary that writes to a state root runs `v0.11.0`. The summary and history schema versions are unchanged.
+
 ## [v0.10.0] — 2026-10-24
 
 ### Changed

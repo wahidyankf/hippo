@@ -348,6 +348,9 @@ while a `release monitor` that reaches its own duration exits `0`.
 - Lifetime summaries use fixed-memory aggregates and remain complete even after older raw chunks rotate away. Validated
   source plus at most eight customizable tags identify work without recording command arguments, repository origins,
   paths, credentials, or user payloads.
+- A lifetime summary and its history row carry the waited child tree's CPU and launch-to-reap wall time as two optional
+  scalars. The runtime adapter takes them from the reaped launcher's rusage, which folds in each waited descendant. Shed
+  and cancelled runs give a lower bound, and unmeasured runs omit both. Aggregates never carry them.
 - Status and development summaries use schema 5. Status includes privacy-safe owner/waiter rows, tier, deadline, legacy
   count, and promotion decision; schema-1 sessions appear as legacy active owners, with the heavy record deduplicated
   from its matching session. Exclusive observation holds the shared lock without pruning or rewriting compatibility

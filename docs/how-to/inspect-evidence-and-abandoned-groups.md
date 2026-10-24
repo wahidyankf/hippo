@@ -155,6 +155,10 @@ What to look at:
 - **`requestedCpu` vs `allocatedCpu`** — whether you got what you asked for.
 - **`fallbackChain`** — the profiles HIPPO tried before settling. A chain longer than one entry means the host could not
   support the profile you requested.
+- **`childCpuSeconds`** and **`childWallSeconds`** — the CPU and wall time the child's process tree used, when HIPPO
+  measured them. CPU well above wall time means several threads ran at once. A shed or cancelled run reports only a
+  lower bound. An absent field means HIPPO did not measure the run, not that the run used no CPU. See
+  [child usage](../reference/json-schemas.md#child-usage).
 - **`outcome`** and **`budgetOutcome`** — how the session ended. The
   [outcome list](../reference/json-schemas.md#development-lifetime-summary) says whether the child started.
 
