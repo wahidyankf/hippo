@@ -93,9 +93,8 @@ state=normal reason=normal profile=balanced concurrency=12 swap=active available
   owners=0 waiters=0 ownerLimit=0 promotion=not-configured
 ```
 
-Guard a command. Under schema 3 (`hippo.local.json`), `--resource-tier` is required: `light`, `standard`, or `heavy`,
-three reservations sized by that file, or `very-heavy` where that file also declares it as a last resort. Schema 1
-ignores it. Arguments after `--` belong to the child:
+Guard a command. Under schema 3 (`hippo.local.json`), `--resource-tier` is required: `light`, `standard`, `heavy`, or
+optional `very-heavy`, sized by it. Schema 1 ignores it. Arguments after `--` belong to the child:
 
 ```console
 $ hippo run --class ephemeral --resource-tier light --disk-path . -- sh -c 'echo build-started; echo build-finished'
