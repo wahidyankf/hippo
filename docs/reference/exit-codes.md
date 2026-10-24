@@ -146,7 +146,10 @@ effects first. [Respond to exit codes](../how-to/respond-to-exit-codes.md) walks
 
 Before `v0.8.0` HIPPO returned `73`, `75`, `76` and `78` for its own refusals, and `1` for both an empty result and a
 usage mistake. Those four numbers were in the range a child may return, carried no reason, and no consumer branched on
-them. They are gone.
+them. None of the four is an exit status now. `73` and `75` still appear as integers in two places. `status --json`
+reports `profile.exitCode` as `73` when the disk floor blocks work and as `75` when capacity defers it. The reservation
+ledger, `reservations.json` in the [state root](./state-root.md), records `sheddingExitCode` as `73` for a storage shed
+and `75` for any other pressure shed. A caller of a deferred or shed run still sees `124`, naming the reason.
 
 | Was  | Now   | Reason now carried                                             |
 | ---- | ----- | -------------------------------------------------------------- |
