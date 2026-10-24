@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/wahidyankf/hippo/tests/support"
 	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
 
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
@@ -16,11 +17,11 @@ import (
 	"github.com/wahidyankf/hippo/internal/status"
 )
 
-// runCompiledHIPPO runs the built binary over the shared root and returns its exit status and output.
-func runCompiledHIPPO(t *testing.T, binary, shared string, arguments ...string) (int, string) {
+// runCompiledHIPPO runs the built binary in environment and returns its exit status and output.
+func runCompiledHIPPO(t *testing.T, binary string, environment []string, arguments ...string) (int, string) {
 	t.Helper()
 	command := exec.Command(binary, arguments...)
-	command.Env = append(os.Environ(), "HIPPO_ROOT="+shared)
+	command.Env = environment
 	var output bytes.Buffer
 	command.Stdout, command.Stderr = &output, &output
 	err := command.Run()
@@ -42,12 +43,21 @@ func runCompiledHIPPO(t *testing.T, binary, shared string, arguments ...string) 
 func TestCompiledClientLargerThanSharedPoolDefersWithoutPoisoningRoot(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "hippo")
-	build := exec.Command("go", "build", "-o", binary, "./cmd/hippo")
+	// A stamped test build samples the fixed host evidence below instead of the live
+	// host, so only the shared ledger decides admission here. Against the live host,
+	// the CPU that parallel test packages use on a small runner defers the final run
+	// at the host profile's admission, and that says nothing about the shared pool.
+	build := exec.Command("go", "build", "-ldflags", support.StampedBuildLinkerFlags(), "-o", binary, "./cmd/hippo")
 	build.Dir = integrationModuleRoot(t)
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build HIPPO: %s: %v", output, err)
 	}
 	shared := filepath.Join(root, "shared")
+	environment, releaseHost, err := support.QuietHostEnvironment(append(os.Environ(), "HIPPO_ROOT="+shared))
+	if err != nil {
+		t.Fatalf("publish the fixed host evidence: %v", err)
+	}
+	defer releaseHost()
 	configPath := filepath.Join(root, "hippo.json")
 	if err := os.WriteFile(configPath, []byte(`{"schemaVersion":2,"coordination":{"maxCpu":2,"maxMemoryMiB":1024}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -73,19 +83,19 @@ func TestCompiledClientLargerThanSharedPoolDefersWithoutPoisoningRoot(t *testing
 		"run", "--config", configPath, "--disk-path", ".", "--reserve-cpu", "2", "--reserve-memory-mib", "256",
 		"--wait-for-admission", "50ms", "--", "/bin/sh", "-c", "printf started > '" + marker + "'",
 	}
-	if code, output := runCompiledHIPPO(t, binary, shared, larger...); code != status.LimitShed {
+	if code, output := runCompiledHIPPO(t, binary, environment, larger...); code != status.LimitShed {
 		t.Fatalf("larger client exit=%d output=%q, want the capacity deferral %d", code, output, status.LimitShed)
 	}
 	if _, err = os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("deferred client started its child: stat error=%v", err)
 	}
-	if code, output := runCompiledHIPPO(t, binary, shared, "status", "--config", configPath, "--json"); code != status.Success {
+	if code, output := runCompiledHIPPO(t, binary, environment, "status", "--config", configPath, "--json"); code != status.Success {
 		t.Fatalf("status after the deferral exit=%d output=%q, want a readable shared root", code, output)
 	}
 	if err = guard.ReleaseReservation(shared, owner); err != nil {
 		t.Fatalf("live owner could not release after the deferral: %v", err)
 	}
-	if code, output := runCompiledHIPPO(t, binary, shared, larger...); code != status.Success {
+	if code, output := runCompiledHIPPO(t, binary, environment, larger...); code != status.Success {
 		t.Fatalf("larger client after the owner released exit=%d output=%q, want admission", code, output)
 	}
 	if _, err = os.Stat(marker); err != nil {

@@ -19,6 +19,15 @@ import (
 // commit, and the scenario "Version identifies the exact build" requires it.
 const testBuildVersion = "v0.0.0-test"
 
+// StampedBuildLinkerFlags returns the -ldflags value that makes a build of
+// ./cmd/hippo a harness test build. Only such a build honours the fixed host
+// evidence QuietHostEnvironment publishes; a release or plain build samples the
+// live host, whose load is the runner's and not the test's.
+func StampedBuildLinkerFlags() string {
+	return "-X github.com/wahidyankf/hippo/internal/adapters/cli.Version=" + testBuildVersion +
+		" -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit=" + strings.Repeat("0", 40)
+}
+
 // e2eBinarySelection is what one binary-selection scenario staged and chose.
 type e2eBinarySelection struct {
 	inherited, chosen string
@@ -91,9 +100,7 @@ func e2eBinary(inherited string) (string, func(), error) {
 	}
 	// The same flags and bounded concurrency as tests/e2e/run.sh.
 	build := exec.Command(goBinary, "build", "-p=1", "-trimpath", "-ldflags", //nolint:gosec // HIPPO_GO_BINARY is the harness input naming the Go toolchain, as tests/e2e/run.sh reads it.
-		"-X github.com/wahidyankf/hippo/internal/adapters/cli.Version="+testBuildVersion+
-			" -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit="+strings.Repeat("0", 40),
-		"-o", binary, "./cmd/hippo")
+		StampedBuildLinkerFlags(), "-o", binary, "./cmd/hippo")
 	build.Dir = repository
 	build.Env = append(os.Environ(), "GOMAXPROCS=2")
 	if output, buildError := build.CombinedOutput(); buildError != nil {
