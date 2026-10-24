@@ -69,7 +69,9 @@ Two layers, in this order:
    that is itself prohibited is reported as `<blocked-path>` rather than printed.
 2. **Credential scanning.** TruffleHog `v3.97.1`, pinned by SHA-256, downloaded once into a cache outside the
    repository, verified before extraction, and run offline with
-   `--no-verification --no-update --fail --fail-on-scan-errors`.
+   `--no-verification --no-update --fail --fail-on-scan-errors`. The extracted scanner is staged in a temporary
+   directory, stamped with its own digest, and published by one rename, so a cache entry never exists without its stamp;
+   an entry without a stamp is refused.
 
 Before either layer touches real material, a **canary** runs: an inert, unissued token-shaped marker assembled at run
 time and scanned by the pinned scanner with verification disabled. The canary must produce a real detection while
