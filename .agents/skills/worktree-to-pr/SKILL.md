@@ -23,7 +23,8 @@ Read it before acting; this skill exists to make sure it is the thing that gets 
 4. **Push and open as a draft**, with a body carrying why, what was decided, and how it was proved.
 5. **Mark ready**, then wait for the run that starts _because_ you marked it ready. The earlier run is not the required
    one.
-6. **Merge** by rebase, once every precondition holds.
+6. **Merge** by squash, the only method the `main` ruleset allows, with
+   `gh pr merge <number> --squash --match-head-commit <head>`, once every precondition holds.
 7. **Land the next unit** in the same worktree, or delete the worktree, the local branch, and the remote branch.
 
 ## Traps
