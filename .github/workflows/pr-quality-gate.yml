@@ -119,6 +119,25 @@ jobs:
         if: steps.route.outputs.changed == 'true'
         run: ./rhino version
 
+  mixed-version:
+    # The one released-binary check that depends on the host's CPU count. The
+    # released build subtracts a CPU before its cap, so a shared ledger can
+    # disagree with the current build on hosts this runner size. The full suite
+    # runs this same leaf after merge; here only the leaf runs, on this runner.
+    name: Mixed-version compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Released v0.8.5 interoperability leaf
+        run: ./tests/e2e/mixed-version.sh
+
   release-build:
     name: Release build
     runs-on: ubuntu-24.04
@@ -157,7 +176,14 @@ jobs:
     # adding or splitting a job below never means editing the ruleset -- and a
     # job that is added but forgotten here still cannot pass unnoticed, because
     # `needs` fails the aggregate when any dependency does.
-    needs: [formatting, repository-contract, consumer-bootstrap, release-build]
+    needs:
+      [
+        formatting,
+        repository-contract,
+        consumer-bootstrap,
+        release-build,
+        mixed-version,
+      ]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

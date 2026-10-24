@@ -23,10 +23,12 @@ executes that extracted binary's `version --json`. The selected Go tool strictly
 version, and full commit must match the selected immutable release. Both preparations reject unexpected stderr or
 altered raw version output.
 
-The gate then executes `TestMixedVersionV085DisplayInteroperability` once with `-tags=mixedversion -count=1`, a
-120-second test timeout, and the same current candidate used by the retained v0.8.4 public suite. The v0.8.5 preparation
-exports `HIPPO_PUBLIC_V085_BIN`, `HIPPO_PUBLIC_V085_BIN_SHA256`, and `HIPPO_PUBLIC_V085_VERSION_RECEIPT` to the harness.
-The existing v0.8.4 inputs remain separate. These artifact inputs never become product environment. A preparation or
+The pull-request gate runs this same leaf alone through `tests/e2e/mixed-version.sh`, with the same candidate and
+preparation, on its `ubuntu-24.04` runner. After merge, `tests/e2e/run.sh` runs it again as part of the full suite. The
+gate then executes `TestMixedVersionV085DisplayInteroperability` once with `-tags=mixedversion -count=1`, a 120-second
+test timeout, and the same current candidate used by the retained v0.8.4 public suite. The v0.8.5 preparation exports
+`HIPPO_PUBLIC_V085_BIN`, `HIPPO_PUBLIC_V085_BIN_SHA256`, and `HIPPO_PUBLIC_V085_VERSION_RECEIPT` to the harness. The
+existing v0.8.4 inputs remain separate. These artifact inputs never become product environment. A preparation or
 compatibility failure stops the gate; no missing-input skip exists.
 
 This v0.8.5 compatibility fixture reserves one CPU and one GiB per real owner: two concurrent owners allocate two CPUs
