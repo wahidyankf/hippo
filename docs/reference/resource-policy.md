@@ -122,6 +122,10 @@ These are the compiled tiers, and the values the recommended schema-3 configurat
 bounds and `queueDeadline` come from the configuration file, which may set any positive deadline and any bounds that fit
 the pool — see [configuration](./configuration.md#adaptive-schema-3).
 
+A fourth tier, `very-heavy`, is optional and has no compiled bounds. A schema-3 file that declares it sets its bounds,
+as for the three tiers above, and a run may name it only where the file declares it. Any other configuration refuses
+`--resource-tier very-heavy` with exit `2`. See [optional very-heavy tier](./configuration.md#optional-very-heavy-tier).
+
 The minimum is the admission floor. When the FIFO head fits, HIPPO grants the largest vector up to the tier maximum that
 is safe at that instant. The allocation is fixed for the payload lifetime, so a lighter period cannot silently enlarge
 an existing job and a pressured period cannot resize it underneath the build tool.

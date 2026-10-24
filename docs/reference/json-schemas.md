@@ -148,7 +148,8 @@ owner, not two. Exclusive mode has no registered waiter rows and does not invent
 **Coordination corruption is an error, never a synthetic zero-total success.** If the reservation marker, lock, or
 ledger cannot be decoded, `status --json` returns an error rather than reporting totals it cannot substantiate.
 
-`owners` and `waiters` are safe operational rows. They contain opaque run IDs, source and tags, class, profile, tier,
+`owners` and `waiters` are safe operational rows. `tier` is `light`, `standard`, `heavy`, or `very-heavy`; the last
+appears only where the configuration declares it. They contain opaque run IDs, source and tags, class, profile, tier,
 requested/allocated vectors, tier minimum/maximum, registration time, and deadline—never commands, arguments, working
 directories, or repository paths. `legacyEntries` counts live compatibility owners and live schema-2 records without
 metadata; schema-3 launches refuse to mix with them until they drain.
