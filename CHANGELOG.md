@@ -7,7 +7,7 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
-## [v0.8.6] — Unreleased
+## [v0.10.0] — Unreleased
 
 ### Changed
 
