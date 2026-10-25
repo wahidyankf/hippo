@@ -105,9 +105,11 @@ Measuring a roomy volume while the work fills a small one is the most common way
 ## Read swap as memory on a Linux devbox
 
 With `coordination.countSwap` on, `watch`, `status`, `monitor`, and the TUI count unused swap as memory up to the swap
-allowance. Their output then names the allowance. A `swap-over-allowance` advisory shows when swap use passes it, and
-the state stays where the RAM reading puts it. Set the key only after every binary that reads the file is `v0.11.0` or
-later, as the [configuration reference](../reference/configuration.md#swap-counting) explains.
+allowance. `status` and `watch` name the allowance in their text line, and their JSON carries the headroom and the
+counted memory. The TUI shows all three. `monitor` counts the swap in its transitions but prints no allowance. A
+`swap-over-allowance` advisory appears in the JSON and the TUI when swap use passes the allowance, and it never changes
+the state. Set the key only after every binary that reads the file is `v0.11.0` or later, as the
+[configuration reference](../reference/configuration.md#swap-counting) explains.
 
 ## Related
 
