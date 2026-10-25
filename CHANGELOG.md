@@ -7,7 +7,7 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
-## [v0.11.0] — unreleased
+## [v0.11.0] — 2026-10-25
 
 ### Added
 
@@ -26,11 +26,12 @@ Entries are reconstructed from the repository's own history. For the complete co
   accept `very-heavy` whatever the file declares. A declared tier outside the pool, a `null` or `{}` tier, or a bad
   queue deadline refuses the file with exit `125`, as the required tiers already do.
 - An optional `coordination.countSwap` setting, off by default, for a schema-3 Linux host. When it is on, unused swap
-  counts as memory up to an allowance: the smaller of swap total and the effective memory limit, rounded up to a whole
-  GiB. Admission, the reservation pool, shedding, and the emergency floor read the counted memory, and critical PSI
+  counts as memory up to an allowance: the effective memory limit rounded up to a whole GiB, or swap total when that is
+  smaller. Admission, the reservation pool, shedding, and the emergency floor read the counted memory, and critical PSI
   stays critical. Swap in use above the allowance is reported as the `swap-over-allowance` advisory. It never changes
-  the state or sheds work alone, and a run writes one line to standard error the first time it sees it. `status`,
-  `watch`, `monitor`, and the TUI show the allowance, the headroom, and the counted memory. The status JSON gains
+  the state or sheds work alone, and a run writes one line to standard error the first time it sees it. `status` and
+  `watch` name the allowance in their text line, and their JSON and the TUI also show the headroom and the counted
+  memory. `monitor` counts the swap in its transitions but prints no allowance. The status JSON gains
   `swapAllowanceBytes`, `resource.swapHeadroomBytes`, `resource.countedAvailableMemoryBytes`, and `resource.advisories`.
   macOS ignores the setting, and it must not be used on zram-backed swap. Without the setting, every output is
   unchanged.
@@ -42,7 +43,8 @@ Entries are reconstructed from the repository's own history. For the complete co
   checking it against that size. The next command then read a ledger it refuses, so every client on the root exited
   `125` naming `hippo.supervision.failed`. Such a request now waits without taking a queue place. Its bounded wait ends
   in the usual `124` naming `hippo.limit.capacity-deferred`, with its never-started receipt, and the ledger stays valid.
-  A root that an earlier binary already poisoned still needs the manual recovery in the
+  While smaller clients keep the pool busy, such a request can wait out its whole bounded wait without being admitted. A
+  root that an earlier binary already poisoned still needs the manual recovery in the
   [inspection guide](docs/how-to/inspect-evidence-and-abandoned-groups.md#when-the-root-will-not-admit-anything). No
   configuration key, exit status, or record changed, and a request that already fits the pool behaves as before.
 
