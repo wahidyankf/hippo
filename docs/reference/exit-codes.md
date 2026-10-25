@@ -180,3 +180,14 @@ returned: an unreadable host and a refused evidence root before launch named `hi
 `release check` on an unreadable host exited `124` naming `hippo.limit.capacity-deferred`. The status is still `125` in
 every case but that last one. v0.8.2 added `hippo.lease.unwritable`: a port-lease root that refused a write before
 launch named `hippo.supervision.failed`, with the same `125`.
+
+v0.11.0 adds no status and no reason. It changes one outcome. A `run` whose request is larger than the shared pool as it
+stands used to queue anyway, and that left the ledger unreadable: every client on the root then exited `125` naming
+`hippo.supervision.failed`. Such a request now waits without a queue place. When its bounded wait ends it exits `124`
+naming `hippo.limit.capacity-deferred`, with its `never-started` receipt. A root that an earlier binary already poisoned
+still needs the
+[recovery steps](../how-to/inspect-evidence-and-abandoned-groups.md#when-the-root-will-not-admit-anything). The optional
+`very-heavy` tier and `coordination.countSwap` add refusals with the statuses already listed: a `run` that names an
+undeclared `very-heavy` tier exits `2` naming `hippo.args.invalid`. A configuration file with a bad `very-heavy` block
+exits `125` naming `hippo.config.unreadable`, and so does a binary older than v0.11.0 that reads a file declaring
+`very-heavy` or naming `countSwap`.

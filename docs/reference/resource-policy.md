@@ -139,10 +139,10 @@ and keeps the rest visible in FIFO order.
 ## Swap allowance
 
 With `coordination.countSwap` set to `true` on a schema-3 Linux host, HIPPO counts unused swap as memory, up to an
-allowance. The allowance is the smaller of swap total and the effective memory limit, rounded up to a whole GiB. Swap in
-use is subtracted from the allowance, and the remainder is the headroom. The headroom is added to available memory
-before every memory threshold reads it: admission, the memory states, shedding, and the emergency floor. Reserves and
-the raw evidence are unchanged, so `availableMemoryBytes` in the output stays the raw reading.
+allowance. The allowance is the effective memory limit rounded up to a whole GiB, or the swap total when that is
+smaller. Swap in use is subtracted from the allowance, and the remainder is the headroom. The headroom is added to
+available memory before every memory threshold reads it: admission, the memory states, shedding, and the emergency
+floor. Reserves and the raw evidence are unchanged, so `availableMemoryBytes` in the output stays the raw reading.
 
 | Condition                                       | Effect                                                    |
 | ----------------------------------------------- | --------------------------------------------------------- |
