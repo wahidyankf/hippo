@@ -59,7 +59,7 @@ The TUI uses that same policy for optional decoration, including colour and emph
 required cursor/alternate-screen controls and text markers such as `WAIT`, `STALE`, and `ERROR`. Explicit
 `--color always` does not bypass interactive entry requirements: stdin and stdout must be terminals, and `TERM=dumb` is
 refused. Global `--output json` selects only failure diagnostics after terminal restoration, never JSON frames. See the
-[TUI command reference](./cli.md#hippo-tui); as of v0.9.0, final interactive release verification was pending.
+[TUI command reference](./cli.md#hippo-tui).
 
 ```console
 $ TERM=xterm HIPPO_COLOR=1 hippo --config missing.json status 2>&1 | cat -v

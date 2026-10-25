@@ -5,9 +5,9 @@ evidence stayed inside the release envelope.
 
 Release monitoring is strict: it requires explicit local health and routed endpoints, and it will not guess them.
 
-**Verification note:** as of v0.9.0, deployment, host-admission, streaming, environment and assessment examples below
-had not been exercised against the current build. They require controlled deployment endpoints and matching release
-evidence. The argument-refusal examples have been checked with the stated configuration and environment prerequisites.
+**Verification note:** the deployment, host-admission, streaming, environment and assessment examples below require
+controlled deployment endpoints and matching release evidence. The argument-refusal examples have been checked with the
+stated configuration and environment prerequisites.
 
 ## Gate a release before starting
 
