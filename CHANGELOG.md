@@ -50,11 +50,12 @@ Entries are reconstructed from the repository's own history. For the complete co
 
 ### Compatibility
 
-- Declaring `very-heavy` is a breaking change for every binary before v0.11.0. A v0.10.0 binary, and every schema-3
-  release before it, refuses such a file with exit `125` naming `hippo.config.unreadable` and "schema 3 contains an
-  unknown resource tier", which stops every guarded command that loads the file on that machine. Roll out in this order:
-  release v0.11.0; repin every consumer on the machine and check each with `hippo version --json`; then add the
-  `very-heavy` block to that machine's file. Rollback is deleting the block. Machines whose files do not declare the
+- Declaring `very-heavy` is a breaking change for every binary before v0.11.0. A v0.10.0 binary refuses such a file with
+  exit `125` naming `hippo.config.unreadable` and "schema 3 contains an unknown resource tier". So does every schema-3
+  release from v0.8.0. A v0.6.0 to v0.7.2 binary refuses it with exit `78` and the same message, and an earlier binary
+  refuses any schema-3 file. Each refusal stops every guarded command that loads the file on that machine. Roll out in
+  this order: release v0.11.0; repin every consumer on the machine and check each with `hippo version --json`; then add
+  the `very-heavy` block to that machine's file. Rollback is deleting the block. Machines whose files do not declare the
   tier are unaffected. A v0.10.0 `history --resource-tier very-heavy` is refused as an unknown filter. In practice only
   the desktop needs the tier.
 - Setting `coordination.countSwap` is a breaking change for every binary before v0.11.0. A v0.10.0 binary refuses a file

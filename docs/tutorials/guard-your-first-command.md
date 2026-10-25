@@ -64,7 +64,9 @@ build-finished
 ```
 
 That is the whole output. A healthy guarded run is deliberately quiet — HIPPO writes to stderr only when an operator
-needs to know about a degraded admission, a deferral, a storage block, or a pressure shed.
+needs to know about a degraded admission, a deferral, a storage block, or a pressure shed. The one opt-in exception is
+`coordination.countSwap`: with it on, a run also writes one swap-over-allowance line the first time it sees that
+advisory. See [swap allowance](../reference/resource-policy.md#swap-allowance).
 
 Notice what did **not** happen: no progress bar, no wrapper banner, no reformatting of the child's output. The child
 kept your stdout exactly as it found it.

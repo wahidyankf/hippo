@@ -1,7 +1,8 @@
 # Resource policy
 
 The thresholds and profiles HIPPO uses to classify host evidence and decide admission. These are compiled defaults.
-Local configuration can never cross the immutable floors — one CPU, 256 MiB, and at most 20 owners — but within them a
+Local configuration can never cross the immutable floors — one CPU, 256 MiB, and at most 20 owners — and a profile's
+`memoryReserveMinMiB` never goes below 128 MiB, nor its `noSwapMemoryReserveMinMiB` below 256 MiB. Within those limits a
 profile override may move a compiled profile value either way, and under schema 3 the configuration file defines the
 resource tiers.
 

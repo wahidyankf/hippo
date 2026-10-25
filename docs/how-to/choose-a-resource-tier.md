@@ -103,7 +103,8 @@ counting it counts the same memory twice. Add the key inside `coordination`:
 With the key on, unused swap counts as memory up to an allowance. The allowance is derived from swap total and the
 memory limit, and [swap allowance](../reference/resource-policy.md#swap-allowance) gives the exact rule. Swap in use
 above the allowance raises the `swap-over-allowance` advisory, and that advisory never sheds work on its own. On macOS
-the allowance is zero, so the key changes nothing: `hippo status` prints `swapAllowanceGiB=0.00`.
+the allowance is zero, so admission and shedding decisions do not change. The key still adds output: the text status
+line prints `swapAllowanceGiB=0.00`, and the [JSON fields](../reference/json-schemas.md) are present with zero values.
 
 ## Roll a change out to a machine
 

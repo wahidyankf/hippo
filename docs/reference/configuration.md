@@ -90,11 +90,13 @@ rejects it because it has no FIFO queue to bound. Upgrade every consumer first a
 before activating schema 3; a schema-3 launch returns protocol-mismatch exit `125` naming
 `hippo.coordination.protocol-mismatch` before enqueue or child launch when a mixed legacy ledger remains.
 
-The optional `very-heavy` tier needs the same care, with a sharper edge. A v0.10.0 binary, and every schema-3 release
-before this one, refuses a file that declares `very-heavy` with exit `125` naming `hippo.config.unreadable` and "schema
-3 contains an unknown resource tier". That stops every guarded command which loads the file on that binary. Repin every
-consumer on the machine first, check each with `hippo version --json`, and only then add the block. To roll back, delete
-the block; the file then loads on every binary again.
+The optional `very-heavy` tier needs the same care, with a sharper edge. A v0.10.0 binary refuses a file that declares
+`very-heavy` with exit `125` naming `hippo.config.unreadable` and "schema 3 contains an unknown resource tier". So does
+every schema-3 release from v0.8.0. A v0.6.0 to v0.7.2 binary refuses it with exit `78` (replan required) and the same
+message without the reason name, and a binary before v0.6.0 refuses any schema-3 file. Each refusal stops every guarded
+command which loads the file on that binary. Repin every consumer on the machine first, check each with
+`hippo version --json`, and only then add the block. To roll back, delete the block; the file then loads on every binary
+again.
 
 ## Optional very-heavy tier
 
@@ -204,10 +206,11 @@ Critical PSI is critical whatever the swap. See [resource policy](resource-polic
 
 Do not enable it on zram-backed swap. zram is carved from RAM, so counting it counts the same memory twice.
 
-**Rollout order.** Every binary that reads the file must be `v0.11.0` or later before the key is added. An older binary,
-including `v0.10.0`, refuses the whole file with `json: unknown field "countSwap"`, exit `125`, on every command that
-loads configuration. Repin every consumer first, check each with `hippo version --json`, then add `countSwap` to that
-machine's file. Rollback is deleting the key. A file that omits it loads and behaves as before.
+**Rollout order.** Every binary that reads the file must be `v0.11.0` or later before the key is added. An older binary
+refuses the whole file on every command that loads configuration. A v0.8.0 to v0.10.0 binary exits `125` with
+`json: unknown field "countSwap"`, and a v0.6.0 to v0.7.2 binary exits `78` instead. Repin every consumer first, check
+each with `hippo version --json`, then add `countSwap` to that machine's file. Rollback is deleting the key. A file that
+omits it loads and behaves as before.
 
 ## `profiles`
 
@@ -252,7 +255,7 @@ named it divides capacity as its lineage's built-in does: four owners for `balan
 | `fallback`                   | string  | Profile to resolve to when this one does not fit                 |
 | `strict`                     | boolean | When true, no fallback is attempted; a misfit replans with `125` |
 | `memoryReservePercent`       | number  | Share of effective memory held back                              |
-| `memoryReserveMinMiB`        | integer | Lower clamp on the memory reserve                                |
+| `memoryReserveMinMiB`        | integer | Lower clamp on the memory reserve. Never below 128 MiB           |
 | `memoryReserveMaxMiB`        | integer | Upper clamp on the memory reserve                                |
 | `noSwapMemoryReservePercent` | number  | Memory reserve when the host has no usable swap                  |
 | `noSwapMemoryReserveMinMiB`  | integer | Lower clamp, no-swap case. Never below 256 MiB                   |
