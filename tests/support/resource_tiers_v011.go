@@ -1,12 +1,10 @@
 package support
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -181,19 +179,8 @@ func (driver *Driver) runTierInvocation(root string, arguments []string) error {
 	if driver.mode != e2eMode {
 		return driver.runGuardInRoot(root, arguments...)
 	}
-	command := exec.Command(driver.binary, arguments...)
-	command.Env = environmentWith(map[string]string{hippoRootEnvironment: root, tierEnvironmentConfig: ""})
-	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	command.Stdout, command.Stderr = stdout, stderr
-	err := command.Run()
-	driver.exitCode, driver.output, driver.errorOutput = 0, stdout.String(), stderr.String()
-	if exitError, failed := errors.AsType[*exec.ExitError](err); failed {
-		driver.exitCode = exitError.ExitCode()
 
-		return nil
-	}
-
-	return err
+	return driver.runBinaryWith(map[string]string{hippoRootEnvironment: root, tierEnvironmentConfig: ""}, arguments...)
 }
 
 func (driver *Driver) requireTierExit(expected string) error {

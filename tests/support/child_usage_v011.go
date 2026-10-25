@@ -108,14 +108,21 @@ func (driver *Driver) runGuardedChild(script string) error {
 }
 
 // runGuardInRoot runs the guard with root as its evidence root: through the
-// compiled binary at the end-to-end boundary, and in process otherwise.
+// compiled binary at the end-to-end boundary, and in process otherwise. Neither
+// samples the live host: admission is not these scenarios' subject, and a
+// runner's own memory state would otherwise defer a run their inputs admit.
 func (driver *Driver) runGuardInRoot(root string, arguments ...string) error {
 	if driver.mode == e2eMode {
 		return driver.runBinaryInRoot(root, arguments...)
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	base := time.Now()
 	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + root},
+		Collector: &sequenceCollector{samples: []policy.Sample{
+			healthySample(base), healthySample(base.Add(time.Millisecond)), healthySample(base.Add(2 * time.Millisecond)),
+		}},
+		Sleep: func(time.Duration) {},
 	}).Run(context.Background(), arguments)
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
