@@ -37,8 +37,13 @@ const (
 		"n=$((n+1)); /bin/sleep 0.05; done; kill $p; wait $p 2>/dev/null"
 	// grandchildRound runs the busy round in a nested shell the payload waits for.
 	grandchildRound = "/bin/sh -c '" + busyRound + "'"
-	// unreapedRound never waits for its helper, so a shed leaves the helper's CPU unrecorded.
-	unreapedRound = cpuBusyHelper + " >/dev/null & /bin/sleep 30"
+	// unreapedRound starts its helper from a subshell that exits at once, so the
+	// helper is no process's child within the waited tree and the shell cannot
+	// reap it. A helper the shell started itself would be reaped, and its CPU
+	// carried into the shell's usage, whenever a group signal killed the helper
+	// before the shell. A shed then leaves the helper's CPU unrecorded however
+	// the host schedules the signals.
+	unreapedRound = "(" + cpuBusyHelper + " >/dev/null &); /bin/sleep 30"
 	// shedHealthySamples keeps the guard healthy for about one second at the
 	// fixture's one-millisecond sample interval before it reports critical pressure.
 	shedHealthySamples = 1000
@@ -108,14 +113,21 @@ func (driver *Driver) runGuardedChild(script string) error {
 }
 
 // runGuardInRoot runs the guard with root as its evidence root: through the
-// compiled binary at the end-to-end boundary, and in process otherwise.
+// compiled binary at the end-to-end boundary, and in process otherwise. Neither
+// samples the live host: admission is not these scenarios' subject, and a
+// runner's own memory state would otherwise defer a run their inputs admit.
 func (driver *Driver) runGuardInRoot(root string, arguments ...string) error {
 	if driver.mode == e2eMode {
 		return driver.runBinaryInRoot(root, arguments...)
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	base := time.Now()
 	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + root},
+		Collector: &sequenceCollector{samples: []policy.Sample{
+			healthySample(base), healthySample(base.Add(time.Millisecond)), healthySample(base.Add(2 * time.Millisecond)),
+		}},
+		Sleep: func(time.Duration) {},
 	}).Run(context.Background(), arguments)
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 

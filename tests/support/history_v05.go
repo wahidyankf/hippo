@@ -347,11 +347,23 @@ func (driver *Driver) requestJSONHistory() error {
 // runBinaryInRoot runs the compiled binary with root as its shared evidence
 // root, and records its exit status and both streams.
 func (driver *Driver) runBinaryInRoot(root string, arguments ...string) error {
+	return driver.runBinaryWith(map[string]string{hippoRootEnvironment: root}, arguments...)
+}
+
+// runBinaryWith runs the compiled binary with the given variables set over the
+// fixed quiet host evidence, and records its exit status and both streams. The
+// callers' subject is never host admission, so the runner's own load must not
+// decide whether the run is admitted.
+func (driver *Driver) runBinaryWith(values map[string]string, arguments ...string) error {
+	environment, err := driver.quietHostEnvironment(environmentWith(values))
+	if err != nil {
+		return err
+	}
 	command := exec.Command(driver.binary, arguments...)
-	command.Env = environmentWith(map[string]string{hippoRootEnvironment: root})
+	command.Env = environment
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	command.Stdout, command.Stderr = stdout, stderr
-	err := command.Run()
+	err = command.Run()
 	driver.exitCode, driver.output, driver.errorOutput = 0, stdout.String(), stderr.String()
 	if exitError, failed := errors.AsType[*exec.ExitError](err); failed {
 		driver.exitCode = exitError.ExitCode()
