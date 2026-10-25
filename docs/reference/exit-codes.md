@@ -189,5 +189,6 @@ still needs the
 [recovery steps](../how-to/inspect-evidence-and-abandoned-groups.md#when-the-root-will-not-admit-anything). The optional
 `very-heavy` tier and `coordination.countSwap` add refusals with the statuses already listed: a `run` that names an
 undeclared `very-heavy` tier exits `2` naming `hippo.args.invalid`. A configuration file with a bad `very-heavy` block
-exits `125` naming `hippo.config.unreadable`, and so does a binary older than v0.11.0 that reads a file declaring
-`very-heavy` or naming `countSwap`.
+exits `125` naming `hippo.config.unreadable`, and so does a binary from v0.8.0 to v0.10.0 that reads a file declaring
+`very-heavy` or naming `countSwap`. A v0.6.0 to v0.7.2 binary refuses such a file with exit `78` instead, and an older
+binary refuses any schema-3 file.

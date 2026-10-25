@@ -3,13 +3,14 @@
 Complete command and flag inventory for the `hippo` executable. Maintained by hand from the binary's own help output,
 with no generator behind it; run `hippo <command> --help` to confirm against the version you have installed.
 
-The `hippo tui` command and the `run --label` flag were added in v0.9.0 and are present in v0.10.0. Interactive terminal
-behavior has not yet been verified against the final release build.
+The `hippo tui` command and the `run --label` flag were added in v0.9.0 and are present in v0.10.0. As of v0.9.0,
+interactive terminal behavior had not been verified against the final release build.
 
 **Verification note:** host-state, guarded-workload, history, refusal, and completion examples below have been exercised
 on a binary built from the landed source with synthetic fixtures; host-derived numbers vary. The `version` examples
-match the published v0.10.0 archive. Release-fixture, deployment, and endpoint examples remain unexercised; they require
-a matching release, controlled state, or live endpoints.
+match the published v0.11.0 archive, as checked on 2026-10-25 with the pinned release binary at commit
+c13eb6cec7d5697fd061c06b1f14dd52a3900f05. Release-fixture, deployment, and endpoint examples remain unexercised; they
+require a matching release, controlled state, or live endpoints.
 
 ## Command tree
 
@@ -94,10 +95,10 @@ Without a request for help, each of those mistakes still exits `2` naming `hippo
 
 ```console
 $ hippo version
-v0.10.0 (<commit>)
+v0.11.0 (<commit>)
 
 $ hippo version --json
-{"schemaVersion":1,"version":"v0.10.0","commit":"<commit>"}
+{"schemaVersion":1,"version":"v0.11.0","commit":"<commit>"}
 ```
 
 The text form reports the release followed by its exact source commit. The JSON form carries the same values in
@@ -179,8 +180,8 @@ unavailable values if none has succeeded.
 Both stdin and stdout must be terminals, and `TERM=dumb` is refused. Unusable terminal streams or an interval below `1s`
 are usage mistakes (`2`, `hippo.args.invalid`); use `status` or `watch` for redirected output. Help exits `0` without
 opening the terminal. `q` exits `0`; Ctrl-C or SIGINT exits `130`, and SIGTERM exits `143` when no classified failure
-takes precedence. Terminal initialization, output, or restoration failure uses `125`, `hippo.supervision.failed`.
-Terminal lifecycle acceptance against the final build remains pending.
+takes precedence. Terminal initialization, output, or restoration failure uses `125`, `hippo.supervision.failed`. As of
+v0.9.0, terminal lifecycle acceptance against the final build was pending.
 
 There is no `--json` or `--jsonl` display mode. Global `--output json` adds only the existing failure body on stderr
 after terminal restoration; it does not select JSON frames. `--color` controls optional decoration using the same

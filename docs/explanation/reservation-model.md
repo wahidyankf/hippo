@@ -28,7 +28,9 @@ refuses the first pair and wastes the machine.
 So admission works on both dimensions at once:
 
 - **CPU capacity** is every CPU the host reports available, or the `maxCpu` ceiling when that is lower.
-- **Memory capacity** is effective memory minus the resolved profile's reserve.
+- **Memory capacity** is effective memory minus the resolved profile's reserve. With `coordination.countSwap` on, the
+  swap allowance joins the pool before that reserve is taken away, and `maxMemoryMiB`, when set, caps the result. See
+  [reservation capacity](../reference/resource-policy.md#reservation-capacity).
 
 Both must fit **together**. The check uses checked subtraction specifically so that integer overflow cannot wrap an
 exhausted vector around into an apparent admission — a bug class that would be catastrophic and silent.

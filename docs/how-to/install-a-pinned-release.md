@@ -20,7 +20,7 @@ checksums.txt
 ## Download, verify, extract
 
 ```sh
-VERSION=v0.10.0
+VERSION=v0.11.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 [ "$ARCH" = x86_64 ] && ARCH=amd64
@@ -42,7 +42,7 @@ tar -xzf "$ASSET"
 ```
 
 ```console
-hippo_v0.10.0_darwin_arm64.tar.gz: OK
+hippo_v0.11.0_darwin_arm64.tar.gz: OK
 ```
 
 Each archive contains exactly one regular mode-755 member named `hippo`.
