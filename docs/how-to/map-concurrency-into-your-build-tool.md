@@ -80,7 +80,8 @@ A deliberately low value is respected; an optimistic one is capped. This means y
 Choose `light` for formatting and small checks, `standard` for ordinary build/test plans, and `heavy` only for measured
 memory- or CPU-intensive work. Use `very-heavy` only as a last resort, and only where the configuration declares it (see
 [the optional tier](../reference/configuration.md#optional-very-heavy-tier)). The tier lets an idle machine grant
-heavier work up to its safe maximum while protecting the UI and queued peers.
+heavier work up to its safe maximum while protecting the UI and queued peers. For the measured-need rule behind the
+choice, see [how to choose a resource tier](./choose-a-resource-tier.md).
 
 ### Exclusive mode leaves it alone
 

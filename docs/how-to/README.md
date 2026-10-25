@@ -10,6 +10,8 @@ If you are still learning what HIPPO does, start with the [tutorials](../tutoria
   binary on PATH.
 - [How to enable reservation coordination](./enable-reservation-coordination.md) — turn on the shared budget, adopt
   adaptive schema 3, and migrate without a mixed-version epoch.
+- [How to choose a resource tier](./choose-a-resource-tier.md) — pick the smallest tier that fits, add the optional
+  `very-heavy` tier, turn on swap counting, and roll either change out to a machine.
 
 ## Integrate
 

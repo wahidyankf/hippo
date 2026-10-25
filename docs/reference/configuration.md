@@ -195,12 +195,12 @@ Schema 3 only: a schema-2 file that names it is refused at load with exit `125` 
 }
 ```
 
-The swap allowance is the smaller of swap total and the effective memory limit, rounded up to a whole GiB (physical RAM
-when no limit is set). It is zero where swap is unavailable or unreadable, and on macOS, where the setting does nothing.
-HIPPO does not yet apply a finite cgroup `memory.swap.max`, so the allowance may exceed what that cgroup allows. While
-swap in use stays within the allowance, the unused part counts as memory for admission, the reservation pool, shedding,
-and the emergency floor. The pool grows by the allowance, and `maxMemoryMiB` still caps it. Critical PSI is critical
-whatever the swap. See [resource policy](resource-policy.md#swap-allowance).
+The swap allowance is the effective memory limit rounded up to a whole GiB, or the swap total when that is smaller;
+physical RAM stands in when no limit is set. It is zero where swap is unavailable or unreadable, and on macOS, where the
+setting does nothing. HIPPO does not yet apply a finite cgroup `memory.swap.max`, so the allowance may exceed what that
+cgroup allows. While swap in use stays within the allowance, the unused part counts as memory for admission, the
+reservation pool, shedding, and the emergency floor. The pool grows by the allowance, and `maxMemoryMiB` still caps it.
+Critical PSI is critical whatever the swap. See [resource policy](resource-policy.md#swap-allowance).
 
 Do not enable it on zram-backed swap. zram is carved from RAM, so counting it counts the same memory twice.
 

@@ -205,6 +205,10 @@ directories, or repository paths.
 
 `--json` and `--jsonl` are mutually exclusive.
 
+From v0.11.0 on, each run row that `--json` or `--jsonl` returns carries `childCpuSeconds` and `childWallSeconds` when
+HIPPO measured that run. Rows from earlier binaries, aggregated rows, and unmeasured runs omit both fields. See
+[child usage](./json-schemas.md#child-usage).
+
 A filter value no recorded run can carry is a usage mistake (`2`, `hippo.args.invalid`), not an empty result: `--class`
 takes `ephemeral`, `service`, `transactional`, or `release`; `--resource-tier` takes `light`, `standard`, `heavy`, or
 `very-heavy`; and `--outcome` takes `passed`, `task-failed`, `supervision-failed`, `pressure-shed`, `storage-shed`,
@@ -215,7 +219,9 @@ recorded, but no `--outcome` or `--class` value selects it.
 ## `hippo monitor`
 
 Prints the initial state, then one line per state or profile transition. Runs until it is stopped, and a signal ends it
-with `128+N`: `130` for `SIGINT`, `143` for `SIGTERM`.
+with `128+N`: `130` for `SIGINT`, `143` for `SIGTERM`. With `coordination.countSwap` on, the transitions read counted
+memory, but the output names no swap allowance; `status` and `watch` show it. See
+[swap allowance](./resource-policy.md#swap-allowance).
 
 | Flag                    | Default | Meaning                                      |
 | ----------------------- | ------- | -------------------------------------------- |
@@ -304,8 +310,10 @@ Missing or unusable display records do not change accounting; inherited runs kee
 The child keeps the caller's stdin, stdout, and stderr. Guard diagnostics go to stderr only. A normal child exit code is
 passed through unchanged. Under reservation coordination (schema 2 or 3), capacity waiting creates one FIFO identity and
 does not launch the payload until admitted. A heartbeat reports that run ID, queue position, and remaining deadline
-every 30 seconds. Expiry returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt.
-Under schema 1, a heavy-work lease deferral returns the same `124` without a receipt. HIPPO never retries a payload.
+every 30 seconds. Expiry returns `124` naming `hippo.limit.capacity-deferred`, with a `never-started` safety receipt. A
+request too large for the shared pool as it stands waits without taking a queue place, and when its wait ends it exits
+the same way. Under schema 1, a heavy-work lease deferral returns the same `124` without a receipt. HIPPO never retries
+a payload.
 
 A `--lease-port` lease is a directory in `hippo-port-leases` under the temporary directory (`TMPDIR`, else `/tmp`), not
 in the state root. A lease root that refuses that write before launch exits `125` naming `hippo.lease.unwritable`; a
