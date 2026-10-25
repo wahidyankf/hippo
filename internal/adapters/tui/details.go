@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/application"
+	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 func (state *model) syncBody() {
@@ -112,7 +113,7 @@ func (state *model) capacityLines() []string {
 	if state.snapshot.QueueRegistered {
 		queue = fmt.Sprintf("%d registered waiters", len(state.snapshot.Queue))
 	}
-	return []string{
+	return append([]string{
 		"Host capacity and pressure",
 		"Host parallelism: " + positiveText(sample.AvailableParallelism),
 		"Host CPU utilization: " + state.cpuText(),
@@ -147,7 +148,25 @@ func (state *model) capacityLines() []string {
 		fmt.Sprintf("Class service: %d", totals.Service),
 		fmt.Sprintf("Class transactional: %d", totals.Transactional),
 		"Allocations describe reservations, not process RSS or CPU usage.",
+	}, swapCountingLines(state.snapshot.Status)...)
+}
+
+// swapCountingLines describes the swap allowance and the memory it adds, and only
+// while coordination.countSwap is on, so a counting-off view is unchanged.
+func swapCountingLines(status application.StatusView) []string {
+	if status.SwapAllowanceBytes == nil {
+		return nil
 	}
+	lines := []string{
+		"Swap allowance: " + optionalBytes(status.SwapAllowanceBytes),
+		"Swap headroom: " + optionalBytes(status.Resource.SwapHeadroomBytes),
+		"Counted available RAM: " + optionalBytes(status.Resource.CountedAvailableMemoryBytes),
+	}
+	if slices.Contains(status.Resource.Advisories, policy.SwapOverAllowanceAdvisory) {
+		lines = append(lines, "Advisory: swap use exceeds its allowance; not shedding for swap alone.")
+	}
+
+	return lines
 }
 
 func optionalCount(value *int64) string {

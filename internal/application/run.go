@@ -678,6 +678,7 @@ admission:
 	ticker := services.Clock.Ticker(config.Policy.SampleInterval)
 	defer ticker.Stop()
 	var warningSince *time.Time
+	var swapNotice swapAllowanceNotice
 
 	for {
 		select {
@@ -780,6 +781,7 @@ admission:
 			}
 
 			assessment := policy.ResourceAssessment(samples, config.Policy)
+			swapNotice.observe(config.Stderr, assessment)
 			// A stable macOS warning never counts toward the grace of a running
 			// ephemeral child whose profile may use degraded admission, however
 			// that child was admitted: the same warning would admit it now.
@@ -810,10 +812,9 @@ admission:
 
 				if config.ReservationPolicy.Enabled {
 					emergency := false
-					available := reading.Sample.AvailableMemoryBytes
-					if available == nil {
-						available = reading.Sample.AvailableNonCompressedEstimateBytes
-					}
+					// The floor reads counted memory, so swap within its allowance
+					// keeps the floor from firing; PSI critical still triggers below.
+					available := policy.CountedAvailableMemory(reading.Sample)
 					if config.EmergencyAvailableMemoryBytes > 0 && available != nil &&
 						*available < config.EmergencyAvailableMemoryBytes {
 						emergency = true

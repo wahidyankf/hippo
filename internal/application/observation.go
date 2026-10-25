@@ -218,7 +218,8 @@ func (services ObservationServices) ObserveSnapshot(ctx context.Context, request
 	if configError != nil {
 		return ObservationSnapshot{}, 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
-	first, err := services.Collector.Collect(ctx, nil, request.diskPath)
+	collector := WithSwapCounting(services.Collector, configuration.Coordination.CountSwap)
+	first, err := collector.Collect(ctx, nil, request.diskPath)
 	if err != nil {
 		return ObservationSnapshot{}, 1, err
 	}
@@ -230,7 +231,7 @@ func (services ObservationServices) ObserveSnapshot(ctx context.Context, request
 		return ObservationSnapshot{}, 1, err
 	}
 
-	second, err := services.Collector.Collect(ctx, first.CPUState, request.diskPath)
+	second, err := collector.Collect(ctx, first.CPUState, request.diskPath)
 	if err != nil {
 		return ObservationSnapshot{}, 1, err
 	}

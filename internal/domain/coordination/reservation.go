@@ -275,7 +275,9 @@ func PlanReservation(
 	if memoryLimit <= 0 {
 		memoryLimit = sample.PhysicalMemoryBytes
 	}
-	memoryCapacity := memoryLimit - resolution.MemoryReserve
+	// The swap allowance, zero unless the sample counts it, joins the pool beside
+	// RAM; the reserve stays computed on RAM, and maxMemoryMiB still caps the pool.
+	memoryCapacity := memoryLimit + policy.CountedSwapAllowance(sample) - resolution.MemoryReserve
 	if settings.MaxMemoryBytes > 0 {
 		memoryCapacity = min(memoryCapacity, settings.MaxMemoryBytes)
 	}

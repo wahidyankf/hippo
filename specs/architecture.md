@@ -241,16 +241,18 @@ Admission failures return before child creation. Schema 2 derives a safe vector 
 parallelism, with no CPU held back) and effective memory, applies optional caps (`maxCpu` lowers the CPU capacity and
 never raises it above the host's CPUs), and divides automatic requests by profile shares of four, two, or one. Schema 3
 requires light, standard, and heavy tier bounds, plus an optional very-heavy tier where the file declares it, and grants
-the largest launch-time vector that fits between the chosen minimum and maximum. Explicit dimensions cannot cross one
-CPU or 256 MiB or leave their schema-3 tier. Checked subtraction verifies both dimensions without integer wrap.
-Impossible requests replan immediately; temporary exhaustion holds one stable strict-FIFO identity until admission or
-its tier deadline. `--wait-for-admission` bounds only the schema-2 FIFO queue and a tier sets its own deadline, so the
-flag is refused with exit 2 under schema 1, which has no FIFO queue, beside a tier under schema 2, and always under
-schema 3; a negative wait is refused before configuration is read. No payload retry loop exists. The effective
-active-owner limit is the conservative live minimum. Schema 3 defaults to two owners and opens a third only after the
-configured newest overlapping runs pass the multi-source memory, pressure, CPU p95, swap, and shedding criteria.
-Inheritance reuses the token's fixed allocation without a second owner. Host thresholds remain authoritative after
-budget fit.
+the largest launch-time vector that fits between the chosen minimum and maximum. With `coordination.countSwap` on, the
+memory pool also grows by the Linux swap allowance, which the policy derives from the host sample, and the samples every
+threshold reads carry the unused part of it as headroom; the pool stays capped by `maxMemoryMiB`. Explicit dimensions
+cannot cross one CPU or 256 MiB or leave their schema-3 tier. Checked subtraction verifies both dimensions without
+integer wrap. Impossible requests replan immediately; temporary exhaustion holds one stable strict-FIFO identity until
+admission or its tier deadline. `--wait-for-admission` bounds only the schema-2 FIFO queue and a tier sets its own
+deadline, so the flag is refused with exit 2 under schema 1, which has no FIFO queue, beside a tier under schema 2, and
+always under schema 3; a negative wait is refused before configuration is read. No payload retry loop exists. The
+effective active-owner limit is the conservative live minimum. Schema 3 defaults to two owners and opens a third only
+after the configured newest overlapping runs pass the multi-source memory, pressure, CPU p95, swap, and shedding
+criteria. Inheritance reuses the token's fixed allocation without a second owner. Host thresholds remain authoritative
+after budget fit.
 
 An admitted child inherits its fixed profile, allocated CPU, reserved memory, clamped caller-selected concurrency
 mappings, and caller-owned streams. For controlling-terminal input, HIPPO gives the isolated child group foreground

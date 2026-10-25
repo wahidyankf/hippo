@@ -140,6 +140,7 @@ naming `hippo.args.invalid`, before any child starts.
 | `maxMemoryMiB`         | integer | Nonnegative. If set, must be at least `256`                    |
 | `maxActiveOwners`      | integer | Nonnegative, at most `20`. `0` means the default of 20         |
 | `automaticOwnerShares` | object  | Profile name → share count, each between `1` and `20`          |
+| `countSwap`            | boolean | Schema 3 only. `false` or omitted: swap is not counted         |
 
 `maxCpu` is the most CPUs HIPPO may allocate. `0`, or any value at or above the host's CPU count, leaves every CPU
 available. A Mac owner who wants one CPU kept for the desktop sets it to the core count minus one, for example `11` on a
@@ -182,6 +183,31 @@ Within one shared state root, every live owner and every queued waiter contribut
 HIPPO uses the **minimum** of those contributions until the contributing participant exits or times out, and resets the
 effective limit when the ledger becomes idle. A single strict repository therefore tightens the whole host, and cannot
 be loosened by a permissive peer.
+
+## Swap counting
+
+`coordination.countSwap` lets a Linux host count its unused swap as memory. It is optional and defaults to `false`.
+Schema 3 only: a schema-2 file that names it is refused at load with exit `125` naming `hippo.config.unreadable`.
+
+```json
+"coordination": {
+  "countSwap": true
+}
+```
+
+The swap allowance is the smaller of swap total and the effective memory limit, rounded up to a whole GiB (physical RAM
+when no limit is set). It is zero where swap is unavailable or unreadable, and on macOS, where the setting does nothing.
+HIPPO does not yet apply a finite cgroup `memory.swap.max`, so the allowance may exceed what that cgroup allows. While
+swap in use stays within the allowance, the unused part counts as memory for admission, the reservation pool, shedding,
+and the emergency floor. The pool grows by the allowance, and `maxMemoryMiB` still caps it. Critical PSI is critical
+whatever the swap. See [resource policy](resource-policy.md#swap-allowance).
+
+Do not enable it on zram-backed swap. zram is carved from RAM, so counting it counts the same memory twice.
+
+**Rollout order.** Every binary that reads the file must be `v0.11.0` or later before the key is added. An older binary,
+including `v0.10.0`, refuses the whole file with `json: unknown field "countSwap"`, exit `125`, on every command that
+loads configuration. Repin every consumer first, check each with `hippo version --json`, then add `countSwap` to that
+machine's file. Rollback is deleting the key. A file that omits it loads and behaves as before.
 
 ## `profiles`
 

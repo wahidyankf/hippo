@@ -132,6 +132,10 @@ waiting run=fb5b47c58a0287aee14ca7c310499cd0 position=1 source=my-repo class=eph
   deadline=2026-09-26T11:20:56.116166Z
 ```
 
+With `coordination.countSwap` on, the summary line ends with `swapAllowanceGiB=<n>`, the swap allowance in GiB. Without
+it the line is unchanged. The TUI's capacity view adds the allowance, headroom, and counted RAM, and an advisory line
+while swap use exceeds the allowance. See [swap allowance](./resource-policy.md#swap-allowance).
+
 The text form prints one privacy-safe row line under the summary for each owner and waiter. The JSON form carries the
 same rows in full, plus the base, maximum, and currently effective owner limit. A live exclusive compatibility session
 appears as a legacy owner, while exclusive waiters remain unregistered. Filters change rows, not the global aggregate

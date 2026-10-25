@@ -36,13 +36,14 @@ func (services ObservationServices) Monitor(ctx context.Context, request Monitor
 		return 0, status.Fail(status.CodeConfigUnreadable, "resource configuration: %v", configError)
 	}
 
+	collector := WithSwapCounting(services.Collector, configuration.Coordination.CountSwap)
 	var previous policy.CPUState
 
 	samples := []policy.Sample{}
 	prior := ""
 
 	observe := func() error {
-		reading, err := services.Collector.Collect(ctx, previous, request.DiskPath)
+		reading, err := collector.Collect(ctx, previous, request.DiskPath)
 		if err != nil {
 			return err
 		}

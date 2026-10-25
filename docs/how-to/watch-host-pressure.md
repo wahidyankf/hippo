@@ -102,6 +102,13 @@ hippo monitor --interval 5s --disk-path ./target
 Measuring a roomy volume while the work fills a small one is the most common way to be surprised by exit `124` naming
 `hippo.limit.storage-blocked`.
 
+## Read swap as memory on a Linux devbox
+
+With `coordination.countSwap` on, `watch`, `status`, `monitor`, and the TUI count unused swap as memory up to the swap
+allowance. Their output then names the allowance. A `swap-over-allowance` advisory shows when swap use passes it, and
+the state stays where the RAM reading puts it. Set the key only after every binary that reads the file is `v0.11.0` or
+later, as the [configuration reference](../reference/configuration.md#swap-counting) explains.
+
 ## Related
 
 - [Resource policy](../reference/resource-policy.md) — the thresholds behind each `reason`

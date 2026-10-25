@@ -71,6 +71,63 @@ Feature: Resource-aware admission
     Then the state is warning because of swap pressure
 
   @e2e-exempt
+  Scenario: Swap headroom counts as memory while the host is within its allowance
+    Given a Linux host with 4 GiB of memory and 64 MiB of available memory
+    And that host has 8 GiB of swap of which 1 GiB is in use
+    And swap counting is on
+    When development pressure is assessed
+    Then the resource state is normal with reason "normal"
+
+  @e2e-exempt
+  Scenario: Without swap counting the same host is critical on memory
+    Given a Linux host with 4 GiB of memory and 64 MiB of available memory
+    And that host has 8 GiB of swap of which 1 GiB is in use
+    When development pressure is assessed
+    Then the resource state is critical with reason "memory-critical"
+
+  @e2e-exempt
+  Scenario: Swap use beyond the allowance is reported without changing the state
+    Given a Linux host with 4 GiB of memory and 3 GiB of available memory
+    And that host has 8 GiB of swap of which 5 GiB is in use
+    And swap counting is on
+    When development pressure is assessed
+    Then the resource state is normal with reason "normal"
+    And the advisory "swap-over-allowance" is reported
+
+  @e2e-exempt
+  Scenario: Critical memory pressure stays critical within the allowance
+    Given a Linux host with 4 GiB of memory and 3 GiB of available memory
+    And that host has 8 GiB of swap of which 1 GiB is in use
+    And memory PSI some average is 25 percent
+    And swap counting is on
+    When development pressure is assessed
+    Then the resource state is critical with reason "memory-psi"
+
+  @e2e-exempt
+  Scenario Outline: The memory PSI warning band counts only beyond the swap allowance
+    Given a Linux host with 4 GiB of memory and 3 GiB of available memory
+    And that host has 8 GiB of swap of which <used> is in use
+    And memory PSI some average is 10 percent
+    And swap counting is on
+    When development pressure is assessed
+    Then the resource state is <state> with reason "<reason>"
+
+    Examples:
+      | used  | state   | reason     |
+      | 1 GiB | normal  | normal     |
+      | 5 GiB | warning | memory-psi |
+
+  @e2e-exempt
+  Scenario: Swap-out growth is left to memory PSI while counting is on
+    Given a Linux host with 4 GiB of memory and 3 GiB of available memory
+    And that host has 8 GiB of swap of which 1 GiB is in use
+    And swap-outs grow by 128 MiB over 15 seconds on that host
+    And memory PSI some average is 0 percent
+    And swap counting is on
+    When development pressure is assessed
+    Then the resource state is normal with reason "normal"
+
+  @e2e-exempt
   Scenario: Compressor growth requires both payload and growth
     Given compressor payload is 12 GiB and grows 1 GiB over 15 seconds
     When development pressure is assessed
