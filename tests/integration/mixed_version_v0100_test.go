@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/wahidyankf/hippo/tests/support"
 )
 
 // The released v0.10.0 binary is the one tests/e2e/v0100-release.sh verifies
@@ -111,7 +113,14 @@ func newMixedV0100Fixture(t *testing.T, released, candidate string) *mixedV0100F
 			t.Fatal(err)
 		}
 	}
-	fixture.environment = []string{"HIPPO_ROOT=" + fixture.root, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "NO_COLOR=1"}
+	// Every invocation samples the fixed quiet host, as the compiled-binary runner does: the owner's
+	// admission reads the runner's CPU, which parallel test packages load, so a live host defers it.
+	environment, releaseHost, err := support.QuietHostEnvironment([]string{"HIPPO_ROOT=" + fixture.root, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "NO_COLOR=1"})
+	if err != nil {
+		t.Fatalf("publish the fixed host evidence: %v", err)
+	}
+	t.Cleanup(releaseHost)
+	fixture.environment = environment
 	var cancel context.CancelFunc
 	fixture.runContext, cancel = context.WithTimeout(context.Background(), mixedV0100Timeout)
 	t.Cleanup(cancel)
