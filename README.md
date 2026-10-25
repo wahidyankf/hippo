@@ -40,8 +40,7 @@ examples remain unexercised.
   bounded run outcomes without exposing commands or paths.
 - **Interactive monitoring.** `hippo tui`, added in v0.9.0, shows running jobs, queue positions, and capacity with
   keyboard navigation and a compact narrow-terminal layout. See
-  [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md). Final interactive verification was pending as
-  of v0.9.0.
+  [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md).
 - **Burst-safe activation.** Simultaneous repository clients wait through brief coordination contention after launch
   instead of cutting an already started payload.
 - **No daemon.** One short-lived process per guarded command, plus files in a shared state root.
@@ -103,8 +102,8 @@ build-started
 build-finished
 ```
 
-Stderr carries only degraded admission, deferral, storage block, or pressure shed, or, with countSwap on, one
-swap-over-allowance line per run.
+Stderr carries only degraded admission, deferral, storage block, or pressure shed, or, with countSwap on, at most one
+swap-over-allowance line per run, when swap use exceeds its allowance.
 
 Your exit code and your pipeline both survive:
 

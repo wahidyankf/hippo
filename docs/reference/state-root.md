@@ -64,8 +64,6 @@ prunes supported, validated annotations only after a complete liveness census pr
 recognized expired regular annotation temporaries. It does not follow symlinks. Unsupported, invalid, unreadable, or
 unverifiably live annotations remain; retained unknown state has no unconditional storage bound.
 
-As of v0.9.0, final mixed-version and native lifecycle acceptance against the release build was pending.
-
 ### Evidence
 
 Development streams are named `development-<class>-<epochMillis>-<pid>`.

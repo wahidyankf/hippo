@@ -19,10 +19,9 @@ opening the dashboard:
 hippo tui --help
 ```
 
-**Verification note:** as of v0.9.0, the interactive launch examples on this page had not been exercised against the
-final release build. `hippo tui --help` exits `0` on a binary built from the landed source, with the flags shown below,
-and piped streams, `TERM=dumb`, and a sub-second `--interval` are each refused with exit `2` naming
-`hippo.args.invalid`. As of v0.9.0, final interactive verification was pending.
+**Verification note:** `hippo tui --help` exits `0` on a binary built from the landed source, with the flags shown
+below, and piped streams, `TERM=dumb`, and a sub-second `--interval` are each refused with exit `2` naming
+`hippo.args.invalid`.
 
 The default refresh delay is **5 seconds after each collection finishes**, not every 5 seconds on a fixed clock.
 Collection takes two host readings one second apart, so a complete refresh cycle takes longer than the delay. To wait 10

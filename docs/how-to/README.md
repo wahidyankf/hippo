@@ -23,7 +23,7 @@ If you are still learning what HIPPO does, start with the [tutorials](../tutoria
 ## Operate
 
 - [How to monitor work with the TUI](./monitor-work-with-the-tui.md) — inspect work and capacity with keyboard
-  navigation in the interactive dashboard added in v0.9.0; as of v0.9.0, final release verification was pending.
+  navigation in the interactive dashboard added in v0.9.0.
 - [How to watch host pressure](./watch-host-pressure.md) — see resource, owner, queue, deadline, and promotion
   transitions as they happen.
 - [How to inspect evidence and abandoned process groups](./inspect-evidence-and-abandoned-groups.md) — query bounded
