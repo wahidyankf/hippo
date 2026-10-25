@@ -193,10 +193,10 @@ func TestOnlyOneConcurrentOwnerWinsTheLastVectorSlot(t *testing.T) {
 	if err != nil || totals.Allocated.CPU != 4 || totals.Allocated.MemoryBytes != policy.GiB {
 		t.Fatalf("non-atomic totals %+v error=%v", totals, err)
 	}
-	if err = guard.ReleaseReservation(root, winners[0]); err != nil {
+	if err = retryDeferred(func() error { return guard.ReleaseReservation(root, winners[0]) }); err != nil {
 		t.Fatal(err)
 	}
-	if err = guard.ReleaseReservation(root, owner); err != nil {
+	if err = retryDeferred(func() error { return guard.ReleaseReservation(root, owner) }); err != nil {
 		t.Fatal(err)
 	}
 }
