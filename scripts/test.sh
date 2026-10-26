@@ -26,11 +26,11 @@ public_host_helper_prepare "$root"
 ./scripts/test-quick.sh
 go test -count=1 ./tests/integration \
 	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'
-HIPPO_BDD_SUITE=integration go test -count=1 -run '^TestIntegrationBehaviours$' ./internal/adapters/tui
+HIPPO_BDD_SUITE=integration go test -count=1 -run '^TestIntegrationBehaviours$' ./tests/bdd
 ./tests/e2e/run.sh
-go test -race -count=1 ./cmd/... ./internal/... ./tests/support ./tests/support/hostprobe ./tests/support/oldidentity ./tests/unit ./tests/integration \
-	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$'
+go test -race -count=1 ./cmd/... ./internal/... ./tests/support ./tests/support/hostprobe ./tests/support/oldidentity ./tests/unit ./tests/bdd ./tests/integration \
+	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'
 go test -race -count=1 ./tests/contract
-HIPPO_BDD_SUITE=unit go test -race -count=1 -run '^TestUnitBehaviours$' ./internal/adapters/tui
-HIPPO_BDD_SUITE=integration go test -race -count=1 -run '^TestIntegrationBehaviours$' ./internal/adapters/tui
+HIPPO_BDD_SUITE=unit go test -race -count=1 -run '^TestUnitBehaviours$' ./tests/bdd
+HIPPO_BDD_SUITE=integration go test -race -count=1 -run '^TestIntegrationBehaviours$' ./tests/bdd
 go tool govulncheck ./...

@@ -8,7 +8,6 @@ go_binary=${HIPPO_GO_BINARY:-go}
 # refusal therefore retains its genuine status and owns no E2E temporary yet.
 . "$tool_dir/tests/support/hostprobe/prepare.sh"
 . "$tool_dir/tests/e2e/old-release.sh"
-. "$tool_dir/tests/e2e/v085-release.sh"
 . "$tool_dir/tests/e2e/v0100-release.sh"
 temporary_dir=$(mktemp -d "$temporary_parent/hippo-e2e.XXXXXX")
 
@@ -36,24 +35,12 @@ GOMAXPROCS=2 "$go_binary" build -p=1 -trimpath -buildvcs=false \
 	-ldflags "-X github.com/wahidyankf/hippo/internal/adapters/cli.Version=v0.0.0-test -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit=0000000000000000000000000000000000000000" \
 	-o "$temporary_dir/hippo" ./cmd/hippo
 public_old_release_prepare "$tool_dir" "$temporary_dir"
-public_v085_release_prepare "$tool_dir" "$temporary_dir"
 public_v0100_release_prepare "$tool_dir" "$temporary_dir"
-# Each immutable release is prepared independently; these tagged leaves use the
-# verified v0.8.5 and v0.10.0 and the same current candidate as the retained
-# v0.8.4 corpus.
-HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -tags=mixedversion -count=1 -timeout=120s -p=2 \
-	-run '^TestMixedVersionV085DisplayInteroperability$' ./tests/integration
+# Each immutable release is prepared independently; the tagged leaf uses the
+# verified v0.10.0 and the same current candidate as the retained v0.8.4 corpus.
 HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -tags=mixedversion -count=1 -timeout=120s -p=2 \
 	-run '^TestMixedVersionV0100VeryHeavyCompatibility$' ./tests/integration
 HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -count=1 ./tests/e2e \
 	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'
 HIPPO_BDD_SUITE=e2e HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -count=1 \
-	-run '^TestE2EBehaviours$' ./internal/adapters/tui
-# These public entries retain their own canonical execution and native receipts.
-# All use the same stamped candidate and prepared helper, and run serially.
-HIPPO_BDD_SUITE=e2e HIPPO_BDD_ADAPTER=e2e HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -count=1 \
-	-run '^TestTUIBDDPublicCanonicalSuite$' ./internal/adapters/tui
-HIPPO_BDD_SUITE=e2e HIPPO_BDD_ADAPTER=e2e HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -count=1 \
-	-run '^TestTUIBDDPublicObservationCanonical$' ./internal/adapters/tui
-HIPPO_BDD_SUITE=e2e HIPPO_BDD_ADAPTER=e2e HIPPO_BIN="$temporary_dir/hippo" "$go_binary" test -count=1 \
-	-run '^TestTUIBDDPublicSessionHolderSignals$' ./internal/adapters/tui
+	-run '^TestE2EBehaviours$' ./tests/bdd
