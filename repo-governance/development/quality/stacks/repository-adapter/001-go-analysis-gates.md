@@ -25,35 +25,12 @@ versions: [`go.mod`](../../../../../go.mod).
   behind disabled `exhaustruct`.
 - `gochecksumtype`: enabled without `//sumtype:decl` targets: domain concepts are scalar enums covered by `exhaustive`.
   The first sealed interface needs no configuration change.
-- `depguard`: versioned Tea/Lipgloss roots and Bubbles components stay TUI-only:
-  [Code Clarity](../../../code-clarity.md). Exact x/ansi root serves only TUI text and
-  `tests/host/evidence-verifier/*.go` native cells. Other restrictions remain.
-  - Native support permits exact `golang.org/x/sys/unix` only in `tests/support/tui_arguments.go`,
-    `tests/support/tui_public_interactive_inputs.go`, `tests/support/tui_transport_native.go`,
-    `tests/support/tui_transport_native_darwin.go` and `tests/support/tui_transport_native_linux.go`: real terminal/FD
-    state on both platforms requires the pinned kernel API. Their strict binding retains the support allowlist; other
-    support, x/sys packages, Charm and production permissions stay unchanged.
-  - Native fault test `internal/adapters/tui/bdd_native_faults_internal_test.go` permits exact `golang.org/x/sys/unix`
-    in its separate strict binding, alongside only the standard library and HIPPO module. Atomic replacement of its
-    distinct retained descriptors needs the pinned kernel API on Linux arm64; other TUI tests retain their restrictions.
-- `ireturn`: only exact `Update`/Tea.Model in `internal/adapters/tui/model.go` is excluded because the pinned external
-  consumer requires that interface. Helpers/constructors/other files stay concrete:
+- `depguard`: production stays within the standard library, Cobra, the HIPPO module, and `golang.org/x/sys`; test
+  support additionally admits the Godog harness. No Charm, Bubbles, or terminal framework remains after the TUI removal.
+- `ireturn`: no exclusions; helpers, constructors, and all other files return concrete types:
   [Lint Strictness](../../checks/lint-strictness.md).
-- `G702`: exactly five inline `#nosec G702` waivers under [Lint Strictness](../../checks/lint-strictness.md); other
-  calls remain checked:
-  - [`invokeCompiledTUI`](../../../../../tests/e2e/tui_contract_test.go): stamped harness selection.
-  - [Old executable](../../../../../internal/adapters/tui/bdd_public_mixed_owners_external_test.go): authenticated
-    absolute regular executable; pinned SHA/strict release receipt; separate argv/context.
-  - [PS wrapper](../../../../../internal/adapters/tui/bdd_public_ps_startup_diagnostic_external_test.go): probe-owned
-    0700 wrapper; quoted authenticated helper, fixed argv, finite context/Wait.
-  - [Mixed owner](../../../../../tests/integration/mixed_version_v085_test.go): trusted supervisor verifies v0.8.5
-    provenance and builds/selects current; leaf identity checks; separate argv, fixed payload shell, finite
-    context/Wait.
-  - [Mixed status](../../../../../tests/integration/mixed_version_v085_test.go): same selection/identity checks; fixed
-    separate status argv, finite context/Run.
-  - Review judges continued need; taint analysis cannot authenticate the supervisor (**unenforced by decision**).
-    Untrusted selection, interpolated shell source, removed provenance or changed status argv invalidates waivers.
-    Leaf/integration TestMain does not authenticate current stamp.
+- `G702`: no inline `#nosec G702` waivers remain after the TUI removal; every `exec.Command` call stays checked under
+  [Lint Strictness](../../checks/lint-strictness.md).
 
 ## NilAway
 
