@@ -13,6 +13,24 @@ The hooks are `commit-msg` (Conventional Commits), `pre-commit` (staged formatti
 the documentation gates). Each mirrors a job in the [pull-request gate](../development/quality-gates.md), so a bypassed
 hook does not skip the check — it moves the failure to CI, where it costs more and blocks the merge anyway.
 
+## HIPPO-Congestion Exception
+
+The maintainer pre-authorizes `--no-verify` on `git commit` and `git push` for a task-owned branch that lands through a
+pull request, with no per-instance prompt, when every condition below holds. This is the only standing exception to the
+rule above.
+
+- The hook cannot run because HIPPO admission deferred or failed it (exit `124` never-started, exit `125`, abnormal
+  latency), not because a gate found a violation. These hooks run unguarded, so this fires only when a gate's own HIPPO
+  guard stops it.
+- The manual screens pass: the tracked-tree screen and the per-commit range screen (`scripts/public-safety/check.sh`)
+  both exit `0`, with no leak-review finding. The `commit-msg` hook stays enabled.
+- Formatting is done by hand or editor; the pull-request gate verifies it.
+- The bypass cites the HIPPO receipt and screen evidence in the push and PR notes, and never carries into a later
+  operation.
+
+Direct pushes to `main` stay outside this exception: explicit per-instance authorization still applies, strongly
+discouraged except for manual override.
+
 ## When a Hook Fails
 
 Read the output. The hook prints the failing command and its diagnostic; that is the whole of the investigation in most
