@@ -34,36 +34,6 @@ for tracked in conformance.manifest.json.example cmd/hippo-conformance/main.go i
 	test -f "$tracked"
 done
 
-# Host verification tooling, boundary tests, and their instructions are source.
-for tracked in tests/host/README.md tests/host/tui-sequence.sh \
-	tests/host/evidence-verifier/README.md \
-	tests/host/evidence-verifier/actions.go \
-	tests/host/evidence-verifier/artifact_binding_test.go \
-	tests/host/evidence-verifier/candidate.go \
-	tests/host/evidence-verifier/cells.go \
-	tests/host/evidence-verifier/cli.go \
-	tests/host/evidence-verifier/input.go \
-	tests/host/evidence-verifier/main.go \
-	tests/host/evidence-verifier/main_test.go \
-	tests/host/evidence-verifier/native_artifacts.go \
-	tests/host/evidence-verifier/native_events_test.go \
-	tests/host/evidence-verifier/observation.go \
-	tests/host/evidence-verifier/prepare.go \
-	tests/host/evidence-verifier/protocol.go \
-	tests/host/evidence-verifier/record.go \
-	tests/host/evidence-verifier/verify.go \
-	tests/host/integration/README.md \
-	tests/host/integration/entrypoints_test.go \
-	tests/host/integration/finalization_test.go \
-	tests/host/integration/protocol_test.go \
-	tests/host/integration/recording_test.go; do
-	git check-ignore --quiet "$tracked" && {
-		echo "$tracked must remain committable" >&2
-		exit 1
-	}
-	test -f "$tracked"
-done
-
 # Portable corpus contracts and repository-root refusals are publishable source.
 for tracked in tests/contract/corpus.go tests/contract/corpus_internal_test.go \
 	tests/support/repository_paths.go tests/support/repository_paths_internal_test.go \

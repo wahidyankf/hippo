@@ -110,8 +110,8 @@ func (driver *Driver) invalidExclusiveStatusOwner(state string) error {
 		return err
 	}
 	contents := map[string][]byte{
-		tuiMalformedAnnotation: []byte("{\"schemaVersion\":1\n"),
-		"future":               []byte("{\"schemaVersion\":2}\n"),
+		malformedAnnotation: []byte("{\"schemaVersion\":1\n"),
+		"future":            []byte("{\"schemaVersion\":2}\n"),
 	}[state]
 	if contents == nil {
 		return fmt.Errorf("unknown invalid compatibility state %q", state)

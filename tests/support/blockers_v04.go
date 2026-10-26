@@ -2520,7 +2520,7 @@ func requireSafeConformanceStartErrorV04(runError error, consumerName, phase str
 		return errors.New("invalid conformance command boundary was accepted")
 	}
 	message := runError.Error()
-	if !strings.Contains(message, consumerName) || !strings.Contains(message, phase) || !strings.Contains(message, tuiStartPhase) {
+	if !strings.Contains(message, consumerName) || !strings.Contains(message, phase) || !strings.Contains(message, startPhase) {
 		return fmt.Errorf("conformance start error omitted safe consumer/phase/category metadata: %w", runError)
 	}
 	for _, privatePath := range privatePaths {

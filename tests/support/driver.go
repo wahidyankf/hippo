@@ -87,6 +87,15 @@ const (
 	childStartedArgScript         = `printf started > "$1"`
 	hippoRootEnvironment          = "HIPPO_ROOT"
 	literalValidate               = "literal: validate"
+	runIDField                    = "runId"
+	startPhase                    = "start"
+	malformedAnnotation           = "malformed"
+	memoryChildWorkload           = "memory-child"
+	idleSwapState                 = "idle"
+	darwinMemoryPressureTool      = "memory_pressure"
+	darwinVMStatTool              = "vm_stat"
+	darwinSysctlTool              = "sysctl"
+	e2eBehaviourEntry             = "TestE2EBehaviours"
 )
 
 // interruptReadinessWait bounds how long a fixture waits for a guarded child to
@@ -154,11 +163,11 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 type Driver struct {
 	architectureGraphError   error
 	architectureFixtureError error
-	tuiCLI                   *tuiCLIState
-	tuiArguments             *tuiArgumentState
-	tuiObservation           *tuiObservationState
-	tuiGates                 *tuiGateState
 	annotationRun            *annotationRunState
+	annotations              *annotationBDD
+	ownedMixedSessions       []*guard.Session
+	compatibilityBodies      []string
+	compatibilityWatch       []string
 	mode                     string
 	samples                  []policy.Sample
 	assessment               policy.Assessment
@@ -310,7 +319,9 @@ func (stream *failingStream) Close() error {
 
 // NewDriver returns isolated scenario state for one behavior adapter.
 func NewDriver(adapter contract.Adapter) *Driver {
-	return &Driver{mode: adapter.Name}
+	driver := &Driver{mode: adapter.Name}
+	driver.annotations = newAnnotationBDD(adapter, driver)
+	return driver
 }
 
 func healthySample(at time.Time) policy.Sample {
@@ -334,7 +345,7 @@ func healthySample(at time.Time) policy.Sample {
 		SwapIns:                             new(int64(10)),
 		SwapOuts:                            new(int64(20)),
 		SwapFreeBytes:                       new(2 * policy.GiB),
-		SwapState:                           tuiIdleState,
+		SwapState:                           idleSwapState,
 	}
 }
 
@@ -342,8 +353,12 @@ func healthySample(at time.Time) policy.Sample {
 func (driver *Driver) Reset() {
 	driver.cleanup()
 	mode := driver.mode
+	annotations := driver.annotations
 
-	*driver = Driver{mode: mode}
+	*driver = Driver{mode: mode, annotations: annotations}
+	if annotations != nil {
+		annotations.Reset()
+	}
 
 	if mode == contract.E2E {
 		driver.binary = os.Getenv("HIPPO_BIN")
@@ -364,6 +379,14 @@ func (driver *Driver) cleanup() {
 		_ = guard.ReleaseReservation(driver.leaseRoot, driver.admissionSession)
 		driver.admissionSession = nil
 	}
+	for _, session := range driver.ownedMixedSessions {
+		if driver.leaseRoot != "" {
+			_ = guard.ReleaseReservation(driver.leaseRoot, session)
+		}
+	}
+	driver.ownedMixedSessions = nil
+	driver.compatibilityBodies = nil
+	driver.compatibilityWatch = nil
 	for _, holder := range driver.interruption.holders {
 		_ = guard.ReleaseReservation(driver.interruption.root, holder)
 	}
@@ -386,6 +409,9 @@ func (driver *Driver) cleanup() {
 // Close removes temporary scenario resources.
 func (driver *Driver) Close() {
 	driver.cleanup()
+	if driver.annotations != nil {
+		driver.annotations.Close()
+	}
 }
 
 func environmentWith(values map[string]string) []string {
@@ -2092,6 +2118,21 @@ func (driver *Driver) requireCobraDiagnostic() error {
 		!strings.Contains(driver.errorOutput, "unknown command \"not-a-command\"") ||
 		!strings.Contains(driver.errorOutput, "--help") {
 		return fmt.Errorf("exit=%d error=%q", driver.exitCode, driver.errorOutput)
+	}
+
+	return nil
+}
+
+func (driver *Driver) removedTUICommand() {
+	_ = driver.runCLI("tui")
+}
+
+func (driver *Driver) requireRemovedTUIRefused() error {
+	if driver.exitCode != status.CallerError ||
+		!strings.Contains(driver.errorOutput, "unknown command \"tui\"") ||
+		!strings.Contains(driver.errorOutput, "--help") ||
+		driver.output != "" {
+		return fmt.Errorf("exit=%d output=%q error=%q", driver.exitCode, driver.output, driver.errorOutput)
 	}
 
 	return nil
@@ -3894,7 +3935,7 @@ func validCoreCoverageSelectors(script string) bool {
 	}
 	calls, valid := gateTestCommands(coverageCommand)
 	if !valid || len(calls) != 1 || calls[0].suite != "" || calls[0].adapter != "" ||
-		!slices.Contains(calls[0].args, "./internal/adapters/tui") ||
+		!slices.Contains(calls[0].args, "./tests/bdd") ||
 		!gateOrdinarySelection(calls[0].args, gateMeasuredEntries()) ||
 		strings.ContainsAny(thresholdCommand, "|&;") {
 		return false

@@ -495,3 +495,102 @@ func (driver *Driver) requireUnusableSummaryRefused() error {
 
 	return nil
 }
+
+// requestRunWithInvalidLabel runs one guarded command carrying an invalid
+// display label against the scenario's isolated root. Label validation
+// precedes registration, so the child never starts and the root gains no run.
+func (driver *Driver) requestRunWithInvalidLabel(value string) error {
+	labels := map[string]string{
+		"empty": "", "65 ASCII characters": strings.Repeat("a", 65),
+		"a forward slash": "bad/name", "a backward slash": `bad\name`,
+		"a control character": "bad\x1b[31m", "dot-dot": "..",
+	}
+	label, ok := labels[value]
+	if !ok {
+		return fmt.Errorf("unknown invalid label case %q", value)
+	}
+	if driver.leaseRoot == "" {
+		return errors.New("invalid label run has no isolated root")
+	}
+	arguments := []string{runCommandName, taskClassFlag, taskClassEphemeral, diskPathFlag, ".", "--label", label, "--", shellPath, "-c", "exit 0"}
+	root := driver.leaseRoot
+	environment := []string{"HIPPO_ROOT=" + root, "HOME=" + root, isolatedPath}
+	ctx, cancel := context.WithTimeout(context.Background(), usageAttemptBound)
+	defer cancel()
+	if driver.mode == contract.E2E {
+		command := exec.CommandContext(ctx, driver.binary, arguments...)
+		command.Env = environment
+		command.Dir = root
+		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+		command.Stdout, command.Stderr = stdout, stderr
+		runError := command.Run()
+		driver.output, driver.errorOutput = stdout.String(), stderr.String()
+		exitError := &exec.ExitError{}
+		switch {
+		case runError == nil:
+		case errors.As(runError, &exitError):
+			driver.exitCode = exitError.ExitCode()
+		default:
+			return runError
+		}
+
+		return nil
+	}
+
+	// Configuration and identity are discovered from the process's working
+	// directory, and this checkout tracks both. The scenario must not inherit
+	// them, so the in-process run happens from the scratch root; scenarios run
+	// one at a time, so the change is not observed by another.
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if err = os.Chdir(root); err != nil {
+		return err
+	}
+	defer func() { _ = os.Chdir(workingDirectory) }()
+	driver.exitCode, _ = bootstrap.WithDefaults(cli.Application{
+		Stdout: stdout, Stderr: stderr, Environment: environment,
+	}).Run(ctx, arguments)
+	driver.output, driver.errorOutput = stdout.String(), stderr.String()
+
+	return nil
+}
+
+func (driver *Driver) requireInvalidLabelRefused() error {
+	if driver.exitCode != status.CallerError ||
+		!strings.Contains(driver.errorOutput, "hippo: ["+string(status.CodeArgsInvalid)+"]") {
+		return fmt.Errorf("invalid label was not refused as a usage mistake: exit=%d stdout=%q stderr=%q",
+			driver.exitCode, driver.output, driver.errorOutput)
+	}
+	if !strings.Contains(driver.errorOutput, "--label") {
+		return fmt.Errorf("invalid label refusal did not name its flag: stderr=%q", driver.errorOutput)
+	}
+
+	return nil
+}
+
+func (driver *Driver) requireLabelRootUnchanged() error {
+	if driver.leaseRoot == "" {
+		return errors.New("invalid label run has no isolated root")
+	}
+	var created []string
+	if err := filepath.WalkDir(driver.leaseRoot, func(path string, entry os.DirEntry, walkError error) error {
+		if walkError != nil {
+			return walkError
+		}
+		if !entry.IsDir() {
+			created = append(created, path)
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+	if len(created) > 0 {
+		return fmt.Errorf("refused label run created %d files: %q", len(created), created)
+	}
+
+	return nil
+}

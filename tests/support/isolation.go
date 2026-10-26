@@ -22,7 +22,7 @@ const bddSuiteVariable = "HIPPO_BDD_SUITE"
 var harnessInputs = map[string]bool{
 	"HIPPO_BIN":                          true, // the binary the adapters run
 	"HIPPO_BDD_ADAPTER":                  true, // the boundary the behaviour suite executes at
-	bddSuiteVariable:                     true, // the executing suite selected by the composed TUI harness
+	bddSuiteVariable:                     true, // the executing suite selected by the behaviour harness
 	"HIPPO_E2E_TEMP_PARENT":              true, // where tests/e2e/run.sh builds its binary
 	"HIPPO_E2E_OLD_ARCHIVE":              true, // cached immutable v0.8.4 archive, verified by the E2E preparer
 	"HIPPO_E2E_V085_ARCHIVE":             true, // cached immutable v0.8.5 archive, independently verified
@@ -70,7 +70,7 @@ func RunIsolated(m *testing.M) int {
 		return 1
 	}
 
-	owner, err := newPublicTUIHostWrapperOwner(root)
+	owner, err := newPublicHostWrapperOwner(root)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "own test host wrappers: %v\n", err)
 		if removeError := os.RemoveAll(root); removeError != nil {
@@ -78,13 +78,13 @@ func RunIsolated(m *testing.M) int {
 		}
 		return 1
 	}
-	publicTUISuiteWrapperOwner = owner
+	publicSuiteWrapperOwner = owner
 	code := m.Run()
 	if err := owner.close(); err != nil {
 		fmt.Fprintf(os.Stderr, "join test host wrappers: %v\n", err)
 		return 1 // Live borrowed code and the enclosing suite root must survive.
 	}
-	publicTUISuiteWrapperOwner = nil
+	publicSuiteWrapperOwner = nil
 	// A leftover root is reported rather than failed: it costs temporary space,
 	// not a verdict about the code under test.
 	if err := os.RemoveAll(root); err != nil {

@@ -48,7 +48,7 @@ func concreteIOImport(imported string) bool {
 func forbiddenImport(owner, imported string) bool {
 	const module = "github.com/wahidyankf/hippo/"
 	if strings.HasPrefix(imported, "charm.land/") || strings.HasPrefix(imported, "github.com/charmbracelet/") {
-		return owner != "internal/adapters/tui"
+		return true
 	}
 	if imported == "github.com/spf13/cobra" || imported == "github.com/spf13/pflag" {
 		return owner != "internal/adapters/cli"

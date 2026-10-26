@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/wahidyankf/hippo/tests/contract"
 )
 
 // These fixtures test shell orchestration, not HIPPO behaviour: copied actual
@@ -64,7 +66,7 @@ func TestBDDGateFullRegistration(t *testing.T) {
 		t.Run(row.name, func(t *testing.T) {
 			count := 0
 			for _, call := range calls {
-				if call.suite != row.suite || !slices.Contains(call.args, "./internal/adapters/tui") || slices.Contains(call.args, "-race") != row.race {
+				if call.suite != row.suite || !slices.Contains(call.args, "./tests/bdd") || slices.Contains(call.args, "-race") != row.race {
 					continue
 				}
 				count++
@@ -116,17 +118,17 @@ func TestBDDGateE2ECandidateRegistration(t *testing.T) {
 			ordinary++
 			requireBDDGateSelection(t, call, []string{"TestOrdinaryE2E"}, bddGateEntryNames())
 		}
-		if slices.Contains(call.args, "./internal/adapters/tui") {
+		if slices.Contains(call.args, "./tests/bdd") {
 			composed = append(composed, bddGateFlag(call, "-run"))
 			if call.suite != "e2e" || len(bddGateFlagValues(call, "-run")) != 1 || len(bddGateFlagValues(call, "-skip")) != 0 {
 				t.Errorf("wrong public corpus selection: %+v", call)
 			}
-			if bddGateFlag(call, "-run") != "^TestE2EBehaviours$" && call.adapter != "e2e" {
-				t.Errorf("direct public entry lacks explicit E2E adapter: %+v", call)
+			if call.adapter != "" {
+				t.Errorf("direct public entry carries an explicit adapter: %+v", call)
 			}
 		}
 	}
-	wanted := []string{"^TestE2EBehaviours$", "^TestTUIBDDPublicCanonicalSuite$", "^TestTUIBDDPublicObservationCanonical$", "^TestTUIBDDPublicSessionHolderSignals$"}
+	wanted := []string{"^TestE2EBehaviours$"}
 	if ordinary != 1 || !slices.Equal(composed, wanted) {
 		t.Errorf("ordinary E2E=%d composed sequence=%v, want one ordinary and %v", ordinary, composed, wanted)
 	}
@@ -158,25 +160,69 @@ func TestBDDGateFailuresStopActualScripts(t *testing.T) {
 	}
 }
 
+type gateFixtureScripts struct{ quick, full, compiled string }
+
+func checkGateQuickOrdinary(source string) error {
+	calls, valid := gateTestCommands(source)
+	if !valid {
+		return errors.New("quick gate contains an invalid test command")
+	}
+	for _, call := range calls {
+		if call.suite == contract.Integration || call.suite == contract.E2E {
+			return errors.New("quick gate invokes a native executing corpus")
+		}
+		if slices.Contains(call.args, "./cmd/...") && slices.Contains(call.args, "./internal/...") && gateOrdinarySelection(call.args, gateOrdinaryEntries()) {
+			return nil
+		}
+	}
+	return errors.New("quick gate omits unrestricted deterministic tests with exact corpus exclusions")
+}
+
+func checkGateFullIntegration(source string) error {
+	calls, valid := gateTestCommands(source)
+	if !valid {
+		return errors.New("full gate contains an invalid test command")
+	}
+	ordinary, composed := false, 0
+	for _, call := range calls {
+		if slices.Contains(call.args, "./tests/integration") && !slices.Contains(call.args, "-race") && len(gateFlagValues(call.args, "-run")) == 0 {
+			ordinary = true
+		}
+		if gateExecutingEntry(call, contract.Integration, "TestIntegrationBehaviours", false) {
+			composed++
+		}
+	}
+	if !ordinary {
+		return errors.New("full gate omits ordinary integration without exclusive selectors")
+	}
+	if composed != 1 {
+		return errors.New("integration corpus requires one explicit mode and exclusive composed entry")
+	}
+	return nil
+}
+
 func TestBDDGateInspectorsRejectNonexecutingRegistrations(t *testing.T) {
-	quick := "go test -count=1 ./cmd/... ./internal/... ./tests/support ./tests/coverage ./tests/bdd -skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$'\n"
-	integration := "HIPPO_BDD_SUITE=integration go test -count=1 -run '^TestIntegrationBehaviours$' ./internal/adapters/tui\n"
-	e2e := "HIPPO_BDD_SUITE=e2e HIPPO_BIN=\"$temporary_dir/hippo\" \"$go_binary\" test -count=1 -run '^TestE2EBehaviours$' ./internal/adapters/tui\n"
-	state := tuiGateState{quick: quick, full: "go test -count=1 ./tests/integration\n" + integration + "./tests/e2e/run.sh\n", compiled: "public_old_release_prepare \"$tool_dir\" \"$temporary_dir\"\n" + e2e + bddGatePublicRegistrationFixture(), terminalTests: "func TestNativeTerminalLifecycle"}
+	quick := "go test -count=1 ./cmd/... ./internal/... ./tests/support ./tests/support/hostprobe ./tests/support/oldidentity ./tests/coverage ./tests/bdd -skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'\n"
+	integration := "HIPPO_BDD_SUITE=integration go test -count=1 -run '^TestIntegrationBehaviours$' ./tests/bdd\n"
+	e2e := "HIPPO_BDD_SUITE=e2e HIPPO_BIN=\"$temporary_dir/hippo\" \"$go_binary\" test -count=1 -run '^TestE2EBehaviours$' ./tests/bdd\n"
+	state := gateFixtureScripts{quick: quick, full: "go test -count=1 ./tests/integration\n" + integration + "./tests/e2e/run.sh\n", compiled: "public_old_release_prepare \"$tool_dir\" \"$temporary_dir\"\n" + e2e}
 	t.Run("exact ordinary selection oracle", func(t *testing.T) {
 		requireBDDGateOrdinarySelectionOracle(t)
 	})
 	t.Run("supported registration control", func(t *testing.T) {
-		driver := &Driver{tuiGates: &state}
-		for _, check := range []func() error{driver.requireTUIQuickModelGate, driver.requireTUIIntegrationGate, driver.requireTUIStandaloneGate} {
-			if err := check(); err != nil {
-				t.Error(err)
-			}
+		if err := checkGateQuickOrdinary(state.quick); err != nil {
+			t.Error(err)
+		}
+		if err := checkGateFullIntegration(state.full); err != nil {
+			t.Error(err)
+		}
+		if err := checkStandaloneGatePublicEntries(normalizedBDDGateCommands(state.compiled)); err != nil {
+			t.Error(err)
 		}
 	})
 	for _, row := range []struct{ name, target, from, to string }{
-		{"ordinary exact exclusions removed", "quick", " -skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$'", ""},
-		{"ordinary exclusions broadened", "quick", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$", "Test"},
+		{"ordinary exact exclusions removed", "quick", " -skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'", ""},
+		{"ordinary exclusions broadened", "quick", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$", "Test"},
 		{"Integration mode changed", "full", "HIPPO_BDD_SUITE=integration", "HIPPO_BDD_SUITE=integrationX"},
 		{"Integration only commented", "full", integration, "# " + integration},
 		{"Integration wrong entry", "full", "^TestIntegrationBehaviours$", "^TestUnitBehaviours$"},
@@ -203,18 +249,17 @@ func TestBDDGateInspectorsRejectNonexecutingRegistrations(t *testing.T) {
 				t.Fatal("mutation does not name exactly one registration")
 			}
 			*source = strings.Replace(*source, row.from, row.to, 1)
-			// inspectTUIGates delivers normalized command text to the require
-			// methods. Comment mutations are existing rejection controls, not RED.
+			// The require functions receive normalized command text. Comment
+			// mutations are existing rejection controls, not RED.
 			*source = normalizedBDDGateCommands(*source)
-			driver := &Driver{tuiGates: &mutated}
 			var err error
 			switch row.target {
 			case "quick":
-				err = driver.requireTUIQuickModelGate()
+				err = checkGateQuickOrdinary(*source)
 			case "full":
-				err = driver.requireTUIIntegrationGate()
+				err = checkGateFullIntegration(*source)
 			case "compiled":
-				err = driver.requireTUIStandaloneGate()
+				err = checkStandaloneGatePublicEntries(*source)
 			}
 			if err == nil {
 				t.Fatal("nonexecuting, wrong-boundary or overbroad registration accepted")
@@ -233,8 +278,8 @@ func TestBDDGateCoreCoverageRequiresRelocatedUnit(t *testing.T) {
 		t.Fatal("existing denominator and relocated Unit host rejected")
 	}
 	for _, row := range []struct{ name, from, to string }{
-		{"relocated host removed", "./tests/unit ./internal/adapters/tui ", "./tests/unit "},
-		{"Unit entry excluded", "^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$"},
+		{"relocated host removed", "./tests/unit ./tests/bdd ", "./tests/unit "},
+		{"Unit entry excluded", "^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$"},
 		{"coverage made static-only", "-coverprofile=coverage/unit.out", "-run '^TestFeatureCompliance$' -coverprofile=coverage/unit.out"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -284,7 +329,7 @@ func bddGateEntryNames() []string {
 }
 
 func bddGateOrdinaryEntryNames() []string {
-	return append(bddGateEntryNames(), "TestTUIBDDPublicCanonicalSuite", "TestTUIBDDPublicObservationCanonical", "TestTUIBDDPublicSessionHolderSignals", "TestTUIBDDPublicPSHelperStartupDiagnostic", "TestTUIBDDPublicStatusPostQueryStackDiagnostic")
+	return bddGateEntryNames()
 }
 
 func bddGateFlag(call bddGateCall, name string) string {
@@ -349,7 +394,7 @@ func requireBDDGateSelection(t *testing.T, call bddGateCall, included, excluded 
 	if !bddGateSelectionIsExact(call, excluded) {
 		t.Errorf("ordinary/measured selection must have unrestricted -run and exact anchored corpus-only -skip: %v", call.args)
 	}
-	for _, name := range append(included, "TestOrdinaryDirectTUI", "TestUnitBehavioursExtra", "PrefixTestFeatureCompliance", "TestTUIBDDAnnotationCanonicalExecutes") {
+	for _, name := range append(included, "TestOrdinaryDirect", "TestUnitBehavioursExtra", "PrefixTestFeatureCompliance", "TestAnnotationCanonicalExecutes") {
 		if !bddGateSelects(call, name) {
 			t.Errorf("ordinary test %s excluded: %v", name, call.args)
 		}
@@ -552,7 +597,7 @@ func requireBDDGateQuickMeasuredUnit(t *testing.T, calls []bddGateCall) {
 	t.Helper()
 	var unitCalls []bddGateCall
 	for _, call := range calls {
-		if bddGateNamesPackage(call, "./internal/adapters/tui") && bddGateSelects(call, "TestUnitBehaviours") {
+		if bddGateNamesPackage(call, "./tests/bdd") && bddGateSelects(call, "TestUnitBehaviours") {
 			unitCalls = append(unitCalls, call)
 		}
 	}
@@ -563,7 +608,7 @@ func requireBDDGateQuickMeasuredUnit(t *testing.T, calls []bddGateCall) {
 	if bddGateFlag(call, "-coverprofile") != "coverage/unit.out" {
 		t.Errorf("Unit is not measured: %v", call.args)
 	}
-	requireBDDGateSelection(t, call, []string{"TestUnitBehaviours", "TestOrdinaryDirectTUI"}, bddGateOrdinaryEntryNames()[1:])
+	requireBDDGateSelection(t, call, []string{"TestUnitBehaviours", "TestOrdinaryDirect"}, bddGateOrdinaryEntryNames()[1:])
 	for _, pkg := range []string{"./tests/unit", "./internal/application", "./internal/domain/coordination", "./internal/domain/evidence", "./internal/identity", "./internal/status"} {
 		if !slices.Contains(call.args, pkg) {
 			t.Errorf("measured package %s missing", pkg)
@@ -579,7 +624,7 @@ func requireBDDGateQuickCompliance(t *testing.T, calls []bddGateCall) {
 			continue
 		}
 		adapters = append(adapters, call.adapter)
-		if !slices.Contains(call.args, "./internal/adapters/tui") || bddGateFlag(call, "-run") != "^TestFeatureCompliance$" {
+		if !slices.Contains(call.args, "./tests/bdd") || bddGateFlag(call, "-run") != "^TestFeatureCompliance$" {
 			t.Errorf("static check uses wrong host/selector: %+v", call)
 		}
 		if call.binary != "inherited-candidate-must-not-be-used" {
@@ -607,8 +652,8 @@ func requireBDDGateFullOrdinary(t *testing.T, calls []bddGateCall) {
 		if !slices.Contains(call.args, "./tests/integration") {
 			continue
 		}
-		if run := bddGateFlag(call, "-run"); run == "^TestMixedVersionV085DisplayInteroperability$" || run == "^TestMixedVersionV0100VeryHeavyCompatibility$" {
-			continue // The separate required leaves are checked by their registration controls.
+		if run := bddGateFlag(call, "-run"); run == "^TestMixedVersionV0100VeryHeavyCompatibility$" {
+			continue // The separate required leaf is checked by its registration control.
 		}
 		excluded := bddGateEntryNames()
 		if slices.Contains(call.args, "./internal/...") {
@@ -617,7 +662,7 @@ func requireBDDGateFullOrdinary(t *testing.T, calls []bddGateCall) {
 		requireBDDGateSelection(t, call, []string{"TestOrdinaryIntegration"}, excluded)
 		if slices.Contains(call.args, "-race") {
 			race = true
-			for _, pkg := range []string{"./cmd/...", "./internal/...", "./tests/support", "./tests/support/hostprobe", "./tests/support/oldidentity", "./tests/unit"} {
+			for _, pkg := range []string{"./cmd/...", "./internal/...", "./tests/support", "./tests/support/hostprobe", "./tests/support/oldidentity", "./tests/unit", "./tests/bdd"} {
 				if !slices.Contains(call.args, pkg) {
 					t.Errorf("ordinary race package missing: %s", pkg)
 				}
@@ -648,15 +693,15 @@ func requireBDDGateFullContract(t *testing.T, calls []bddGateCall) {
 
 func requireBDDGateOrdinarySelectionOracle(t *testing.T) {
 	t.Helper()
-	positive := bddGateCall{args: []string{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$", "./internal/..."}}
-	if !bddGateSelectionIsExact(positive, bddGateOrdinaryEntryNames()) || !bddGateSelects(positive, "TestTUIBDDAnnotationCanonicalExecutes") {
+	positive := bddGateCall{args: []string{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$", "./internal/..."}}
+	if !bddGateSelectionIsExact(positive, bddGateOrdinaryEntryNames()) || !bddGateSelects(positive, "TestAnnotationCanonicalExecutes") {
 		t.Fatal("exact corpus exclusions must retain real ordinary annotation entry")
 	}
 	for _, args := range [][]string{
-		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic|TestTUIBDDAnnotationCanonicalExecutes)$", "./internal/..."},
-		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$", "-run", "^(TestOrdinaryDirectTUI|TestUnitBehavioursExtra|PrefixTestFeatureCompliance)$", "./internal/..."},
-		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$", "-skip", "^TestTUIBDDAnnotationCanonicalExecutes$", "./internal/..."},
-		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$", "-run", "", "-run", "^TestOrdinaryDirectTUI$", "./internal/..."},
+		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestAnnotationCanonicalExecutes)$", "./internal/..."},
+		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$", "-run", "^(TestOrdinaryDirect|TestUnitBehavioursExtra|PrefixTestFeatureCompliance)$", "./internal/..."},
+		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$", "-skip", "^TestAnnotationCanonicalExecutes$", "./internal/..."},
+		{"test", "-skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$", "-run", "", "-run", "^TestOrdinaryDirect$", "./internal/..."},
 	} {
 		if bddGateSelectionIsExact(bddGateCall{args: args}, bddGateOrdinaryEntryNames()) {
 			t.Fatalf("ordinary test restriction accepted: %v", args)
@@ -677,17 +722,17 @@ func requireBDDGateSelectorAliases(t *testing.T, positive bddGateCall) {
 			}
 			args := make([]string, 1, 9)
 			args[0] = "test"
-			args = append(args, flag("skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$")...)
+			args = append(args, flag("skip", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$")...)
 			args = append(args, flag(runCommandName, ".*")...)
 			call := bddGateCall{args: args}
-			if !bddGateSelectionIsExact(call, bddGateOrdinaryEntryNames()) || !bddGateSelects(call, "TestTUIBDDAnnotationCanonicalExecutes") {
+			if !bddGateSelectionIsExact(call, bddGateOrdinaryEntryNames()) || !bddGateSelects(call, "TestAnnotationCanonicalExecutes") {
 				t.Fatalf("healthy selector alias rejected: %v", args)
 			}
-			annotationSkip := flag("skip", "^TestTUIBDDAnnotationCanonicalExecutes$")
-			narrowRun := flag(runCommandName, "^(TestOrdinaryDirectTUI|TestUnitBehavioursExtra|PrefixTestFeatureCompliance)$")
+			annotationSkip := flag("skip", "^TestAnnotationCanonicalExecutes$")
+			narrowRun := flag(runCommandName, "^(TestOrdinaryDirect|TestUnitBehavioursExtra|PrefixTestFeatureCompliance)$")
 			for _, restriction := range [][]string{annotationSkip, narrowRun} {
 				mutated := bddGateCall{args: append(append([]string(nil), positive.args...), restriction...)}
-				if bddGateSelectionIsExact(mutated, bddGateOrdinaryEntryNames()) || bddGateSelects(mutated, "TestTUIBDDAnnotationCanonicalExecutes") {
+				if bddGateSelectionIsExact(mutated, bddGateOrdinaryEntryNames()) || bddGateSelects(mutated, "TestAnnotationCanonicalExecutes") {
 					t.Fatalf("alias restriction ignored: %v", mutated.args)
 				}
 			}

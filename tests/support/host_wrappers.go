@@ -19,31 +19,31 @@ const (
 )
 
 // Only RunIsolated installs this actual suite owner; inherited markers do not.
-var publicTUISuiteWrapperOwner *publicTUIHostWrapperOwner
+var publicSuiteWrapperOwner *publicHostWrapperOwner
 
-type publicTUIHostWrapperSet struct {
+type publicHostWrapperSet struct {
 	directory string
 	identity  os.FileInfo
 	files     map[string]os.FileInfo
 	borrowers int
 }
 
-type publicTUIHostWrapperOwner struct {
+type publicHostWrapperOwner struct {
 	mu      sync.Mutex
 	root    string
-	sets    map[[sha256.Size]byte]*publicTUIHostWrapperSet
+	sets    map[[sha256.Size]byte]*publicHostWrapperSet
 	retired bool
 }
 
-func newPublicTUIHostWrapperOwner(root string) (*publicTUIHostWrapperOwner, error) {
+func newPublicHostWrapperOwner(root string) (*publicHostWrapperOwner, error) {
 	canonical, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return nil, err
 	}
-	if err := publicTUIOwnedDirectory(canonical); err != nil {
+	if err := publicOwnedDirectory(canonical); err != nil {
 		return nil, err
 	}
-	return &publicTUIHostWrapperOwner{root: canonical, sets: map[[sha256.Size]byte]*publicTUIHostWrapperSet{}}, nil
+	return &publicHostWrapperOwner{root: canonical, sets: map[[sha256.Size]byte]*publicHostWrapperSet{}}, nil
 }
 
 func publicHostProbeEnvironmentKey(entry string) bool {
@@ -71,7 +71,7 @@ func publicHostWrapperKey(executable string, scripts map[string]string) ([sha256
 	return sha256.Sum256(encoded), nil
 }
 
-func (owner *publicTUIHostWrapperOwner) acquire(executable string, scripts map[string]string) (*publicTUIHostWrapperSet, error) {
+func (owner *publicHostWrapperOwner) acquire(executable string, scripts map[string]string) (*publicHostWrapperSet, error) {
 	key, err := publicHostWrapperKey(executable, scripts)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (owner *publicTUIHostWrapperOwner) acquire(executable string, scripts map[s
 	if owner.retired {
 		return nil, errors.New("shared host wrapper owner has retired")
 	}
-	if err := publicTUIOwnedDirectory(owner.root); err != nil {
+	if err := publicOwnedDirectory(owner.root); err != nil {
 		return nil, err
 	}
 	set, found := owner.sets[key]
@@ -99,7 +99,7 @@ func (owner *publicTUIHostWrapperOwner) acquire(executable string, scripts map[s
 	return set, nil
 }
 
-func (owner *publicTUIHostWrapperOwner) create(scripts map[string]string) (*publicTUIHostWrapperSet, error) {
+func (owner *publicHostWrapperOwner) create(scripts map[string]string) (*publicHostWrapperSet, error) {
 	directory, err := os.MkdirTemp(owner.root, "host-wrappers-")
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (owner *publicTUIHostWrapperOwner) create(scripts map[string]string) (*publ
 	if err != nil {
 		return nil, errors.Join(err, os.RemoveAll(directory))
 	}
-	set := &publicTUIHostWrapperSet{directory: directory, identity: identity, files: map[string]os.FileInfo{}}
+	set := &publicHostWrapperSet{directory: directory, identity: identity, files: map[string]os.FileInfo{}}
 	for name := range scripts {
 		info, err := os.Lstat(filepath.Join(directory, name))
 		if err != nil {
@@ -131,8 +131,8 @@ func writePublicHostWrappers(directory string, scripts map[string]string) error 
 	return nil
 }
 
-func validatePublicHostWrapperSet(set *publicTUIHostWrapperSet, scripts map[string]string) error {
-	if err := publicTUIOwnedDirectory(set.directory); err != nil {
+func validatePublicHostWrapperSet(set *publicHostWrapperSet, scripts map[string]string) error {
+	if err := publicOwnedDirectory(set.directory); err != nil {
 		return err
 	}
 	identity, err := os.Lstat(set.directory)
@@ -160,13 +160,13 @@ func validatePublicHostWrapperSet(set *publicTUIHostWrapperSet, scripts map[stri
 	return nil
 }
 
-func (owner *publicTUIHostWrapperOwner) release(set *publicTUIHostWrapperSet) {
+func (owner *publicHostWrapperOwner) release(set *publicHostWrapperSet) {
 	owner.mu.Lock()
 	defer owner.mu.Unlock()
 	set.borrowers--
 }
 
-func (owner *publicTUIHostWrapperOwner) close() error {
+func (owner *publicHostWrapperOwner) close() error {
 	owner.mu.Lock()
 	defer owner.mu.Unlock()
 	owner.retired = true
@@ -176,7 +176,7 @@ func (owner *publicTUIHostWrapperOwner) close() error {
 		}
 	}
 	for _, set := range owner.sets {
-		if err := publicTUIOwnedDirectory(set.directory); err != nil {
+		if err := publicOwnedDirectory(set.directory); err != nil {
 			return err
 		}
 		identity, err := os.Lstat(set.directory)

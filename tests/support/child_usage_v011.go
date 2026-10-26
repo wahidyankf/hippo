@@ -190,7 +190,7 @@ func (driver *Driver) stagePredatingSummary() error {
 // finalizes, with the given child-usage fields added.
 func writeChildUsageSummary(root, runID string, finished time.Time, fields map[string]any) error {
 	values := map[string]any{
-		schemaVersionField: 5, tuiRunIDField: runID, "source": hippoFixtureName,
+		schemaVersionField: 5, runIDField: runID, "source": hippoFixtureName,
 		"taskClass": string(policy.TaskEphemeral), "resourceTier": standardTierName, "outcome": "passed",
 		"finishedAt": finished.UTC().Format(time.RFC3339Nano),
 	}

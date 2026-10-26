@@ -10,7 +10,7 @@ import (
 )
 
 // These tests verify recorded script orchestration and literal gate inspectors.
-// A recording Go stand-in never establishes public HIPPO or native acceptance.
+// A recording Go stand-in never builds or executes a candidate.
 func TestBDDGatePublicEntriesRegisteredOnceWithSameCandidate(t *testing.T) {
 	calls, code := recordBDDGate(t, "tests/e2e/run.sh", "")
 	if code != 0 {
@@ -18,10 +18,10 @@ func TestBDDGatePublicEntriesRegisteredOnceWithSameCandidate(t *testing.T) {
 	}
 	candidate := bddGateFlag(requireBDDGateCall(t, calls, "build", "./cmd/hippo"), "-o")
 	var oldBinary, oldReceipt string
-	wanted := []string{"^TestE2EBehaviours$", "^TestTUIBDDPublicCanonicalSuite$", "^TestTUIBDDPublicObservationCanonical$", "^TestTUIBDDPublicSessionHolderSignals$"}
+	wanted := []string{"^TestE2EBehaviours$"}
 	var actual []string
 	for _, call := range calls {
-		if call.args[0] != "test" || !slices.Contains(call.args, "./internal/adapters/tui") {
+		if call.args[0] != "test" || !slices.Contains(call.args, "./tests/bdd") {
 			continue
 		}
 		actual = append(actual, bddGateFlag(call, "-run"))
@@ -34,8 +34,8 @@ func TestBDDGatePublicEntriesRegisteredOnceWithSameCandidate(t *testing.T) {
 		if call.binary != candidate || call.suite != "e2e" || bddGateFlag(call, "-count") != "1" || len(bddGateFlagValues(call, "-skip")) != 0 {
 			t.Errorf("public entry lost candidate/mode/exact execution: %+v", call)
 		}
-		if bddGateFlag(call, "-run") != wanted[0] && call.adapter != "e2e" {
-			t.Errorf("direct public entry lost explicit adapter: %+v", call)
+		if call.adapter != "" {
+			t.Errorf("direct public entry carries an explicit adapter: %+v", call)
 		}
 	}
 	if !slices.Equal(actual, wanted) {
@@ -43,21 +43,12 @@ func TestBDDGatePublicEntriesRegisteredOnceWithSameCandidate(t *testing.T) {
 	}
 }
 
-func bddGatePublicRegistrationFixture() string {
-	lines := make([]string, 0, 3)
-	for _, name := range []string{"TestTUIBDDPublicCanonicalSuite", "TestTUIBDDPublicObservationCanonical", "TestTUIBDDPublicSessionHolderSignals"} {
-		lines = append(lines, "HIPPO_BDD_SUITE=e2e HIPPO_BDD_ADAPTER=e2e HIPPO_BIN=\"$temporary_dir/hippo\" \"$go_binary\" test -count=1 -run '^"+name+"$' ./internal/adapters/tui\n")
-	}
-	return strings.Join(lines, "")
-}
-
 func TestBDDGatePublicInspectorRejectsEachMissingOrNonexecutingEntry(t *testing.T) {
-	legacy := "HIPPO_BDD_SUITE=e2e HIPPO_BIN=\"$temporary_dir/hippo\" \"$go_binary\" test -count=1 -run '^TestE2EBehaviours$' ./internal/adapters/tui\n"
+	legacy := "HIPPO_BDD_SUITE=e2e HIPPO_BIN=\"$temporary_dir/hippo\" \"$go_binary\" test -count=1 -run '^TestE2EBehaviours$' ./tests/bdd\n"
 	preparation := "public_old_release_prepare \"$tool_dir\" \"$temporary_dir\"\n"
-	compiled := preparation + legacy + bddGatePublicRegistrationFixture()
+	compiled := preparation + legacy
 	check := func(source string) error {
-		driver := &Driver{tuiGates: &tuiGateState{full: "./tests/e2e/run.sh\n", compiled: normalizedBDDGateCommands(source)}}
-		return driver.requireTUIStandaloneGate()
+		return checkStandaloneGatePublicEntries(normalizedBDDGateCommands(source))
 	}
 	if err := check(compiled); err != nil {
 		t.Fatalf("complete public registration rejected: %v", err)
@@ -73,18 +64,12 @@ func TestBDDGatePublicInspectorRejectsEachMissingOrNonexecutingEntry(t *testing.
 			t.Fatal("missing, commented, late, duplicate or wrong owned old preparation accepted")
 		}
 	}
-	for line := range strings.SplitSeq(strings.TrimSuffix(legacy+bddGatePublicRegistrationFixture(), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSuffix(legacy, "\n"), "\n") {
 		_, selector, _ := strings.Cut(line, "-run '^")
 		name, _, _ := strings.Cut(selector, "$'")
 		t.Run(name, func(t *testing.T) {
 			requireInvalidPublicEntryMutations(t, compiled, line, name, check)
 		})
-	}
-	for _, name := range []string{"TestTUIBDDPublicPSHelperStartupDiagnostic", "TestTUIBDDPublicStatusPostQueryStackDiagnostic"} {
-		line := strings.Replace(legacy, "TestE2EBehaviours", name, 1)
-		if err := check(compiled + line); err == nil {
-			t.Fatalf("task-only diagnostic %s accepted as permanent route", name)
-		}
 	}
 }
 
@@ -98,12 +83,12 @@ func TestBDDGatePublicOrdinarySelectorsRetainUnitAndPureControls(t *testing.T) {
 			if call.args[0] != "test" || !slices.Contains(call.args, "./internal/...") {
 				continue
 			}
-			for _, name := range []string{"TestTUIBDDPublicCanonicalSuite", "TestTUIBDDPublicObservationCanonical", "TestTUIBDDPublicSessionHolderSignals", "TestTUIBDDPublicPSHelperStartupDiagnostic", "TestTUIBDDPublicStatusPostQueryStackDiagnostic"} {
-				if bddGateSelects(call, name) {
-					t.Errorf("%s executes compiled-only %s ordinarily", script, name)
+			for _, name := range gateCorpusEntries() {
+				if bddGateFlag(call, "-run") == "^"+name+"$" {
+					t.Errorf("%s executes behaviour %s ordinarily", script, name)
 				}
 			}
-			for _, name := range []string{"TestOrdinaryDirectTUI", "TestTUIBDDAnnotationCanonicalExecutes", "TestTUIBDDPublicCanonicalSuiteExtra", "PrefixTestTUIBDDPublicCanonicalSuite"} {
+			for _, name := range []string{"TestOrdinaryDirect", "TestAnnotationCanonicalExecutes", "TestUnitBehavioursExtra", "PrefixTestFeatureCompliance"} {
 				if !bddGateSelects(call, name) {
 					t.Errorf("%s drops pure or prefix control %s", script, name)
 				}
@@ -113,7 +98,7 @@ func TestBDDGatePublicOrdinarySelectorsRetainUnitAndPureControls(t *testing.T) {
 }
 
 func TestBDDGatePublicEntryFailureStopsAndCleansCandidate(t *testing.T) {
-	for _, name := range []string{"TestE2EBehaviours", "TestTUIBDDPublicCanonicalSuite", "TestTUIBDDPublicObservationCanonical", "TestTUIBDDPublicSessionHolderSignals"} {
+	for _, name := range []string{"TestE2EBehaviours"} {
 		t.Run(name, func(t *testing.T) {
 			calls, code := recordBDDGate(t, "tests/e2e/run.sh", "test:^"+name+"$")
 			if code != 73 || len(calls) == 0 || bddGateFlag(calls[len(calls)-1], "-run") != "^"+name+"$" {
@@ -133,7 +118,7 @@ func TestBDDGateOldPreparationFailureStopsE2EGate(t *testing.T) {
 		t.Fatalf("old preparation failure status=%d, want73", code)
 	}
 	for _, call := range calls {
-		if slices.Contains(call.args, "./tests/e2e") || slices.Contains(call.args, "./internal/adapters/tui") {
+		if slices.Contains(call.args, "./tests/e2e") || slices.Contains(call.args, "./tests/bdd") {
 			t.Fatalf("E2E ran after immutable old preparation failed: %+v", call)
 		}
 	}
@@ -150,7 +135,7 @@ func requireInvalidPublicEntryMutations(t *testing.T, compiled, line, name strin
 		{"commented", "# " + line},
 		{"wrong mode", strings.Replace(line, "HIPPO_BDD_SUITE=e2e", "HIPPO_BDD_SUITE=unit", 1)},
 		{"wrong candidate", strings.Replace(line, "HIPPO_BIN=\"$temporary_dir/hippo\"", "HIPPO_BIN=other-candidate", 1)},
-		{"wrong host", strings.Replace(line, "./internal/adapters/tui", "./tests/e2e", 1)},
+		{"wrong host", strings.Replace(line, "./tests/bdd", "./tests/e2e", 1)},
 		{"compile only", strings.Replace(line, " test ", " test -c ", 1)},
 		{"compile only alias", line + " --c=true"},
 		{"race alias", line + " --race=true"},
@@ -172,13 +157,5 @@ func requireInvalidPublicEntryMutations(t *testing.T, compiled, line, name strin
 				t.Fatal("invalid required public registration accepted")
 			}
 		})
-	}
-	if strings.Contains(line, "HIPPO_BDD_ADAPTER=e2e") {
-		for _, adapter := range []string{"unit", ""} {
-			replacement := strings.Replace(line, "HIPPO_BDD_ADAPTER=e2e", "HIPPO_BDD_ADAPTER="+adapter, 1)
-			if err := check(strings.Replace(compiled, line, replacement, 1)); err == nil {
-				t.Fatalf("wrong direct adapter %q accepted", adapter)
-			}
-		}
 	}
 }

@@ -34,7 +34,7 @@ func TestHexagonalSelectorsRejectStaleAndNonexecutingPromises(t *testing.T) {
 		{"old config package", "./internal/adapters/config,", "./internal/config,"},
 		{"old parser file", "internal/adapters/host/linux_parsers.go", "internal/host/linux_parsers.go"},
 		{"domain directory missing", "internal/domain/coordination,internal/domain/evidence", "internal/domain/evidence"},
-		{"application tests missing", "./internal/adapters/tui ./internal/application ", "./internal/adapters/tui "},
+		{"application tests missing", "./tests/bdd ./internal/application ", "./tests/bdd "},
 		{"threshold reduced", "--minimum 99", "--minimum 98"},
 		{"coverage command commented", "go test -count=1 \\\n", "# go test -count=1 \\\n"},
 		{"threshold failure swallowed", "--minimum 99", "--minimum 99 || true"},
