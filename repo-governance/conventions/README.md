@@ -41,7 +41,7 @@ A convention chooses a path. It does not authorize anyone to walk it; see
 - [Pull request merge](pull-request-merge.md) — the preconditions for merging.
 - [PR review agent procedures](pr-review-agent-procedures/README.md) — the procedure moved out of the
   `pr-review-checker` definition to fit its word budget.
-- [Push hook verification](push-hook-verification.md) — fix the cause, never bypass the hook.
+- [Push hook verification](push-hook-verification.md) — fix the cause; bypass only through the worktree-to-PR exception.
 - [Push hook verification modules](push-hook-verification/README.md) — the one-push capacity exception and its evidence.
 - [Rules](rules.md) — how a rule is written and where it lives.
 - [Structure](structure/README.md) — where each kind of adopted catalog artifact lives.

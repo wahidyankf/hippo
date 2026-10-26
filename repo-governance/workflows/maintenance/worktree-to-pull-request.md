@@ -35,7 +35,11 @@ incoming diff and reconcile the current task against it before continuing.
 Run the [push review](../quality/pr-leak-review/002-push-review.md) of every outgoing commit before each push, then push
 and open the pull request **as a draft**, with a body that carries why, what was decided, and how it was proved — see
 [pull request body](../../conventions/pull-request-body.md). Screen the title and body before opening it — see
-[data safety](../../conventions/public-repository-data-safety.md).
+[data safety](../../conventions/public-repository-data-safety.md). `--no-verify` on the task branch needs no
+per-instance prompt under the [worktree-to-PR exception][hook-exception]: the safety screens and the push review must
+still pass, and the gate must pass on the pushed head before merging.
+
+[hook-exception]: ../../conventions/push-hook-verification.md#worktree-to-pr-exception
 
 ## 5. Ready, Then Wait
 

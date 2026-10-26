@@ -35,8 +35,11 @@ Read it before acting; this skill exists to make sure it is the thing that gets 
   captured output rather than the exit code.
 - Exit `124` from the guard means a limit stopped the work, and on a workstation that usually means it was busy. The
   reason on stderr says which limit. Retry the same invocation once it clears; it is not a failure of the change.
-- Never `--no-verify`. Fix the cause.
+- `--no-verify` only under the [worktree-to-PR exception][hook-exception]: safety screens and the push leak review must
+  pass, `commit-msg` stays on, and the PR gate must pass on the pushed head. A reported hook finding is still fixed at
+  its cause.
 - Check GitHub no more often than every three minutes, and never with a watching mode.
 
 [worktree-workflow]: ../../../repo-governance/workflows/maintenance/worktree-to-pull-request.md
 [task-sync]: ../../../repo-governance/conventions/no-destructive-git-operations/001-authorized-task-branch-sync.md
+[hook-exception]: ../../../repo-governance/conventions/push-hook-verification.md#worktree-to-pr-exception
