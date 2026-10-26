@@ -95,7 +95,7 @@ func invalidFlagValues() [][]string {
 		{statusCommandName, sourceFlagName, malformedSource},
 		{watchCommandName, sourceFlagName, malformedSource},
 		{historyCommandName, sourceFlagName, malformedSource},
-		{historyCommandName, "--class", unknownSubcommand},
+		{historyCommandName, taskClassFlag, unknownSubcommand},
 		{historyCommandName, "--outcome", unknownSubcommand},
 		{historyCommandName, "--resource-tier", unknownSubcommand},
 	}
@@ -439,7 +439,7 @@ func (driver *Driver) requestInvalidIdentityFile() error {
 	}
 
 	return driver.attemptEach([][]string{{
-		outputFlag, outputJSONValue, runCommandName, "--cwd", directory, diskPathFlag, directory,
+		outputFlag, outputJSONValue, runCommandName, annotationCwdFlag, directory, diskPathFlag, directory,
 		"--", shellPath, "-c", "printf " + usageChildOutput,
 	}})
 }
@@ -512,7 +512,7 @@ func (driver *Driver) requestRunWithInvalidLabel(value string) error {
 	if driver.leaseRoot == "" {
 		return errors.New("invalid label run has no isolated root")
 	}
-	arguments := []string{runCommandName, taskClassFlag, taskClassEphemeral, diskPathFlag, ".", "--label", label, "--", shellPath, "-c", "exit 0"}
+	arguments := []string{runCommandName, taskClassFlag, taskClassEphemeral, diskPathFlag, ".", "--label", label, "--", shellPath, "-c", probeNeverConsultsHIPPO}
 	root := driver.leaseRoot
 	environment := []string{"HIPPO_ROOT=" + root, "HOME=" + root, isolatedPath}
 	ctx, cancel := context.WithTimeout(context.Background(), usageAttemptBound)

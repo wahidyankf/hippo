@@ -147,7 +147,7 @@ const shellExitZero = "exit 0"
 func initializeFixtureCheckout(path string) error {
 	for _, arguments := range [][]string{
 		{"init", "-q"},
-		{"-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-q", "--allow-empty", "-m", fixtureOwner},
+		{"-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", gitCommitWord, "-q", "--allow-empty", "-m", fixtureOwner},
 	} {
 		command := GitCommand(path, arguments...)
 		if output, commandError := command.CombinedOutput(); commandError != nil {

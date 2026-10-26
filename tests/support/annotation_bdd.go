@@ -31,10 +31,14 @@ import (
 )
 
 const (
-	annotationBDDToken       = "0123456789abcdef0123456789abcdef"
-	annotationBDDOther       = "fedcba9876543210fedcba9876543210"
-	annotationBDDUnproven    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	annotationBDDFirstWaiter = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	annotationBDDToken            = "0123456789abcdef0123456789abcdef"
+	annotationBDDOther            = "fedcba9876543210fedcba9876543210"
+	annotationBDDUnproven         = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	annotationBDDFirstWaiter      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	annotationPublishEvent        = "publish"
+	annotationCommitEvent         = "commit"
+	annotationAdmissionDeferral   = "admission deferral"
+	annotationConfirmedForcedStop = "confirmed forced stop"
 )
 
 // annotationBDD invokes application policy at Unit, actual embedded CLI/runtime
@@ -180,13 +184,13 @@ func (fixture *annotationBDD) registrationEffects() application.DisplayRegistrat
 	return application.DisplayRegistrationEffects{
 		Publish: func(id string, label identity.DisplayLabel) error {
 			fixture.publishes++
-			fixture.events = append(fixture.events, "publish")
+			fixture.events = append(fixture.events, annotationPublishEvent)
 			fixture.annotations[id] = label.String()
 			return nil
 		},
 		Commit: func() error {
 			fixture.commits++
-			fixture.events = append(fixture.events, "commit")
+			fixture.events = append(fixture.events, annotationCommitEvent)
 			fixture.atCommit = maps.Clone(fixture.annotations)
 			if fixture.kind == application.DisplayExclusiveRegistration {
 				var err error
@@ -348,7 +352,7 @@ func (fixture *annotationBDD) privacyAnnotation() ([]byte, error) {
 }
 
 func (fixture *annotationBDD) requireUnitPublication() error {
-	if fixture.publishes != 1 || fixture.atCommit[fixture.id] != fixture.label || !reflect.DeepEqual(fixture.events, []string{"publish", "commit"}) {
+	if fixture.publishes != 1 || fixture.atCommit[fixture.id] != fixture.label || !reflect.DeepEqual(fixture.events, []string{annotationPublishEvent, annotationCommitEvent}) {
 		return errors.New("publication did not precede actual ownership commit exactly once")
 	}
 	return nil
@@ -363,7 +367,7 @@ func (fixture *annotationBDD) requireFIFO() error {
 		return fmt.Errorf("original request/FIFO changed: %+v", fixture.ledger.Waiters)
 	}
 	if fixture.adapter.Name == contract.Unit && (first.Token != annotationBDDFirstWaiter || target.Sequence != 3 || fixture.publishes != 1 || fixture.atCommit[fixture.id] != "test-web") {
-		return errors.New("Unit actual Enqueue/AdmitHead changed original FIFO/publication")
+		return errors.New("unit actual Enqueue/AdmitHead changed original FIFO/publication")
 	}
 	return fixture.close()
 }
@@ -387,7 +391,7 @@ func (fixture *annotationBDD) requireDefault() error {
 
 func (fixture *annotationBDD) requireExclusiveSchema() error {
 	if fixture.adapter.Name == contract.Unit {
-		if fixture.commits != 1 || fixture.kind != application.DisplayExclusiveRegistration || !reflect.DeepEqual(fixture.events, []string{"publish", "commit"}) {
+		if fixture.commits != 1 || fixture.kind != application.DisplayExclusiveRegistration || !reflect.DeepEqual(fixture.events, []string{annotationPublishEvent, annotationCommitEvent}) {
 			return errors.New("exclusive production record did not pass through ordered application commit")
 		}
 		if err := requireUnitExclusiveWire(fixture.unitSession, fixture.unitCoordination, fixture.id); err != nil {
@@ -500,7 +504,7 @@ func (fixture *annotationBDD) requireInherited() error {
 
 func (fixture *annotationBDD) prepareRetirement(ctx context.Context, ending string) error {
 	kind := application.DisplayReservationRegistration
-	if ending == "cancellation in queue" || ending == "admission deferral" {
+	if ending == "cancellation in queue" || ending == annotationAdmissionDeferral {
 		kind = application.DisplayWaiterRegistration
 	}
 	if err := fixture.prepare(kind, "retire-build"); err != nil {
@@ -584,7 +588,7 @@ func (fixture *annotationBDD) retire() error {
 	case "cancellation in queue":
 		fixture.target.cancel()
 		return fixture.awaitResult(fixture.target, 130)
-	case "confirmed forced stop":
+	case annotationConfirmedForcedStop:
 		fixture.target.cancel()
 		return fixture.awaitResult(fixture.target, 128+int(syscall.SIGKILL))
 	case "admission deferral":
@@ -605,12 +609,12 @@ func (fixture *annotationBDD) requireRetired() error {
 		}
 		for _, owner := range fixture.ledger.Owners {
 			if owner.Token == fixture.id {
-				return errors.New("Unit actual owner transition retained token")
+				return errors.New("unit actual owner transition retained token")
 			}
 		}
 		for _, waiter := range fixture.ledger.Waiters {
 			if waiter.Token == fixture.id {
-				return errors.New("Unit actual waiter transition retained token")
+				return errors.New("unit actual waiter transition retained token")
 			}
 		}
 		return nil
@@ -867,7 +871,7 @@ func (annotationBDDCollector) Collect(ctx context.Context, _ policy.CPUState, _ 
 	if err := ctx.Err(); err != nil {
 		return policy.Reading{}, err
 	}
-	return policy.Reading{Sample: policy.Sample{SchemaVersion: 3, MeasuredAt: time.Now().UTC().Format(time.RFC3339Nano), Platform: "darwin", Capabilities: []string{"compressor", "memory-pressure", "swap"}, EffectiveMemoryLimitBytes: 32 * policy.GiB, PhysicalMemoryBytes: 32 * policy.GiB, AvailableMemoryBytes: new(12 * policy.GiB), AvailableNonCompressedEstimateBytes: new(12 * policy.GiB), MemoryPressureLevel: new(1), CompressorAvailable: new(true), CompressorPayloadBytes: new(int64(0)), AvailableParallelism: 8, CPUUtilizationPercent: new(0.0), DiskFreeBytes: new(40 * policy.GiB), DiskTotalBytes: new(512 * policy.GiB), SwapIns: new(int64(0)), SwapOuts: new(int64(0)), SwapFreeBytes: new(2 * policy.GiB), SwapState: "idle"}}, nil
+	return policy.Reading{Sample: policy.Sample{SchemaVersion: 3, MeasuredAt: time.Now().UTC().Format(time.RFC3339Nano), Platform: darwinPlatform, Capabilities: []string{"compressor", "memory-pressure", "swap"}, EffectiveMemoryLimitBytes: 32 * policy.GiB, PhysicalMemoryBytes: 32 * policy.GiB, AvailableMemoryBytes: new(12 * policy.GiB), AvailableNonCompressedEstimateBytes: new(12 * policy.GiB), MemoryPressureLevel: new(1), CompressorAvailable: new(true), CompressorPayloadBytes: new(int64(0)), AvailableParallelism: 8, CPUUtilizationPercent: new(0.0), DiskFreeBytes: new(40 * policy.GiB), DiskTotalBytes: new(512 * policy.GiB), SwapIns: new(int64(0)), SwapOuts: new(int64(0)), SwapFreeBytes: new(2 * policy.GiB), SwapState: idleSwapState}}, nil
 }
 
 // annotationInvocationContext mirrors the public process entry's signal cause
@@ -886,7 +890,7 @@ func annotationInvocationContext(parent context.Context, adapter contract.Adapte
 
 func (fixture *annotationBDD) start(parent context.Context, label, inherited string, printf bool) (*annotationBDDJob, error) {
 	if fixture.adapter.Name == contract.Unit {
-		return nil, errors.New("Unit must not enter native fixture")
+		return nil, errors.New("unit must not enter native fixture")
 	}
 	ctx, cancel := annotationInvocationContext(parent, fixture.adapter)
 	job := &annotationBDDJob{cancel: cancel, joined: make(chan struct{})}
@@ -904,7 +908,7 @@ func (fixture *annotationBDD) start(parent context.Context, label, inherited str
 	if inherited != "" {
 		environment = append(environment, "HIPPO_SESSION="+inherited)
 	}
-	args := []string{"run", "--config", fixture.config, "--cwd", directory, "--disk-path", directory, "--profile", "constrained", "--class", "service"}
+	args := []string{"run", "--config", fixture.config, "--cwd", directory, "--disk-path", directory, "--profile", profileConstrained, taskClassFlag, "service"}
 	if label != "" {
 		args = append(args, "--label", label)
 	}

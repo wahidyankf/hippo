@@ -96,6 +96,8 @@ const (
 	darwinVMStatTool              = "vm_stat"
 	darwinSysctlTool              = "sysctl"
 	e2eBehaviourEntry             = "TestE2EBehaviours"
+	allocatedField                = "allocated"
+	gitCommitWord                 = "commit"
 )
 
 // interruptReadinessWait bounds how long a fixture waits for a guarded child to
@@ -2055,7 +2057,7 @@ func (driver *Driver) rootHelp() error {
 }
 
 func (driver *Driver) requireHelp() error {
-	commands := []string{"completion", historyCommandName, monitorCommandName, releaseCommandName, "run", statusCommandName, versionCommandName, watchCommandName}
+	commands := []string{"completion", historyCommandName, monitorCommandName, releaseCommandName, runCommandName, statusCommandName, versionCommandName, watchCommandName}
 	if driver.exitCode != 0 {
 		return fmt.Errorf("help exited %d: %s", driver.exitCode, driver.errorOutput)
 	}
@@ -3586,7 +3588,7 @@ func (driver *Driver) smallRunner() {
 }
 
 func (driver *Driver) requireConstrained() error {
-	if driver.resolution.ResolvedProfile != "constrained" || driver.exitCode != 0 {
+	if driver.resolution.ResolvedProfile != profileConstrained || driver.exitCode != 0 {
 		return fmt.Errorf("got profile %q exit %d", driver.resolution.ResolvedProfile, driver.exitCode)
 	}
 	return nil

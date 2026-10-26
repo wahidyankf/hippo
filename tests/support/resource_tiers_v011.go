@@ -160,7 +160,7 @@ func (driver *Driver) runTierRun(tier string, extra []string) error {
 	}
 	marker := filepath.Join(driver.leaseRoot, tierPayloadMarker)
 	arguments := []string{
-		runCommandName, "--class", string(policy.TaskEphemeral), resourceTierFlag, tier,
+		runCommandName, taskClassFlag, string(policy.TaskEphemeral), resourceTierFlag, tier,
 		sourceFlagName, hippoFixtureName, diskPathFlag, driver.leaseRoot,
 	}
 	if driver.configPath != "" {

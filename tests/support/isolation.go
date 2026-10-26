@@ -70,21 +70,7 @@ func RunIsolated(m *testing.M) int {
 		return 1
 	}
 
-	owner, err := newPublicHostWrapperOwner(root)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "own test host wrappers: %v\n", err)
-		if removeError := os.RemoveAll(root); removeError != nil {
-			fmt.Fprintf(os.Stderr, "remove isolated test root: %v\n", removeError)
-		}
-		return 1
-	}
-	publicSuiteWrapperOwner = owner
 	code := m.Run()
-	if err := owner.close(); err != nil {
-		fmt.Fprintf(os.Stderr, "join test host wrappers: %v\n", err)
-		return 1 // Live borrowed code and the enclosing suite root must survive.
-	}
-	publicSuiteWrapperOwner = nil
 	// A leftover root is reported rather than failed: it costs temporary space,
 	// not a verdict about the code under test.
 	if err := os.RemoveAll(root); err != nil {

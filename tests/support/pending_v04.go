@@ -345,7 +345,7 @@ func requireV04StaleIdentity(root string) error {
 		schemaVersionField: 2, capacityField: floor, nextSequenceField: 1,
 		ownersField: []any{map[string]any{
 			tokenField: tokenValue, pidField: os.Getpid(), classField: string(policy.TaskEphemeral), profileField: profileBalanced,
-			requestedField: floor, "allocated": floor, sequenceField: 1, maxActiveOwnersFld: 20,
+			requestedField: floor, allocatedField: floor, sequenceField: 1, maxActiveOwnersFld: 20,
 		}},
 		waitersField: []any{},
 	}
@@ -816,7 +816,7 @@ func (driver *Driver) requirePendingTerminalV04() error {
 
 func v04ScriptArguments(command string, arguments ...string) ([]string, error) {
 	switch runtime.GOOS {
-	case "darwin", "freebsd", "openbsd", "netbsd":
+	case darwinPlatform, "freebsd", "openbsd", "netbsd":
 		return append([]string{"-q", "/dev/null", command}, arguments...), nil
 	case "linux":
 		parts := append([]string{command}, arguments...)

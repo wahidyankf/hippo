@@ -322,10 +322,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release workflow requires the peeled tag to equal the event commit", Boundary: releaseWorkflowBoundary, Reason: "requires isolated event and peeled-tag commit identities"},
 		{Scenario: "Release workflows disable implicit Go module caching", Boundary: releaseWorkflowBoundary, Reason: "workflow setup-go caching configuration is outside the compiled binary boundary"},
 		{Scenario: "CI validates assets against the exact build commit", Boundary: releaseWorkflowBoundary, Reason: "CI workflow commit propagation is outside the compiled binary boundary"},
-		// These two reviewed boundaries retain the original observation scope.
+		// This reviewed boundary retains the original observation scope.
 		{Scenario: "Display annotations do not change public status or watch comparison", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
-		{Scenario: "Unknown sample time remains unavailable", Boundary: hostEvidenceBoundary, Reason: "requires absent or malformed synthetic host measurement times; the E2E transport refuses private model fallback"},
-		{Scenario: "Missing host readings are distinct from accounting zero", Boundary: hostEvidenceBoundary, Reason: "requires synthetic unavailable optional host readings alongside known zero reservation demand; the E2E transport refuses private model fallback"},
 	},
 }
 

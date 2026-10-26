@@ -94,7 +94,7 @@ func requireAnnotationMemoryOutcome(fixture *annotationMemoryRun, reservation bo
 	}
 	if !fixture.inherited {
 		position := -1
-		for _, event := range []string{"begin", "publish", "close", startPhase, "finalize", taskClassRelease, "remove"} {
+		for _, event := range []string{"begin", annotationPublishEvent, "close", startPhase, "finalize", taskClassRelease, "remove"} {
 			next := slices.Index(fixture.trace[position+1:], event)
 			if next < 0 {
 				return fmt.Errorf("actual lifecycle lost ordered %s: %v", event, fixture.trace)

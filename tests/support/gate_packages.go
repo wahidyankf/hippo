@@ -373,16 +373,6 @@ func gateHasOldReleasePreparation(script string) bool {
 	return count == 1
 }
 
-func gateHasE2ECommand(script string) bool {
-	for line := range strings.SplitSeq(strings.ReplaceAll(script, "\\\n", " "), "\n") {
-		words, valid := gateCommandWords(strings.TrimSpace(line))
-		if valid && len(words) == 1 && words[0] == "./tests/e2e/run.sh" {
-			return true
-		}
-	}
-	return false
-}
-
 func validSerialComposedCompliance(script string) bool {
 	calls, valid := gateTestCommands(script)
 	if !valid {

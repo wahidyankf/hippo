@@ -94,7 +94,7 @@ func (driver *Driver) requireMixedVersionAccounting() error {
 	if len(owners) != 2 || owners[0]["runId"] == owners[1]["runId"] {
 		return fmt.Errorf("mixed owners lost distinct FIFO order: %v", owners)
 	}
-	for _, key := range []string{"allocated", "capacity"} {
+	for _, key := range []string{allocatedField, "capacity"} {
 		if totals[key] == nil {
 			return fmt.Errorf("mixed accounting lost %s totals", key)
 		}
@@ -277,19 +277,7 @@ func (driver *Driver) readCompatibilityWatch() error {
 	defer cancel()
 	var stdout, stderr bytes.Buffer
 	if driver.mode == contract.E2E {
-		previous, present := os.LookupEnv(hippoRootEnvironment)
-		_ = os.Setenv(hippoRootEnvironment, root)
-		defer func() {
-			if present {
-				_ = os.Setenv(hippoRootEnvironment, previous)
-			} else {
-				_ = os.Unsetenv(hippoRootEnvironment)
-			}
-		}()
-		command := exec.CommandContext(ctx, driver.binary, arguments...)
-		command.Env = environment
-		command.Stdout, command.Stderr = &stdout, &stderr
-		_ = command.Run()
+		driver.runCompatibilityWatchBinary(ctx, root, environment, arguments, &stdout, &stderr)
 	} else {
 		workingDirectory, err := os.Getwd()
 		if err != nil {
@@ -303,13 +291,29 @@ func (driver *Driver) readCompatibilityWatch() error {
 			Stdout: &stdout, Stderr: &stderr, Environment: environment,
 		}).Run(ctx, arguments)
 	}
-	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(stdout.String()), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		driver.compatibilityWatch = append(driver.compatibilityWatch, line)
 	}
 	return nil
+}
+
+func (driver *Driver) runCompatibilityWatchBinary(ctx context.Context, root string, environment, arguments []string, stdout, stderr *bytes.Buffer) {
+	previous, present := os.LookupEnv(hippoRootEnvironment)
+	_ = os.Setenv(hippoRootEnvironment, root)
+	defer func() {
+		if present {
+			_ = os.Setenv(hippoRootEnvironment, previous)
+		} else {
+			_ = os.Unsetenv(hippoRootEnvironment)
+		}
+	}()
+	command := exec.CommandContext(ctx, driver.binary, arguments...)
+	command.Env = environment
+	command.Stdout, command.Stderr = stdout, stderr
+	_ = command.Run()
 }
 
 func (driver *Driver) compatibilityOwners() ([]map[string]any, map[string]any, error) {

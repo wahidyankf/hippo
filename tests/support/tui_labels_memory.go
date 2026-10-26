@@ -70,7 +70,7 @@ func (fixture *annotationMemoryRun) run(ctx context.Context, reservation bool) {
 func (fixture *annotationMemoryRun) mutate(publication bool) error {
 	if publication {
 		fixture.writes++
-		fixture.record("publish")
+		fixture.record(annotationPublishEvent)
 		if fixture.operation == annotationOperationWrite || fixture.operation == annotationOperationBoth {
 			fixture.failures++
 			return errors.New("/private/annotation-write raw-error private-owner-label private-argument\x1b[31m")

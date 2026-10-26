@@ -386,7 +386,7 @@ func (driver *Driver) requireCheckedMiBConversionV04(root string) error {
 	if err := os.WriteFile(overflowConfig, []byte(`{"schemaVersion":2}`), 0o600); err != nil {
 		return err
 	}
-	arguments := []string{"run", configFlag, overflowConfig, "--reserve-memory-mib", strconv.FormatInt(maximum+1, 10), "--", shellPath, "-c", "exit 0"}
+	arguments := []string{"run", configFlag, overflowConfig, "--reserve-memory-mib", strconv.FormatInt(maximum+1, 10), "--", shellPath, "-c", probeNeverConsultsHIPPO}
 	if driver.mode == e2eMode {
 		command := exec.Command(driver.binary, arguments...)
 		command.Env = append(os.Environ(), "HIPPO_ROOT="+filepath.Join(root, "cli-root"))

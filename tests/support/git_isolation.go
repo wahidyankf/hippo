@@ -147,7 +147,7 @@ func fixtureRepositoryCommands(subject string) [][]string {
 		{"init", "-q", "-b", "main"},
 		{
 			"-c", "user.name=HIPPO fixture", "-c", "user.email=fixture@example.invalid",
-			"commit", "--allow-empty", "-q", "-m", subject,
+			gitCommitWord, "--allow-empty", "-q", "-m", subject,
 		},
 	}
 }
