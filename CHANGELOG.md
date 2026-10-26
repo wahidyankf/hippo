@@ -7,6 +7,20 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.12.0] — 2026-10-26
+
+### Changed
+
+- The `hippo tui` command and its interactive dashboard are removed, with the Bubble Tea presentation adapter, its
+  terminal lifecycle, and the Charm dependencies. `status`, `watch`, `history`, and `monitor` remain the data surface,
+  and the new [`hippo_watch` recipe](docs/how-to/hippo-watch.md) keeps a live view from `status --json` and
+  `watch --json` in the caller's own terminal. Requesting `hippo tui` now exits `2` naming the unknown command, with
+  nothing on stdout.
+- The BDD suite host moves from `internal/adapters/tui` to `tests/bdd` with the neutral driver only. The
+  display-annotation fixture moves with it, and the invalid-label, mixed-version, and status/watch comparison scenarios
+  assert through the public commands. The v0.8.5 display leaf, the PTY integration tests, and the tmux host proofs are
+  retired. Hexagonal ports and bootstrap composition are unchanged.
+
 ## [v0.11.0] — 2026-10-25
 
 ### Added
