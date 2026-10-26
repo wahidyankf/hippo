@@ -24,7 +24,8 @@ controls may acquire and use a temporary stamped candidate; that fixture does no
 Run the full E2E suite on its scheduled CI workflow (CRON) by default in every repository that has E2E; keep local E2E
 selective to the touched flow. The nightly loaded-host workflow runs the release gate, including E2E, under synthetic
 load. `pre-push` must stay fast enough that nobody looks for a way around it — a slow hook is a hook that gets bypassed,
-and [push hook verification](../conventions/push-hook-verification.md) exists because that bypass is prohibited.
+and [push hook verification](../conventions/push-hook-verification.md) exists because that bypass is restricted to its
+worktree-to-PR exception.
 
 This adapts the `ose-rules` end-to-end standard to HIPPO's quick/full gates: private fixture controls retain candidate
 acquisition while public journeys stay out of hooks.

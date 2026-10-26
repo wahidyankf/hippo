@@ -4,32 +4,41 @@ When a hook fails, fix the cause. Never bypass it.
 
 ## The Rule
 
-`--no-verify` is prohibited without explicit authorization from the user for that specific push. There is no standing
-permission, and no situation in which "the hook is slow" or "the failure is unrelated" is sufficient reason. The one
-exception — a guard stop before any check started, on a human-authorized push of a task-owned branch whose hosted
-pull-request gate mirrors the hook — lives in [Capacity-Held Hook](push-hook-verification/001-capacity-held-hook.md).
+`--no-verify` is prohibited without explicit authorization from the user for that specific push, except on a task-owned
+branch that lands through [worktree to pull request](../workflows/maintenance/worktree-to-pull-request.md), where the
+[worktree-to-PR exception](#worktree-to-pr-exception) pre-authorizes it. There is no other standing permission, and no
+situation in which "the hook is slow" or "the failure is unrelated" is sufficient reason outside that exception. The
+narrower guard-stop exception — a guard stop before any check started, on a human-authorized push of a task-owned branch
+whose hosted pull-request gate mirrors the hook — lives in
+[Capacity-Held Hook](push-hook-verification/001-capacity-held-hook.md).
 
 The hooks are `commit-msg` (Conventional Commits), `pre-commit` (staged formatting), and `pre-push` (the quick gate and
 the documentation gates). Each mirrors a job in the [pull-request gate](../development/quality-gates.md), so a bypassed
 hook does not skip the check — it moves the failure to CI, where it costs more and blocks the merge anyway.
 
-## HIPPO-Congestion Exception
+## Worktree-to-PR Exception
 
-The maintainer pre-authorizes `--no-verify` on `git commit` and `git push` for a task-owned branch that lands through a
-pull request, with no per-instance prompt, when every condition below holds. This is the only standing exception to the
-rule above.
+The maintainer pre-authorizes `--no-verify` on `git commit` and `git push` for a task-owned branch that lands through
+[worktree to pull request](../workflows/maintenance/worktree-to-pull-request.md), with no per-instance prompt, when
+every condition below holds. This is the only standing exception to the rule above. It supersedes the earlier
+HIPPO-congestion-only pre-authorization: a hook whose contract the pull-request gate mirrors does not need to run
+locally first, because the gate refuses the head when the hook would have.
 
-- The hook cannot run because HIPPO admission deferred or failed it (exit `124` never-started, exit `125`, abnormal
-  latency), not because a gate found a violation. These hooks run unguarded, so this fires only when a gate's own HIPPO
-  guard stops it.
-- The manual screens pass: the tracked-tree screen and the per-commit range screen (`scripts/public-safety/check.sh`)
-  both exit `0`, with no leak-review finding. The `commit-msg` hook stays enabled.
+- The branch is a task-owned worktree branch whose only route to `main` is its pull request. Direct pushes to `main`
+  stay outside this exception: explicit per-instance authorization still applies, strongly discouraged except for manual
+  override.
+- No reported finding is skipped: a hook that ran and reported a violation is fixed at its cause. The public-safety
+  screens have no bypass — the tracked-tree screen and the per-commit range screen (`scripts/public-safety/check.sh`)
+  both exit `0`, and the push [leak review](../workflows/quality/pr-leak-review/002-push-review.md) reports no finding.
+  The `commit-msg` hook stays enabled.
 - Formatting is done by hand or editor; the pull-request gate verifies it.
-- The bypass cites the HIPPO receipt and screen evidence in the push and PR notes, and never carries into a later
-  operation.
+- The bypass cites the screen evidence in the push and PR notes, and never carries into a later operation.
+- The branch does not merge until the pull-request gate passes on the exact pushed head. A later push replaces that head
+  and owes a fresh pass; nothing about this exception waives it.
 
-Direct pushes to `main` stay outside this exception: explicit per-instance authorization still applies, strongly
-discouraged except for manual override.
+Enforcement: gated — [`pr-quality-gate.yml`](../../.github/workflows/pr-quality-gate.yml) mirrors the `pre-commit`,
+`commit-msg`, and `pre-push` contracts as merge-blocking checks, so a bypassed hook moves its failure into the gate,
+where it blocks the merge; review verifies the cited screen evidence against the gate result.
 
 ## When a Hook Fails
 

@@ -20,12 +20,14 @@ that moves the [public contract](../development/public-contract.md) still needs 
 ## Ongoing Task Delivery
 
 Authorization to deliver a named task covers its staging, thematic commits, synchronization, publication, and landing
-until that task is finished. Do not request permission again for those routine steps;
+until that task is finished. Do not request permission again for those routine steps, including `--no-verify` on the
+task branch under the [worktree-to-PR exception](push-hook-verification.md#worktree-to-pr-exception);
 [authorized task sync](no-destructive-git-operations/001-authorized-task-branch-sync.md) owns the rebase and lease-push
 safeguards, and each step keeps its own gates: the [push review](../workflows/quality/pr-leak-review/002-push-review.md)
 before a push and the [merge preconditions](pull-request-merge.md) before landing. Resuming the same unfinished task
 retains its recorded authority after scope and current state are verified. It covers no other repository, unrelated
-work, later task, hook bypass, or release.
+work, later task, or release; hook bypass only through the
+[worktree-to-PR exception](push-hook-verification.md#worktree-to-pr-exception).
 
 ## Why It Is Separate
 
