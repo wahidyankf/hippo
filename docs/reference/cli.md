@@ -3,7 +3,8 @@
 Complete command and flag inventory for the `hippo` executable. Maintained by hand from the binary's own help output,
 with no generator behind it; run `hippo <command> --help` to confirm against the version you have installed.
 
-The `hippo tui` command and the `run --label` flag were added in v0.9.0 and are present in v0.10.0.
+The `run --label` flag was added in v0.9.0 and is present in v0.10.0. The `hippo tui` command was removed; use
+`hippo watch` or the [`hippo_watch` recipe](../how-to/hippo-watch.md) instead.
 
 **Verification note:** host-state, guarded-workload, history, refusal, and completion examples below have been exercised
 on a binary built from the landed source with synthetic fixtures; host-derived numbers vary. The `version` examples
@@ -13,14 +14,13 @@ require a matching release, controlled state, or live endpoints.
 
 ## Command tree
 
-`hippo` has nine commands; `release` holds three subcommands of its own.
+`hippo` has eight commands; `release` holds three subcommands of its own.
 
 ```text
 hippo
 +-- version
 +-- status
 +-- watch
-+-- tui
 +-- history
 +-- monitor
 +-- run
@@ -36,7 +36,6 @@ hippo
 | `hippo version`         | Print build version information                  |
 | `hippo status`          | Inspect current resource evidence                |
 | `hippo watch`           | Watch resource, admission, and queue transitions |
-| `hippo tui`             | Inspect work and capacity interactively          |
 | `hippo history`         | Query bounded shared run summaries               |
 | `hippo monitor`         | Monitor resource-state transitions               |
 | `hippo run`             | Run a command under resource supervision         |
@@ -52,8 +51,7 @@ Every command accepts these, placed before or after the command name.
 
 - `--color <when>`
   - Default: `auto`
-  - Meaning: Colour diagnostics and decorate the TUI: `always`, `never`, or `auto`; see
-    [Colour](./environment-variables.md#colour)
+  - Meaning: Colour diagnostics: `always`, `never`, or `auto`; see [Colour](./environment-variables.md#colour)
 - `--output <form>`
   - Default: `text`
   - Meaning: Diagnostic format: `text`, or `json` to add the machine-readable failure body on stderr
@@ -71,7 +69,7 @@ The root command also accepts `--version`, which prints the same text as `hippo 
 
 ## Shared flags
 
-`status`, `watch`, `tui`, `monitor`, `run`, and every `release` subcommand accept these.
+`status`, `watch`, `monitor`, `run`, and every `release` subcommand accept these.
 
 | Flag               | Default | Meaning                                                                              |
 | ------------------ | ------- | ------------------------------------------------------------------------------------ |
@@ -133,8 +131,8 @@ waiting run=fb5b47c58a0287aee14ca7c310499cd0 position=1 source=my-repo class=eph
 ```
 
 With `coordination.countSwap` on, the summary line ends with `swapAllowanceGiB=<n>`, the swap allowance in GiB. Without
-it the line is unchanged. The TUI's capacity view adds the allowance, headroom, and counted RAM, and an advisory line
-while swap use exceeds the allowance. See [swap allowance](./resource-policy.md#swap-allowance).
+it the line is unchanged. The JSON form also carries the headroom and counted RAM, and an advisory field while swap use
+exceeds the allowance. See [swap allowance](./resource-policy.md#swap-allowance).
 
 The text form prints one privacy-safe row line under the summary for each owner and waiter. The JSON form carries the
 same rows in full, plus the base, maximum, and currently effective owner limit. A live exclusive compatibility session
@@ -156,35 +154,6 @@ one is being collected.
 | `--disk-path <path>`    | `.`     | Path whose free space is measured                  |
 | `--source <label>`      | unset   | Filter owner and waiter rows by source             |
 | `--tag <key=value>`     | none    | Filter rows by a label; repeatable, all must match |
-
-## `hippo tui`
-
-Interactive observation of running jobs, the registered FIFO queue, and machine capacity. It creates no job or
-reservation, and quitting the dashboard does not stop guarded work. See
-[How to monitor work with the TUI](../how-to/monitor-work-with-the-tui.md) for layouts and keys.
-
-| Flag                    | Default | Meaning                                          |
-| ----------------------- | ------- | ------------------------------------------------ |
-| `--interval <duration>` | `5s`    | Delay after collection finishes; minimum `1s`    |
-| `--disk-path <path>`    | `.`     | Path whose free space is measured                |
-| `--source <label>`      | unset   | Filter owner and waiter rows by source           |
-| `--tag <key=value>`     | none    | Filter rows by a tag; repeatable, all must match |
-
-The shared `--config` and `--profile` flags also apply. Source and tag validation follows `status`; filters change
-visible rows while resource totals and FIFO positions stay global. Collection retains two host readings one second
-apart. Refresh requests during collection coalesce into one immediate follow-up; automatic refresh waits until the
-configured delay after completion. A failed refresh retains the last successful snapshot marked stale, or shows
-unavailable values if none has succeeded.
-
-Both stdin and stdout must be terminals, and `TERM=dumb` is refused. Unusable terminal streams or an interval below `1s`
-are usage mistakes (`2`, `hippo.args.invalid`); use `status` or `watch` for redirected output. Help exits `0` without
-opening the terminal. `q` exits `0`; Ctrl-C or SIGINT exits `130`, and SIGTERM exits `143` when no classified failure
-takes precedence. Terminal initialization, output, or restoration failure uses `125`, `hippo.supervision.failed`.
-
-There is no `--json` or `--jsonl` display mode. Global `--output json` adds only the existing failure body on stderr
-after terminal restoration; it does not select JSON frames. `--color` controls optional decoration using the same
-[styling policy](./environment-variables.md#colour) as diagnostics. Required terminal controls and text state markers
-remain when decoration is disabled.
 
 ## `hippo history`
 

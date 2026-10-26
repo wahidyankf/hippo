@@ -35,8 +35,8 @@ other section probably has the right one.
 - **How you use it** — under adaptive schema 3, `hippo run --resource-tier <tier> -- <command>`, plus one environment
   variable your build tool already reads.
 - **How you observe it** — `hippo status`, `hippo watch`, and `hippo history` show labeled admission and bounded
-  outcomes without recording commands or paths. The `hippo tui` command, added in v0.9.0, adds a keyboard-driven
-  interactive view; see [Monitor work with the TUI](./how-to/monitor-work-with-the-tui.md).
+  outcomes without recording commands or paths. For a live view, follow the
+  [`hippo_watch` recipe](./how-to/hippo-watch.md).
 - **What it will not do** — signal a process group it did not start, or guess when shared state is unreadable.
 
 ## Specifications
