@@ -3,8 +3,8 @@
 Complete command and flag inventory for the `hippo` executable. Maintained by hand from the binary's own help output,
 with no generator behind it; run `hippo <command> --help` to confirm against the version you have installed.
 
-The `run --label` flag was added in v0.9.0. The `hippo tui` command was removed; use
-`hippo watch` or the [`hippo_watch` recipe](../how-to/hippo-watch.md) instead.
+The `run --label` flag was added in v0.9.0. The `hippo tui` command was removed; use `hippo watch` or the
+[`hippo_watch` recipe](../how-to/hippo-watch.md) instead.
 
 **Verification note:** host-state, guarded-workload, history, refusal, and completion examples below have been exercised
 on a binary built from the landed source with synthetic fixtures; host-derived numbers vary. The `version` examples

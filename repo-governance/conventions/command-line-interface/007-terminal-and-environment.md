@@ -10,10 +10,10 @@ when_to_use: >-
 
 ## HIPPO Local Adoption
 
-Preserve HIPPO's published styling policy when presenting guarded work. Reason: existing callers rely on
-explicit forcing and presence-based `NO_COLOR` suppression; a guarded child that inherits the controlling terminal
-still needs ownership restored when it finishes. This locally adopted contract replaces the copied generic
-nonempty-variable and blanket all-escape rules without changing diagnostic behavior.
+Preserve HIPPO's published styling policy when presenting guarded work. Reason: existing callers rely on explicit
+forcing and presence-based `NO_COLOR` suppression; a guarded child that inherits the controlling terminal still needs
+ownership restored when it finishes. This locally adopted contract replaces the copied generic nonempty-variable and
+blanket all-escape rules without changing diagnostic behavior.
 
 ## Diagnostic Styling
 
@@ -31,8 +31,8 @@ data a caller receives.
 For base-directory variables, keep the separate unset-or-empty fallback rule in
 [Arguments and Flags](005-arguments-and-flags.md); the `NO_COLOR` presence rule does not govern path defaults.
 
-Enforcement: existing diagnostic contracts distinguish auto suppression from
-explicit forcing, per [quality gates](../../development/quality-gates.md).
+Enforcement: existing diagnostic contracts distinguish auto suppression from explicit forcing, per
+[quality gates](../../development/quality-gates.md).
 
 ## Inspection and Interactive Entry
 
@@ -40,8 +40,8 @@ Keep ordinary inspection content, record counts, field order, and exit meaning i
 Piped inspection remains readable without cursor movement, an alternate screen, progress indicators, or a pager.
 Optional styling follows the explicit policy above; a pipe alone is not a diagnostic-writer capability probe.
 
-HIPPO ships no interactive presentation to enter: `status`, `watch`, `history`, and `monitor` render the same text
-and JSON with or without a terminal. A guarded child that inherits the controlling terminal owns it while it runs and
+HIPPO ships no interactive presentation to enter: `status`, `watch`, `history`, and `monitor` render the same text and
+JSON with or without a terminal. A guarded child that inherits the controlling terminal owns it while it runs and
 restores foreground ownership when it finishes.
 
 Enforcement is gated: package tests cover CLI refusals, while integration tests prove guarded-child terminal ownership
@@ -50,5 +50,5 @@ and restoration. [Quality gates](../../development/quality-gates.md) declares th
 ## Actual Machine-Readable Documents
 
 Keep every actual machine-readable document body escape-free even with `--color always`, under
-[Machine-Readable Output](004-machine-readable-output.md). The adjacent human diagnostic retains its
-styling policy; the JSON body remains independently parseable and clean.
+[Machine-Readable Output](004-machine-readable-output.md). The adjacent human diagnostic retains its styling policy; the
+JSON body remains independently parseable and clean.
