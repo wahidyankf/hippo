@@ -40,8 +40,8 @@ defaults.
 ## Container View
 
 The shell bootstrap builds, caches, and execs the Go CLI, which reads configuration, owns the state store, collects host
-evidence, starts and signals the child group, probes health endpoints, and presents interactive observations through the
-caller's terminal.
+evidence, starts and signals the child group, probes health endpoints, and reports observations as text and JSON through
+the caller's streams.
 
 ```text
 +-----------------+  caches builds       +-----------------------+
@@ -83,15 +83,14 @@ collects host and process evidence through operating-system interfaces, and stor
 evidence records in a shared per-user state root. HIPPO instances launched by different repositories coordinate through
 that same root. The configuration and state roots are runtime inputs; neither is committed to this repository. A guarded
 command runs as a distinct child process group so interruption and pressure shedding cannot target unrelated processes.
-`hippo tui` uses the same Go process for interactive observation; it introduces no daemon, separate runtime container,
-job, or resource reservation. The TUI is included from v0.9.0, and final terminal and native acceptance against the
-release build remains pending.
+Machine consumers poll the same process through `status`, `watch`, `history`, and `monitor`; HIPPO introduces no daemon,
+separate runtime container, job, or resource reservation beyond the guarded child.
 
 ## Component View
 
 The command boundary projects parsed arguments into application requests. Application use cases own the execution order
 and consume ports they define. Pure domain values and reducers own policy, coordination, and evidence decisions.
-Bootstrap supplies concrete adapters once per invocation, including the interactive TUI presentation adapter.
+Bootstrap supplies concrete adapters once per invocation.
 
 ```text
 Process entry ---> Bootstrap composition ---> CLI command boundary
@@ -103,29 +102,19 @@ Process entry ---> Bootstrap composition ---> CLI command boundary
                           | effects                 | decisions
                           v                         v
                     Host and storage          Pure domain
-
-CLI command boundary ---> TUI presentation ---> Application observations
-                          |                     |
-                          | terminal effects    | snapshots through callback
-                          v                     v
-                    Operator terminal     Application-owned values
 ```
 
 Every component above sits inside the `Go CLI process` container.
 
 - **Process entry and bootstrap** translate signals into portable cancellation and construct configuration, host,
-  runtime, health, evidence, and TUI capabilities. Build identity selects the isolated Linux collector only in test
-  builds.
+  runtime, health, and evidence capabilities. Build identity selects the isolated Linux collector only in test builds.
 - **CLI boundary** owns Cobra commands, argument validation, request projection, noninteractive presentation, and exit
-  diagnostics. It dispatches TUI sessions through a composed callback after validation and terminal checks. Help and
-  diagnostic precedence remain part of the public contract. CLI code constructs no concrete service adapters.
-- **TUI adapter** owns responsive views, keyboard navigation, selection, viewport scrolling, stale-data markers, refresh
-  scheduling, and terminal lifecycle. A worker invokes the supplied observation callback; the event loop never collects
-  host evidence or reads private state directly. Bubble Tea, Bubbles, and Lip Gloss remain inside this adapter.
+  diagnostics. Help and diagnostic precedence remain part of the public contract. CLI code constructs no concrete
+  service adapters.
 - **Application** owns guarded-run preparation, host admission, queue retries and deadlines, queue heartbeats,
   launch-once supervision, own-owner observation before sampling, remote victim release waits, stop/finalize/release
-  ordering, shared status/TUI observations, history, watch, monitor, release checks and monitoring, and conformance
-  phase ordering. Consumer-owned ports expose portable values, opaque tokens, and callback capabilities.
+  ordering, shared status observations, history, watch, monitor, release checks and monitoring, and conformance phase
+  ordering. Consumer-owned ports expose portable values, opaque tokens, and callback capabilities.
 - **Coordination domain** owns strict wire values, checked vector accounting, FIFO enqueue and head allocation,
   conservative owner limits, and victim election. These reducers perform no filesystem or process effects.
 - **Evidence domain** owns outcomes, fixed-memory histograms, lifetime and release aggregation, history matching,
@@ -135,13 +124,13 @@ Every component above sits inside the `Go CLI process` container.
 - **Configuration and host adapters** discover local paths, read and decode strict configuration and identity files, and
   normalize macOS, Linux, cgroup, swap, pressure, CPU, disk, and process evidence. Linux kernel reads propagate caller
   cancellation through one owned read-only, nonblocking, close-on-exec descriptor and a synchronous bounded poll loop.
-  The adapter closes that descriptor before returning; the TUI observation worker still joins normally. Explicit context
-  readers take precedence over legacy synchronous readers, whose arbitrary callbacks remain non-preemptible. Optional
-  evidence fallback stops on cancellation. Nonblocking reads do not preempt arbitrary filesystem or device kernel
-  stalls; Darwin collection retains its supervised command probes. The rooted Darwin file adapter checks metadata and
-  uses the same loop for ordinary files. Darwin named pipes use an owned fixed `/bin/cat` process with private streams,
-  actual EOF and a joined `Wait` before returning, because Darwin FIFO readiness misses writer-close events. Context
-  cancellation retires only that reader child and discards partial bytes.
+  The adapter closes that descriptor before returning. Explicit context readers take precedence over legacy synchronous
+  readers, whose arbitrary callbacks remain non-preemptible. Optional evidence fallback stops on cancellation.
+  Nonblocking reads do not preempt arbitrary filesystem or device kernel stalls; Darwin collection retains its
+  supervised command probes. The rooted Darwin file adapter checks metadata and uses the same loop for ordinary files.
+  Darwin named pipes use an owned fixed `/bin/cat` process with private streams, actual EOF and a joined `Wait` before
+  returning, because Darwin FIFO readiness misses writer-close events. Context cancellation retires only that reader
+  child and discards partial bytes.
 - **Runtime adapter** keeps coordination locks, identity descriptors, ledger effects, compatibility leases, port
   identities, launcher handshakes, child process groups, streams, and controlling-terminal transfer together. Each
   admission or port attempt performs one atomic effect transaction; application code owns acquisition retries. Unknown
@@ -160,35 +149,21 @@ Long-running operations receive caller-owned contexts. Only the signal boundary 
 cancellation, so an interrupted invocation exits `128+N` unless a started child's status or a classified HIPPO failure
 explains its end. Application code receives neither files, process handles, process groups, nor framework types.
 
-## Interactive Observation Dynamic View
-
-The TUI consumes an application-owned observation callback returning an `ObservationSnapshot`, rather than parsing CLI
-JSON. Bootstrap composes that callback with the same observation services used by status and watch.
-
-```text
-CLI validation --> TUI event loop --refresh--> One worker --callback--> Application observation
-                       ^     |                    |                          |
-                       |     +<------ Result -----+<------ Snapshot ---------+
-                       |     |
-                 Refresh     +--keys/resize--> Terminal view
-                       |
-                Runner scheduler (delay after collection completes)
-```
+## Observation Dynamic View
 
 Application observation reloads configuration, collects two host readings one second apart, resolves policy, reads
 promotion evidence and coordination, and projects ordered rows with explicit availability. Its snapshot clones maps,
 slices, and optional metric values before crossing the asynchronous boundary. The stable `StatusView` remains the public
-status/watch JSON projection; display annotations belong only to the interactive snapshot.
+status/watch JSON projection; display annotations ride the same snapshot for data consumers.
 
-The runner permits one collection at a time. Navigation and resize continue during collection; repeated refresh requests
-coalesce into one immediate follow-up. Otherwise the next collection starts after the configured interval following
+```text
+CLI validation --> Application observation --> StatusView --> text or JSON streams
+```
+
+`status` prints one snapshot; `watch` prints a snapshot per changed collection after the configured interval following
 completion. Failed collection keeps the last good snapshot marked stale, with sample age and a fixed safe error summary;
-before the first success, values stay unavailable. A successful collection replaces that state.
-
-The runner owns cancellation, the worker, the refresh scheduler, event delivery, and terminal restoration. Exit joins
-that work before returning to CLI diagnostics and does not cancel guarded jobs. Operating-system signal ownership stays
-at the process boundary; Bubble Tea's signal handler is disabled. Source and test presence do not establish that final
-PTY restoration or native host acceptance has passed.
+before the first success, values stay unavailable. A successful collection replaces that state. Operating-system signal
+ownership stays at the process boundary.
 
 ## Guarded Execution Dynamic View
 

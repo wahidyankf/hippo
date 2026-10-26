@@ -22,6 +22,4 @@ exemption fails behavior compliance.
 - [`reservations.feature`](reservations.feature) specifies overflow-safe vector allocation, FIFO admission, strict
   ownership, owner-side shedding, and schema evolution.
 - [`terminal.feature`](terminal.feature) specifies safe interactive controlling-terminal ownership.
-- [`tui.feature`](tui.feature) specifies responsive read-only observation, display labels, filtering, and terminal
-  lifecycle.
 - [`conformance.feature`](conformance.feature) specifies generic manifest-driven multi-consumer verification.

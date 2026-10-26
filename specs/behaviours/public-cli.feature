@@ -151,8 +151,6 @@ Feature: Public HIPPO CLI
       | run --help --class bogus         | hippo run     |
       | history --since nope --help      | hippo history |
       | release --help --no-such-flag    | hippo release |
-      | tui --interval nonsense --help   | hippo tui     |
-      | tui --help --no-such-flag         | hippo tui     |
 
   Scenario Outline: A flag mistake without help remains a usage mistake
     Given the compiled HIPPO binary
@@ -165,10 +163,6 @@ Feature: Public HIPPO CLI
       | --color bogus status                      |
       | run --lease-port abc                      |
       | run --lease-port abc -- /bin/sh -c --help |
-      | tui --refresh 10s                         |
-      | tui --json                                |
-      | tui --jsonl                               |
-      | tui unexpected                            |
 
   Scenario: Shell completion is generated on demand
     Given the compiled HIPPO binary
@@ -322,48 +316,12 @@ Feature: Public HIPPO CLI
     When release monitoring writes its first sample
     Then monitoring fails without closing the caller-owned stream
 
-  @tui-cli
-  Scenario: TUI help exposes observation options without opening a terminal
-    Given TUI input and output are not terminals and observation providers record calls
-    When TUI help is requested
-    Then help lists config disk-path profile source tag and interval options
-    And the interval default is five seconds and the disk-path default is the current directory
-    And no configuration host coordination or terminal session is opened
-    And help exits 0
-
-  @tui-cli
-  Scenario Outline: Invalid TUI options are rejected before observation and terminal entry
-    Given observation providers and terminal entry record calls
-    When TUI is requested with <mistake>
-    Then it exits 2 naming hippo.args.invalid before any provider or terminal entry is called
-
-    Examples:
-      | mistake                              |
-      | an interval of 999 milliseconds      |
-      | an interval of zero                  |
-      | a negative interval                  |
-      | a malformed source filter            |
-      | a malformed tag filter               |
-      | both invalid source and tag filters  |
-
-  @tui-cli
-  Scenario: Source validation precedes tag validation for TUI requests
-    Given observation providers and terminal entry record calls
-    When TUI is requested with invalid source and tag filters
-    Then the usage diagnostic identifies the source filter first
-    And no observation or terminal session starts
+  Scenario: The removed TUI command is an unknown command
+    Given the compiled HIPPO binary
+    When the removed TUI command is requested
+    Then the diagnostic names the removed command and exits with code 2
 
   @e2e-exempt
-  @tui-cli
-  Scenario: Global JSON output formats a TUI refusal after terminal restoration
-    Given a TUI terminal whose session can be restored
-    When TUI rendering fails with global JSON output requested
-    Then the terminal is restored before the failure is written
-    And the only machine-readable failure body names hippo tui with exit 125
-    And TUI frames are not serialized as JSON status records
-
-  @e2e-exempt
-  @tui-compatibility
   Scenario: Display annotations do not change public status or watch comparison
     Given stable observation evidence whose display annotation changes between requests
     When JSON status and watch inspect that evidence
