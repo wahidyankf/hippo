@@ -20,7 +20,7 @@ CPU-and-memory reservation ledger coordinates repositories; only the owning guar
 $ hippo run --class ephemeral --resource-tier standard --disk-path . -- make test
 ```
 
-**Verification note:** installation matches the v0.11.0 archive. Host-state and guarded-workload examples ran on a
+**Verification note:** installation matches the v0.12.0 archive. Host-state and guarded-workload examples ran on a
 landed-source binary with synthetic fixtures; numbers vary; `make test` is the reader's command. Contributor-test
 examples remain unexercised.
 
@@ -61,7 +61,7 @@ Download a tagged archive for `darwin` or `linux` on `amd64` or `arm64`, and ver
 `checksums.txt`. **Pin both the tag and the expected SHA-256; never follow `main` at runtime.**
 
 ```sh
-VERSION=v0.11.0
+VERSION=v0.12.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); [ "$ARCH" = x86_64 ] && ARCH=amd64; [ "$ARCH" = aarch64 ] && ARCH=arm64
 BASE="https://github.com/wahidyankf/hippo/releases/download/${VERSION}"
