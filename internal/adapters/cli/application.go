@@ -35,27 +35,21 @@ const linuxEvidenceRootEnvironment = "HIPPO_TEST_LINUX_EVIDENCE_ROOT"
 // Application supplies the command's injectable host and I/O dependencies.
 type Application struct {
 	// Compose refreshes derived services from the current injectable inputs before dispatch.
-	Compose func(Application) Application
-	// TerminalCapabilities inspects the supplied streams without entering terminal mode.
-	TerminalCapabilities func() (inputTTY, outputTTY bool, err error)
-	// RunTUI owns one terminal session using a prepared observation request.
-	RunTUI                      func(context.Context, releaseguard.ObservationRequest, time.Duration, bool) (status.Interruption, error)
-	defaultTerminalCapabilities func() (inputTTY, outputTTY bool, err error)
-	defaultRunTUI               func(context.Context, releaseguard.ObservationRequest, time.Duration, bool) (status.Interruption, error)
-	Stdin                       io.Reader
-	Stdout, Stderr              io.Writer
-	Environment                 []string
-	Collector                   policy.Collector
-	MonitorRelease              func(context.Context, releaseguard.MonitorConfig) error
-	ReleaseServices             releaseguard.ReleaseServices
-	RunServices                 releaseguard.RunServices
-	Observer                    releaseguard.ObservationServices
-	Configuration               releaseguard.RunConfiguration
-	RunEntry                    releaseguard.RunEntryServices
-	Sleep                       func(time.Duration)
-	Now                         func() time.Time
-	Version                     string
-	Commit                      string
+	Compose         func(Application) Application
+	Stdin           io.Reader
+	Stdout, Stderr  io.Writer
+	Environment     []string
+	Collector       policy.Collector
+	MonitorRelease  func(context.Context, releaseguard.MonitorConfig) error
+	ReleaseServices releaseguard.ReleaseServices
+	RunServices     releaseguard.RunServices
+	Observer        releaseguard.ObservationServices
+	Configuration   releaseguard.RunConfiguration
+	RunEntry        releaseguard.RunEntryServices
+	Sleep           func(time.Duration)
+	Now             func() time.Time
+	Version         string
+	Commit          string
 }
 
 type commandExecution struct {
@@ -110,12 +104,6 @@ func (application Application) defaults() Application {
 	}
 	if application.Commit == "" {
 		application.Commit = Commit
-	}
-	if application.TerminalCapabilities == nil {
-		application.TerminalCapabilities = application.defaultTerminalCapabilities
-	}
-	if application.RunTUI == nil {
-		application.RunTUI = application.defaultRunTUI
 	}
 	if application.MonitorRelease == nil {
 		application.MonitorRelease = application.ReleaseServices.RunMonitor

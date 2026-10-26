@@ -50,12 +50,9 @@ go test -count=1 ./tests/architecture
 # Every package's own tests. The scenario "Every package with tests runs in a
 # gate" fails if a package holding tests falls outside these patterns.
 go test -count=1 ./cmd/... ./internal/... ./tests/support ./tests/support/hostprobe ./tests/support/oldidentity ./tests/coverage ./tests/bdd \
-	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$'
+	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'
 # Portable corpus discovery and execution contracts have their own package.
 go test -count=1 ./tests/contract
-# Host evidence rejections and compiled recorder/runner helpers execute here;
-# tmux/WezTerm runtime proof and Neovim docs/config shortcut audit remain separate.
-go test -count=1 ./tests/host/evidence-verifier ./tests/host/integration
 # The unit corpus and pure package tests share one measured coverage execution.
 # Explicit leaf directories keep the threshold helper's nonrecursive discovery
 # complete as domain packages acquire new deterministic functions.
@@ -63,15 +60,15 @@ mkdir -p coverage
 go test -count=1 \
 	-coverpkg=./internal/policy,./internal/adapters/config,./internal/adapters/host,./internal/adapters/evidence,./internal/domain/coordination,./internal/domain/evidence,./internal/identity,./internal/status,./internal/application \
 	-coverprofile=coverage/unit.out \
-	-skip '^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance|TestTUIBDDPublicCanonicalSuite|TestTUIBDDPublicObservationCanonical|TestTUIBDDPublicSessionHolderSignals|TestTUIBDDPublicPSHelperStartupDiagnostic|TestTUIBDDPublicStatusPostQueryStackDiagnostic)$' \
-	./tests/unit ./internal/adapters/tui ./internal/application ./internal/domain/coordination ./internal/domain/evidence \
+	-skip '^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$' \
+	./tests/unit ./tests/bdd ./internal/application ./internal/domain/coordination ./internal/domain/evidence \
 	./internal/identity ./internal/status
 go run ./tests/coverage --profile coverage/unit.out \
 	--directories internal/policy,internal/domain/coordination,internal/domain/evidence,internal/identity,internal/status,internal/application \
 	--files internal/adapters/config/config.go,internal/adapters/host/collector.go,internal/adapters/host/linux_parsers.go --minimum 99
 # Resolve the complete composed registry without executing a corpus or candidate.
-HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
-HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
-HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
+HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
+HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
+HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
 
 ./tests/artifacts/run.sh

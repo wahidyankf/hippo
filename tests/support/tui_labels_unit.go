@@ -79,7 +79,7 @@ func requireAnnotationMemoryOutcome(fixture *annotationMemoryRun, reservation bo
 	wantFinalized, wantOutcome := 1, evidence.OutcomeTaskFailed
 	if fixture.inherited {
 		wantFinalized, wantOutcome = 0, evidence.OutcomeUnset
-		if !slices.Equal(fixture.trace, []string{"begin", "close", tuiStartPhase, taskClassRelease}) {
+		if !slices.Equal(fixture.trace, []string{"begin", "close", startPhase, taskClassRelease}) {
 			return fmt.Errorf("inherited annotation run changed its non-owning lifecycle: %v", fixture.trace)
 		}
 	}
@@ -94,7 +94,7 @@ func requireAnnotationMemoryOutcome(fixture *annotationMemoryRun, reservation bo
 	}
 	if !fixture.inherited {
 		position := -1
-		for _, event := range []string{"begin", "publish", "close", tuiStartPhase, "finalize", taskClassRelease, "remove"} {
+		for _, event := range []string{"begin", annotationPublishEvent, "close", startPhase, "finalize", taskClassRelease, "remove"} {
 			next := slices.Index(fixture.trace[position+1:], event)
 			if next < 0 {
 				return fmt.Errorf("actual lifecycle lost ordered %s: %v", event, fixture.trace)

@@ -114,7 +114,7 @@ func (driver *Driver) hostSwapInUse(total, used string) error {
 	sample.SwapTotalBytes = new(totalBytes)
 	sample.SwapUsedBytes = new(usedBytes)
 	sample.SwapFreeBytes = new(freeBytes)
-	sample.SwapState = "idle"
+	sample.SwapState = idleSwapState
 	if usedBytes > 0 {
 		sample.SwapState = "active"
 	}
@@ -143,7 +143,7 @@ func (driver *Driver) hostUnreadableSwap() error {
 	sample.SwapTotalBytes = new(8 * policy.GiB)
 	sample.SwapUsedBytes = nil
 	sample.SwapFreeBytes = nil
-	sample.SwapState = "idle"
+	sample.SwapState = idleSwapState
 
 	return nil
 }

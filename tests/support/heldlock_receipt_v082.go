@@ -71,7 +71,7 @@ func (driver *Driver) heldLockRunArguments(wait string) []string {
 	return append([]string{
 		runCommandName, sourceFlagName, interruptedRunSource, diskPathFlag, driver.interruption.root,
 		"--config", filepath.Join(driver.interruption.workingDir, interruptionConfigName),
-		"--cwd", driver.interruption.workingDir, waitForAdmissionFlag, wait,
+		annotationCwdFlag, driver.interruption.workingDir, waitForAdmissionFlag, wait,
 	}, append(reservationArguments(), "--", "/bin/sh", "-c", `printf started > "$CHILD_MARKER"`)...)
 }
 

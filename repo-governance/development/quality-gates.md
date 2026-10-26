@@ -20,27 +20,24 @@ Hooks run `./rhino gate run --surface <hook>`; [`repo-config.yml`](../../repo-co
 
 `scripts/test-quick.sh` must retain this order: layout, formatting, whole-module compilation, strict lint, NilAway,
 import graph/negative fixtures, package tests, deterministic coverage, serial compliance, artifact policy. Retain all
-cmd/internal/support/coverage/host tests, contract self-tests and `tests/bdd` negatives.
+cmd/internal/support/coverage tests, contract self-tests and `tests/bdd` negatives.
 
 Ordinary support `TestMain` uses `RunCompiled`: it keeps an inherited `HIPPO_BIN` carrying the test stamp, or builds a
 temporary candidate from the current tree and removes it afterwards. This setup also runs when `-run '^$'` selects no
 tests. These private fixture controls follow [E2E placement](end-to-end-testing.md#placement); acquiring their candidate
 does not execute the canonical E2E corpus.
 
-Ordinary selection excludes four [BDD suite host](behaviour-driven-development.md#suite-host) entries and exactly five
-compiled-only entries: `TestTUIBDDPublicCanonicalSuite`, `TestTUIBDDPublicObservationCanonical`,
-`TestTUIBDDPublicSessionHolderSignals`, `TestTUIBDDPublicPSHelperStartupDiagnostic`,
-`TestTUIBDDPublicStatusPostQueryStackDiagnostic`. Anchor exact names; execute other direct TUI tests. Coverage retains
-`TestUnitBehaviours`, excludes the other eight entries and runs relocated Unit once alongside existing `tests/unit` and
-pure-package selectors. Retain `-coverpkg` denominator, leaf selectors, exclusions, 99% floor and executing domain
-literal analysis.
+Ordinary selection excludes the four [BDD suite host](behaviour-driven-development.md#suite-host) entries and nothing
+else. Anchor exact names. Coverage retains `TestUnitBehaviours`, excludes the other three entries and runs relocated
+Unit once alongside existing `tests/unit` and pure-package selectors. Retain `-coverpkg` denominator, leaf selectors,
+exclusions, 99% floor and executing domain literal analysis.
 
 Run full-registry compliance serially, Unit then Integration then E2E:
 
 ```sh
-HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
-HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
-HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui
+HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
+HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
+HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
 ```
 
 Static compliance does not execute scenarios or start a compiled candidate. Mode/selector registrations and
@@ -56,20 +53,16 @@ inventory complete. Cheapest failures precede coverage to avoid wasted runs.
 
 `scripts/test.sh` must retain existing `tests/integration` plus relocated `TestIntegrationBehaviours`, explicitly
 `HIPPO_BDD_SUITE=integration`. `tests/e2e/run.sh` must retain direct E2E plus relocated `TestE2EBehaviours`, explicitly
-`HIPPO_BDD_SUITE=e2e`, against one temporary stamped candidate. Run `TestTUIBDDPublicCanonicalSuite`,
-`TestTUIBDDPublicObservationCanonical`, `TestTUIBDDPublicSessionHolderSignals` serially with explicit E2E suite/adapter,
-that candidate and prepared helper. Each entry runs once, without skips; retain the full corpus and every non-exempt
-canonical public row. Owner-approved terminal-fault E2E deferrals in [BDD](behaviour-driven-development.md#suite-host)
-retain six rows/29 steps at Unit/Integration. `TestTUIBDDPublicSessionHolderSignals` also requires compiled
-`readonly-output/plain` and `readonly-output/global-json` regressions alongside every other gate.
+`HIPPO_BDD_SUITE=e2e`, against one temporary stamped candidate. The relocated entry runs once, without skips; retain the
+full corpus. The owner-approved observation E2E deferral in [BDD](behaviour-driven-development.md#suite-host) retains
+its Unit/Integration predicates.
 
-[Immutable old-release preparation](../../tests/e2e/README.md) precedes public execution. PS-startup/post-query
-diagnostics use exact task selection and satisfy no acceptance scenario.
+[Immutable old-release preparation](../../tests/e2e/README.md) precedes public execution.
 
-Race retains cmd/internal/support/unit/integration patterns, adds contract self-tests/relocated Unit and explicitly
-selects relocated Integration. Retain `govulncheck`. Selector fixtures must fail on removal of any host, mode, coverage,
-Integration/E2E, race or serial compliance registration. Preserve host/artifact/release inventory. Full runs after merge
-on `main`: see [In CI](#in-ci).
+Race retains cmd/internal/support/unit/bdd/integration patterns, adds contract self-tests/relocated Unit and explicitly
+selects relocated Integration. Retain `govulncheck`. Selector fixtures must fail on removal of any mode, coverage,
+Integration/E2E, race or serial compliance registration. Preserve artifact/release inventory. Full runs after merge on
+`main`: see [In CI](#in-ci).
 
 The [terminal contract](../conventions/command-line-interface/007-terminal-and-environment.md) requires genuine PTY
 lifecycle and separate native host proof; fake callbacks do not establish terminal restoration.

@@ -316,7 +316,7 @@ func (driver *Driver) writeRecordedSummary(runID, class, outcome string) error {
 	}
 	driver.leaseRoot = root
 	encoded, err := json.Marshal(map[string]any{
-		schemaVersionField: 5, tuiRunIDField: runID, "source": hippoFixtureName,
+		schemaVersionField: 5, runIDField: runID, "source": hippoFixtureName,
 		"taskClass": class, "resourceTier": standardTierName, "outcome": outcome,
 		"finishedAt": time.Now().UTC().Format(time.RFC3339Nano),
 	})

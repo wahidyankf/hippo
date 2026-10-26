@@ -56,7 +56,7 @@ func TestSequenceCollectorReturnsReadinessErrorWithinBound(t *testing.T) {
 	}
 }
 
-func TestPublicTUIRootFromSymlinkTemporaryParent(t *testing.T) {
+func TestPublicRootFromSymlinkTemporaryParent(t *testing.T) {
 	parent, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -72,12 +72,12 @@ func TestPublicTUIRootFromSymlinkTemporaryParent(t *testing.T) {
 	t.Setenv("TMPDIR", alias)
 	driver := &Driver{mode: contract.E2E}
 	t.Cleanup(driver.Close)
-	root, directory, err := driver.PreparePublicTUIRoot()
+	root, directory, err := driver.PreparePublicRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{directory, root} {
-		if err := publicTUIOwnedDirectory(path); err != nil {
+		if err := publicOwnedDirectory(path); err != nil {
 			t.Fatalf("constructed public root fails its actual ownership boundary: %v", err)
 		}
 	}

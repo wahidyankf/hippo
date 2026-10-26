@@ -182,7 +182,6 @@ func (application Application) rootCommand(execution *commandExecution) *cobra.C
 		application.versionCommand(execution),
 		application.statusCommand(execution),
 		application.watchCommand(execution),
-		application.tuiCommand(execution),
 		application.historyCommand(execution),
 		application.monitorCommand(execution),
 		application.runCommand(execution),

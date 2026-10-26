@@ -94,14 +94,14 @@ func TestGateCommandWordsSeparateQuotedRegexFromShellEffects(t *testing.T) {
 func TestGateSerialComplianceRejectsRemovedOrNonexecutingRegistration(t *testing.T) {
 	lines := make([]string, 0, 3)
 	for _, adapter := range []string{"unit", "integration", "e2e"} {
-		lines = append(lines, "HIPPO_BDD_ADAPTER="+adapter+" go test -count=1 -run '^TestFeatureCompliance$' ./internal/adapters/tui")
+		lines = append(lines, "HIPPO_BDD_ADAPTER="+adapter+" go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd")
 	}
 	positive := strings.Join(lines, "\n")
 	if !validSerialComposedCompliance(positive) {
 		t.Fatal("three serial composed static checks rejected")
 	}
 	for _, line := range lines {
-		for _, replacement := range []string{"", "# " + line, line + " || true", strings.Replace(line, "./internal/adapters/tui", "./tests/bdd", 1), strings.Replace(line, "^TestFeatureCompliance$", "^TestUnitBehaviours$", 1)} {
+		for _, replacement := range []string{"", "# " + line, line + " || true", strings.Replace(line, "./tests/bdd", "./tests/e2e", 1), strings.Replace(line, "^TestFeatureCompliance$", "^TestUnitBehaviours$", 1)} {
 			if validSerialComposedCompliance(strings.Replace(positive, line, replacement, 1)) {
 				t.Fatalf("removed/nonstatic registration accepted: %s", replacement)
 			}

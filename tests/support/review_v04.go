@@ -66,7 +66,7 @@ func (driver *Driver) requireMalformedServiceCompatibilityV04() error {
 func validReviewOwner(tokenValue, class string, sequence uint64, requested, allocated guard.ReservationVector) map[string]any {
 	return map[string]any{
 		tokenField: tokenValue, pidField: os.Getpid(), classField: class, profileField: profileBalanced,
-		requestedField: requested, "allocated": allocated, sequenceField: sequence, maxActiveOwnersFld: 20,
+		requestedField: requested, allocatedField: allocated, sequenceField: sequence, maxActiveOwnersFld: 20,
 	}
 }
 

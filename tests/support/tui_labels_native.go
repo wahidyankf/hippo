@@ -245,7 +245,7 @@ func (driver *Driver) executeAnnotationNative(parent context.Context, state *ann
 	ctx, cancel := context.WithTimeout(parent, 40*time.Second)
 	defer cancel()
 	environment := []string{hippoRootEnvironment + "=" + state.root, "ANNOTATION_READY=" + state.ready, "ANNOTATION_RELEASE=" + state.release, "ANNOTATION_CHILD_EXIT=" + strconv.Itoa(state.childExit), isolatedPath}
-	arguments := []string{runCommandName, configFlag, state.configPath, annotationCwdFlag, state.scratch, diskPathFlag, state.scratch, "--profile", "constrained", "--label", annotationOwnerLabel, annotationColorFlag, "always"}
+	arguments := []string{runCommandName, configFlag, state.configPath, annotationCwdFlag, state.scratch, diskPathFlag, state.scratch, "--profile", profileConstrained, "--label", annotationOwnerLabel, annotationColorFlag, "always"}
 	if state.json {
 		arguments = append([]string{outputFlag, outputJSONValue}, arguments...)
 	}

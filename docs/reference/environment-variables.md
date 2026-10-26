@@ -16,9 +16,9 @@ HIPPO compiles in no build-tool or product-specific names.
   creates or expands an owner.
 - `HIPPO_HEALTH_URL` — Default for `release monitor --health-url`.
 - `HIPPO_ROUTED_ORIGIN` — Default for `release monitor --routed-origin`.
-- `HIPPO_COLOR` — Set to `1` to let `--color auto` colour diagnostics and decorate the TUI. See [Colour](#colour).
-- `NO_COLOR` — Present with any value, even empty: `--color auto` disables diagnostic colour and TUI decoration.
-- `TERM` — Unset or `dumb`: `--color auto` never colours or decorates. `dumb` also refuses TUI entry.
+- `HIPPO_COLOR` — Set to `1` to let `--color auto` colour diagnostics. See [Colour](#colour).
+- `NO_COLOR` — Present with any value, even empty: `--color auto` disables diagnostic colour.
+- `TERM` — Unset or `dumb`: `--color auto` never colours or decorates.
 - `XDG_STATE_HOME` — Linux only, when `HIPPO_ROOT` is unset: picks the default state root, and so the shared ledger
   HIPPO joins. See [State root](./state-root.md#location).
 - `HOME` — When `HIPPO_ROOT` is unset: the base of the default state root. See [State root](./state-root.md#location).
@@ -55,11 +55,8 @@ and is not `dumb`, and `HIPPO_COLOR` is exactly `1`. HIPPO does not test whether
 `auto` is always something the caller opts into. `--color always` and `--color never` ignore all three variables. The
 machine-readable body is never coloured.
 
-The TUI uses that same policy for optional decoration, including colour and emphasis. Disabling decoration keeps
-required cursor/alternate-screen controls and text markers such as `WAIT`, `STALE`, and `ERROR`. Explicit
-`--color always` does not bypass interactive entry requirements: stdin and stdout must be terminals, and `TERM=dumb` is
-refused. Global `--output json` selects only failure diagnostics after terminal restoration, never JSON frames. See the
-[TUI command reference](./cli.md#hippo-tui).
+Text output carries no decoration beyond the diagnostic line itself. Global `--output json` selects only failure
+diagnostics on stderr, never JSON frames. See the [command reference](./cli.md).
 
 ```console
 $ TERM=xterm HIPPO_COLOR=1 hippo --config missing.json status 2>&1 | cat -v

@@ -1,6 +1,7 @@
 package support
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/wahidyankf/hippo/tests/contract"
 )
 
 // testRunningScripts are every script a gate runs `go test` from. A package
@@ -290,7 +293,7 @@ func gateCorpusEntries() []string {
 // gatePublicEntries names direct compiled-only product tests and task diagnostics.
 // Ordinary pure and helper controls remain selected; these exact names do not.
 func gatePublicEntries() []string {
-	return []string{"TestTUIBDDPublicCanonicalSuite", "TestTUIBDDPublicObservationCanonical", "TestTUIBDDPublicSessionHolderSignals", "TestTUIBDDPublicPSHelperStartupDiagnostic", "TestTUIBDDPublicStatusPostQueryStackDiagnostic"}
+	return []string{}
 }
 
 func gateOrdinaryEntries() []string {
@@ -302,15 +305,58 @@ func gateMeasuredEntries() []string {
 }
 
 func gateRequiredPublicEntries() []string {
-	return []string{e2eBehaviourEntry, "TestTUIBDDPublicCanonicalSuite", "TestTUIBDDPublicObservationCanonical", "TestTUIBDDPublicSessionHolderSignals"}
+	return []string{e2eBehaviourEntry}
 }
 
 func gateExecutingEntry(call gateTestCommand, suite, entry string, race bool) bool {
-	return call.suite == suite && slices.Contains(call.args, "./internal/adapters/tui") &&
+	return call.suite == suite && slices.Contains(call.args, "./tests/bdd") &&
 		len(gateFlagValues(call.args, "-c")) == 0 && len(gateFlagValues(call.args, "-list")) == 0 &&
 		((race && slices.Contains(call.args, "-race")) || (!race && len(gateFlagValues(call.args, "-race")) == 0)) &&
 		len(gateFlagValues(call.args, "-run")) == 1 &&
 		gateFlag(call.args, "-run") == "^"+entry+"$" && len(gateFlagValues(call.args, "-skip")) == 0
+}
+
+// checkStandaloneGatePublicEntries validates the compiled script's public
+// behavior entries: one owned old-release preparation, then each required
+// entry exactly once against the built candidate.
+func checkStandaloneGatePublicEntries(compiled string) error {
+	if !gateHasOldReleasePreparation(compiled) {
+		return errors.New("compiled public journey lacks owned old preparation")
+	}
+	calls, valid := gateTestCommands(compiled)
+	if !valid {
+		return errors.New("compiled gate contains an invalid test command")
+	}
+	entries := gateRequiredPublicEntries()
+	seen := make(map[string]int, len(entries))
+	for _, call := range calls {
+		if !slices.Contains(call.args, "./tests/bdd") {
+			continue
+		}
+		entry := ""
+		for _, required := range entries {
+			if gateExecutingEntry(call, contract.E2E, required, false) {
+				entry = required
+			}
+		}
+		if entry == "" || call.binary != "$temporary_dir/hippo" ||
+			len(gateFlagValues(call.args, "-count")) != 1 || gateFlag(call.args, "-count") != "1" ||
+			call.adapter != "" {
+			return errors.New("compiled candidate contains a nonexecuting or unowned public entry")
+		}
+		for _, argument := range call.args {
+			if strings.HasPrefix(argument, "./") && argument != "./tests/bdd" {
+				return errors.New("compiled public entry contains another package selector")
+			}
+		}
+		seen[entry]++
+	}
+	for _, entry := range entries {
+		if seen[entry] != 1 {
+			return fmt.Errorf("required public entry %s executions = %d, want one", entry, seen[entry])
+		}
+	}
+	return nil
 }
 
 func gateHasOldReleasePreparation(script string) bool {
@@ -327,16 +373,6 @@ func gateHasOldReleasePreparation(script string) bool {
 	return count == 1
 }
 
-func gateHasE2ECommand(script string) bool {
-	for line := range strings.SplitSeq(strings.ReplaceAll(script, "\\\n", " "), "\n") {
-		words, valid := gateCommandWords(strings.TrimSpace(line))
-		if valid && len(words) == 1 && words[0] == "./tests/e2e/run.sh" {
-			return true
-		}
-	}
-	return false
-}
-
 func validSerialComposedCompliance(script string) bool {
 	calls, valid := gateTestCommands(script)
 	if !valid {
@@ -347,7 +383,7 @@ func validSerialComposedCompliance(script string) bool {
 		if call.adapter == "" {
 			continue
 		}
-		if !slices.Contains(call.args, "./internal/adapters/tui") || len(gateFlagValues(call.args, "-run")) != 1 ||
+		if !slices.Contains(call.args, "./tests/bdd") || len(gateFlagValues(call.args, "-run")) != 1 ||
 			gateFlag(call.args, "-run") != "^TestFeatureCompliance$" || len(gateFlagValues(call.args, "-skip")) != 0 || call.binary != "" {
 			return false
 		}

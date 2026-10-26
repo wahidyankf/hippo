@@ -14,9 +14,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/health"
 	"github.com/wahidyankf/hippo/internal/adapters/host"
 	runtimeadapter "github.com/wahidyankf/hippo/internal/adapters/runtime"
-	"github.com/wahidyankf/hippo/internal/adapters/tui"
 	app "github.com/wahidyankf/hippo/internal/application"
-	"github.com/wahidyankf/hippo/internal/status"
 )
 
 // testBuildVersion is the identity only the repository's own test builds
@@ -93,16 +91,7 @@ func WithDefaults(application cli.Application) cli.Application {
 	application.ReleaseServices = app.ReleaseServices{Configuration: application.Configuration, Collector: application.Collector, Environment: environmentMap(application.Environment), Clock: runtimeadapter.ReleaseClock{NowFunc: application.Now, Pause: application.Sleep}, Health: health.Probe{}, Evidence: evidence.ReleaseRepository{}}
 	application.Observer = app.ObservationServices{Configuration: application.Configuration, Collector: application.Collector, Runtime: engine, Evidence: evidence.HistoryRepository{}, Annotations: evidence.DisplayRepository{}, Clock: runtimeadapter.ObservationClock{NowFunc: application.Now, Pause: application.Sleep}, Environment: environmentMap(application.Environment)}
 	application.RunEntry = app.RunEntryServices{Configuration: application.Configuration, Observation: application.Observer, Run: application.RunServices, Collector: application.Collector, Environment: application.Environment, Now: application.Now, Sleep: application.Sleep, Stdin: application.Stdin, Stdout: application.Stdout, Stderr: application.Stderr, PortLeaseRoot: resourceconfig.PortLeaseRoot(environmentMap(application.Environment))}
-	return application.WithTUIDefaults(
-		func() (bool, bool, error) {
-			return tui.TerminalCapabilities(application.Stdin, application.Stdout)
-		},
-		func(ctx context.Context, request app.ObservationRequest, interval time.Duration, styling bool) (status.Interruption, error) {
-			return tui.Run(ctx, func(ctx context.Context) (app.ObservationSnapshot, int, error) {
-				return application.Observer.ObserveSnapshot(ctx, request)
-			}, tui.Options{Interval: interval, Styling: styling, Input: application.Stdin, Output: application.Stdout, Environment: application.Environment})
-		},
-	)
+	return application
 }
 
 // Execute runs the composed production command boundary.

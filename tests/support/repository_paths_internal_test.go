@@ -28,7 +28,7 @@ func fixtureHIPPORepository(t *testing.T, root, module string, withSpecs bool) {
 
 func fixturePackageDirectory(t *testing.T, root string) string {
 	t.Helper()
-	path := filepath.Join(root, "internal", "adapters", "tui")
+	path := filepath.Join(root, "internal", "adapters", "cli")
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		t.Fatal(err)
 	}

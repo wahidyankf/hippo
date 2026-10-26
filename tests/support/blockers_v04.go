@@ -386,7 +386,7 @@ func (driver *Driver) requireCheckedMiBConversionV04(root string) error {
 	if err := os.WriteFile(overflowConfig, []byte(`{"schemaVersion":2}`), 0o600); err != nil {
 		return err
 	}
-	arguments := []string{"run", configFlag, overflowConfig, "--reserve-memory-mib", strconv.FormatInt(maximum+1, 10), "--", shellPath, "-c", "exit 0"}
+	arguments := []string{"run", configFlag, overflowConfig, "--reserve-memory-mib", strconv.FormatInt(maximum+1, 10), "--", shellPath, "-c", probeNeverConsultsHIPPO}
 	if driver.mode == e2eMode {
 		command := exec.Command(driver.binary, arguments...)
 		command.Env = append(os.Environ(), "HIPPO_ROOT="+filepath.Join(root, "cli-root"))
@@ -2520,7 +2520,7 @@ func requireSafeConformanceStartErrorV04(runError error, consumerName, phase str
 		return errors.New("invalid conformance command boundary was accepted")
 	}
 	message := runError.Error()
-	if !strings.Contains(message, consumerName) || !strings.Contains(message, phase) || !strings.Contains(message, tuiStartPhase) {
+	if !strings.Contains(message, consumerName) || !strings.Contains(message, phase) || !strings.Contains(message, startPhase) {
 		return fmt.Errorf("conformance start error omitted safe consumer/phase/category metadata: %w", runError)
 	}
 	for _, privatePath := range privatePaths {

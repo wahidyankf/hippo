@@ -167,7 +167,7 @@ requested/allocated vectors, tier minimum/maximum, registration time, and deadli
 directories, or repository paths. `legacyEntries` counts live compatibility owners and live schema-2 records without
 metadata; schema-3 launches refuse to mix with them until they drain.
 
-The TUI's display label is separate from these identity source/tag fields. It comes from a private
+A run's display label is separate from these identity source/tag fields. It comes from a private
 [display annotation](./state-root.md#display-annotations), outside the public status/watch schema. `run --label` adds no
 display field to status, summaries, receipts, the reservation ledger, or strict owner metadata.
 

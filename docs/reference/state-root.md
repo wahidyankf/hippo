@@ -47,7 +47,7 @@ instead.
 
 ### Display annotations
 
-The TUI reads optional display context from `run-display/<token>.json`. Each schema-1 record contains exactly
+Observation reads optional display context from `run-display/<token>.json`. Each schema-1 record contains exactly
 `schemaVersion`, `runId`, and `label`, with a complete run ID matching its filename. Reads are bounded at 512 bytes.
 Publication is atomic through a private `0700` directory and `0600` file. Labels follow the
 [`run --label` validation and basename fallback](./cli.md#hippo-run); they never include captured arguments or paths.

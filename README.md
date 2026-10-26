@@ -38,9 +38,9 @@ examples remain unexercised.
   failure names a reason: `hippo: [hippo.area.reason]`. Child-owned codes pass through with task-failed evidence.
 - **Visible admission.** `status`, `watch`, and `history` expose labeled owners, FIFO waiters, promotion state, and
   bounded run outcomes without exposing commands or paths.
-- **Interactive monitoring.** `hippo tui`, added in v0.9.0, shows running jobs, queue positions, and capacity with
-  keyboard navigation and a compact narrow-terminal layout. See
-  [Monitor work with the TUI](./docs/how-to/monitor-work-with-the-tui.md).
+- **Live views without a dashboard.** `hippo status`, `hippo watch`, and the
+  [`hippo_watch` recipe](./docs/how-to/hippo-watch.md) show running jobs, queue positions, and capacity from stable JSON
+  in your own terminal.
 - **Burst-safe activation.** Simultaneous repository clients wait through brief coordination contention after launch
   instead of cutting an already started payload.
 - **No daemon.** One short-lived process per guarded command, plus files in a shared state root.

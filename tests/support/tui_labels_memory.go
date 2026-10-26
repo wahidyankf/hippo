@@ -54,7 +54,7 @@ func (fixture *annotationMemoryRun) settings(reservation bool) application.RunCo
 	settings.ConsecutiveCPUSamples = 1
 	label, _ := identity.ParseDisplayLabel(annotationOwnerLabel)
 	return application.RunConfig{
-		Command: tuiMemoryChild, Arguments: []string{"private-argument"}, Label: label,
+		Command: memoryChildWorkload, Arguments: []string{"private-argument"}, Label: label,
 		TaskClass: policy.TaskEphemeral, Collector: fixture, Policy: settings, Stderr: fixture.writer,
 		Resolution:         policy.Resolution{RequestedProfile: "balanced", ResolvedProfile: "balanced", Concurrency: 2, Lineage: policy.LineageBalanced},
 		ReservationPolicy:  coordination.ReservationPolicy{Enabled: reservation},
@@ -70,7 +70,7 @@ func (fixture *annotationMemoryRun) run(ctx context.Context, reservation bool) {
 func (fixture *annotationMemoryRun) mutate(publication bool) error {
 	if publication {
 		fixture.writes++
-		fixture.record("publish")
+		fixture.record(annotationPublishEvent)
 		if fixture.operation == annotationOperationWrite || fixture.operation == annotationOperationBoth {
 			fixture.failures++
 			return errors.New("/private/annotation-write raw-error private-owner-label private-argument\x1b[31m")
@@ -155,13 +155,13 @@ func (fixture *annotationMemoryRun) ValidateCommand(string) *status.Failure { re
 func (fixture *annotationMemoryRun) Start(_ context.Context, config application.RunConfig, _ *application.Lease, _ *application.PortLease) (*application.Workload, error) {
 	fixture.starts++
 	fixture.started = config
-	fixture.record(tuiStartPhase)
+	fixture.record(startPhase)
 	done := make(chan application.ChildCompletion, 1)
 	if fixture.heldDone != nil {
-		return &application.Workload{ID: tuiMemoryChild, Done: fixture.heldDone}, nil
+		return &application.Workload{ID: memoryChildWorkload, Done: fixture.heldDone}, nil
 	}
 	done <- application.ChildCompletion{ExitCode: 37, Failed: true}
-	return &application.Workload{ID: tuiMemoryChild, Done: done}, nil
+	return &application.Workload{ID: memoryChildWorkload, Done: done}, nil
 }
 
 func (fixture *annotationMemoryRun) Stop(application.RunConfig, *application.Workload) (application.ChildCompletion, error) {

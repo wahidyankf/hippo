@@ -13,7 +13,7 @@ importing adapters or bootstrap.
 
 ## Directory Map
 
-- [adapters/](adapters/README.md) — configuration, host, runtime, evidence, health, CLI, TUI, and conformance effects.
+- [adapters/](adapters/README.md) — configuration, host, runtime, evidence, health, CLI, and conformance effects.
 - [application/](application/README.md) — execution, observation, release, and conformance use cases and their ports.
 - [bootstrap/](bootstrap/README.md) — concrete adapter composition for command entry points.
 - [domain/](domain/README.md) — pure coordination reducers and evidence aggregation.
