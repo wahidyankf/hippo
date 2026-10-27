@@ -203,14 +203,14 @@ harness:
         plan:
           model-resolve:
             command: [codex, debug, models]
-            pattern: gpt-*-sol
-            fallback: gpt-6-sol
-          effort: high
+            pattern: gpt-*-terra
+            fallback: gpt-6.1-terra
+          effort: xhigh
         execution:
           model-resolve:
             command: [codex, debug, models]
-            pattern: gpt-*-luna
-            fallback: gpt-6-luna
+            pattern: gpt-*-terra
+            fallback: gpt-6.1-terra
           effort: high
         fast:
           model-resolve:

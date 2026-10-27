@@ -224,9 +224,9 @@
     }
   ],
   "resolvedModels": {
-    "execution": "gpt-6-luna",
+    "execution": "gpt-6.1-terra",
     "fast": "gpt-6-luna",
-    "plan": "gpt-6.1-sol",
+    "plan": "gpt-6.1-terra",
     "ultra": "gpt-6.1-sol"
   }
 }
