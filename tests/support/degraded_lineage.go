@@ -134,7 +134,18 @@ func (driver *Driver) resolveProfile(requested policy.ProfileName, taskClass pol
 		return policy.Resolution{}, err
 	}
 
-	return loaded.Catalog.Resolve(requested, taskClass, sample)
+	resolution, err := loaded.Catalog.Resolve(requested, taskClass, sample)
+	if err != nil {
+		return policy.Resolution{}, err
+	}
+	// The driver resolves the way the command line does: coordination knobs
+	// apply to the resolved policy, and a scenario that sets none keeps the
+	// legacy thresholds.
+	resolution.Policy = policy.ApplyCoordinationThresholds(
+		resolution.Policy, driver.thresholds.memory, driver.thresholds.swapMultiple,
+	)
+
+	return resolution, nil
 }
 
 // resolveConfigured resolves the scenario configuration's default profile the

@@ -242,6 +242,9 @@ func (services ObservationServices) ObserveSnapshot(ctx context.Context, request
 	if resolveError != nil {
 		return ObservationSnapshot{}, 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
+	resolution.Policy = policy.ApplyCoordinationThresholds(
+		resolution.Policy, configuration.Coordination.MemoryPolicy, configuration.Coordination.SwapUsedMaxMultiple,
+	)
 
 	resolution, assessment, decisionError := decideStatus(resolution, first.Sample, second.Sample)
 	if decisionError != nil {

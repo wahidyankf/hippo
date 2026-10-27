@@ -82,9 +82,27 @@ type Collector interface {
 
 // Policy defines thresholds, timing, and resource reservations.
 type Policy struct {
-	AdmissionMemoryBytes           int64
-	WarningAdmissionMemoryBytes    int64
-	CriticalMemoryBytes            int64
+	AdmissionMemoryBytes        int64
+	WarningAdmissionMemoryBytes int64
+	CriticalMemoryBytes         int64
+	// WarningMemoryPercent is the optional RAM-proportional warning threshold,
+	// in percent of the effective memory limit with physical memory standing in
+	// for an unset limit. Zero or negative keeps the legacy fixed admission
+	// thresholds, so a policy that never names it behaves as before.
+	WarningMemoryPercent float64
+	// CriticalMemoryPercent is the optional RAM-proportional critical threshold,
+	// shaped like the warning one. Zero or negative keeps the legacy fixed
+	// critical threshold.
+	CriticalMemoryPercent float64
+	// WarningMemoryFloorBytes floors the proportional warning threshold.
+	// CriticalMemoryFloorBytes floors the proportional critical threshold.
+	// Either is read only while its percent is positive.
+	WarningMemoryFloorBytes  int64
+	CriticalMemoryFloorBytes int64
+	// SwapUsedMaxMultiple is the optional per-machine swap gate: while readable
+	// swap in use fits within this multiple of physical memory, the byte-based
+	// swap reasons are waived. Zero or negative keeps the legacy swap rules.
+	SwapUsedMaxMultiple            float64
 	DiskWarningBytes               int64
 	DiskCriticalBytes              int64
 	TrendWindow                    time.Duration
@@ -136,6 +154,68 @@ func DefaultPolicy() Policy {
 		LeaseWait:      5 * time.Minute,
 		SampleInterval: time.Second,
 	}
+}
+
+// MemoryPolicy is the optional RAM-proportional admission override a
+// coordination file may carry. Every field is zero when the file names no
+// block, which keeps the legacy fixed thresholds.
+type MemoryPolicy struct {
+	WarningPercent     float64
+	CriticalPercent    float64
+	WarningFloorBytes  int64
+	CriticalFloorBytes int64
+}
+
+// ApplyCoordinationThresholds returns base with the coordination admission
+// knobs applied: the RAM-proportional memory thresholds and the per-machine
+// swap gate. Zero values leave the legacy fixed thresholds in force, so a
+// coordination without either knob resolves the policy it always did.
+func ApplyCoordinationThresholds(base Policy, memory MemoryPolicy, swapUsedMaxMultiple float64) Policy {
+	base.WarningMemoryPercent = memory.WarningPercent
+	base.CriticalMemoryPercent = memory.CriticalPercent
+	base.WarningMemoryFloorBytes = memory.WarningFloorBytes
+	base.CriticalMemoryFloorBytes = memory.CriticalFloorBytes
+	base.SwapUsedMaxMultiple = swapUsedMaxMultiple
+
+	return base
+}
+
+// proportionalThreshold is percent of a memory limit in whole bytes, rounding
+// up, saturating where the rounded value would overflow. It is zero without a
+// positive limit and percent.
+func proportionalThreshold(limit int64, percent float64) int64 {
+	if limit <= 0 || percent <= 0 {
+		return 0
+	}
+	scaled := float64(limit) * percent / 100
+	if scaled >= float64(math.MaxInt64) {
+		return math.MaxInt64
+	}
+
+	return int64(math.Ceil(scaled))
+}
+
+// memoryThresholds resolves the available-memory floors a sample is decided
+// against: the RAM-proportional thresholds where the policy names a percent,
+// the legacy fixed thresholds otherwise. The caller names the legacy warning
+// floor it already reads, since the normal boundary and the stable-warning
+// degraded boundary keep their own.
+func memoryThresholds(sample Sample, policy Policy, legacyWarning int64) (int64, int64) {
+	warning, critical := legacyWarning, policy.CriticalMemoryBytes
+	if policy.WarningMemoryPercent > 0 {
+		warning = max(
+			proportionalThreshold(sampleMemoryLimit(sample), policy.WarningMemoryPercent),
+			policy.WarningMemoryFloorBytes,
+		)
+	}
+	if policy.CriticalMemoryPercent > 0 {
+		critical = max(
+			proportionalThreshold(sampleMemoryLimit(sample), policy.CriticalMemoryPercent),
+			policy.CriticalMemoryFloorBytes,
+		)
+	}
+
+	return warning, critical
 }
 
 // Assessment classifies current and trend-based resource evidence.
@@ -223,17 +303,18 @@ func MemoryState(sample Sample, policy Policy) State {
 	}
 
 	available := availableMemory(sample)
+	warning, critical := memoryThresholds(sample, policy, policy.AdmissionMemoryBytes)
 	criticalPressure := sample.MemoryPressureLevel != nil && *sample.MemoryPressureLevel == 4
 	compressorFailed := sample.CompressorAvailable != nil &&
 		!*sample.CompressorAvailable &&
 		(sample.Platform == "" || hasCapability(sample, "compressor"))
-	if criticalPressure || compressorFailed || psiCriticalBand(sample) || *available < policy.CriticalMemoryBytes {
+	if criticalPressure || compressorFailed || psiCriticalBand(sample) || *available < critical {
 		return StateCritical
 	}
 
 	warningPressure := sample.MemoryPressureLevel != nil && *sample.MemoryPressureLevel == 2
 
-	if warningPressure || psiWarningBand(sample) || *available < policy.AdmissionMemoryBytes {
+	if warningPressure || psiWarningBand(sample) || *available < warning {
 		return StateWarning
 	}
 
@@ -341,8 +422,10 @@ func ResourceAssessment(samples []Sample, policy Policy) Assessment { //nolint:c
 	}
 
 	// While swap counts and PSI is readable, PSI is the memory signal, so the
-	// swap-out rate is not assessed.
-	swapRateAssessed := !countsAllowance(current) || !psiReadable(current)
+	// swap-out rate is not assessed. The per-machine swap gate waives the same
+	// byte-based swap reasons while readable swap in use fits within its
+	// multiple of physical memory; every other signal stays in force.
+	swapRateAssessed := (!countsAllowance(current) || !psiReadable(current)) && !swapRateWaived(current, policy)
 	if swapRateAssessed && current.SwapState != swapUnavailableState && result.SwapOutWindowBytes >= float64(policy.SwapOutCriticalBytes) {
 		result.SwapState = "stressed"
 		candidates = append(candidates, candidate{reason: "swap-critical", state: StateCritical})
@@ -387,7 +470,11 @@ func AdmissionReady(samples []Sample, policy Policy) bool {
 }
 
 func warningWindowReady(samples []Sample, policy Policy) bool {
-	if len(samples) < policy.ConsecutiveCPUSamples || policy.TrendWindow <= 0 || policy.WarningAdmissionMemoryBytes <= 0 {
+	if len(samples) < policy.ConsecutiveCPUSamples || policy.TrendWindow <= 0 {
+		return false
+	}
+	warning, _ := memoryThresholds(samples[len(samples)-1], policy, policy.WarningAdmissionMemoryBytes)
+	if warning <= 0 {
 		return false
 	}
 
@@ -417,7 +504,8 @@ func WarningAdmissionReady(samples []Sample, policy Policy) bool { //nolint:cycl
 
 	for index, sample := range samples {
 		available := availableMemory(sample)
-		if sample.Platform != platformDarwin || !EssentialReadingsValid(sample) || available == nil || *available < policy.WarningAdmissionMemoryBytes ||
+		warning, _ := memoryThresholds(sample, policy, policy.WarningAdmissionMemoryBytes)
+		if sample.Platform != platformDarwin || !EssentialReadingsValid(sample) || available == nil || *available < warning ||
 			sample.MemoryPressureLevel == nil || *sample.MemoryPressureLevel == 4 ||
 			sample.CompressorAvailable == nil || !*sample.CompressorAvailable ||
 			sample.DiskFreeBytes == nil || *sample.DiskFreeBytes < policy.DiskWarningBytes {

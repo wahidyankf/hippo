@@ -128,6 +128,68 @@ Feature: Resource-aware admission
     Then the resource state is normal with reason "normal"
 
   @e2e-exempt
+  Scenario: A RAM-proportional warning fires below the percent threshold
+    Given a Linux host with 16 GiB of memory and 3 GiB of available memory
+    And the warning memory threshold is 25 percent of memory
+    When development pressure is assessed
+    Then the resource state is warning with reason "memory-warning"
+
+  @e2e-exempt
+  Scenario Outline: A RAM-proportional warning honors its floor
+    Given a Linux host with 16 GiB of memory and <available> of available memory
+    And the warning memory threshold is 25 percent of memory
+    And the warning memory floor is 5 GiB
+    When development pressure is assessed
+    Then the resource state is <state> with reason "<reason>"
+
+    Examples:
+      | available | state   | reason         |
+      | 4 GiB     | warning | memory-warning |
+      | 6 GiB     | normal  | normal         |
+
+  @e2e-exempt
+  Scenario: A RAM-proportional critical fires above the fixed critical floor
+    Given a Linux host with 16 GiB of memory and 2 GiB of available memory
+    And the critical memory threshold is 15 percent of memory
+    When development pressure is assessed
+    Then the resource state is critical with reason "memory-critical"
+
+  @e2e-exempt
+  Scenario Outline: Swap-out pressure within the swap multiple is waived
+    Given a Linux host with 4 GiB of memory and 3 GiB of available memory
+    And that host has 8 GiB of swap of which <used> is in use
+    And swap-outs grow by 128 MiB over 15 seconds on that host
+    And swap use within <multiple> times physical memory is allowed
+    When development pressure is assessed
+    Then the resource state is <state> with reason "<reason>"
+
+    Examples:
+      | used  | multiple | state   | reason       |
+      | 1 GiB | 2        | normal  | normal       |
+      | 4 GiB | 1        | normal  | normal       |
+      | 5 GiB | 1        | warning | swap-warning |
+
+  @e2e-exempt
+  Scenario: The swap multiple never waives critical memory pressure
+    Given a Linux host with 4 GiB of memory and 3 GiB of available memory
+    And that host has 8 GiB of swap of which 1 GiB is in use
+    And memory PSI some average is 25 percent
+    And swap use within 2 times physical memory is allowed
+    When development pressure is assessed
+    Then the resource state is critical with reason "memory-psi"
+
+  @e2e-exempt
+  Scenario: The swap multiple keeps the over-allowance advisory
+    Given a Linux host with 4 GiB of memory and 3 GiB of available memory
+    And that host has 8 GiB of swap of which 5 GiB is in use
+    And swap-outs grow by 128 MiB over 15 seconds on that host
+    And swap counting is on
+    And swap use within 2 times physical memory is allowed
+    When development pressure is assessed
+    Then the resource state is normal with reason "normal"
+    And the advisory "swap-over-allowance" is reported
+
+  @e2e-exempt
   Scenario: Compressor growth requires both payload and growth
     Given compressor payload is 12 GiB and grows 1 GiB over 15 seconds
     When development pressure is assessed

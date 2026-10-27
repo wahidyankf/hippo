@@ -215,6 +215,9 @@ func (application RunEntryServices) executePrepared(ctx context.Context, options
 	if resolveError != nil {
 		return 0, policy.Stopped(policy.ReasonReplanRequired, resolveError)
 	}
+	resolution.Policy = policy.ApplyCoordinationThresholds(
+		resolution.Policy, configuration.Coordination.MemoryPolicy, configuration.Coordination.SwapUsedMaxMultiple,
+	)
 	if resolution.Reason != policy.ReasonNone {
 		_, _ = fmt.Fprintf(
 			application.Stderr,

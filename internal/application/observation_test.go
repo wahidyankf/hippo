@@ -30,6 +30,8 @@ type observationFixture struct {
 	stopped        bool
 	failureAt      string
 	failure        error
+	memory         policy.MemoryPolicy
+	swapMultiple   float64
 }
 
 func (fixture *observationFixture) Load(string, map[string]string) (application.Configuration, error) {
@@ -37,7 +39,7 @@ func (fixture *observationFixture) Load(string, map[string]string) (application.
 	if fixture.failureAt == "load" {
 		return application.Configuration{}, fixture.failure
 	}
-	return application.Configuration{Catalog: policy.BuiltinCatalog(), Coordination: coordination.Configuration{SchemaVersion: 3, Mode: "reservation", BaseActiveOwners: 1, MaxActiveOwners: 2}, Hash: "config-hash"}, nil
+	return application.Configuration{Catalog: policy.BuiltinCatalog(), Coordination: coordination.Configuration{SchemaVersion: 3, Mode: "reservation", BaseActiveOwners: 1, MaxActiveOwners: 2, MemoryPolicy: fixture.memory, SwapUsedMaxMultiple: fixture.swapMultiple}, Hash: "config-hash"}, nil
 }
 
 func (*observationFixture) Identity(map[string]string, string, string, []string) (identity.Value, string, error) {

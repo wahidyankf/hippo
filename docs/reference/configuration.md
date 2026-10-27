@@ -143,6 +143,8 @@ naming `hippo.args.invalid`, before any child starts.
 | `maxActiveOwners`      | integer | Nonnegative, at most `20`. `0` means the default of 20         |
 | `automaticOwnerShares` | object  | Profile name → share count, each between `1` and `20`          |
 | `countSwap`            | boolean | Schema 3 only. `false` or omitted: swap is not counted         |
+| `memoryPolicy`         | object  | Schema 3 only. Omitted: the legacy fixed memory thresholds     |
+| `swapUsedMaxMultiple`  | number  | Schema 3 only. Omitted: the legacy swap-out rules              |
 
 `maxCpu` is the most CPUs HIPPO may allocate. `0`, or any value at or above the host's CPU count, leaves every CPU
 available. A Mac owner who wants one CPU kept for the desktop sets it to the core count minus one, for example `11` on a
@@ -211,6 +213,46 @@ refuses the whole file on every command that loads configuration. A v0.8.0 to v0
 `json: unknown field "countSwap"`, and a v0.6.0 to v0.7.2 binary exits `78` instead. Repin every consumer first, check
 each with `hippo version --json`, then add `countSwap` to that machine's file. Rollback is deleting the key. A file that
 omits it loads and behaves as before.
+
+## RAM-proportional admission thresholds
+
+`coordination.memoryPolicy` lets a schema-3 file replace the fixed warning and critical memory thresholds with shares of
+RAM. It is optional and defaults to the legacy behavior. A schema-2 file that names it is refused at load with exit
+`125` naming `hippo.config.unreadable`.
+
+```json
+"coordination": {
+  "memoryPolicy": {
+    "warningPercent": 25,
+    "criticalPercent": 5,
+    "warningFloorMiB": 5120,
+    "criticalFloorMiB": 1024
+  },
+  "swapUsedMaxMultiple": 2
+}
+```
+
+Each key is optional. A named percent must be above `0` and at most `100`, and reads as that share of the effective
+memory limit, with physical memory standing in for an unset limit. A named floor must be nonnegative, reads in MiB, and
+lifts the percent: the warning fires while available memory is below the larger of `warningPercent` of the limit and
+`warningFloorMiB`, and the critical level follows the same shape. A field the block omits keeps its legacy fixed
+threshold. The warning percent also governs the macOS degraded-admission window. See
+[resource policy](resource-policy.md#ram-proportional-thresholds).
+
+`coordination.swapUsedMaxMultiple` is the per-machine swap gate. While readable swap in use fits within that multiple of
+physical memory, the byte-based swap reasons (`swap-warning` and `swap-critical`) are waived. The multiple must be
+positive when present. Pressure levels, PSI bands, compressor failure, OOM counters, and the critical paths stay fully
+in force, and swap in use above the allowance is still reported as `swap-over-allowance`. See
+[swap gate](resource-policy.md#swap-gate).
+
+**Rollout order.** Every binary that reads the file must be `v0.12.0` or later before either key is added. An older
+binary refuses the whole file on every command that loads configuration: a v0.11.0 binary exits `125` with
+`json: unknown field "memoryPolicy"`. Repin every consumer first, check each with `hippo version --json`, then add the
+keys to that machine's file. Rollback is deleting the keys. A file that omits them loads and behaves as before.
+
+**Calibration.** HIPPO ships no production percents or floors beyond the legacy fixed thresholds, and the values above
+are examples only, not recommendations. Derive every percent and the multiple from host sampler data before relying on
+them, and record the follow-up that does so.
 
 ## `profiles`
 
