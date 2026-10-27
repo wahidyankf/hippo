@@ -78,6 +78,10 @@ Worked example: a 16 GiB host with swap, on `balanced`, reserves 15% of 16 GiB, 
 reads `memory-warning`; below 1.2 GiB, `memory-critical`. A 32 GiB host reaches the 4 GiB maximum reserve, so its
 warning starts at 4 GiB and its critical level at 2 GiB.
 
+A schema-3 `coordination.memoryPolicy` block replaces the admission, critical, and warning-window rows above with shares
+of RAM; see [RAM-proportional thresholds](#ram-proportional-thresholds). Without the block, every row reads as printed
+here.
+
 When no profile fits, ordinary work still resolves to the profile that ends its fallback chain, the one with no
 `fallback`, when that profile's lineage reaches `minimal`: built-in `minimal`, or a configured profile whose `extends`
 lineage reaches `minimal`. That profile's admission memory is lowered to its critical level and its disk warning to the
@@ -163,6 +167,31 @@ minimums are checked against that pool, so a tier may need the allowance to be p
 
 Do not enable counting on zram-backed swap: zram is carved from RAM, so the same memory would count twice. Counting does
 not change promotion: a third owner still needs zero swap-outs over its window.
+
+## RAM-proportional thresholds
+
+With `coordination.memoryPolicy` set on a schema-3 host, the warning fires while available memory is below the larger of
+`warningPercent` of the effective memory limit and `warningFloorMiB`, and the critical level follows the same shape with
+the critical keys. Physical memory stands in for an unset limit. Each key is optional, and a key the block omits keeps
+its legacy fixed threshold from the table above. The warning percent also governs the macOS degraded-admission window: a
+stable warning admits degraded work only while every sample holds the proportional warning floor.
+
+HIPPO ships no production percents or floors beyond the legacy fixed thresholds. Derive every value from host sampler
+data before relying on it; see the [calibration note](configuration.md#ram-proportional-admission-thresholds).
+
+## Swap gate
+
+With `coordination.swapUsedMaxMultiple` set on a schema-3 host, the swap-out rate rules are waived while readable swap
+in use fits within that multiple of physical memory:
+
+- Swap use within the multiple: `swap-warning` and `swap-critical` never fire.
+- Swap use above the multiple: the swap-out rate rules apply unchanged.
+- Unreadable swap use, or no RAM figure: the swap-out rate rules apply unchanged.
+- Any pressure, PSI, compressor, OOM, disk, CPU, or critical state: decided exactly as without the setting.
+
+The waiver covers only the byte-based swap reasons. Pressure levels (including level 4), the PSI bands, compressor
+failure, OOM counters, disk, and CPU rules stay fully in force, and a waived host still reports `swap-over-allowance`
+while counting is on and swap in use passes the allowance.
 
 ## Reservation capacity
 

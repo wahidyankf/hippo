@@ -42,6 +42,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.resourceTierBindings(),
 		driver.ledgerCapacityBindings(),
 		driver.swapCountingBindings(),
+		driver.thresholdBindings(),
 	)
 }
 

@@ -24,4 +24,13 @@ type Configuration struct {
 	Tiers                         map[string]ResourceTierPolicy
 	// CountSwap is coordination.countSwap: whether swap counts toward memory.
 	CountSwap bool
+	// MemoryPolicy is coordination.memoryPolicy: the optional RAM-proportional
+	// admission thresholds. Zero throughout means the block was absent, and the
+	// legacy fixed thresholds apply.
+	MemoryPolicy policy.MemoryPolicy
+	// SwapUsedMaxMultiple is coordination.swapUsedMaxMultiple: the optional
+	// per-machine multiple of physical memory within which swap-out pressure is
+	// waived. Zero or negative means the setting was absent, and the legacy
+	// swap rules apply.
+	SwapUsedMaxMultiple float64
 }

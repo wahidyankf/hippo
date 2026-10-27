@@ -7,6 +7,25 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.13.0] — unreleased
+
+### Added
+
+- An optional `coordination.memoryPolicy` block and an optional `coordination.swapUsedMaxMultiple` setting, both schema
+  3 only and both off unless a file names them. The block replaces the fixed warning and critical memory thresholds with
+  shares of RAM: the warning fires while available memory is below the larger of `warningPercent` of the effective
+  memory limit and `warningFloorMiB`, and the critical level follows the same shape with the critical keys. Physical
+  memory stands in for an unset limit, each key is optional with the omitted key keeping its legacy fixed threshold, and
+  the warning percent also governs the macOS degraded-admission window. While readable swap in use fits within
+  `swapUsedMaxMultiple` of physical memory, the byte-based `swap-warning` and `swap-critical` reasons are waived;
+  pressure levels (including level 4), PSI bands, compressor failure, OOM counters, and the critical paths stay fully in
+  force, and a waived host still reports `swap-over-allowance` while counting is on and swap in use passes the
+  allowance. A file that names neither key loads and behaves exactly as before, and no evidence schema changes. An older
+  binary refuses a file that declares either key with exit `125`, so repin every consumer to `v0.13.0` or later before
+  adding them, and delete the keys to roll back. HIPPO ships no production percents, floors, or multiples: the
+  documented numbers are shapes only, and operators must derive working values from host sampler data in a follow-up
+  before relying on them.
+
 ## [v0.12.0] — 2026-10-26
 
 ### Changed

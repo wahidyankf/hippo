@@ -102,6 +102,23 @@ func swapInUse(sample Sample) (int64, bool) {
 	return *sample.SwapUsedBytes, true
 }
 
+// swapRateWaived reports whether the per-machine swap gate excuses the
+// byte-based swap reasons for one sample: the policy names a positive multiple
+// and readable swap in use fits within that multiple of physical memory. It is
+// false wherever swap in use cannot be read, so an unreadable swap never
+// waives the rate rules by default.
+func swapRateWaived(sample Sample, policy Policy) bool {
+	if policy.SwapUsedMaxMultiple <= 0 || sample.PhysicalMemoryBytes <= 0 {
+		return false
+	}
+	used, readable := swapInUse(sample)
+	if !readable {
+		return false
+	}
+
+	return float64(used) <= policy.SwapUsedMaxMultiple*float64(sample.PhysicalMemoryBytes)
+}
+
 // countsAllowance reports whether the sample counts a non-zero allowance. Only
 // then do the swap rules below differ from a host that does not count swap.
 func countsAllowance(sample Sample) bool {

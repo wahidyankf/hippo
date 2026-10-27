@@ -37,8 +37,9 @@ exporting `HIPPO_PUBLIC_V0100_BIN`, `HIPPO_PUBLIC_V0100_BIN_SHA256`, and `HIPPO_
 `TestMixedVersionV0100VeryHeavyCompatibility` leaf runs once with `-tags=mixedversion -count=1` and a 120-second
 timeout. It checks that the released v0.10.0 binary refuses a declared very-heavy tier with exit `125`, and that it
 lists a live very-heavy owner from the current build. It also checks that the released binary refuses a schema-3 file
-that declares `coordination.countSwap` with exit `125`, and that the current build accepts that same file. Offline
-acquisition uses `HIPPO_E2E_V0100_ARCHIVE`.
+that declares `coordination.countSwap` with exit `125`, and that the current build accepts that same file. It checks the
+admission threshold keys the same way: the released binary refuses a file that declares `memoryPolicy` or
+`swapUsedMaxMultiple`, and the current build accepts it. Offline acquisition uses `HIPPO_E2E_V0100_ARCHIVE`.
 
 This v0.8.5 compatibility fixture reserves one CPU and one GiB per real owner: two concurrent owners allocate two CPUs
 and two GiB. Its scoped configuration caps CPU capacity at two and memory capacity at three GiB, so the exact oracle

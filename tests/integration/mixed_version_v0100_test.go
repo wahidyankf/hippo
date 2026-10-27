@@ -20,17 +20,18 @@ import (
 
 // The released v0.10.0 binary is the one tests/e2e/v0100-release.sh verifies
 // against tests/e2e/hippo-v0100.lock. This leaf pins the compatibility hazards of
-// the optional very-heavy tier and of coordination.countSwap: a v0.10.0 reader
-// refuses a file that declares either, and a very-heavy owner written by this
-// build is still listed by v0.10.0.
+// the optional very-heavy tier, of coordination.countSwap, and of the admission
+// threshold keys: a v0.10.0 reader refuses a file that declares any of them,
+// and a very-heavy owner written by this build is still listed by v0.10.0.
 const (
-	mixedV0100Timeout          = 120 * time.Second
-	mixedV0100PollInterval     = 10 * time.Millisecond
-	mixedV0100RefusedCode      = 125
-	mixedV0100Unreadable       = "hippo.config.unreadable"
-	mixedV0100UnknownTier      = "schema 3 contains an unknown resource tier"
-	mixedV0100UnknownCountSwap = `json: unknown field "countSwap"`
-	mixedV0100OwnerTierText    = "tier=very-heavy"
+	mixedV0100Timeout           = 120 * time.Second
+	mixedV0100PollInterval      = 10 * time.Millisecond
+	mixedV0100RefusedCode       = 125
+	mixedV0100Unreadable        = "hippo.config.unreadable"
+	mixedV0100UnknownTier       = "schema 3 contains an unknown resource tier"
+	mixedV0100UnknownCountSwap  = `json: unknown field "countSwap"`
+	mixedV0100UnknownThresholds = `json: unknown field "memoryPolicy"`
+	mixedV0100OwnerTierText     = "tier=very-heavy"
 )
 
 // mixedV0100SharedDocument is a schema-3 file that both releases read: three tiers, one pool.
@@ -54,6 +55,9 @@ const mixedV0100DeclaredDocument = `{"schemaVersion":3,"coordination":{"maxCpu":
 // refuses the whole file for that unknown key, so the setting is the only difference from the shared file.
 var mixedV0100CountSwapDocument = strings.Replace(mixedV0100SharedDocument, `"coordination":{`, `"coordination":{"countSwap":true,`, 1)
 
+// mixedV0100ThresholdsDocument is the shared file with the admission threshold keys declared.
+var mixedV0100ThresholdsDocument = strings.Replace(mixedV0100SharedDocument, `"coordination":{`, `"coordination":{"memoryPolicy":{"warningPercent":25,"warningFloorMiB":5120},"swapUsedMaxMultiple":2,`, 1)
+
 // TestMixedVersionV0100VeryHeavyCompatibility runs the released binary beside the
 // stamped candidate over one shared evidence root.
 func TestMixedVersionV0100VeryHeavyCompatibility(t *testing.T) {
@@ -72,6 +76,8 @@ func TestMixedVersionV0100VeryHeavyCompatibility(t *testing.T) {
 	t.Run("released binary lists a very-heavy owner written by this build", fixture.listsVeryHeavyOwner)
 	t.Run("released binary refuses a file that declares countSwap", fixture.refusesCountSwap)
 	t.Run("current build accepts a file that declares countSwap", fixture.acceptsCountSwap)
+	t.Run("released binary refuses a file that declares admission thresholds", fixture.refusesThresholds)
+	t.Run("current build accepts a file that declares admission thresholds", fixture.acceptsThresholds)
 }
 
 type mixedV0100Fixture struct {
@@ -80,6 +86,7 @@ type mixedV0100Fixture struct {
 	sharedConfig        string
 	declaredConfig      string
 	countSwapConfig     string
+	thresholdsConfig    string
 	environment         []string
 	runContext          context.Context
 }
@@ -95,9 +102,10 @@ func newMixedV0100Fixture(t *testing.T, released, candidate string) *mixedV0100F
 	fixture := &mixedV0100Fixture{
 		released: released, candidate: candidate,
 		root: filepath.Join(directory, "root"), work: filepath.Join(directory, "work"),
-		sharedConfig:    filepath.Join(directory, "shared.json"),
-		declaredConfig:  filepath.Join(directory, "declared.json"),
-		countSwapConfig: filepath.Join(directory, "countswap.json"),
+		sharedConfig:     filepath.Join(directory, "shared.json"),
+		declaredConfig:   filepath.Join(directory, "declared.json"),
+		countSwapConfig:  filepath.Join(directory, "countswap.json"),
+		thresholdsConfig: filepath.Join(directory, "thresholds.json"),
 	}
 	for _, path := range []string{fixture.root, fixture.work} {
 		if err := os.Mkdir(path, 0o700); err != nil {
@@ -105,9 +113,10 @@ func newMixedV0100Fixture(t *testing.T, released, candidate string) *mixedV0100F
 		}
 	}
 	for path, document := range map[string]string{
-		fixture.sharedConfig:    mixedV0100SharedDocument,
-		fixture.declaredConfig:  mixedV0100DeclaredDocument,
-		fixture.countSwapConfig: mixedV0100CountSwapDocument,
+		fixture.sharedConfig:     mixedV0100SharedDocument,
+		fixture.declaredConfig:   mixedV0100DeclaredDocument,
+		fixture.countSwapConfig:  mixedV0100CountSwapDocument,
+		fixture.thresholdsConfig: mixedV0100ThresholdsDocument,
 	} {
 		if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
 			t.Fatal(err)
@@ -175,6 +184,28 @@ func (fixture *mixedV0100Fixture) refusesCountSwap(t *testing.T) {
 // acceptsCountSwap requires the current build to read the same file and report a schema-five status.
 func (fixture *mixedV0100Fixture) acceptsCountSwap(t *testing.T) {
 	result := fixture.invoke(t, fixture.candidate, "status", "--json", "--config", fixture.countSwapConfig, "--disk-path", fixture.work)
+	var view struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+	if result.code != 0 || strings.Contains(result.stderr, mixedV0100Unreadable) || json.Unmarshal([]byte(result.stdout), &view) != nil || view.SchemaVersion != 5 {
+		t.Fatalf("current status exit=%d stderr=%q stdout=%q, want exit 0 and a schema-five status", result.code, result.stderr, result.stdout)
+	}
+}
+
+// refusesThresholds pins the threshold hazard: the released reader refuses the file, because it names keys it
+// does not know, with exit 125 and the first unknown-field text.
+func (fixture *mixedV0100Fixture) refusesThresholds(t *testing.T) {
+	result := fixture.invoke(t, fixture.released, "status", "--json", "--config", fixture.thresholdsConfig, "--disk-path", fixture.work)
+	if result.code != mixedV0100RefusedCode || !strings.Contains(result.stderr, mixedV0100Unreadable) ||
+		!strings.Contains(result.stderr, mixedV0100UnknownThresholds) {
+		t.Fatalf("released status exit=%d stderr=%q, want %d naming %s and %q",
+			result.code, result.stderr, mixedV0100RefusedCode, mixedV0100Unreadable, mixedV0100UnknownThresholds)
+	}
+}
+
+// acceptsThresholds requires the current build to read the same file and report a schema-five status.
+func (fixture *mixedV0100Fixture) acceptsThresholds(t *testing.T) {
+	result := fixture.invoke(t, fixture.candidate, "status", "--json", "--config", fixture.thresholdsConfig, "--disk-path", fixture.work)
 	var view struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}

@@ -108,6 +108,29 @@ line prints `swapAllowanceGiB=0.00`, and the [JSON fields](../reference/json-sch
 `swapAllowanceBytes` and `resource.swapHeadroomBytes` are zero, and `resource.countedAvailableMemoryBytes` equals the
 raw available memory.
 
+## Tune the admission thresholds for one machine
+
+RAM-proportional thresholds and the swap gate are for a schema-3 machine whose fixed GiB thresholds no longer match its
+RAM. Both live inside `coordination`, both are optional per key, and both need v0.12.0 or later on every binary that
+reads the file:
+
+```json
+"coordination": {
+  "memoryPolicy": {
+    "warningPercent": 25,
+    "warningFloorMiB": 5120
+  },
+  "swapUsedMaxMultiple": 2
+}
+```
+
+The warning fires below the larger of the percent of the memory limit and the floor, and the critical level follows the
+same shape; a key the block omits keeps its legacy fixed threshold. While swap in use fits within the multiple of
+physical memory, the swap-out rate reasons are waived, but PSI, pressure levels, the compressor, and the critical paths
+stay in force. Start from the host's sampler data, not from the numbers above: HIPPO ships no production values for
+these keys. The [configuration reference](../reference/configuration.md#ram-proportional-admission-thresholds) gives the
+exact validation rules.
+
 ## Roll a change out to a machine
 
 Any binary older than v0.11.0 refuses both settings. A v0.10.0 binary that reads a file declaring `very-heavy` exits
@@ -135,12 +158,19 @@ machine's file that declares neither setting is unaffected by the upgrade. Roll 
 3. Only when every binary on the machine reports v0.11.0, add the `very-heavy` block or the `countSwap` key to that
    machine's file.
 
-To roll back, delete the block or the key. The file then loads on every binary again.
+The threshold keys (`memoryPolicy`, `swapUsedMaxMultiple`) roll out the same way, one release later: only when every
+binary on the machine reports v0.12.0, add them to that machine's file. An older binary refuses the file with
+`json: unknown field "memoryPolicy"`. To roll back, delete the block or the key. The file then loads on every binary
+again.
 
 ## Related
 
 - [Configuration: optional very-heavy tier](../reference/configuration.md#optional-very-heavy-tier)
 - [Configuration: swap counting](../reference/configuration.md#swap-counting)
+- [Configuration: RAM-proportional admission thresholds][ram-thresholds]
+
+[ram-thresholds]: ../reference/configuration.md#ram-proportional-admission-thresholds
+
 - [Resource policy: schema-3 resource tiers](../reference/resource-policy.md#schema-3-resource-tiers)
 - [Command-line interface: hippo run](../reference/cli.md#hippo-run)
 - [How to enable reservation coordination](./enable-reservation-coordination.md)

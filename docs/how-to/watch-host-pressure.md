@@ -110,6 +110,13 @@ With `coordination.countSwap` on, `watch`, `status`, and `monitor` count unused 
 JSON when swap use passes the allowance, and it never changes the state. Set the key only after every binary that reads
 the file is `v0.11.0` or later, as the [configuration reference](../reference/configuration.md#swap-counting) explains.
 
+## Account for a tuned swap gate
+
+On a machine with `coordination.swapUsedMaxMultiple` set, `watch` and `monitor` skip the `swap-warning` and
+`swap-critical` reasons while swap in use fits within the multiple of physical memory. A missing swap reason on a tuned
+machine means the gate waived it, not that no swap-outs happened; PSI, pressure levels, and the compressor still report
+as usual. See [swap gate](../reference/resource-policy.md#swap-gate).
+
 ## Related
 
 - [Resource policy](../reference/resource-policy.md) — the thresholds behind each `reason`

@@ -213,6 +213,7 @@ type Driver struct {
 	pushQuickGate            bool
 	coreCoverage             bool
 	resolution               policy.Resolution
+	thresholds               thresholdScenario
 	automaticPlan            guard.ReservationPlan
 	automaticPlanError       error
 	cpuSample                policy.Sample

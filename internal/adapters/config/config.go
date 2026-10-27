@@ -81,6 +81,15 @@ type coordinationFile struct {
 	EmergencyMemoryMiB   int64                      `json:"emergencyAvailableMemoryMiB,omitempty"`
 	Tiers                map[string]tierFile        `json:"tiers,omitempty"`
 	CountSwap            *bool                      `json:"countSwap,omitempty"`
+	MemoryPolicy         *memoryPolicyFile          `json:"memoryPolicy,omitempty"`
+	SwapUsedMaxMultiple  *float64                   `json:"swapUsedMaxMultiple,omitempty"`
+}
+
+type memoryPolicyFile struct {
+	WarningPercent   *float64 `json:"warningPercent,omitempty"`
+	CriticalPercent  *float64 `json:"criticalPercent,omitempty"`
+	WarningFloorMiB  *int64   `json:"warningFloorMiB,omitempty"`
+	CriticalFloorMiB *int64   `json:"criticalFloorMiB,omitempty"`
 }
 
 type promotionFile struct {
@@ -145,18 +154,18 @@ func reservationCoordination() Coordination {
 
 func adaptiveCoordination(decoded file, result Coordination, configured *coordinationFile) (Coordination, error) {
 	if decoded.SchemaVersion != schemaVersionAdaptive {
-		// Swap counting is a schema-3 policy: a schema-2 file that names it would
-		// otherwise load and silently change nothing.
-		if configured.CountSwap != nil {
-			return Coordination{}, errors.New("countSwap requires schema 3")
-		}
-		return result, nil
+		return nonAdaptiveCoordination(configured, result)
 	}
 	if decoded.Coordination == nil {
 		return Coordination{}, errors.New("schema 3 requires adaptive coordination")
 	}
 	result.SchemaVersion = schemaVersionAdaptive
 	result.CountSwap = countSwapSetting(configured)
+	memory, multiple, thresholdError := adaptiveThresholdSettings(configured)
+	if thresholdError != nil {
+		return Coordination{}, thresholdError
+	}
+	result.MemoryPolicy, result.SwapUsedMaxMultiple = memory, multiple
 	if configured.MaxCPU <= 0 || configured.MaxMemoryMiB <= 0 || configured.BaseActiveOwners <= 0 ||
 		configured.MaxActiveOwners <= 0 {
 		return Coordination{}, errors.New("schema 3 requires positive pool and owner limits")
@@ -216,6 +225,91 @@ func adaptiveCoordination(decoded file, result Coordination, configured *coordin
 // countSwapSetting reads coordination.countSwap. An absent key is off.
 func countSwapSetting(configured *coordinationFile) bool {
 	return configured.CountSwap != nil && *configured.CountSwap
+}
+
+// nonAdaptiveCoordination is the coordination a file below schema 3 carries:
+// reservation defaults, with every schema-3 policy key refused where it is
+// decoded, as an unreadable configuration, rather than loading and silently
+// changing nothing.
+func nonAdaptiveCoordination(configured *coordinationFile, result Coordination) (Coordination, error) {
+	if configured.CountSwap != nil {
+		return Coordination{}, errors.New("countSwap requires schema 3")
+	}
+	if configured.MemoryPolicy != nil {
+		return Coordination{}, errors.New("memoryPolicy requires schema 3")
+	}
+	if configured.SwapUsedMaxMultiple != nil {
+		return Coordination{}, errors.New("swapUsedMaxMultiple requires schema 3")
+	}
+
+	return result, nil
+}
+
+// adaptiveThresholdSettings converts the schema-3 threshold keys: the
+// RAM-proportional memory policy and the per-machine swap gate.
+func adaptiveThresholdSettings(configured *coordinationFile) (policy.MemoryPolicy, float64, error) {
+	memory, err := memoryPolicySetting(configured)
+	if err != nil {
+		return policy.MemoryPolicy{}, 0, err
+	}
+	multiple, err := swapMultipleSetting(configured)
+	if err != nil {
+		return policy.MemoryPolicy{}, 0, err
+	}
+
+	return memory, multiple, nil
+}
+
+// memoryPolicySetting converts coordination.memoryPolicy. An absent block is
+// the zero policy, which keeps the legacy fixed thresholds. A named percent
+// must read as a share of memory, and a named floor must convert to bytes.
+func memoryPolicySetting(configured *coordinationFile) (policy.MemoryPolicy, error) {
+	setting := policy.MemoryPolicy{}
+	if configured.MemoryPolicy == nil {
+		return setting, nil
+	}
+	block := configured.MemoryPolicy
+	if block.WarningPercent != nil {
+		if *block.WarningPercent <= 0 || *block.WarningPercent > 100 {
+			return policy.MemoryPolicy{}, errors.New("schema 3 warning memory percent is invalid")
+		}
+		setting.WarningPercent = *block.WarningPercent
+	}
+	if block.CriticalPercent != nil {
+		if *block.CriticalPercent <= 0 || *block.CriticalPercent > 100 {
+			return policy.MemoryPolicy{}, errors.New("schema 3 critical memory percent is invalid")
+		}
+		setting.CriticalPercent = *block.CriticalPercent
+	}
+	if block.WarningFloorMiB != nil {
+		floor, err := policy.MiBToBytes(*block.WarningFloorMiB)
+		if err != nil {
+			return policy.MemoryPolicy{}, err
+		}
+		setting.WarningFloorBytes = floor
+	}
+	if block.CriticalFloorMiB != nil {
+		floor, err := policy.MiBToBytes(*block.CriticalFloorMiB)
+		if err != nil {
+			return policy.MemoryPolicy{}, err
+		}
+		setting.CriticalFloorBytes = floor
+	}
+
+	return setting, nil
+}
+
+// swapMultipleSetting reads coordination.swapUsedMaxMultiple. An absent key is
+// off, and a named multiple must be positive.
+func swapMultipleSetting(configured *coordinationFile) (float64, error) {
+	if configured.SwapUsedMaxMultiple == nil {
+		return 0, nil
+	}
+	if *configured.SwapUsedMaxMultiple <= 0 {
+		return 0, errors.New("schema 3 swap used multiple must be positive")
+	}
+
+	return *configured.SwapUsedMaxMultiple, nil
 }
 
 // buildOptionalTiers validates each optional tier only when the file declares it,

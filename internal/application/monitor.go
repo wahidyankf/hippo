@@ -58,6 +58,9 @@ func (services ObservationServices) Monitor(ctx context.Context, request Monitor
 		if resolveError != nil {
 			return resolveError
 		}
+		resolution.Policy = policy.ApplyCoordinationThresholds(
+			resolution.Policy, configuration.Coordination.MemoryPolicy, configuration.Coordination.SwapUsedMaxMultiple,
+		)
 
 		assessment := policy.ResourceAssessment(samples, resolution.Policy)
 		state := string(assessment.State) + ":" + assessment.Reason + ":" + string(resolution.ResolvedProfile)
