@@ -19,8 +19,8 @@ and above the [workflows](../workflows/README.md).
 - [Quality](quality/README.md) — the software-development standards adopted from the shared catalog.
 - [Quality gates](quality-gates.md) — what runs, where, and in what order.
 - [Quality gates modules](quality-gates/README.md) — the ordered modules of that standard.
-- [Resource-aware development](resource-aware-development.md) — the guard, and why this repository cannot use it on
-  itself.
+- [Resource-aware development](resource-aware-development.md) — the guard, why this repository cannot use it on itself,
+  and remote dispatch under recorded local pressure.
 - [Software quality enforcement](software-quality-enforcement.md) — the gates that must pass before a change is done.
 - [Specification maintenance](specification-maintenance.md) — Gherkin first, always.
 - [Test-driven development](test-driven-development.md) — red, green, refactor, with evidence.

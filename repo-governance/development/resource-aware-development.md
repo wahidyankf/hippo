@@ -59,3 +59,17 @@ This consumer awareness grants no cleanup authority. Existing task-owned cleanup
 keep their scope.
 
 **Enforcement: unenforced by decision**, because approval and cache classification require human judgment.
+
+## Remote dispatch
+
+Explicit copy of `ose-rules` `origin/main` `429a891` (`004-remote-dispatch.md`), re-based: HIPPO cannot guard HIPPO; the
+precondition is recorded pressure, never HIPPO state. RD-B2..B7 unchanged.
+
+- Readable `REMOTE_DISPATCH_HOME` governs; targets come from it only. Otherwise dispatch must not happen: record a
+  refusal, start nothing on any target. (RD-A2, gated by `remote-dispatch-refusal`.)
+- Dispatch only under recorded measured local pressure: the operator records load average relative to CPU count and/or
+  free disk below the pressure mark, values recorded not guessed, placeholder thresholds. (RD-B1, re-based K2=A.)
+- A fresh target query must read normal before remote work. One HIPPO boundary, placed on the target host, never local.
+  Teardown removes task-created state; record first, deleted last. (RD-B2..B7, unenforced: review compares transcripts.)
+- Confidentiality adds nothing: [data safety](../conventions/public-repository-data-safety.md) binds every committed
+  artifact. (RD-C, covered.)

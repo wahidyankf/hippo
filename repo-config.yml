@@ -652,6 +652,12 @@ gates:
         executable: sh
         args: [{ literal: scripts/shell-lint.sh }]
       run-on: { pre-push: {}, pull-request: {}, main: {} }
+    - id: remote-dispatch-refusal
+      type: check
+      command:
+        executable: bash
+        args: [{ literal: scripts/check-remote-dispatch-refusal.sh }]
+      run-on: { pre-commit: {}, pull-request: {}, main: {} }
     - id: quick
       type: check
       command:
