@@ -48,7 +48,7 @@ and that disagreement is a bug worth reporting.
 
 ## Project context
 
-HIPPO is one of the seven **`ose-projects`** repositories — the repositories
+HIPPO is one of the eight **`ose-projects`** repositories — the repositories
 [Open Sharia Enterprise](https://github.com/wahidyankf/ose-public) is built and maintained in. Each entry gives the
 repository's role, then how it relates to HIPPO:
 
@@ -66,6 +66,8 @@ repository's role, then how it relates to HIPPO:
   pins HIPPO releases.
 - [`py-typekit`](https://github.com/wahidyankf/py-typekit) — typed functional primitives for Python. None: it is named
   here only because it is a member.
+- [`ex-bdd`](https://github.com/wahidyankf/ex-bdd) — behaviour-driven development testing for Elixir. Upstream
+  consumption: it guards its local compute with a pinned HIPPO release.
 
 Each consumer reaches HIPPO through a checksum-pinned bootstrap. Nothing crosses the other way at runtime: the HIPPO
 binary depends on none of them, and cannot guard itself.
@@ -77,7 +79,7 @@ role.
 **That label is navigation, not coupling.** `ose-projects` is a routing label only — not an organization, a parent
 repository, a parity group, or a shared release. The seven are developed, versioned, gated, and released independently,
 with no shared version number, release cadence, or monorepo. Membership obliges each member only to name the others, so
-a reader who finds one can find the other six, and nothing more. HIPPO is usable entirely on its own and has no
+a reader who finds one can find the other seven, and nothing more. HIPPO is usable entirely on its own and has no
 OSE-specific defaults compiled into it.
 
 External contributions are currently closed. See the [repository README](../README.md#-project-status) for the current
