@@ -77,7 +77,7 @@ authorized maintainers. Its contents stay private: this repository publishes not
 role.
 
 **That label is navigation, not coupling.** `ose-projects` is a routing label only — not an organization, a parent
-repository, a parity group, or a shared release. The seven are developed, versioned, gated, and released independently,
+repository, a parity group, or a shared release. The eight are developed, versioned, gated, and released independently,
 with no shared version number, release cadence, or monorepo. Membership obliges each member only to name the others, so
 a reader who finds one can find the other seven, and nothing more. HIPPO is usable entirely on its own and has no
 OSE-specific defaults compiled into it.
