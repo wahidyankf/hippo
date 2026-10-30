@@ -36,6 +36,13 @@ raw samples and summaries instead — see [JSON schemas](./json-schemas.md).
 `reservations.json` and `coordination-mode.json` exist only while an epoch is live. An idle root legitimately has
 neither.
 
+### Placement
+
+The state root must sit on a local filesystem whose advisory locks every process sharing the root observes. A remount, a
+FUSE view, or a virtualized share can report a new device number or isolate lock state from a live holder. When both
+identity links still name the recorded inode on one device, the lock still decides a dead owner; only a shared lock view
+keeps that decision sound. Point `HIPPO_ROOT` at local storage, never at a network or virtualized mount.
+
 `hippo.evidence.unwritable` covers the whole state root, these coordination files included, not only the evidence files
 below. A `run` that cannot write any of them before its child starts, for lack of permission, a read-only file system,
 or no space or quota, exits `125` naming it, and so does `status` when it cannot open `coordination.lock` to read

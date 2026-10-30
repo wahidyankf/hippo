@@ -232,6 +232,38 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		}),
 		step(`^status and competing admission reconcile that ledger$`, driver.exerciseReservationScenarioV04),
 		step(`^exact owner capacity or FIFO position remains until the original identity retires and later reconciliation succeeds$`, assert("reservation identity path corruption")),
+		step(`^a dead reservation owner whose ledger device differs while both identity links name the recorded inode$`, func() error {
+			return driver.prepareReservationScenarioV04("reservation device-change dead owner", func(string) error {
+				return requireV04DeviceChangeDeadOwner()
+			})
+		}),
+		step(`^the dead owner retires silently and the next admission succeeds$`, assert("reservation device-change dead owner")),
+		step(`^a dead reservation waiter whose ledger device differs while both identity links name the recorded inode$`, func() error {
+			return driver.prepareReservationScenarioV04("reservation device-change dead waiter", func(string) error {
+				return requireV04DeviceChangeDeadWaiter()
+			})
+		}),
+		step(`^status reconciles that ledger$`, driver.exerciseReservationScenarioV04),
+		step(`^the dead waiter retires silently while the live owner stays active$`, assert("reservation device-change dead waiter")),
+		step(`^a live reservation owner whose ledger device differs while both identity links name the recorded inode$`, func() error {
+			return driver.prepareReservationScenarioV04("reservation device-change live owner", func(string) error {
+				return requireV04DeviceChangeLiveOwner()
+			})
+		}),
+		step(`^the owner stays active with unchanged ledger bytes and the competitor defers with exit 124 naming hippo\.limit\.capacity-deferred$`, assert("reservation device-change live owner")),
+		step(`^a live reservation owner whose ledger device differs while its identity (missing-lock|missing-anchor|replaced-lock|replaced-anchor|missing-pair)$`, func(fault string) error {
+			return driver.prepareReservationScenarioV04("reservation device-change incomplete identity", func(string) error {
+				return requireV04DeviceChangeIncompleteIdentity(fault)
+			})
+		}),
+		step(`^both stay closed with exit 125 without changing the ledger or exposing the identity$`, assert("reservation device-change incomplete identity")),
+		step(`^a reservation owner whose ledger device differs while both identity links name the recorded inode$`, func() error {
+			return driver.prepareReservationScenarioV04("reservation device-change inheritance", func(string) error {
+				return requireV04DeviceChangeInheritance()
+			})
+		}),
+		step(`^an heir requests that owner while it lives and again after its guard dies$`, driver.exerciseReservationScenarioV04),
+		step(`^the live request inherits the token and the later request is refused without failure$`, assert("reservation device-change inheritance")),
 		step(`^a long-lived caller whose guarded run returns before child-group retirement is confirmed$`, prepare("abandoned local handles", requireV04AbandonedLocalHandles)),
 		step(`^the lifetime holder retires later without the caller process exiting$`, driver.exerciseReservationScenarioV04),
 		step(`^the same caller can safely reclaim both reservation capacity and the leased port$`, assert("abandoned local handles")),

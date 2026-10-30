@@ -146,7 +146,48 @@ func openReservationIdentity(root, value string) (*os.File, error) {
 	return identity, nil
 }
 
-func reservationIdentityAlive(root, value string, expectedDevice, expectedInode uint64) (bool, error) { //nolint:gocognit // Identity validation deliberately distinguishes stale, live, replaced, and unverifiable kernel state.
+func reservationIdentityUnverifiable(cause string) error {
+	return errors.New("reservation identity state is unverifiable: " + cause)
+}
+
+// observeReservationIdentity stats one identity path for the coordination-domain
+// judgement. A missing path is absent evidence, not an error; anything the
+// adapter cannot read stays closed without exposing what it saw.
+func observeReservationIdentity(candidate string) (coordination.ReservationIdentityEvidence, *os.File, error) {
+	opened, openError := os.OpenFile(candidate, os.O_RDWR, 0o600)
+	if errors.Is(openError, os.ErrNotExist) {
+		return coordination.ReservationIdentityEvidence{}, nil, nil
+	}
+	if openError != nil {
+		return coordination.ReservationIdentityEvidence{}, nil,
+			reservationIdentityUnverifiable("reservation identity evidence cannot be read")
+	}
+	var info unix.Stat_t
+	if statError := unix.Fstat(int(opened.Fd()), &info); statError != nil {
+		_ = opened.Close()
+
+		return coordination.ReservationIdentityEvidence{}, nil,
+			reservationIdentityUnverifiable("reservation identity evidence cannot be read")
+	}
+	device, deviceError := filesystemIdentifier(info.Dev)
+	inode, inodeError := filesystemIdentifier(info.Ino)
+	if deviceError != nil || inodeError != nil {
+		_ = opened.Close()
+
+		return coordination.ReservationIdentityEvidence{}, nil,
+			reservationIdentityUnverifiable("reservation identity evidence cannot be read")
+	}
+
+	return coordination.ReservationIdentityEvidence{Present: true, Device: device, Inode: inode}, opened, nil
+}
+
+func closeReservationIdentity(identity *os.File) {
+	if identity != nil {
+		_ = identity.Close()
+	}
+}
+
+func reservationIdentityAlive(root, value string, expectedDevice, expectedInode uint64) (bool, error) {
 	path, err := reservationIdentityPath(root, value)
 	if err != nil {
 		return false, err
@@ -155,62 +196,48 @@ func reservationIdentityAlive(root, value string, expectedDevice, expectedInode 
 	if err != nil {
 		return false, err
 	}
-	var identity *os.File
-	var observedDevice, observedInode uint64
-	for _, candidate := range []string{path, anchor} {
-		opened, openError := os.OpenFile(candidate, os.O_RDWR, 0o600)
-		if errors.Is(openError, os.ErrNotExist) {
-			continue
-		}
-		if openError != nil {
-			return false, errors.New("reservation identity state is unverifiable")
-		}
-		var info unix.Stat_t
-		if statError := unix.Fstat(int(opened.Fd()), &info); statError != nil {
-			_ = opened.Close()
-
-			return false, errors.New("reservation identity state is unverifiable")
-		}
-		device, deviceError := filesystemIdentifier(info.Dev)
-		inode, inodeError := filesystemIdentifier(info.Ino)
-		if deviceError != nil || inodeError != nil {
-			_ = opened.Close()
-
-			return false, errors.New("reservation identity state is unverifiable")
-		}
-		if expectedDevice != 0 || expectedInode != 0 {
-			if device != expectedDevice || inode != expectedInode {
-				_ = opened.Close()
-				continue
-			}
-		} else if identity != nil && (device != observedDevice || inode != observedInode) {
-			_ = opened.Close()
-			_ = identity.Close()
-
-			return false, errors.New("reservation identity state is unverifiable")
-		}
-		if identity == nil {
-			identity, observedDevice, observedInode = opened, device, inode
-		} else {
-			_ = opened.Close()
-		}
+	lockEvidence, lockFile, err := observeReservationIdentity(path)
+	if err != nil {
+		return false, err
 	}
-	if identity == nil {
-		if expectedDevice != 0 || expectedInode != 0 {
-			return false, errors.New("reservation identity state is unverifiable")
-		}
+	anchorEvidence, anchorFile, err := observeReservationIdentity(anchor)
+	if err != nil {
+		closeReservationIdentity(lockFile)
 
+		return false, err
+	}
+	judgement := coordination.JudgeReservationIdentity(expectedDevice, expectedInode, lockEvidence, anchorEvidence)
+	if judgement == coordination.ReservationIdentityAbsent {
 		return false, nil
 	}
-	defer func() { _ = identity.Close() }()
-	err = unix.Flock(int(identity.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+	if judgement == coordination.ReservationIdentityIncomplete {
+		closeReservationIdentity(lockFile)
+		closeReservationIdentity(anchorFile)
+
+		return false, reservationIdentityUnverifiable(coordination.IncompleteReservationIdentityCause)
+	}
+	// The probe keeps the first evidence that exactly matches the ledger, as
+	// before; a drifted or expectation-free pair names one file either way.
+	probe, other := lockFile, anchorFile
+	if probe == nil ||
+		(lockEvidence.Present && anchorEvidence.Present &&
+			(lockEvidence.Device != expectedDevice || lockEvidence.Inode != expectedInode) &&
+			anchorEvidence.Device == expectedDevice && anchorEvidence.Inode == expectedInode) {
+		probe, other = anchorFile, lockFile
+	}
+	closeReservationIdentity(other)
+	if probe == nil {
+		return false, reservationIdentityUnverifiable(coordination.IncompleteReservationIdentityCause)
+	}
+	defer closeReservationIdentity(probe)
+	err = unix.Flock(int(probe.Fd()), unix.LOCK_EX|unix.LOCK_NB)
 	if errors.Is(err, unix.EWOULDBLOCK) || errors.Is(err, unix.EAGAIN) {
 		return true, nil
 	}
 	if err != nil {
-		return false, errors.New("reservation identity state is unverifiable")
+		return false, reservationIdentityUnverifiable("reservation identity lock cannot be proved")
 	}
-	unlockError := unix.Flock(int(identity.Fd()), unix.LOCK_UN)
+	unlockError := unix.Flock(int(probe.Fd()), unix.LOCK_UN)
 
 	return false, unlockError
 }
