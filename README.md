@@ -185,9 +185,9 @@ them; `CLAUDE.md` has one import directive, keeping one instruction body.
 
 ## 🌙 Part of Open Sharia Enterprise
 
-HIPPO is one of seven **`ose-projects`** repositories, with `ose-public`, `rhino`, `beaver-nest`, `ose-rules`,
-`py-typekit`, and [`ose-private`](https://github.com/wahidyankf/ose-private) (Private). The label is navigation only —
-see [project context](./docs/README.md#project-context) for each one's link and relationship.
+HIPPO is one of eight **`ose-projects`** repositories, with `ose-public`, `rhino`, `beaver-nest`, `ose-rules`,
+`py-typekit`, `ex-bdd`, and [`ose-private`](https://github.com/wahidyankf/ose-private) (Private). The label is
+navigation only — see [project context](./docs/README.md#project-context) for each one's link and relationship.
 
 HIPPO has no OSE-specific defaults; consumers supply commands, paths, ports, and health endpoints.
 
