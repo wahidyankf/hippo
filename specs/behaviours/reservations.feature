@@ -401,6 +401,44 @@ Feature: Shared vector reservations
       | waiter | replaced |
 
   @e2e-exempt
+  Scenario: A dead owner behind a changed device number reconciles
+    Given a dead reservation owner whose ledger device differs while both identity links name the recorded inode
+    When status and competing admission reconcile that ledger
+    Then the dead owner retires silently and the next admission succeeds
+
+  @e2e-exempt
+  Scenario: A dead waiter behind a changed device number reconciles
+    Given a dead reservation waiter whose ledger device differs while both identity links name the recorded inode
+    When status reconciles that ledger
+    Then the dead waiter retires silently while the live owner stays active
+
+  @e2e-exempt
+  Scenario: A live owner behind a changed device number stays active
+    Given a live reservation owner whose ledger device differs while both identity links name the recorded inode
+    When status and competing admission reconcile that ledger
+    Then the owner stays active with unchanged ledger bytes and the competitor defers with exit 124 naming hippo.limit.capacity-deferred
+
+  @e2e-exempt
+  Scenario Outline: Incomplete identity evidence after a device change stays closed
+    Given a live reservation owner whose ledger device differs while its identity <fault>
+    When status and competing admission reconcile that ledger
+    Then both stay closed with exit 125 without changing the ledger or exposing the identity
+
+    Examples:
+      | fault           |
+      | missing-lock    |
+      | missing-anchor  |
+      | replaced-lock   |
+      | replaced-anchor |
+      | missing-pair    |
+
+  @e2e-exempt
+  Scenario: Inheritance follows the lock across a device change
+    Given a reservation owner whose ledger device differs while both identity links name the recorded inode
+    When an heir requests that owner while it lives and again after its guard dies
+    Then the live request inherits the token and the later request is refused without failure
+
+  @e2e-exempt
   Scenario: An embedded guard abandons only its local lifetime handles
     Given a long-lived caller whose guarded run returns before child-group retirement is confirmed
     When the lifetime holder retires later without the caller process exiting

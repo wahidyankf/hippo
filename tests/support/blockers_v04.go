@@ -1110,6 +1110,26 @@ func requireV04ReservationIdentityPathCorruption(record, fault string) error {
 	return runInternalGuardRegressionV04("TestReservationIdentityPathCorruptionFailClosed/" + record + "/" + fault)
 }
 
+func requireV04DeviceChangeDeadOwner() error {
+	return runInternalGuardRegressionV04("TestReservationIdentityDeviceChangeRetiresDeadOwner")
+}
+
+func requireV04DeviceChangeDeadWaiter() error {
+	return runInternalGuardRegressionV04("TestReservationIdentityDeviceChangeWaiter/dead")
+}
+
+func requireV04DeviceChangeLiveOwner() error {
+	return runInternalGuardRegressionV04("TestReservationIdentityDeviceChangeKeepsLiveOwner")
+}
+
+func requireV04DeviceChangeIncompleteIdentity(fault string) error {
+	return runInternalGuardRegressionV04("TestReservationIdentityDeviceChangeIncompleteStaysClosed/" + fault)
+}
+
+func requireV04DeviceChangeInheritance() error {
+	return runInternalGuardRegressionV04("TestReservationIdentityDeviceChangeInheritance")
+}
+
 func requireV04SchemaOneSupervisorLifetime(class string) error {
 	return runInternalGuardRegressionV04("TestSchemaOneOwnershipSurvivesSupervisorDeath/" + class)
 }

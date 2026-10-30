@@ -59,6 +59,11 @@ because its PID was checked carelessly, is not. Advisory locks make the question
 Where identity is genuinely unknown, accounting is retained. Only a **positively stale** identity is reclaimed, and that
 reclamation is correct even when its diagnostic PID has been reused.
 
+A volume that reports a new device number does not by itself prove an identity file was replaced. When both identity
+links still name the recorded inode on that one device, the advisory lock decides: a held lock keeps the owner, a free
+lock retires the record, and anything less than the intact pair stays closed. See
+[Shared state root](../reference/state-root.md#placement) for the filesystem this decision assumes.
+
 ### Failed release retries rather than looking stale
 
 If final ledger release cannot acquire the coordination lock, HIPPO retains the identity evidence and retries

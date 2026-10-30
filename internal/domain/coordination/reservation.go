@@ -245,6 +245,74 @@ type ReservationTotals struct {
 	AbandonedProcessGroups []int `json:"abandonedProcessGroups,omitempty"`
 }
 
+// ReservationIdentityEvidence is one observed identity path as the adapter found
+// it: whether the path could be statted, and the device and inode it names.
+type ReservationIdentityEvidence struct {
+	Present bool
+	Device  uint64
+	Inode   uint64
+}
+
+// ReservationIdentityJudgement is the pure coordination-domain decision for one
+// token's identity evidence: which lock the adapter may probe, if any.
+type ReservationIdentityJudgement int
+
+const (
+	// ReservationIdentityAbsent means neither identity path exists, so there is
+	// nothing to judge. Only a caller with no ledger expectation reaches this,
+	// and it reports not alive without an error.
+	ReservationIdentityAbsent ReservationIdentityJudgement = iota
+	// ReservationIdentityProbe means the evidence names one lock the adapter
+	// may probe: an exact ledger match, or agreeing paths with no expectation.
+	ReservationIdentityProbe
+	// ReservationIdentityProbeAfterDeviceChange means both identity paths name
+	// the ledger's inode on one device, and only the device number differs. The
+	// advisory lock decides: it is the intact pair of links, not the recorded
+	// number, that proves the file was not replaced behind a live owner.
+	ReservationIdentityProbeAfterDeviceChange
+	// ReservationIdentityIncomplete means the evidence cannot prove liveness
+	// either way, so reconciliation stays closed.
+	ReservationIdentityIncomplete
+)
+
+// IncompleteReservationIdentityCause names the missing proof when identity
+// evidence cannot judge liveness. It carries no token, path, device number, or
+// inode.
+const IncompleteReservationIdentityCause = "reservation identity link pair is incomplete"
+
+// JudgeReservationIdentity decides whether one token's observed identity
+// evidence names a single lock the adapter may probe. An exact ledger match
+// probes first and is unchanged by a device change; otherwise both paths must
+// name the ledger's inode on one device for the lock to decide, and a single
+// drifted path is never probed.
+func JudgeReservationIdentity(
+	expectedDevice, expectedInode uint64,
+	lock, anchor ReservationIdentityEvidence,
+) ReservationIdentityJudgement {
+	if expectedDevice == 0 && expectedInode == 0 {
+		switch {
+		case !lock.Present && !anchor.Present:
+			return ReservationIdentityAbsent
+		case lock.Present && anchor.Present &&
+			(lock.Device != anchor.Device || lock.Inode != anchor.Inode):
+			return ReservationIdentityIncomplete
+		default:
+			return ReservationIdentityProbe
+		}
+	}
+	if lock.Present && lock.Device == expectedDevice && lock.Inode == expectedInode ||
+		anchor.Present && anchor.Device == expectedDevice && anchor.Inode == expectedInode {
+		return ReservationIdentityProbe
+	}
+	if lock.Present && anchor.Present &&
+		lock.Inode == expectedInode && anchor.Inode == expectedInode &&
+		lock.Device == anchor.Device && lock.Device != expectedDevice {
+		return ReservationIdentityProbeAfterDeviceChange
+	}
+
+	return ReservationIdentityIncomplete
+}
+
 // CeilDivide computes positive allocation rounding without overflow.
 func CeilDivide(value int64, divisor int) int64 {
 	quotient, remainder := value/int64(divisor), value%int64(divisor)

@@ -239,6 +239,9 @@ Recovery is manual and deliberate:
    drain the live epoch or upgrade every client that shares the root.
 4. Retry.
 
+This path clears only provably dead identities. When any owner is live, the same steps fail closed and keep every
+identity file; when evidence is unreadable, nothing is removed until the cause is fixed.
+
 Clearing state to "unstick" a root is how a live owner's record disappears and every waiting task starts at once. See
 [Why HIPPO fails closed](../explanation/failing-closed.md).
 
