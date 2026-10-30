@@ -10,5 +10,7 @@ One kebab-case Markdown file per idea, in the shape [the index](../README.md) de
 
 - [Complete fixture isolation and executable proofs](complete-fixture-isolation-and-executable-proofs.md) — preserved
   fixture-standard WIP and its remaining verification gaps, deferred separately from completed Command Code support.
+- [Reconcile a dead owner after a volume device change](reconcile-dead-owner-after-volume-device-change.md) — a dead
+  owner whose device number changed wedges every command that reads the state root; the lock can decide it.
 - [Warning deferral and cross-owner shed sightings](warning-deferral-and-cross-owner-shed-sightings.md) — transactional
   hooks blocked by a persistent macOS warning, and a shed that names a disk floor the shed run did not cross.
