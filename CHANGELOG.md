@@ -26,6 +26,17 @@ Entries are reconstructed from the repository's own history. For the complete co
   documented numbers are shapes only, and operators must derive working values from host sampler data in a follow-up
   before relying on them.
 
+### Fixed
+
+- A dead reservation owner or waiter whose volume reports a new device number no longer wedges every command that reads
+  the state root. When both identity links still name the recorded inode on one device, the advisory lock decides: a
+  free lock retires the record with the first command, and a held lock keeps a live owner active with its ledger bytes
+  unchanged. Anything less than the intact pair still fails closed with exit `125` naming `hippo.supervision.failed`,
+  with a cause that names the incomplete link pair and carries no token, path, device number, or inode. The ledger
+  schema, exit statuses, codes, commands, and configuration keys are unchanged, and the state root must sit on a local
+  filesystem whose advisory locks every sharing process observes — see
+  [Shared state root](docs/reference/state-root.md#placement).
+
 ## [v0.12.0] — 2026-10-26
 
 ### Changed
