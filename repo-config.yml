@@ -506,12 +506,45 @@ policies:
         - "specs/fixtures/**"
         - "plans/done/**"
     mermaid:
-      authoring-rule: plain-text
+      authoring-rule: rendered
       node-label-graphemes: 32
       edge-label-graphemes: 24
-      fill-colors: ["#0173B2", "#DE8F05", "#029E73", "#CA9161"]
-      edge-colors: ["#0173B2", "#000000"]
-      text-colors: ["#000000", "#FFFFFF"]
+      fill-colors:
+        - "#0173B2"
+        - "#DE8F05"
+        - "#029E73"
+        - "#CC78BC"
+        - "#CA9161"
+        - "#808080"
+        - "#000000"
+        - "#FFFFFF"
+      edge-colors:
+        - "#0173B2"
+        - "#DE8F05"
+        - "#029E73"
+        - "#CC78BC"
+        - "#CA9161"
+        - "#808080"
+        - "#000000"
+        - "#FFFFFF"
+      text-colors:
+        - "#0173B2"
+        - "#DE8F05"
+        - "#029E73"
+        - "#CC78BC"
+        - "#CA9161"
+        - "#808080"
+        - "#000000"
+        - "#FFFFFF"
+      exclude:
+        - "plans/done/**"
+        - ".git/**"
+        - "**/worktrees/**"
+        - "**/node_modules/**"
+        - "**/deps/**"
+        - "**/coverage/**"
+        - "**/playwright-report/**"
+        - "**/test-results/**"
   governance:
     word-budget:
       count: letters-and-digits

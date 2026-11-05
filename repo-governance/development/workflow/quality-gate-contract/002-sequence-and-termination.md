@@ -13,34 +13,34 @@ when_to_use: >-
 One cycle is one full audit followed by one repair. Every arrow back to an earlier step is bounded by the cycle counter
 `k`.
 
-```text
-freeze subject (commit + scope)
-        |
-        v
-entry tooling run ---- red ----> root-cause pre-step (<= 3 attempts, outside the cycle budget)
-        |                              |                     |
-      green                          green               still red --> BLOCKED (tooling)
-        |<-----------------------------+
-        v
-k = 1
-        |
-        v
-full audit by <family>-checker  ----- no blocking row ----> PASS or PASS_WITH_FINDINGS
-        |
-   blocking rows
-        v
-freeze ledger L_k ---> <family>-propagation (run by <family>-fixer)
-        |                   repairs only L_k rows, verifies each row
-        v
-blocking count did not fall since the previous audit? ---- yes ---> FAIL (no progress)
-        |
-        no
-        v
-k = max-cycles? --- no ---> k = k + 1, back to the full audit
-        |
-       yes
-        v
-exit tooling run + per-row verification ---> PASS / PASS_WITH_FINDINGS (all rows closed) or FAIL
+```mermaid
+flowchart TD
+    accTitle: Quality gate sequence
+    accDescr: One audit plus one repair per cycle, bounded by counter k, to the exit check.
+
+    Freeze["Freeze subject<br/>commit plus scope"] --> Entry["Entry tooling run"]
+    Entry -->|red| Prestep["Root-cause pre-step<br/>at most 3 attempts"]
+    Entry -->|green| Audit["Full audit<br/>family checker"]
+    Prestep -->|green| Audit
+    Prestep -->|still red| Blocked["BLOCKED<br/>tooling"]
+    Audit -->|no blocking row| Pass["PASS or<br/>PASS WITH FINDINGS"]
+    Audit -->|blocking rows| Ledger["Freeze ledger<br/>run propagation"]
+    Ledger --> Progress{"Blocking count fell<br/>since last audit?"}
+    Progress -->|no| FailNoProgress["FAIL<br/>no progress"]
+    Progress -->|yes| Ceiling{"k equals<br/>max-cycles?"}
+    Ceiling -->|no| Next["k = k + 1<br/>back to full audit"]
+    Next --> Audit
+    Ceiling -->|yes| Exit["Exit tooling run<br/>plus per-row check"]
+    Exit -->|all rows closed| Pass
+    Exit -->|rows remain open| FinalFail["FAIL"]
+
+    classDef step fill:#0173B2,stroke:#000000,color:#FFFFFF,stroke-width:2px
+    classDef verdict fill:#029E73,stroke:#000000,color:#000000,stroke-width:2px
+    classDef fail fill:#DE8F05,stroke:#000000,color:#000000,stroke-width:2px
+    class Freeze,Entry,Prestep,Audit,Ledger,Next,Exit step
+    class Pass verdict
+    class Blocked,FailNoProgress,FinalFail fail
+    classDef default fill:#FFFFFF,stroke:#000000,color:#000000
 ```
 
 1. **Freeze the subject.** Record the commit and the exact scope. A subject changed during the run by anything other

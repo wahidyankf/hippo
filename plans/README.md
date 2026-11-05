@@ -14,11 +14,24 @@ requires an explicit request, except a defect filed under
 
 A plan moves through four stage folders, from a sketched idea through two formal stages to a finished record.
 
-```text
-+--------+     +----------+     +--------------+     +--------+
-| ideas/ | --> | backlog/ | --> | in-progress/ | --> | done/  |
-| sketch |     | formal   |     | formal       |     | record |
-+--------+     +----------+     +--------------+     +--------+
+```mermaid
+flowchart LR
+    accTitle: Plan lifecycle stages
+    accDescr: A plan moves one way from ideas to done and is never copied between stages.
+
+    Ideas["ideas<br/>sketch"] --> Backlog["backlog<br/>formal"]
+    Backlog --> InProgress["in-progress<br/>formal"]
+    InProgress --> Done["done<br/>record"]
+
+    classDef idea fill:#CC78BC,stroke:#000000,color:#000000,stroke-width:2px
+    classDef queued fill:#DE8F05,stroke:#000000,color:#000000,stroke-width:2px
+    classDef active fill:#0173B2,stroke:#000000,color:#FFFFFF,stroke-width:2px
+    classDef complete fill:#029E73,stroke:#000000,color:#000000,stroke-width:2px
+    class Ideas idea
+    class Backlog queued
+    class InProgress active
+    class Done complete
+    classDef default fill:#FFFFFF,stroke:#000000,color:#000000
 ```
 
 `ideas/` holds two-pagers that are still arguments. `backlog/` and `in-progress/` hold formal plans, queued and running.

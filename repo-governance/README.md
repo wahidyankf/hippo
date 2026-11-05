@@ -9,30 +9,19 @@ Every directory here follows the [directory-map convention](conventions/director
 
 Each layer constrains the one below it, from vision down to workflows.
 
-```text
-+-------------+
-| Vision      |
-+-------------+
-       |
-       v
-+-------------+
-| Principles  |
-+-------------+
-       |
-       v
-+-------------+
-| Conventions |
-+-------------+
-       |
-       v
-+-------------+
-| Development |
-+-------------+
-       |
-       v
-+-------------+
-| Workflows   |
-+-------------+
+```mermaid
+flowchart TD
+    accTitle: Governance hierarchy
+    accDescr: Each layer constrains the one below it, from vision down to workflows.
+
+    Vision --> Principles
+    Principles --> Conventions
+    Conventions --> Development
+    Development --> Workflows
+
+    classDef primary fill:#0173B2,stroke:#000000,color:#FFFFFF,stroke-width:2px
+    class Vision,Principles,Conventions,Development,Workflows primary
+    classDef default fill:#FFFFFF,stroke:#000000,color:#000000
 ```
 
 A lower level may not contradict a higher one. Higher levels need not conform to lower ones. When two documents conflict
