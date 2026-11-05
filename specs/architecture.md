@@ -4,7 +4,7 @@ This document is the canonical as-built C4 model for HIPPO — Host Infrastructu
 describes the public system boundary, runtime containers, internal responsibilities, and material constraints without
 prescribing any consuming repository's architecture.
 
-The diagrams are ASCII. Every relationship and constraint also appears in searchable prose beside its diagram, so the
+The diagrams are Mermaid. Every relationship and constraint also appears in searchable prose beside its diagram, so the
 model stays complete for a reader who cannot see it.
 
 ## System Context
@@ -12,19 +12,22 @@ model stays complete for a reader who cannot see it.
 Operators and automation invoke HIPPO, which reads host evidence, supervises the guarded workload, and probes health
 endpoints.
 
-```text
-+-------------------------+
-| Operator or contributor |---+
-+-------------------------+   |
-                              |  invokes   +-------+  reads evidence  +-----------------------+
-                              +----------->| HIPPO |----------------->| Host operating system |
-                              |            |       |                  +-----------------------+
-+-------------------------+   |            |       |  supervises      +-----------------------+
-| Hooks and automation    |---+            |       |----------------->| Guarded workload      |
-+-------------------------+                |       |                  +-----------------------+
-                                           |       |  probes          +-----------------------+
-                                           |       |----------------->| Health endpoints      |
-                                           +-------+                  +-----------------------+
+```mermaid
+flowchart LR
+    accTitle: System context
+    accDescr: Operators invoke HIPPO, which reads host evidence, supervises work, and probes health.
+
+    Operator["Operator or<br/>contributor"] -->|invokes| HIPPO["HIPPO"]
+    Hooks["Hooks and<br/>automation"] -->|invokes| HIPPO
+    HIPPO -->|reads evidence| HostOS["Host operating<br/>system"]
+    HIPPO -->|supervises| Guarded["Guarded<br/>workload"]
+    HIPPO -->|probes| Health["Health<br/>endpoints"]
+
+    classDef core fill:#0173B2,stroke:#000000,color:#FFFFFF,stroke-width:2px
+    classDef external fill:#DE8F05,stroke:#000000,color:#000000,stroke-width:2px
+    class HIPPO core
+    class Operator,Hooks,HostOS,Guarded,Health external
+    classDef default fill:#FFFFFF,stroke:#000000,color:#000000
 ```
 
 An operator, repository script, Git hook, or CI task invokes HIPPO before compute-bearing local work. HIPPO reads
@@ -43,31 +46,25 @@ The shell bootstrap builds, caches, and execs the Go CLI, which reads configurat
 evidence, starts and signals the child group, probes health endpoints, and reports observations as text and JSON through
 the caller's streams.
 
-```text
-+-----------------+  caches builds       +-----------------------+
-| Shell bootstrap |--------------------->| Build cache           |
-+-----------------+                      +-----------------------+
-         |
-         | builds and execs
-         v
-+-----------------+  reads               +-----------------------+
-| Go CLI process  |--------------------->| Local configuration   |
-|                 |                      +-----------------------+
-|                 |  owns                +-----------------------+
-|                 |--------------------->| Runtime state store   |
-|                 |                      +-----------------------+
-|                 |  collects            +-----------------------+
-|                 |--------------------->| Host operating system |
-|                 |                      +-----------------------+
-|                 |  starts and signals  +-----------------------+
-|                 |--------------------->| Child process group   |
-|                 |                      +-----------------------+
-|                 |  interacts           +-----------------------+
-|                 |--------------------->| Operator terminal     |
-|                 |                      +-----------------------+
-|                 |  probes              +-----------------------+
-|                 |--------------------->| Health endpoints      |
-+-----------------+                      +-----------------------+
+```mermaid
+flowchart TD
+    accTitle: Runtime containers
+    accDescr: The bootstrap builds and execs the Go CLI, which reads config, owns state, and drives children.
+
+    Bootstrap["Shell bootstrap"] -->|caches builds| BuildCache["Build cache"]
+    Bootstrap -->|builds and execs| GoCLI["Go CLI process"]
+    GoCLI -->|reads| LocalConfig["Local configuration"]
+    GoCLI -->|owns| StateStore["Runtime state store"]
+    GoCLI -->|collects| HostOS["Host operating system"]
+    GoCLI -->|starts and signals| ChildGroup["Child process group"]
+    GoCLI -->|interacts| Terminal["Operator terminal"]
+    GoCLI -->|probes| Health["Health endpoints"]
+
+    classDef inside fill:#0173B2,stroke:#000000,color:#FFFFFF,stroke-width:2px
+    classDef outside fill:#DE8F05,stroke:#000000,color:#000000,stroke-width:2px
+    class Bootstrap,GoCLI,BuildCache,LocalConfig,StateStore inside
+    class HostOS,ChildGroup,Terminal,Health outside
+    classDef default fill:#FFFFFF,stroke:#000000,color:#000000
 ```
 
 `Shell bootstrap`, `Go CLI process`, `Build cache`, `Local configuration`, and `Runtime state store` are inside the
@@ -92,16 +89,26 @@ The command boundary projects parsed arguments into application requests. Applic
 and consume ports they define. Pure domain values and reducers own policy, coordination, and evidence decisions.
 Bootstrap supplies concrete adapters once per invocation.
 
-```text
-Process entry ---> Bootstrap composition ---> CLI command boundary
-                          |                         |
-                          | supplies adapters       | requests and renders
-                          v                         v
-                    IO adapters <--- ports --- Application use cases
-                          |                         |
-                          | effects                 | decisions
-                          v                         v
-                    Host and storage          Pure domain
+```mermaid
+flowchart TD
+    accTitle: Component responsibilities
+    accDescr: Boundary projects args to requests. Application owns order via ports. Domain owns policy.
+
+    Entry["Process entry"] --> Composition["Bootstrap<br/>composition"]
+    Composition --> Boundary["CLI command<br/>boundary"]
+    Composition -->|supplies adapters| IO["IO adapters"]
+    Boundary -->|requests and renders| App["Application<br/>use cases"]
+    App -->|ports| IO
+    IO -->|effects| HostStore["Host and<br/>storage"]
+    App -->|decisions| Domain["Pure<br/>domain"]
+
+    classDef boundary fill:#0173B2,stroke:#000000,color:#FFFFFF,stroke-width:2px
+    classDef application fill:#029E73,stroke:#000000,color:#000000,stroke-width:2px
+    classDef adapters fill:#DE8F05,stroke:#000000,color:#000000,stroke-width:2px
+    class Entry,Composition,Boundary boundary
+    class App,Domain application
+    class IO,HostStore adapters
+    classDef default fill:#FFFFFF,stroke:#000000,color:#000000
 ```
 
 Every component above sits inside the `Go CLI process` container.
@@ -156,8 +163,18 @@ promotion evidence and coordination, and projects ordered rows with explicit ava
 slices, and optional metric values before crossing the asynchronous boundary. The stable `StatusView` remains the public
 status/watch JSON projection; display annotations ride the same snapshot for data consumers.
 
-```text
-CLI validation --> Application observation --> StatusView --> text or JSON streams
+```mermaid
+flowchart LR
+    accTitle: Observation projection
+    accDescr: CLI validation flows into application observation, then the StatusView, then text or JSON streams.
+
+    Validation["CLI validation"] --> Observation["Application<br/>observation"]
+    Observation --> StatusView["StatusView"]
+    StatusView --> Streams["text or JSON streams"]
+
+    classDef stage fill:#0173B2,stroke:#000000,color:#FFFFFF,stroke-width:2px
+    class Validation,Observation,StatusView,Streams stage
+    classDef default fill:#FFFFFF,stroke:#000000,color:#000000
 ```
 
 `status` prints one snapshot; `watch` prints a snapshot per changed collection after the configured interval following
@@ -170,47 +187,38 @@ ownership stays at the process boundary.
 A guarded run, top to bottom: the caller's request is admitted through the coordination store, the child runs under
 sampling, and the caller receives the child's status or a classified HIPPO failure. Dashed arrows are replies.
 
-```text
-Caller           Application use cases                  Host and policy           Coordination store        Child group
-   |                    |                               |                           |                     |
-   | run request        |                               |                           |                     |
-   |------------------->|                               |                           |                     |
-   |                    | collect evidence              |                           |                     |
-   |                    |------------------------------>|                           |                     |
-   |                    |              resolved profile |                           |                     |
-   |                    |< - - - - - - - - - - - - - - -|                           |                     |
-   |                    | validate tier minimum/maximum |                           |                     |
-   |                    |------------------------------>|                           |                     |
-   |                    | register one labeled FIFO waiter                          |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |                    | heartbeat position until admitted                         |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |                    | reserve largest safe launch-time vector                   |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |                    | unlock                        |                           |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |                    | start admitted child          |                           |                     |
-   |                    |-------------------------------------------------------------------------------->|
-   |                    | activate supervised process group                         |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |                    | observe own mark              |                           |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |                    | sample and assess             |                           |                     |
-   |                    |------------------------------>|                           |                     |
-   |                    | mark newest eligible          |                           |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |                    | stop own group                |                           |                     |
-   |                    |-------------------------------------------------------------------------------->|
-   |                    |                               |                           |              reaped |
-   |                    |< - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -|
-   |                    | finalize and release          |                           |                     |
-   |                    |---------------------------------------------------------->|                     |
-   |< - - - - - - - - - |                               |                           |                     |
-   |                    |                               |                           |                     |
+```mermaid
+sequenceDiagram
+    accTitle: Guarded execution
+    accDescr: A caller request is admitted via the store, the child runs sampled, and the caller gets status or failure.
 
-  Last reply to the caller: child status verbatim, else 124 limit, 125 HIPPO's own failure, or 126/127
-  launch, each naming a hippo reason.
+    participant Caller as Caller
+    participant App as Application use cases
+    participant Host as Host and policy
+    participant Store as Coordination store
+    participant Child as Child group
+
+    Caller->>App: run request
+    App->>Host: collect evidence
+    Host-->>App: resolved profile
+    App->>Host: validate tier bounds
+    App->>Store: register FIFO waiter
+    App->>Store: heartbeat until admitted
+    App->>Store: reserve launch vector
+    App->>Store: unlock
+    App->>Child: start admitted child
+    App->>Store: record supervised group
+    App->>Store: observe own mark
+    App->>Host: sample and assess
+    App->>Store: mark newest eligible
+    App->>Child: stop own group
+    Child-->>App: reaped
+    App->>Store: finalize and release
+    App-->>Caller: child status or failure
 ```
+
+Last reply to the caller: child status verbatim, else 124 limit, 125 HIPPO's own failure, or 126/127 launch, each naming
+a hippo reason.
 
 Admission failures return before child creation. Schema 2 derives a safe vector from every host CPU (the available
 parallelism, with no CPU held back) and effective memory, applies optional caps (`maxCpu` lowers the CPU capacity and
