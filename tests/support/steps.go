@@ -854,6 +854,10 @@ func (driver *Driver) releaseBindings() []contract.StepBinding {
 		step(`^a release summary with swap-ins and under 4 GiB available memory$`, driver.swapInLowMemorySummary),
 		step(`^a release summary with swap-outs and under 4 GiB available memory$`, driver.swapOutLowMemorySummary),
 		step(`^a release summary with swap-outs and 4 GiB available memory$`, driver.swapOutFloorMemorySummary),
+		step(`^a release summary from an 8 GiB host with swap-outs and 3\.5 GiB available memory$`, driver.swapOutEightGiBAboveThresholdSummary),
+		step(`^a release summary from an 8 GiB host with swap-outs and 2\.5 GiB available memory$`, driver.swapOutEightGiBBelowThresholdSummary),
+		step(`^a release summary from a 16 GiB host with swap-outs and 3\.5 GiB available memory$`, driver.swapOutSixteenGiBSummary),
+		step(`^a release summary without physical memory with swap-outs and 3\.5 GiB available memory$`, driver.swapOutUnknownPhysicalSummary),
 	}
 }
 

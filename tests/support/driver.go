@@ -2786,6 +2786,30 @@ func (driver *Driver) swapOutFloorMemorySummary() error {
 	return driver.writeReleaseSummary(lowMemorySwapSummary(0, 1, 4*policy.GiB))
 }
 
+// swapOutOnHostSummary is a healthy swap-out summary from a host of the given physical memory; zero omits the field.
+func swapOutOnHostSummary(physical, available int64) policy.ReleaseSummary {
+	summary := lowMemorySwapSummary(0, 1, available)
+	summary.PhysicalMemoryBytes = physical
+
+	return summary
+}
+
+func (driver *Driver) swapOutEightGiBAboveThresholdSummary() error {
+	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 7*policy.GiB/2))
+}
+
+func (driver *Driver) swapOutEightGiBBelowThresholdSummary() error {
+	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 5*policy.GiB/2))
+}
+
+func (driver *Driver) swapOutSixteenGiBSummary() error {
+	return driver.writeReleaseSummary(swapOutOnHostSummary(16*policy.GiB, 7*policy.GiB/2))
+}
+
+func (driver *Driver) swapOutUnknownPhysicalSummary() error {
+	return driver.writeReleaseSummary(swapOutOnHostSummary(0, 7*policy.GiB/2))
+}
+
 func (driver *Driver) requireRejected() error {
 	if driver.accepted {
 		return errors.New("release evidence was accepted")

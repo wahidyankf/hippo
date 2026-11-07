@@ -7,23 +7,37 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.13.3] — Unreleased
+
+### Fixed
+
+- `hippo release assess` scales its swap-out threshold to the host's physical memory. The threshold was a fixed 4 GiB of
+  available non-compressed memory, which is half the RAM of an 8 GiB host, so a single swap-out during a release
+  rejected it. The threshold is now 4 GiB or 40% of `physicalMemoryBytes`, whichever is smaller, so a host with less
+  than 10 GiB of physical memory gets a lower threshold; an 8 GiB host's threshold is about 3.2 GiB. A summary without
+  `physicalMemoryBytes` keeps 4 GiB, and a host with 10 GiB or more behaves as before. This applies on every host that
+  reports physical memory, and swap-ins still do not count. The 2 GiB available-memory floor, memory pressure,
+  compressor, release CPU ceiling, routed, and health checks are unchanged, and so are exit statuses, error codes, the
+  summary schema, and configuration. A release rejected only for swap-outs under the old threshold may now pass its
+  other checks.
+
 ## [v0.13.2] — Unreleased
 
 ### Fixed
 
 - `hippo release assess` no longer refuses every release on a host with at most two CPUs just because its CPU use is
-  busy. Such a host cannot keep two whole CPUs free, so its CPU ceiling was zero, whatever its memory, health, and
-  routed evidence showed. Its routed journeys now guard it instead: a schema 4 or later summary with healthy routed
-  journeys (no failures, a measured p95 of 500 ms or less, a measured maximum of 2000 ms or less) is accepted. A schema
-  2 or 3 summary, a routed journey outside its budget, failed health, and a host with more than two CPUs keep their
-  existing rejection. Exit statuses, error codes, the summary schema, and configuration are unchanged; see
+  busy. Such a host cannot keep two whole CPUs free, so its release CPU ceiling was zero or negative, which rejected any
+  release with CPU use above it, whatever its memory, health, and routed evidence showed. Its routed journeys now guard
+  it instead: a schema 4 or later summary with healthy routed journeys (no failures, a measured p95 of 500 ms or less, a
+  measured maximum of 2000 ms or less) is accepted when it also passes its other checks. A schema 2 or 3 summary, a
+  routed journey outside its budget, failed health, and a host with more than two CPUs keep their existing rejection.
+  Exit statuses, error codes, the summary schema, and configuration are unchanged; see
   [the release assessment rule](docs/reference/cli.md#hippo-release-assess).
-- `hippo release assess` counts only swap-outs as swap pressure, on every host, not only small ones. A swap-out with
-  less than 4 GiB of available non-compressed memory still rejects the release, and a swap-out with 4 GiB or more
-  available is accepted. A swap-in no longer rejects it alone, because a swap-in only reads back a page that was already
-  evicted and does not show the release forcing memory out. The 2 GiB available-memory floor, memory pressure,
-  compressor, health, and routed checks are unchanged, and so are exit statuses, error codes, the summary schema, and
-  configuration.
+- `hippo release assess` counts only swap-outs as swap pressure. A swap-in alone no longer rejects a release, and this
+  swap-in exception applies on every host, not only small ones. A swap-out with less than 4 GiB of available
+  non-compressed memory still rejects the release, and a swap-out with 4 GiB or more available is accepted when it also
+  passes its other checks. The 2 GiB available-memory floor, memory pressure, compressor, health, and routed checks are
+  unchanged, and so are exit statuses, error codes, the summary schema, and configuration.
 
 ## [v0.13.1] — 2026-10-30
 
