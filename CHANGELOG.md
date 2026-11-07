@@ -7,6 +7,24 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.13.2] — Unreleased
+
+### Fixed
+
+- `hippo release assess` no longer refuses every release on a host with at most two CPUs just because its CPU use is
+  busy. Such a host cannot keep two whole CPUs free, so its CPU ceiling was zero, whatever its memory, health, and
+  routed evidence showed. Its routed journeys now guard it instead: a schema 4 or later summary with healthy routed
+  journeys (no failures, a measured p95 of 500 ms or less, a measured maximum of 2000 ms or less) is accepted. A schema
+  2 or 3 summary, a routed journey outside its budget, failed health, and a host with more than two CPUs keep their
+  existing rejection. Exit statuses, error codes, the summary schema, and configuration are unchanged; see
+  [the release assessment rule](docs/reference/cli.md#hippo-release-assess).
+- `hippo release assess` counts only swap-outs as swap pressure, on every host, not only small ones. A swap-out with
+  less than 4 GiB of available non-compressed memory still rejects the release, and a swap-out with 4 GiB or more
+  available is accepted. A swap-in no longer rejects it alone, because a swap-in only reads back a page that was already
+  evicted and does not show the release forcing memory out. The 2 GiB available-memory floor, memory pressure,
+  compressor, health, and routed checks are unchanged, and so are exit statuses, error codes, the summary schema, and
+  configuration.
+
 ## [v0.13.1] — 2026-10-30
 
 ### Fixed

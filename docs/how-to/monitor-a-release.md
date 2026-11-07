@@ -93,6 +93,16 @@ A summary that is missing, truncated, or not a summary prints no verdict and exi
 
 Assessment accepts retained schema 2–5 summaries, so old evidence stays readable after an upgrade.
 
+On a host with two or fewer CPUs, a busy CPU alone does not reject a release. Such a host cannot keep two whole CPUs
+free, so its routed journeys are the guard instead: the summary must come from the current `hippo release monitor`
+(schema 5) and show healthy routed journeys. A schema 2 or 3 summary has no routed evidence, so it is still rejected for
+busy CPU; capture the window again with the current release. The
+[command reference](../reference/cli.md#hippo-release-assess) states the full rule.
+
+Swap-ins alone do not reject a release on any host. Only swap-outs while less than 4 GiB of non-compressed memory is
+available do, because a swap-in only reads back a page that was already evicted. The 2 GiB available-memory floor still
+applies to every summary; the summary reports that figure as `availableNonCompressedEstimateMinBytes`.
+
 ## Stream instead of writing files
 
 Either destination may use the Unix `-` convention, but **not both in one invocation** — raw and summary schemas must

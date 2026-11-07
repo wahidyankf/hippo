@@ -556,9 +556,13 @@ type ReleaseSummary struct {
 	RoutedJourneyFailures                  int      `json:"routedJourneyFailures,omitempty"`
 }
 
-// ReleaseHeadroomAvailable validates aggregate capacity for release overlap.
+// ReleaseHeadroomAvailable validates aggregate capacity for release overlap. The CPU-p95 ceiling keeps two whole CPUs
+// free, so a host with at most two CPUs can never meet it. There the routed-journey budget, measured directly, guards
+// responsiveness instead, and only healthy schema 4 or later routed evidence can stand in for the ceiling. Swap pressure
+// counts swap-outs only, on every host: a swap-out under 4 GiB of available memory shows the release forcing memory
+// out, while a swap-in only reads back a page already evicted.
 func ReleaseHeadroomAvailable(summary ReleaseSummary) bool {
-	swapPressure := (summary.SwapInsDelta > 0 || summary.SwapOutsDelta > 0) && summary.AvailableNonCompressedEstimateMinBytes < 4*GiB
+	swapPressure := summary.SwapOutsDelta > 0 && summary.AvailableNonCompressedEstimateMinBytes < 4*GiB
 
 	if summary.AvailableParallelism <= 0 {
 		return false
@@ -566,19 +570,21 @@ func ReleaseHeadroomAvailable(summary ReleaseSummary) bool {
 
 	ceiling := 100 * (1 - 2/float64(summary.AvailableParallelism))
 	compressorHealthy := summary.Platform != platformDarwin && summary.Platform != "" || summary.CompressorAvailableAll
-	routedHealthy := summary.SchemaVersion < 4 ||
-		summary.RoutedJourneyFailures == 0 &&
-			summary.RoutedJourneyLatencyP95Ms > 0 &&
-			summary.RoutedJourneyLatencyP95Ms <= ReleaseRoutedLatencyP95BudgetMs &&
-			summary.RoutedJourneyLatencyMaxMs > 0 &&
-			summary.RoutedJourneyLatencyMaxMs <= ReleaseRoutedLatencyMaxBudgetMs
+	routedWithinBudget := summary.RoutedJourneyFailures == 0 &&
+		summary.RoutedJourneyLatencyP95Ms > 0 &&
+		summary.RoutedJourneyLatencyP95Ms <= ReleaseRoutedLatencyP95BudgetMs &&
+		summary.RoutedJourneyLatencyMaxMs > 0 &&
+		summary.RoutedJourneyLatencyMaxMs <= ReleaseRoutedLatencyMaxBudgetMs
+	routedHealthy := summary.SchemaVersion < 4 || routedWithinBudget
+	cpuHeadroom := summary.CPUUtilizationP95Percent <= ceiling ||
+		summary.AvailableParallelism <= 2 && summary.SchemaVersion >= 4 && routedWithinBudget
 
 	return summary.SampleCount > 0 &&
 		summary.AvailableNonCompressedEstimateMinBytes >= 2*GiB &&
 		summary.MemoryPressureLevelMax == 1 &&
 		compressorHealthy &&
 		!swapPressure &&
-		summary.CPUUtilizationP95Percent <= ceiling &&
+		cpuHeadroom &&
 		summary.HealthFailures == 0 &&
 		routedHealthy
 }

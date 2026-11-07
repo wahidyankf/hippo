@@ -2232,21 +2232,10 @@ func healthySummary() policy.ReleaseSummary {
 }
 
 func (driver *Driver) summary(healthFailures int) error {
-	directory, err := os.MkdirTemp("", "hippo-bdd-")
-	if err != nil {
-		return err
-	}
-
-	driver.temporaryPaths = append(driver.temporaryPaths, directory)
-	driver.summaryPath = filepath.Join(directory, "summary.json")
 	summary := healthySummary()
 	summary.HealthFailures = healthFailures
-	value, err := json.Marshal(summary)
-	if err != nil {
-		return fmt.Errorf("encode release summary: %w", err)
-	}
 
-	return os.WriteFile(driver.summaryPath, value, 0o600)
+	return driver.writeReleaseSummary(summary)
 }
 
 func (driver *Driver) assessSummary() error {
@@ -2711,6 +2700,16 @@ func (driver *Driver) failedSummary() error {
 }
 
 func (driver *Driver) slowRoutedSummary() error {
+	summary := healthySummary()
+	summary.SchemaVersion = 4
+	summary.RoutedJourneyLatencyP95Ms = 501
+	summary.RoutedJourneyLatencyMaxMs = 2_001
+
+	return driver.writeReleaseSummary(summary)
+}
+
+// writeReleaseSummary stores one release summary where the assessment reads it.
+func (driver *Driver) writeReleaseSummary(summary policy.ReleaseSummary) error {
 	directory, err := os.MkdirTemp("", "hippo-bdd-")
 	if err != nil {
 		return err
@@ -2718,17 +2717,73 @@ func (driver *Driver) slowRoutedSummary() error {
 
 	driver.temporaryPaths = append(driver.temporaryPaths, directory)
 	driver.summaryPath = filepath.Join(directory, "summary.json")
-	summary := healthySummary()
-	summary.SchemaVersion = 4
-	summary.RoutedJourneyLatencyP95Ms = 501
-	summary.RoutedJourneyLatencyMaxMs = 2_001
-
 	value, err := json.Marshal(summary)
 	if err != nil {
 		return fmt.Errorf("encode release summary: %w", err)
 	}
 
 	return os.WriteFile(driver.summaryPath, value, 0o600)
+}
+
+// busyTwoCPUSummary is a two-CPU host whose CPU p95 is fully busy and whose other evidence is healthy.
+func busyTwoCPUSummary() policy.ReleaseSummary {
+	summary := healthySummary()
+	summary.AvailableParallelism = 2
+	summary.CPUUtilizationP95Percent = 100
+
+	return summary
+}
+
+func (driver *Driver) twoCPUBusySummary() error {
+	return driver.writeReleaseSummary(busyTwoCPUSummary())
+}
+
+func (driver *Driver) twoCPUBusySlowRoutedSummary() error {
+	summary := busyTwoCPUSummary()
+	summary.RoutedJourneyLatencyP95Ms = 501
+	summary.RoutedJourneyLatencyMaxMs = 2_001
+
+	return driver.writeReleaseSummary(summary)
+}
+
+func (driver *Driver) twoCPUBusySchemaThreeSummary() error {
+	summary := busyTwoCPUSummary()
+	summary.SchemaVersion = 3
+	summary.RoutedJourneyLatencyP95Ms = 0
+	summary.RoutedJourneyLatencyMaxMs = 0
+
+	return driver.writeReleaseSummary(summary)
+}
+
+func (driver *Driver) fourCPUOverCeilingSummary() error {
+	summary := healthySummary()
+	summary.AvailableParallelism = 4
+	summary.CPUUtilizationP95Percent = 60
+
+	return driver.writeReleaseSummary(summary)
+}
+
+// lowMemorySwapSummary is a healthy summary whose available memory sits between the 2 GiB floor and the 4 GiB swap
+// threshold, so the swap clause alone decides it.
+func lowMemorySwapSummary(swapIns, swapOuts, available int64) policy.ReleaseSummary {
+	summary := healthySummary()
+	summary.SwapInsDelta = swapIns
+	summary.SwapOutsDelta = swapOuts
+	summary.AvailableNonCompressedEstimateMinBytes = available
+
+	return summary
+}
+
+func (driver *Driver) swapInLowMemorySummary() error {
+	return driver.writeReleaseSummary(lowMemorySwapSummary(100, 0, 3*policy.GiB))
+}
+
+func (driver *Driver) swapOutLowMemorySummary() error {
+	return driver.writeReleaseSummary(lowMemorySwapSummary(0, 1, 3*policy.GiB))
+}
+
+func (driver *Driver) swapOutFloorMemorySummary() error {
+	return driver.writeReleaseSummary(lowMemorySwapSummary(0, 1, 4*policy.GiB))
 }
 
 func (driver *Driver) requireRejected() error {
