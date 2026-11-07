@@ -847,6 +847,13 @@ func (driver *Driver) releaseBindings() []contract.StepBinding {
 		step(`^release overlap evidence is assessed$`, driver.assessSummary),
 		step(`^the release evidence is rejected$`, driver.requireRejected),
 		step(`^a release summary outside the routed responsiveness budget$`, driver.slowRoutedSummary),
+		step(`^a two-CPU release summary with fully busy CPU and healthy routed journeys$`, driver.twoCPUBusySummary),
+		step(`^a two-CPU release summary with busy CPU and a routed journey outside the routed responsiveness budget$`, driver.twoCPUBusySlowRoutedSummary),
+		step(`^a two-CPU schema 3 release summary with busy CPU$`, driver.twoCPUBusySchemaThreeSummary),
+		step(`^a four-CPU release summary with CPU use above its fifty percent ceiling$`, driver.fourCPUOverCeilingSummary),
+		step(`^a release summary with swap-ins and under 4 GiB available memory$`, driver.swapInLowMemorySummary),
+		step(`^a release summary with swap-outs and under 4 GiB available memory$`, driver.swapOutLowMemorySummary),
+		step(`^a release summary with swap-outs and 4 GiB available memory$`, driver.swapOutFloorMemorySummary),
 	}
 }
 

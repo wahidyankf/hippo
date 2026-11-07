@@ -280,6 +280,107 @@ func TestAdmissionPercentileAndReleasePolicies(t *testing.T) {
 	}
 }
 
+// TestReleaseCPUCeilingForSmallHosts pins where the release CPU ceiling applies. Above two CPUs it always does. A host
+// with at most two CPUs cannot reserve two whole CPUs, so only healthy schema 4 or later routed evidence replaces it.
+func TestReleaseCPUCeilingForSmallHosts(t *testing.T) {
+	busyTwoCPU := policy.ReleaseSummary{
+		SchemaVersion:                          4,
+		SampleCount:                            3,
+		AvailableParallelism:                   2,
+		AvailableNonCompressedEstimateMinBytes: 13 * policy.GiB,
+		MemoryPressureLevelMax:                 1,
+		CompressorAvailableAll:                 true,
+		CPUUtilizationP95Percent:               100,
+		RoutedJourneyLatencyP95Ms:              policy.ReleaseRoutedLatencyP95BudgetMs,
+		RoutedJourneyLatencyMaxMs:              policy.ReleaseRoutedLatencyMaxBudgetMs,
+	}
+	variant := func(mutate func(*policy.ReleaseSummary)) policy.ReleaseSummary {
+		summary := busyTwoCPU
+		mutate(&summary)
+
+		return summary
+	}
+	cpu := func(parallelism int, percent float64) policy.ReleaseSummary {
+		return variant(func(summary *policy.ReleaseSummary) {
+			summary.AvailableParallelism = parallelism
+			summary.CPUUtilizationP95Percent = percent
+		})
+	}
+
+	for _, test := range []struct {
+		name     string
+		summary  policy.ReleaseSummary
+		accepted bool
+	}{
+		{"two-CPU host with busy CPU and healthy routed journeys", busyTwoCPU, true},
+		{"one-CPU host with busy CPU and healthy routed journeys", cpu(1, 100), true},
+		{"routed p95 one millisecond over budget", variant(func(summary *policy.ReleaseSummary) {
+			summary.RoutedJourneyLatencyP95Ms++
+		}), false},
+		{"routed maximum one millisecond over budget", variant(func(summary *policy.ReleaseSummary) {
+			summary.RoutedJourneyLatencyMaxMs++
+		}), false},
+		{"failed routed request", variant(func(summary *policy.ReleaseSummary) {
+			summary.RoutedJourneyFailures = 1
+		}), false},
+		// The routed numbers stay healthy here, so only the schema gate can reject this summary.
+		{"schema 3 with healthy routed numbers", variant(func(summary *policy.ReleaseSummary) {
+			summary.SchemaVersion = 3
+		}), false},
+		{"failed health probe", variant(func(summary *policy.ReleaseSummary) {
+			summary.HealthFailures = 1
+		}), false},
+		{"zero CPUs", cpu(0, 100), false},
+		{"three-CPU host at its ceiling", cpu(3, 33), true},
+		{"three-CPU host above its ceiling", cpu(3, 34), false},
+		{"four-CPU host at its ceiling", cpu(4, 50), true},
+		{"four-CPU host above its ceiling", cpu(4, 51), false},
+	} {
+		if got := policy.ReleaseHeadroomAvailable(test.summary); got != test.accepted {
+			t.Fatalf("%s: accepted = %t, want %t", test.name, got, test.accepted)
+		}
+	}
+}
+
+// TestReleaseSwapPressureCountsSwapOutsOnly pins the swap clause on every host: only swap-outs under 4 GiB of available
+// memory reject a release. A swap-in reads back a page already evicted, so it does not show the release forcing memory out.
+func TestReleaseSwapPressureCountsSwapOutsOnly(t *testing.T) {
+	summary := func(parallelism int, percent float64, swapIns, swapOuts, available int64) policy.ReleaseSummary {
+		return policy.ReleaseSummary{
+			SchemaVersion:                          5,
+			SampleCount:                            3,
+			AvailableParallelism:                   parallelism,
+			AvailableNonCompressedEstimateMinBytes: available,
+			MemoryPressureLevelMax:                 1,
+			CompressorAvailableAll:                 true,
+			CPUUtilizationP95Percent:               percent,
+			SwapInsDelta:                           swapIns,
+			SwapOutsDelta:                          swapOuts,
+			RoutedJourneyLatencyP95Ms:              50,
+			RoutedJourneyLatencyMaxMs:              100,
+		}
+	}
+
+	for _, test := range []struct {
+		name     string
+		summary  policy.ReleaseSummary
+		accepted bool
+	}{
+		{"swap-ins with 3 GiB available", summary(12, 50, 100, 0, 3*policy.GiB), true},
+		{"swap-outs with 3 GiB available", summary(12, 50, 0, 1, 3*policy.GiB), false},
+		{"swap-outs with 4 GiB available", summary(12, 50, 0, 1, 4*policy.GiB), true},
+		{"swap-outs one byte under 4 GiB available", summary(12, 50, 0, 1, 4*policy.GiB-1), false},
+		{"swap-ins and swap-outs with 3 GiB available", summary(12, 50, 100, 1, 3*policy.GiB), false},
+		{"swap-ins with 1 GiB available is still under the floor", summary(12, 50, 100, 0, policy.GiB), false},
+		{"two-CPU busy host with swap-ins and 3 GiB available", summary(2, 100, 100, 0, 3*policy.GiB), true},
+		{"two-CPU busy host with swap-outs and 3 GiB available", summary(2, 100, 0, 1, 3*policy.GiB), false},
+	} {
+		if got := policy.ReleaseHeadroomAvailable(test.summary); got != test.accepted {
+			t.Fatalf("%s: accepted = %t, want %t", test.name, got, test.accepted)
+		}
+	}
+}
+
 func warningAdmissionSamples() []policy.Sample {
 	samples := make([]policy.Sample, 16)
 
