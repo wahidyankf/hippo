@@ -556,13 +556,26 @@ type ReleaseSummary struct {
 	RoutedJourneyFailures                  int      `json:"routedJourneyFailures,omitempty"`
 }
 
+// releaseSwapThreshold is the available non-compressed memory below which swap-outs reject a release: 4 GiB, or 40% of
+// physical memory where that is smaller. It is exactly 4 GiB when physical memory is absent or not positive. The 40% is
+// floor(2p/5), computed as 2*(p/5) + 2*(p%5)/5, which is exact and cannot overflow where p*2 could.
+func releaseSwapThreshold(physical int64) int64 {
+	if physical <= 0 {
+		return 4 * GiB
+	}
+	scaled := 2*(physical/5) + 2*(physical%5)/5
+
+	return min(4*GiB, scaled)
+}
+
 // ReleaseHeadroomAvailable validates aggregate capacity for release overlap. The CPU-p95 ceiling keeps two whole CPUs
 // free, so a host with at most two CPUs can never meet it. There the routed-journey budget, measured directly, guards
 // responsiveness instead, and only healthy schema 4 or later routed evidence can stand in for the ceiling. Swap pressure
-// counts swap-outs only, on every host: a swap-out under 4 GiB of available memory shows the release forcing memory
-// out, while a swap-in only reads back a page already evicted.
+// counts swap-outs only, on every host: a swap-out under the release swap threshold shows the release forcing memory
+// out, while a swap-in only reads back a page already evicted. See releaseSwapThreshold for the threshold.
 func ReleaseHeadroomAvailable(summary ReleaseSummary) bool {
-	swapPressure := summary.SwapOutsDelta > 0 && summary.AvailableNonCompressedEstimateMinBytes < 4*GiB
+	swapPressure := summary.SwapOutsDelta > 0 &&
+		summary.AvailableNonCompressedEstimateMinBytes < releaseSwapThreshold(summary.PhysicalMemoryBytes)
 
 	if summary.AvailableParallelism <= 0 {
 		return false

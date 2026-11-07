@@ -396,17 +396,21 @@ A summary that cannot be read or is not a valid summary prints no verdict and re
 
 Assessment accepts retained schema 2–5 summaries. New summaries are schema 5.
 
-The CPU limit depends on the host's `availableParallelism`. With more than two CPUs, `cpuUtilizationP95Percent` must
-stay at or below `100 * (1 - 2 / availableParallelism)`, which keeps two whole CPUs free. A host with at most two CPUs
-cannot keep two whole CPUs free, so for it that ceiling is not applied. Its routed journeys decide instead: the summary
-must be schema 4 or later and show healthy routed evidence, meaning no failed journey, a measured routed p95 of 500 ms
-or less, and a measured routed maximum of 2000 ms or less. A schema 2 or 3 summary from such a host has no routed
-evidence, so its busy CPU still rejects it. Every other condition is unchanged, and a rejection still returns exit `124`
-naming `hippo.limit.release-envelope-exceeded`.
+The release CPU limit depends on the host's `availableParallelism`. With more than two CPUs, `cpuUtilizationP95Percent`
+must stay at or below `100 * (1 - 2 / availableParallelism)`, which keeps two whole CPUs free. A host with at most two
+CPUs cannot keep two whole CPUs free, so for it that release CPU ceiling is not applied. Its routed journeys decide
+instead: the summary must be schema 4 or later and show healthy routed evidence, meaning no failed journey, a measured
+routed p95 of 500 ms or less, and a measured routed maximum of 2000 ms or less. A schema 2 or 3 summary from such a host
+has no routed evidence, so its busy CPU still rejects it. Every other condition is unchanged, and a rejection still
+returns exit `124` naming `hippo.limit.release-envelope-exceeded`. This release CPU ceiling is separate from the
+admission CPU ceiling of a resource profile, which [resource policy](./resource-policy.md) describes.
 
-Swap pressure counts swap-outs only, on every host. A summary with swap-outs and less than 4 GiB of available
-non-compressed memory is rejected. A swap-in alone does not reject it, because a swap-in only reads back a page that was
-already evicted and does not show the release forcing memory out. Swap-outs with 4 GiB or more available are accepted.
+Swap pressure counts swap-outs only, on every host. A swap-in alone does not trigger it, because a swap-in only reads
+back a page that was already evicted and does not show the release forcing memory out. A summary with swap-outs is
+rejected when its `availableNonCompressedEstimateMinBytes` is below the swap threshold. That threshold is 4 GiB, or 40%
+of `physicalMemoryBytes` when that is smaller, so a host with less than 10 GiB of physical memory gets a lower
+threshold. A summary without `physicalMemoryBytes` uses 4 GiB. Swap-outs with available memory at or above the threshold
+do not trigger the rule; such a summary is accepted when it also passes its other checks.
 
 ## `hippo completion`
 
