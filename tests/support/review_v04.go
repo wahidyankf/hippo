@@ -874,36 +874,51 @@ func (driver *Driver) requireCorruptCoordinationStatusV04() error {
 	return nil
 }
 
+// peakReviewCollector admits the second owner on the first host sample taken
+// after the child has launched, and only then lets the child finish. The child
+// outlives the admission because it waits for the released mark, never because
+// a fixed lifetime is long enough: a runner slow to reach its first supervision
+// sample would otherwise see the child exit before any second owner existed.
 type peakReviewCollector struct {
-	root    string
-	index   int
-	second  *guard.Session
-	acquire error
+	root     string
+	started  string
+	released string
+	second   *guard.Session
+	acquire  error
 }
 
 func (collector *peakReviewCollector) Collect(ctx context.Context, previous policy.CPUState, _ string) (policy.Reading, error) {
 	if err := ctx.Err(); err != nil {
 		return policy.Reading{}, err
 	}
-	if collector.index == 3 && collector.second == nil && collector.acquire == nil {
+	if _, launched := os.Stat(collector.started); launched == nil && collector.second == nil && collector.acquire == nil {
 		collector.second, collector.acquire = runtimewiring.AcquireReservation(
 			ctx, collector.root, "", policy.TaskService, profileBalanced, "", v04Plan(1, 256*policy.MiB), 20, 0,
 		)
+		if collector.acquire == nil {
+			collector.acquire = os.WriteFile(collector.released, []byte("released"), 0o600)
+		}
 	}
-	collector.index++
 
 	return policy.Reading{CPUState: previous, Sample: healthySample(time.Now())}, collector.acquire
 }
 
+// peakOwnerChildScript publishes its launch, then lives until the second owner is admitted.
+const peakOwnerChildScript = `printf started > "$PEAK_CHILD_STARTED"; while [ ! -e "$PEAK_CHILD_RELEASED" ]; do sleep 0.01; done`
+
 func (driver *Driver) risingOwnerCountV04() error { return driver.preparePendingV04() }
 
 func (driver *Driver) sampleLifetimeOwnerPeakV04() error {
-	collector := &peakReviewCollector{root: driver.evidenceRoot}
+	collector := &peakReviewCollector{
+		root: driver.evidenceRoot, started: filepath.Join(driver.evidenceRoot, "peak-child-started"),
+		released: filepath.Join(driver.evidenceRoot, "peak-child-released"),
+	}
 	policySettings := v04FastPolicy()
 	policySettings.SampleInterval = 2 * time.Millisecond
 	policySettings.AdmissionWindow = evidenceDecidesAdmission
 	exitCode, runError := RunGuard(context.Background(), guard.RunConfig{
-		Command: shellPath, Arguments: []string{"-c", "sleep 0.05"}, TaskClass: policy.TaskEphemeral,
+		Command: shellPath, Arguments: []string{"-c", peakOwnerChildScript}, TaskClass: policy.TaskEphemeral,
+		Environment:  append(os.Environ(), "PEAK_CHILD_STARTED="+collector.started, "PEAK_CHILD_RELEASED="+collector.released),
 		EvidenceRoot: driver.evidenceRoot, Collector: collector, Policy: policySettings,
 		Resolution:        policy.Resolution{RequestedProfile: profileBalanced, ResolvedProfile: profileBalanced, Concurrency: 1},
 		ReservationPolicy: v04ReservationPolicy(), ReservationPlan: v04Plan(1, 256*policy.MiB),
