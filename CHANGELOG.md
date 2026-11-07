@@ -7,6 +7,17 @@ never rebuilt or replaced.
 Entries are reconstructed from the repository's own history. For the complete commit list of any release, see its
 [comparison on GitHub](https://github.com/wahidyankf/hippo/releases).
 
+## [v0.13.4] — Unreleased
+
+### Fixed
+
+- `hippo release assess` counts swap-outs as swap pressure only when a release window swaps out at least 1024 pages,
+  which is 4 MiB at 4 KiB pages. Before this, any swap-out under the swap threshold rejected a release, so a few
+  incidental swapped-out pages, such as 31 pages in a 15-minute window on a 2-vCPU, 8 GB Linux host, rejected an
+  otherwise healthy release. Such a window is now accepted when its other checks pass. From 1024 swap-outs, a window
+  under the swap threshold still rejects. The 2 GiB available-memory floor, memory pressure, compressor, CPU, health,
+  and routed checks are unchanged, and so are exit statuses, error codes, the summary schema, and configuration.
+
 ## [v0.13.3] — Unreleased
 
 ### Fixed
