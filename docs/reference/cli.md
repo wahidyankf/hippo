@@ -406,11 +406,13 @@ returns exit `124` naming `hippo.limit.release-envelope-exceeded`. This release 
 admission CPU ceiling of a resource profile, which [resource policy](./resource-policy.md) describes.
 
 Swap pressure counts swap-outs only, on every host. A swap-in alone does not trigger it, because a swap-in only reads
-back a page that was already evicted and does not show the release forcing memory out. A summary with swap-outs is
-rejected when its `availableNonCompressedEstimateMinBytes` is below the swap threshold. That threshold is 4 GiB, or 40%
-of `physicalMemoryBytes` when that is smaller, so a host with less than 10 GiB of physical memory gets a lower
-threshold. A summary without `physicalMemoryBytes` uses 4 GiB. Swap-outs with available memory at or above the threshold
-do not trigger the rule; such a summary is accepted when it also passes its other checks.
+back a page that was already evicted and does not show the release forcing memory out. Swap-outs count only when
+`swapOutsDelta` reaches 1024 pages, which is 4 MiB at 4 KiB pages. A smaller count is incidental, so a window with 1 to
+1023 swap-outs is not rejected for them. At 1024 pages or more, the summary is rejected when its
+`availableNonCompressedEstimateMinBytes` is below the swap threshold. That threshold is 4 GiB, or 40% of
+`physicalMemoryBytes` when that is smaller, so a host with less than 10 GiB of physical memory gets a lower threshold. A
+summary without `physicalMemoryBytes` uses 4 GiB. Swap-outs with available memory at or above the threshold do not
+trigger the rule; such a summary is accepted when it also passes its other checks.
 
 ## `hippo completion`
 

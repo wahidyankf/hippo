@@ -100,10 +100,11 @@ has no routed evidence, so it is still rejected for busy CPU; capture the window
 [command reference](../reference/cli.md#hippo-release-assess) states the full rule.
 
 A swap-in alone does not trigger the swap rule on any host, because a swap-in only reads back a page that was already
-evicted. Swap-outs reject a release when `availableNonCompressedEstimateMinBytes` is below the swap threshold: 4 GiB, or
-40% of `physicalMemoryBytes` when that is smaller, so a host with less than 10 GiB of physical memory gets a lower
-threshold. A summary without `physicalMemoryBytes` uses 4 GiB. The 2 GiB available-memory floor still applies to every
-summary.
+evicted. Swap-outs trigger it only when `swapOutsDelta` reaches 1024 pages, which is 4 MiB at 4 KiB pages, because fewer
+are incidental. From that count, swap-outs reject a release when `availableNonCompressedEstimateMinBytes` is below the
+swap threshold: 4 GiB, or 40% of `physicalMemoryBytes` when that is smaller, so a host with less than 10 GiB of physical
+memory gets a lower threshold. A summary without `physicalMemoryBytes` uses 4 GiB. The 2 GiB available-memory floor
+still applies to every summary.
 
 ## Stream instead of writing files
 

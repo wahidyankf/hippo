@@ -2779,35 +2779,44 @@ func (driver *Driver) swapInLowMemorySummary() error {
 }
 
 func (driver *Driver) swapOutLowMemorySummary() error {
-	return driver.writeReleaseSummary(lowMemorySwapSummary(0, 1, 3*policy.GiB))
+	return driver.writeReleaseSummary(lowMemorySwapSummary(0, 1024, 3*policy.GiB))
 }
 
 func (driver *Driver) swapOutFloorMemorySummary() error {
-	return driver.writeReleaseSummary(lowMemorySwapSummary(0, 1, 4*policy.GiB))
+	return driver.writeReleaseSummary(lowMemorySwapSummary(0, 1024, 4*policy.GiB))
 }
 
-// swapOutOnHostSummary is a healthy swap-out summary from a host of the given physical memory; zero omits the field.
-func swapOutOnHostSummary(physical, available int64) policy.ReleaseSummary {
-	summary := lowMemorySwapSummary(0, 1, available)
+// swapOutOnHostSummary is a healthy swap-out summary from a host of the given physical memory, with the given swap-outs;
+// zero physical memory omits the field.
+func swapOutOnHostSummary(physical, swapOuts, available int64) policy.ReleaseSummary {
+	summary := lowMemorySwapSummary(0, swapOuts, available)
 	summary.PhysicalMemoryBytes = physical
 
 	return summary
 }
 
 func (driver *Driver) swapOutEightGiBAboveThresholdSummary() error {
-	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 7*policy.GiB/2))
+	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 1024, 7*policy.GiB/2))
 }
 
 func (driver *Driver) swapOutEightGiBBelowThresholdSummary() error {
-	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 5*policy.GiB/2))
+	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 1024, 5*policy.GiB/2))
+}
+
+func (driver *Driver) swapOut31EightGiBBelowThresholdSummary() error {
+	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 31, 5*policy.GiB/2))
+}
+
+func (driver *Driver) swapOut1023EightGiBBelowThresholdSummary() error {
+	return driver.writeReleaseSummary(swapOutOnHostSummary(8*policy.GiB, 1023, 5*policy.GiB/2))
 }
 
 func (driver *Driver) swapOutSixteenGiBSummary() error {
-	return driver.writeReleaseSummary(swapOutOnHostSummary(16*policy.GiB, 7*policy.GiB/2))
+	return driver.writeReleaseSummary(swapOutOnHostSummary(16*policy.GiB, 1024, 7*policy.GiB/2))
 }
 
 func (driver *Driver) swapOutUnknownPhysicalSummary() error {
-	return driver.writeReleaseSummary(swapOutOnHostSummary(0, 7*policy.GiB/2))
+	return driver.writeReleaseSummary(swapOutOnHostSummary(0, 1024, 7*policy.GiB/2))
 }
 
 func (driver *Driver) requireRejected() error {
