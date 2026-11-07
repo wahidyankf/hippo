@@ -252,7 +252,7 @@ func TestAdmissionPercentileAndReleasePolicies(t *testing.T) {
 
 	swapPressure := healthy
 	swapPressure.AvailableNonCompressedEstimateMinBytes = 3 * policy.GiB
-	swapPressure.SwapOutsDelta = 1
+	swapPressure.SwapOutsDelta = 1024
 	if policy.ReleaseHeadroomAvailable(swapPressure) {
 		t.Fatal("swap pressure accepted")
 	}
@@ -342,8 +342,9 @@ func TestReleaseCPUCeilingForSmallHosts(t *testing.T) {
 	}
 }
 
-// TestReleaseSwapPressureCountsSwapOutsOnly pins the swap clause on every host: only swap-outs under 4 GiB of available
-// memory reject a release. A swap-in reads back a page already evicted, so it does not show the release forcing memory out.
+// TestReleaseSwapPressureCountsSwapOutsOnly pins the swap clause on every host: swap-outs reject a release only when they
+// reach 1024 pages and available memory is under 4 GiB. Fewer swap-outs are incidental. A swap-in reads back a page
+// already evicted, so it does not show the release forcing memory out.
 func TestReleaseSwapPressureCountsSwapOutsOnly(t *testing.T) {
 	summary := func(parallelism int, percent float64, swapIns, swapOuts, available int64) policy.ReleaseSummary {
 		return policy.ReleaseSummary{
@@ -367,13 +368,16 @@ func TestReleaseSwapPressureCountsSwapOutsOnly(t *testing.T) {
 		accepted bool
 	}{
 		{"swap-ins with 3 GiB available", summary(12, 50, 100, 0, 3*policy.GiB), true},
-		{"swap-outs with 3 GiB available", summary(12, 50, 0, 1, 3*policy.GiB), false},
-		{"swap-outs with 4 GiB available", summary(12, 50, 0, 1, 4*policy.GiB), true},
-		{"swap-outs one byte under 4 GiB available", summary(12, 50, 0, 1, 4*policy.GiB-1), false},
-		{"swap-ins and swap-outs with 3 GiB available", summary(12, 50, 100, 1, 3*policy.GiB), false},
+		{"31 swap-outs with 3 GiB available", summary(12, 50, 0, 31, 3*policy.GiB), true},
+		{"1023 swap-outs with 3 GiB available", summary(12, 50, 0, 1023, 3*policy.GiB), true},
+		{"1024 swap-outs with 3 GiB available", summary(12, 50, 0, 1024, 3*policy.GiB), false},
+		{"1024 swap-outs with 4 GiB available", summary(12, 50, 0, 1024, 4*policy.GiB), true},
+		{"1024 swap-outs one byte under 4 GiB available", summary(12, 50, 0, 1024, 4*policy.GiB-1), false},
+		{"swap-ins and 1024 swap-outs with 3 GiB available", summary(12, 50, 100, 1024, 3*policy.GiB), false},
 		{"swap-ins with 1 GiB available is still under the floor", summary(12, 50, 100, 0, policy.GiB), false},
 		{"two-CPU busy host with swap-ins and 3 GiB available", summary(2, 100, 100, 0, 3*policy.GiB), true},
-		{"two-CPU busy host with swap-outs and 3 GiB available", summary(2, 100, 0, 1, 3*policy.GiB), false},
+		{"two-CPU busy host with 1024 swap-outs and 3 GiB available", summary(2, 100, 0, 1024, 3*policy.GiB), false},
+		{"two-CPU busy host with 31 swap-outs and 3 GiB available", summary(2, 100, 0, 31, 3*policy.GiB), true},
 	} {
 		if got := policy.ReleaseHeadroomAvailable(test.summary); got != test.accepted {
 			t.Fatalf("%s: accepted = %t, want %t", test.name, got, test.accepted)
@@ -409,28 +413,30 @@ func TestReleaseSwapThresholdScalesWithPhysicalMemory(t *testing.T) {
 		summary  policy.ReleaseSummary
 		accepted bool
 	}{
-		{"8 GiB host at its exact threshold", host(8*policy.GiB, eightGiBThreshold, 0, 1), true},
-		{"8 GiB host one byte under its threshold", host(8*policy.GiB, eightGiBThreshold-1, 0, 1), false},
-		{"8 GiB host with 3.5 GiB available", host(8*policy.GiB, 7*policy.GiB/2, 0, 1), true},
-		{"8 GiB host with 2.5 GiB available", host(8*policy.GiB, 5*policy.GiB/2, 0, 1), false},
+		{"8 GiB host at its exact threshold", host(8*policy.GiB, eightGiBThreshold, 0, 1024), true},
+		{"8 GiB host one byte under its threshold", host(8*policy.GiB, eightGiBThreshold-1, 0, 1024), false},
+		{"8 GiB host with 3.5 GiB available", host(8*policy.GiB, 7*policy.GiB/2, 0, 1024), true},
+		{"8 GiB host with 2.5 GiB available", host(8*policy.GiB, 5*policy.GiB/2, 0, 1024), false},
+		{"8 GiB host with 31 swap-outs and 2.5 GiB available", host(8*policy.GiB, 5*policy.GiB/2, 0, 31), true},
+		{"8 GiB host with 1023 swap-outs and 2.5 GiB available", host(8*policy.GiB, 5*policy.GiB/2, 0, 1023), true},
 		{"8 GiB host swap-ins only with 2.5 GiB available", host(8*policy.GiB, 5*policy.GiB/2, 100, 0), true},
 		{"8 GiB host swap-ins only below the 2 GiB floor", host(8*policy.GiB, 3*policy.GiB/2, 100, 0), false},
-		{"8 GiB host swap-ins and swap-outs with 2.5 GiB available", host(8*policy.GiB, 5*policy.GiB/2, 100, 1), false},
-		{"remainder host at its exact threshold", host(remainderPhysical, remainderThreshold, 0, 1), true},
-		{"remainder host one byte under its threshold", host(remainderPhysical, remainderThreshold-1, 0, 1), false},
-		{"10 GiB host at the 4 GiB cap", host(10*policy.GiB, 4*policy.GiB, 0, 1), true},
-		{"10 GiB host one byte under the 4 GiB cap", host(10*policy.GiB, 4*policy.GiB-1, 0, 1), false},
-		{"12 GiB host one byte under the 4 GiB cap", host(12*policy.GiB, 4*policy.GiB-1, 0, 1), false},
-		{"16 GiB host at the 4 GiB cap", host(16*policy.GiB, 4*policy.GiB, 0, 1), true},
-		{"16 GiB host one byte under the 4 GiB cap", host(16*policy.GiB, 4*policy.GiB-1, 0, 1), false},
-		{"16 GiB host with 5 GiB available is not held to 40%", host(16*policy.GiB, 5*policy.GiB, 0, 1), true},
-		{"16 GiB host with 3.5 GiB available", host(16*policy.GiB, 7*policy.GiB/2, 0, 1), false},
-		{"absent physical memory falls back to 4 GiB", host(0, 7*policy.GiB/2, 0, 1), false},
-		{"absent physical memory at the 4 GiB threshold", host(0, 4*policy.GiB, 0, 1), true},
-		{"absent physical memory one byte under 4 GiB", host(0, 4*policy.GiB-1, 0, 1), false},
-		{"negative physical memory falls back to 4 GiB", host(-1, 7*policy.GiB/2, 0, 1), false},
-		{"maximum physical memory cannot overflow the threshold", host(math.MaxInt64, 4*policy.GiB-1, 0, 1), false},
-		{"maximum physical memory keeps the 4 GiB cap", host(math.MaxInt64, 4*policy.GiB, 0, 1), true},
+		{"8 GiB host swap-ins and swap-outs with 2.5 GiB available", host(8*policy.GiB, 5*policy.GiB/2, 100, 1024), false},
+		{"remainder host at its exact threshold", host(remainderPhysical, remainderThreshold, 0, 1024), true},
+		{"remainder host one byte under its threshold", host(remainderPhysical, remainderThreshold-1, 0, 1024), false},
+		{"10 GiB host at the 4 GiB cap", host(10*policy.GiB, 4*policy.GiB, 0, 1024), true},
+		{"10 GiB host one byte under the 4 GiB cap", host(10*policy.GiB, 4*policy.GiB-1, 0, 1024), false},
+		{"12 GiB host one byte under the 4 GiB cap", host(12*policy.GiB, 4*policy.GiB-1, 0, 1024), false},
+		{"16 GiB host at the 4 GiB cap", host(16*policy.GiB, 4*policy.GiB, 0, 1024), true},
+		{"16 GiB host one byte under the 4 GiB cap", host(16*policy.GiB, 4*policy.GiB-1, 0, 1024), false},
+		{"16 GiB host with 5 GiB available is not held to 40%", host(16*policy.GiB, 5*policy.GiB, 0, 1024), true},
+		{"16 GiB host with 3.5 GiB available", host(16*policy.GiB, 7*policy.GiB/2, 0, 1024), false},
+		{"absent physical memory falls back to 4 GiB", host(0, 7*policy.GiB/2, 0, 1024), false},
+		{"absent physical memory at the 4 GiB threshold", host(0, 4*policy.GiB, 0, 1024), true},
+		{"absent physical memory one byte under 4 GiB", host(0, 4*policy.GiB-1, 0, 1024), false},
+		{"negative physical memory falls back to 4 GiB", host(-1, 7*policy.GiB/2, 0, 1024), false},
+		{"maximum physical memory cannot overflow the threshold", host(math.MaxInt64, 4*policy.GiB-1, 0, 1024), false},
+		{"maximum physical memory keeps the 4 GiB cap", host(math.MaxInt64, 4*policy.GiB, 0, 1024), true},
 	} {
 		if got := policy.ReleaseHeadroomAvailable(test.summary); got != test.accepted {
 			t.Fatalf("%s: accepted = %t, want %t", test.name, got, test.accepted)

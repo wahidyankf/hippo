@@ -19,6 +19,10 @@ const (
 	ReleaseRoutedLatencyP95BudgetMs = 500.0
 	// ReleaseRoutedLatencyMaxBudgetMs is the hard single routed-user-surface sample ceiling during release overlap.
 	ReleaseRoutedLatencyMaxBudgetMs = 2_000.0
+	// ReleaseSwapOutMinimumPages is the swapped-out page count a release window must reach before its swap-outs count as
+	// pressure: 1024 pages, which is 4 MiB at 4 KiB pages. Fewer swap-outs are incidental, a few pages the kernel evicted
+	// while the release ran, not sustained eviction.
+	ReleaseSwapOutMinimumPages = 1024
 )
 
 // State is a resource-pressure classification emitted in evidence JSON.
@@ -571,10 +575,11 @@ func releaseSwapThreshold(physical int64) int64 {
 // ReleaseHeadroomAvailable validates aggregate capacity for release overlap. The CPU-p95 ceiling keeps two whole CPUs
 // free, so a host with at most two CPUs can never meet it. There the routed-journey budget, measured directly, guards
 // responsiveness instead, and only healthy schema 4 or later routed evidence can stand in for the ceiling. Swap pressure
-// counts swap-outs only, on every host: a swap-out under the release swap threshold shows the release forcing memory
-// out, while a swap-in only reads back a page already evicted. See releaseSwapThreshold for the threshold.
+// counts swap-outs only, on every host: at least ReleaseSwapOutMinimumPages swap-outs under the release swap threshold
+// show the release forcing memory out, while a swap-in only reads back a page already evicted. See releaseSwapThreshold
+// for the threshold.
 func ReleaseHeadroomAvailable(summary ReleaseSummary) bool {
-	swapPressure := summary.SwapOutsDelta > 0 &&
+	swapPressure := summary.SwapOutsDelta >= ReleaseSwapOutMinimumPages &&
 		summary.AvailableNonCompressedEstimateMinBytes < releaseSwapThreshold(summary.PhysicalMemoryBytes)
 
 	if summary.AvailableParallelism <= 0 {

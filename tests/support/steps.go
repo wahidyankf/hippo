@@ -852,12 +852,14 @@ func (driver *Driver) releaseBindings() []contract.StepBinding {
 		step(`^a two-CPU schema 3 release summary with busy CPU$`, driver.twoCPUBusySchemaThreeSummary),
 		step(`^a four-CPU release summary with CPU use above its fifty percent ceiling$`, driver.fourCPUOverCeilingSummary),
 		step(`^a release summary with swap-ins and under 4 GiB available memory$`, driver.swapInLowMemorySummary),
-		step(`^a release summary with swap-outs and under 4 GiB available memory$`, driver.swapOutLowMemorySummary),
-		step(`^a release summary with swap-outs and 4 GiB available memory$`, driver.swapOutFloorMemorySummary),
-		step(`^a release summary from an 8 GiB host with swap-outs and 3\.5 GiB available memory$`, driver.swapOutEightGiBAboveThresholdSummary),
-		step(`^a release summary from an 8 GiB host with swap-outs and 2\.5 GiB available memory$`, driver.swapOutEightGiBBelowThresholdSummary),
-		step(`^a release summary from a 16 GiB host with swap-outs and 3\.5 GiB available memory$`, driver.swapOutSixteenGiBSummary),
-		step(`^a release summary without physical memory with swap-outs and 3\.5 GiB available memory$`, driver.swapOutUnknownPhysicalSummary),
+		step(`^a release summary with 1024 swap-outs and under 4 GiB available memory$`, driver.swapOutLowMemorySummary),
+		step(`^a release summary with 1024 swap-outs and 4 GiB available memory$`, driver.swapOutFloorMemorySummary),
+		step(`^a release summary from an 8 GiB host with 1024 swap-outs and 3\.5 GiB available memory$`, driver.swapOutEightGiBAboveThresholdSummary),
+		step(`^a release summary from an 8 GiB host with 31 swap-outs and 2\.5 GiB available memory$`, driver.swapOut31EightGiBBelowThresholdSummary),
+		step(`^a release summary from an 8 GiB host with 1023 swap-outs and 2\.5 GiB available memory$`, driver.swapOut1023EightGiBBelowThresholdSummary),
+		step(`^a release summary from an 8 GiB host with 1024 swap-outs and 2\.5 GiB available memory$`, driver.swapOutEightGiBBelowThresholdSummary),
+		step(`^a release summary from a 16 GiB host with 1024 swap-outs and 3\.5 GiB available memory$`, driver.swapOutSixteenGiBSummary),
+		step(`^a release summary without physical memory with 1024 swap-outs and 3\.5 GiB available memory$`, driver.swapOutUnknownPhysicalSummary),
 	}
 }
 
