@@ -7,6 +7,8 @@ Principles sit under the [vision](../vision/README.md) and above the [convention
 
 ## Directory Map
 
+- [Consumer correctness](consumer-correctness.md) — when options differ, choose the one the consumer cannot misuse
+  silently.
 - [Governance continuity](governance-continuity.md) — rules survive context loss, compaction, and handover.
 - [Minimal sufficiency](minimal-sufficiency.md) — understand, reuse, minimize, verify.
 - [Progressive disclosure](progressive-disclosure.md) — the index is short so the rules get read.
