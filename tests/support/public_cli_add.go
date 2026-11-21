@@ -44,6 +44,9 @@ type publicCLIAddState struct {
 	refusal              string
 	bootstrap            bootstrapRuns
 	compaction           compactionWindows
+	statusHost           string
+	stateEnvironment     map[string]string
+	stateRoot            string
 }
 
 // faultingCollector stands for a host sampler that faults in the middle of a

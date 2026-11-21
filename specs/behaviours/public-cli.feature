@@ -572,3 +572,29 @@ Feature: Public HIPPO CLI
       | a shared root whose capacity never frees for a waiting owner | hippo.limit.capacity-deferred | true      |
       | an admitted child that critical host pressure sheds          | hippo.limit.pressure-shed     | true      |
       | a mistyped flag on the run command                           | hippo.args.invalid            | false     |
+
+  # Behaviour: HI-EVD-011
+  # Exemption(e2e): requires synthetic disk and critical pressure samples that the compiled binary cannot inject; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario Outline: Status JSON publishes the legacy integer exit code for a stopped profile
+    Given <host>
+    When JSON status is requested for that host
+    Then the profile publishes exitCode <code> as an integer
+
+    Examples:
+      | host                                                          | code |
+      | a status host with its disk below the storage floor           | 73   |
+      | a status host whose capacity is deferred by critical pressure  | 75   |
+
+  # Behaviour: HI-ENV-002
+  # Exemption(e2e): the default root is observable only through evidence a run writes into the host's real home; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario Outline: The default state root is under XDG_STATE_HOME or HOME, or the Library directory on macOS
+    Given <state>
+    When the default state root is resolved with HIPPO_ROOT unset
+    Then the root is the hippo directory the host platform names for that state
+
+    Examples:
+      | state                                              |
+      | the XDG_STATE_HOME variable names a state directory |
+      | the XDG_STATE_HOME variable is unset               |
