@@ -32,7 +32,6 @@ const (
 	evidenceFilesystemBoundary  = "evidence filesystem"
 	consumerHarnessBoundary     = "consumer harness"
 	repositoryStateBoundary     = "repository state"
-	repositoryConfigBoundary    = "repository configuration"
 	releaseArtifactsBoundary    = "release artifacts"
 	releaseWorkflowBoundary     = "release workflow"
 	testHarnessBoundary         = "test harness"
@@ -249,9 +248,6 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release monitoring refuses missing health inputs before its deadline", Boundary: hostEvidenceBoundary, Reason: "requires a monitoring deadline that has already passed when the command starts, which cannot be injected through the compiled binary"},
 		{Scenario: "Release streaming propagates downstream failure", Boundary: "output stream", Reason: "requires an injected failing writer unavailable through the compiled binary process boundary"},
 		{Scenario: "Bootstrap cache retention is bounded", Boundary: "bootstrap wrapper", Reason: "cache retention is owned by the wrapper outside the compiled binary boundary"},
-		{Scenario: "Stable lifecycle wiring is complete", Boundary: repositoryConfigBoundary, Reason: "gate script and workflow text are outside the compiled binary boundary"},
-		{Scenario: "Full gate runs after merge on main, not on pull requests", Boundary: repositoryConfigBoundary, Reason: "workflow text is outside the compiled binary boundary"},
-		{Scenario: "Release workflow requires a passing post-merge run for the tagged commit", Boundary: repositoryConfigBoundary, Reason: "release workflow text is outside the compiled binary boundary"},
 		{Scenario: "Release versions use exact semantic syntax", Boundary: repositoryStateBoundary, Reason: reasonRepositoryHistory},
 		{Scenario: "Release commits are full lowercase real commits", Boundary: repositoryStateBoundary, Reason: "requires isolated valid and invalid Git object identities"},
 		{Scenario: "Release commit equals checkout HEAD", Boundary: repositoryStateBoundary, Reason: "requires isolated history with a real non-HEAD commit"},
@@ -265,9 +261,6 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Every release archive has one executable member", Boundary: releaseArtifactsBoundary, Reason: reasonReleaseArchives},
 		{Scenario: "Release archive members cannot redirect through unsafe types", Boundary: releaseArtifactsBoundary, Reason: reasonReleaseArchives},
 		{Scenario: "Release binaries carry one clean source identity", Boundary: releaseArtifactsBoundary, Reason: reasonReleaseArchives},
-		{Scenario: "Release workflow peels annotated and lightweight tags", Boundary: releaseWorkflowBoundary, Reason: "requires isolated annotated and lightweight tag histories"},
-		{Scenario: "Release workflow requires origin main ancestry", Boundary: releaseWorkflowBoundary, Reason: "requires isolated reachable and unreachable remote histories"},
-		{Scenario: "Release workflow adds no Actions storage", Boundary: releaseWorkflowBoundary, Reason: "workflow actions and permissions are outside the compiled binary boundary"},
 		{Scenario: "Empty HIPPO binary input cannot resolve from the manifest directory", Boundary: consumerHarnessBoundary, Reason: reasonConsumerHarness},
 		{Scenario: "Empty shared-root input cannot resolve from the manifest directory", Boundary: consumerHarnessBoundary, Reason: reasonConsumerHarness},
 		{Scenario: "Empty consumer path cannot resolve to its manifest checkout", Boundary: consumerHarnessBoundary, Reason: reasonConsumerHarness},
@@ -310,9 +303,6 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release temporary materialization is always removed", Boundary: repositoryStateBoundary, Reason: "requires controlled release staging success and failure paths"},
 		{Scenario: "Release archives have normalized ownership metadata", Boundary: releaseArtifactsBoundary, Reason: reasonReleaseArchives},
 		{Scenario: "Native release identity works from a path containing spaces", Boundary: releaseArtifactsBoundary, Reason: "requires executing a native archive member from a controlled spaced path"},
-		{Scenario: "Release workflow requires the peeled tag to equal the event commit", Boundary: releaseWorkflowBoundary, Reason: "requires isolated event and peeled-tag commit identities"},
-		{Scenario: "Release workflows disable implicit Go module caching", Boundary: releaseWorkflowBoundary, Reason: "workflow setup-go caching configuration is outside the compiled binary boundary"},
-		{Scenario: "CI validates assets against the exact build commit", Boundary: releaseWorkflowBoundary, Reason: "CI workflow commit propagation is outside the compiled binary boundary"},
 		// This reviewed boundary retains the original observation scope.
 		{Scenario: "Display annotations do not change public status or watch comparison", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
 	},

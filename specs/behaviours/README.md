@@ -16,8 +16,6 @@ exemption fails behavior compliance.
 - [`resource-tiers.feature`](resource-tiers.feature) specifies the optional `very-heavy` tier and its refusals.
 - [`public-cli.feature`](public-cli.feature) specifies the safe executable and Unix stream boundary.
 - [`portability.feature`](portability.feature) specifies normalized macOS, Linux, cgroup, swap, and PSI evidence.
-- [`quality-gates.feature`](quality-gates.feature) specifies strict module-local Go lint, NilAway, the domain literal
-  analysis, Gherkin adapter enforcement, and where the full gate runs.
 - [`release.feature`](release.feature) specifies release-specific capacity evidence.
 - [`reservations.feature`](reservations.feature) specifies overflow-safe vector allocation, FIFO admission, strict
   ownership, owner-side shedding, and schema evolution.

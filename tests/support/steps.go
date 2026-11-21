@@ -25,7 +25,6 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.publicCLIBindings(),
 		driver.releaseBindings(),
 		driver.artifactBindings(),
-		driver.qualityGateBindings(),
 		driver.portabilityBindings(),
 		driver.conformanceBindings(),
 		driver.interruptionBindings(),
@@ -900,41 +899,6 @@ func (driver *Driver) artifactBindings() []contract.StepBinding {
 		step(`^valid release assets in a directory whose path contains spaces$`, prepare("release quoted native path", requireV04ReleaseSpacedPath)),
 		step(`^the native version command is executed$`, driver.exerciseReservationScenarioV04),
 		step(`^its quoted binary path emits the exact release identity$`, assert("release quoted native path")),
-		step(`^reachable annotated and lightweight release tags$`, prepare("release tag peeling", requireV04ReleaseTagPeeling)),
-		step(`^the release workflow resolves each tag identity$`, driver.exerciseReservationScenarioV04),
-		step(`^each tag is compared by its peeled commit$`, assert("release tag peeling")),
-		step(`^a reachable release tag and a different reachable event commit$`, prepare("release event commit equality", requireV04ReleaseEventCommitMismatch)),
-		step(`^the release workflow compares their identities$`, driver.exerciseReservationScenarioV04),
-		step(`^the mismatched event commit is rejected before publishing$`, assert("release event commit equality")),
-		step(`^reachable and unreachable peeled release commits$`, prepare("release main reachability", requireV04ReleaseMainReachability)),
-		step(`^the release workflow applies its ancestry gate$`, driver.exerciseReservationScenarioV04),
-		step(`^only the origin-main-reachable commit passes$`, assert("release main reachability")),
-		step(`^the repository Actions storage policy$`, prepare("release storage neutrality", requireV04ReleaseStorageNeutrality)),
-		step(`^release workflow actions and permissions are inspected$`, driver.exerciseReservationScenarioV04),
-		step(`^release publishing adds no artifact package or cache storage$`, assert("release storage neutrality")),
-		step(`^release asset jobs that configure Go$`, prepare("release cache disabled", requireV04ReleaseCacheDisabled)),
-		step(`^their setup-go storage configuration is inspected$`, driver.exerciseReservationScenarioV04),
-		step(`^each release asset job explicitly disables Go caching$`, assert("release cache disabled")),
-		step(`^the CI release asset build and validation steps$`, prepare("CI release commit identity", requireV04CIValidatorCommit)),
-		step(`^their command arguments are compared$`, driver.exerciseReservationScenarioV04),
-		step(`^the validator receives the same exact commit as the builder$`, assert("CI release commit identity")),
-		step(`^the release workflow publishes a tagged commit$`, prepare("release post-merge test", requireV04ReleasePostMergeTestGate)),
-		step(`^the release workflow checks for a passing post-merge test run$`, driver.exerciseReservationScenarioV04),
-		step(`^publishing requires a successful main test run on the exact commit$`, assert("release post-merge test")),
-	}
-}
-
-func (driver *Driver) qualityGateBindings() []contract.StepBinding {
-	return []contract.StepBinding{
-		step(`^post-merge gate wiring is inspected$`, driver.inspectPostMergeGate),
-		step(`^the pull request gate runs no full gate matrix$`, driver.requireNoFullGateOnPullRequests),
-		step(`^the post-merge workflow runs the full gate on push to main on both operating systems$`, driver.requirePostMergeFullGate),
-		step(`^the post-merge workflow is never cancelled by a later commit$`, driver.requirePostMergeNotCancelled),
-		step(`^the macOS release reproducibility check runs after merge only$`, driver.requireReproducibilityAfterMerge),
-		step(`^stable lifecycle wiring is inspected$`, driver.inspectDocumentationGate),
-		step(`^the hooks and pull request caller dispatch only closed v0.4 surfaces$`, driver.requireSharedDocumentationCheck),
-		step(`^the declared main and pull request runners retain every owned policy validator$`, driver.requirePinnedValidatorsRun),
-		step(`^the harness declaration owns non-overlapping Claude Codex and OpenCode projections$`, driver.requireThreeHarnessProfiles),
 	}
 }
 

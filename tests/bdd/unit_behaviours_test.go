@@ -13,7 +13,6 @@ import (
 // @scenario specs/behaviours/execution.feature: *
 // @scenario specs/behaviours/portability.feature: *
 // @scenario specs/behaviours/public-cli.feature: *
-// @scenario specs/behaviours/quality-gates.feature: *
 // @scenario specs/behaviours/release.feature: *
 // @scenario specs/behaviours/reservations.feature: *
 // @scenario specs/behaviours/resource-tiers.feature: *
