@@ -43,6 +43,7 @@ type publicCLIAddState struct {
 	servicePort          int
 	refusal              string
 	bootstrap            bootstrapRuns
+	compaction           compactionWindows
 }
 
 // faultingCollector stands for a host sampler that faults in the middle of a

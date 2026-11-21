@@ -124,3 +124,11 @@ Feature: Bounded runtime evidence
     Given a passed run whose summary predates child usage fields
     When JSON history is requested for thirty days
     Then the history row reads passed and carries no child usage fields
+
+  # Behaviour: HI-EVD-004
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: Completed prior-day evidence is compacted into daily raw and history files within their windows
+    Given completed prior-day evidence and aged raw and history archives in one shared root
+    When evidence retention is enforced on the next day
+    Then prior-day evidence is archived, today's stream is kept as written, and only archives within seven days of raw and thirty days of history remain
