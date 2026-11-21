@@ -87,8 +87,9 @@ import (
 // @scenario specs/behaviours/reservations.feature: A coordination lock held through the whole wait still leaves a never-started receipt
 // @scenario specs/behaviours/reservations.feature: A signal while a run waits for the coordination lock leaves a never-started receipt
 // @scenario specs/behaviours/reservations.feature: A signal to a queued run ends it with the signal status and keeps its receipt
+// @scenario specs/behaviours/reservations.feature: A queued run stopped by a signal writes no lifetime summary
 // @scenario specs/behaviours/reservations.feature: Schema two configuration preserves schema one compatibility
-// @scenario specs/behaviours/reservations.feature: MiB inputs reject arithmetic overflow before conversion
+// @scenario specs/behaviours/reservations.feature: A memory request too large to represent requires replanning
 // @scenario specs/behaviours/reservations.feature: Status and development summaries expose schema five reservation totals
 // @scenario specs/behaviours/resource-tiers.feature: *
 // @scenario specs/behaviours/terminal.feature: *

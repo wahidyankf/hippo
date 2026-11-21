@@ -24,7 +24,7 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): requires maximum-width synthetic CPU and memory capacity unavailable through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
-  Scenario: Maximum-width automatic shares do not overflow ceiling division
+  Scenario: Automatic shares at maximum CPU and memory keep their exact four-share and two-share ceilings
     Given maximum representable CPU and memory capacity for balanced and constrained profiles
     When automatic fair-share reservations are calculated
     Then both vector dimensions retain their exact four-share and two-share ceilings
@@ -71,12 +71,24 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
   @e2e-exempt
-  Scenario: Reservation floors reject unsafe requests
+  Scenario: Reservation floors reject requests below one CPU or 256 MiB before enqueue
     Given explicit requests below one CPU or 256 MiB
     When each unsafe reservation is validated
     Then each request requires replanning before enqueue
-    And a caller asking for memory below the floor sees exit 125 naming hippo.policy.replan-required before enqueue
-    And a caller asking for a negative CPU count sees exit 2 naming hippo.args.invalid before enqueue
+
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A memory request below the floor exits 125 naming hippo.policy.replan-required before enqueue
+    Given explicit requests below one CPU or 256 MiB
+    When each unsafe reservation is validated
+    Then a caller asking for memory below the floor sees exit 125 naming hippo.policy.replan-required before enqueue
+
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A negative CPU request exits 2 naming hippo.args.invalid before enqueue
+    Given explicit requests below one CPU or 256 MiB
+    When each unsafe reservation is validated
+    Then a caller asking for a negative CPU count sees exit 2 naming hippo.args.invalid before enqueue
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
@@ -94,11 +106,17 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Temporary exhaustion uses the bounded wait
+  Scenario: Temporary exhaustion defers the waiter through its deadline with exit 124
     Given a live owner temporarily consumes the remaining capacity
     When another fitting reservation waits through its deadline
     Then the waiter remains FIFO head through its deadline and is deferred with exit 124 naming hippo.limit.capacity-deferred
-    And the deferral writes a never-started receipt even when the wait's budget is nearly spent
+
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: A capacity deferral writes a never-started receipt even when the wait budget is nearly spent
+    Given a live owner temporarily consumes the remaining capacity
+    When another fitting reservation waits through its deadline
+    Then the deferral writes a never-started receipt even when the wait's budget is nearly spent
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
@@ -130,8 +148,8 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Exhausted FIFO sequence resets only after a stale epoch empties
-    Given reservation epochs at the maximum FIFO sequence with live and stale identities
+  Scenario: A reservation queue at its highest position restarts only after its stale epoch empties
+    Given reservation epochs with a queue at its highest position and live and stale identities
     When another reservation requests admission in each epoch
     Then the live epoch stays byte-unchanged while the stale empty epoch restarts safely
 
@@ -298,23 +316,27 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Owner cancellation remains bounded when release coordination is held
-    Given a running reserved owner and a coordination mutation lock held by another goroutine in the same process
+  Scenario: Cancelling a run while another holder holds the release lock bounds its cleanup
+    Given a running reserved owner and a coordination mutation lock held by another holder
     When its owning guard is cancelled and reaps the child
     Then cleanup defers boundedly without a caller failure, with exact ledger bytes and an externally locked identity until a later atomic retry after lock release
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Cancelled FIFO waiters use a fresh cleanup deadline
+  Scenario: A cancelled queued run leaves the queue although the coordination lock is briefly held
     Given a queued reservation waiter and a held coordination mutation lock
-    When its acquisition context is cancelled before the lock is released
+    When its run is cancelled before the lock is released
     Then bounded cleanup removes the waiter without blocking the FIFO queue
 
   Scenario: A signal to a queued run ends it with the signal status and keeps its receipt
     Given a reservation root whose live owners fill its capacity and owner limit
     When a queued guarded run receives SIGINT before it is admitted
     Then the run exits 130 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
-    And no lifetime summary is written, because a queued waiter collects no host evidence
+
+  Scenario: A queued run stopped by a signal writes no lifetime summary
+    Given a reservation root whose live owners fill its capacity and owner limit
+    When a queued guarded run receives SIGINT before it is admitted
+    Then no lifetime summary is written, because a queued waiter collects no host evidence
 
   # Exemption(e2e): requires injected host samples that hold admission sampling open at a deterministic pause; alternative-proof: test:quick
   @e2e-exempt
@@ -322,14 +344,20 @@ Feature: Shared vector reservations
     Given a granted run still sampling the host before admission
     When the guarded run receives SIGTERM before its child starts
     Then the run exits 143 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
-    And its lifetime summary records the outcome admission-cancelled
+
+  # Exemption(e2e): requires injected host samples that hold admission sampling open at a deterministic pause; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A run stopped while sampling is summarized as admission-cancelled and listed by history
+    Given a granted run still sampling the host before admission
+    When the guarded run receives SIGTERM before its child starts
+    Then its lifetime summary records the outcome admission-cancelled
     And history filtered to the outcome admission-cancelled lists that run
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Failed cancelled-waiter cleanup retains verifiable FIFO ownership
+  Scenario: A cancelled queued run keeps its queue place when cleanup cannot take the lock
     Given a queued reservation waiter whose coordination lock remains held past its fresh cleanup deadline
-    When its acquisition context is cancelled and bounded cleanup cannot mutate the ledger
+    When its run is cancelled and bounded cleanup cannot mutate the ledger
     Then the waiter identity and exact FIFO bytes remain and a following FIFO waiter admits only after automatic head cleanup
 
   # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
@@ -531,17 +559,23 @@ Feature: Shared vector reservations
     Given transactional service and ephemeral owners at the emergency memory floor
     When emergency pressure victims are elected atomically
     Then ephemeral and service owners are selected before transactional work
-    And the transactional stop records a started safety receipt without automatic retry
+
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: A transactional emergency stop records a started safety receipt without automatic retry
+    Given transactional service and ephemeral owners at the emergency memory floor
+    When emergency pressure victims are elected atomically
+    Then the transactional stop records a started safety receipt without automatic retry
 
   Scenario: Schema two configuration preserves schema one compatibility
     Given valid schema one and schema two local configurations
     When both configuration documents are loaded
     Then schema one selects exclusive mode and schema two validates reservation limits
 
-  Scenario: MiB inputs reject arithmetic overflow before conversion
+  Scenario: A memory request too large to represent requires replanning
     Given maximum representable and first overflowing MiB values for CLI and configuration
     When reservation memory inputs are parsed
-    Then the maximum stays exact and overflow requires replanning before multiplication
+    Then the maximum stays exact and an overflowing request requires replanning
 
   # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
   @e2e-exempt
@@ -566,37 +600,37 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger tokens are validated before mutation
+  Scenario: A ledger with an invalid or duplicate owner token fails admission closed and keeps its bytes
     Given a reservation ledger with an invalid or duplicate owner token
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the ledger bytes
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger classes are validated before mutation
+  Scenario: A ledger with an unknown workload class fails admission closed and keeps its bytes
     Given a reservation ledger with an unknown workload class
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the class-corrupt ledger bytes
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger sequences are validated before mutation
+  Scenario: A ledger with duplicate or out-of-order sequences fails admission closed and keeps its bytes
     Given a reservation ledger with duplicate or nonmonotonic sequences
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the sequence-corrupt ledger bytes
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger vectors are validated before mutation
+  Scenario: A ledger with negative or inconsistent vectors fails admission closed and keeps its bytes
     Given a reservation ledger with negative or inconsistent resource vectors
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the vector-corrupt ledger bytes
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger arithmetic rejects overflow before mutation
+  Scenario: A ledger with vectors that overflow when added fails admission closed and keeps its bytes
     Given a reservation ledger whose valid individual vectors overflow aggregate arithmetic
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the overflow-corrupt ledger bytes
 
   # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
@@ -608,16 +642,16 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger totals are validated before mutation
+  Scenario: A ledger with allocated totals above capacity fails admission closed and keeps its bytes
     Given a reservation ledger whose allocated totals exceed capacity
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the total-corrupt ledger bytes
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger structure is validated before mutation
+  Scenario: A ledger with an impossible owner and waiter structure fails admission closed and keeps its bytes
     Given a reservation ledger with impossible owner and waiter structure
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the structure-corrupt ledger bytes
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
@@ -690,21 +724,13 @@ Feature: Shared vector reservations
 
   # Exemption(e2e): requires a reservation whose guard liveness is controlled independently of its process group, which cannot be staged through the compiled binary; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Status names a payload left running by a guard that died
-    Given a reservation whose guard is gone while its process group still runs
+  Scenario Outline: Status names a payload group only while its payload runs without its guard
+    Given a reservation whose <setup>
     When reservation status reads that coordination root
-    Then it keeps the capacity held for the running payload and names its process group
+    Then <outcome>
 
-  # Exemption(e2e): requires a reservation whose guard liveness is controlled independently of its process group, which cannot be staged through the compiled binary; alternative-proof: test:integration
-  @e2e-exempt
-  Scenario: Status stays quiet about a payload whose guard is still running
-    Given a reservation whose guard is still running alongside its process group
-    When reservation status reads that coordination root
-    Then it counts the held reservation and names no abandoned process group
-
-  # Exemption(e2e): requires a reservation whose guard liveness is controlled independently of its process group, which cannot be staged through the compiled binary; alternative-proof: test:integration
-  @e2e-exempt
-  Scenario: Status stays quiet about a payload that died with its guard
-    Given a reservation whose guard and process group are both gone
-    When reservation status reads that coordination root
-    Then it reclaims the capacity and names no abandoned process group
+    Examples:
+      | setup                                              | outcome |
+      | guard is gone while its process group still runs   | it keeps the capacity held for the running payload and names its process group |
+      | guard is still running alongside its process group | it counts the held reservation and names no abandoned process group |
+      | guard and process group are both gone              | it reclaims the capacity and names no abandoned process group |
