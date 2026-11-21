@@ -282,6 +282,8 @@ type Driver struct {
 	// over each reading, standing in for a runner the scheduler starves. It is
 	// zero in every scenario.
 	readingStall time.Duration
+	// addCLI is the state of the public command boundary scenarios the spec review added.
+	addCLI publicCLIAddState
 }
 
 type failingStream struct {

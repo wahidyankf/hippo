@@ -305,6 +305,10 @@ var ApprovedExemptions = map[string][]Exemption{
 		// This reviewed boundary retains the original observation scope.
 		{Scenario: "A display annotation adds no field to status", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
 		{Scenario: "A changed display annotation does not make watch emit another snapshot", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
+		{Scenario: "An internal fault exits 2 naming hippo.internal.failure", Boundary: hostEvidenceBoundary, Reason: "a compiled binary cannot be made to fault inside its own host sampler, so an unhandled fault cannot be injected through it"},
+		{Scenario: "Text status prints a summary line and one privacy-safe row per owner and waiter", Boundary: leaseOwnershipBoundary, Reason: reasonCoordinationState},
+		{Scenario: "Watch pauses for its interval between snapshots", Boundary: hostEvidenceBoundary, Reason: "a compiled binary prints only changed snapshots, so a stable host shows no second snapshot whose wait can be timed from outside"},
+		{Scenario: "Text monitor prints the initial state and one line per transition", Boundary: hostEvidenceBoundary, Reason: "requires deterministic repeated and changing host states that cannot be injected through the compiled binary"},
 	},
 }
 

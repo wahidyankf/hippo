@@ -346,3 +346,186 @@ Feature: Public HIPPO CLI
     Given stable observation evidence whose display annotation changes between requests
     When JSON status and watch inspect that evidence
     Then watch emits only the first unchanged schema five snapshot
+
+  # Behaviour: HI-CLI-003
+  Scenario: A source build reports the dev version with an unknown commit
+    Given a HIPPO build made from source without release stamps
+    When JSON version is requested of that build
+    Then the version reports dev with the commit unknown
+
+  # Behaviour: HI-CLI-004
+  Scenario: The root version flag prints what the version command prints
+    Given the compiled HIPPO binary
+    When the root version flag is requested
+    Then its output matches the version command and exits 0
+
+  # Behaviour: HI-CLI-014
+  Scenario Outline: Shell completion is generated for bash, fish, and powershell
+    Given the compiled HIPPO binary
+    When <shell> completion is requested
+    Then a <shell> completion script is emitted
+
+    Examples:
+      | shell      |
+      | Bash       |
+      | Fish       |
+      | PowerShell |
+
+  # Behaviour: HI-CLI-034
+  Scenario: A history window longer than thirty days is refused with exit 2
+    Given the compiled HIPPO binary
+    When history is requested for a window of 31 days
+    Then it exits 2 naming hippo.args.invalid with nothing on stdout
+
+  # Behaviour: HI-CLI-036
+  Scenario: History refuses --json together with --jsonl as a usage mistake
+    Given the compiled HIPPO binary
+    When history is requested with both --json and --jsonl
+    Then it exits 2 naming hippo.args.invalid with nothing on stdout
+
+  # Behaviour: HI-CLI-041
+  # Behaviour: HI-EXT-002
+  Scenario: A valid history filter that matches no run exits 1
+    Given a current summary whose outcome is passed
+    When history is requested for thirty days from a source that matches no run
+    Then it exits 1 with nothing on standard output
+
+  # Behaviour: HI-CLI-035
+  Scenario: History JSON Lines output carries one summary object per line
+    Given a current summary whose outcome is passed
+    When JSON Lines history is requested for thirty days
+    Then each history line is one summary object
+
+  # Behaviour: HI-CLI-083
+  Scenario Outline: The failure body names the one flag that caused the failure in error.field
+    Given the compiled HIPPO binary
+    When hippo is invoked as "<arguments>"
+    Then the failure body's error field is <field>
+
+    Examples:
+      | arguments                          | field   |
+      | --color bogus --output json status | --color |
+      | --output json history --since nope | absent  |
+
+  # Behaviour: HI-CLI-086
+  # Behaviour: HI-ENV-015
+  Scenario Outline: Colour auto colours a diagnostic only with HIPPO_COLOR=1, TERM set, and NO_COLOR absent
+    Given the colour environment is <environment>
+    When a usage mistake is reported with --color <colour>
+    Then the diagnostic is <diagnostic>
+
+    Examples:
+      | environment                                | colour | diagnostic |
+      | HIPPO_COLOR=1 and TERM set                 | auto   | coloured   |
+      | HIPPO_COLOR=1, TERM set, and NO_COLOR set  | auto   | plain      |
+      | HIPPO_COLOR=1 and TERM unset               | auto   | plain      |
+      | HIPPO_COLOR unset and TERM set             | auto   | plain      |
+      | HIPPO_COLOR=1 and TERM set                 | never  | plain      |
+      | no colour variables                        | always | coloured   |
+
+  # Behaviour: HI-CLI-087
+  Scenario: The JSON failure body is never coloured whatever --color says
+    Given the compiled HIPPO binary
+    When hippo is invoked as "--color always --output json --no-such-flag"
+    Then the JSON failure body parses and holds no escape byte
+
+  # Behaviour: HI-CLI-078
+  Scenario Outline: hippo-conformance refuses no argument or several arguments with exit 2
+    Given the compiled hippo-conformance tool
+    When hippo-conformance is invoked with <arguments>
+    Then it exits 2 with the conformance usage line and nothing on stdout
+
+    Examples:
+      | arguments     |
+      | no argument   |
+      | two manifests |
+
+  # Behaviour: HI-CLI-053
+  Scenario: Run starts its child in the directory named by --cwd
+    Given the compiled HIPPO binary
+    When run starts a child in the directory named by --cwd
+    Then the child reports the directory named by --cwd
+
+  # Behaviour: HI-CLI-054
+  Scenario: Run measures the disk path it is given and stops when that path cannot be measured
+    Given the compiled HIPPO binary
+    When run is requested with a disk path that cannot be measured
+    Then it exits 125 naming hippo.host.unreadable and the child never starts
+
+  # Behaviour: HI-CLI-020
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: Text status prints a summary line and one privacy-safe row per owner and waiter
+    Given a labeled reservation owner in the shared queue
+    When text status is requested for that shared root
+    Then text status prints a summary line and one row for the labeled owner without private paths
+
+  # Behaviour: HI-CLI-031
+  # Exemption(e2e): a compiled binary prints only changed snapshots, so a stable host shows no second snapshot whose wait can be timed from outside; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario Outline: Watch pauses for its interval between snapshots
+    Given stable host and queue state for watch
+    When watch waits between snapshots with <interval>
+    Then the watch pauses for <waited> before its next snapshot
+
+    Examples:
+      | interval           | waited |
+      | --interval 2s      | 2s     |
+      | no --interval flag | 5s     |
+
+  # Behaviour: HI-CLI-042
+  # Exemption(e2e): requires deterministic repeated and changing host states that cannot be injected through the compiled binary; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: Text monitor prints the initial state and one line per transition
+    Given repeated and changing resource states
+    When text development monitoring is requested
+    Then monitoring prints the initial state and one state line per transition
+
+  # Behaviour: HI-CFG-002
+  Scenario Outline: A missing config named by --config or HIPPO_CONFIG exits 125; a missing default falls back
+    Given the compiled HIPPO binary
+    When JSON status is requested with a missing config named by <source>
+    Then status exits <status>
+
+    Examples:
+      | source               | status |
+      | --config             | 125    |
+      | HIPPO_CONFIG         | 125    |
+      | HIPPO_DEFAULT_CONFIG | 0      |
+
+  # Behaviour: HI-CFG-001
+  # Behaviour: HI-ENV-003
+  # Behaviour: HI-ENV-004
+  Scenario Outline: Configuration comes from --config, then HIPPO_CONFIG, then HIPPO_DEFAULT_CONFIG
+    Given the compiled HIPPO binary
+    And configuration files for <sources> each declare their own default profile
+    When JSON status is requested with those configuration sources
+    Then status reports the profile of the <winner> source
+
+    Examples:
+      | sources                                 | winner               |
+      | every source                            | --config             |
+      | HIPPO_CONFIG and HIPPO_DEFAULT_CONFIG   | HIPPO_CONFIG         |
+      | HIPPO_DEFAULT_CONFIG alone              | HIPPO_DEFAULT_CONFIG |
+
+  # Behaviour: HI-CFG-018
+  # Behaviour: HI-ERR-008
+  Scenario Outline: An unknown --profile exits 125 naming replan-required; an unknown profile in the file names config.unreadable
+    Given the compiled HIPPO binary
+    And a profile named by <source> that does not exist
+    When JSON status is requested for that profile
+    Then it exits 125 naming <code>
+
+    Examples:
+      | source                     | code                         |
+      | --profile flag             | hippo.policy.replan-required |
+      | defaultProfile in the file | hippo.config.unreadable      |
+
+  # Behaviour: HI-EXT-004
+  # Behaviour: HI-ERR-002
+  # Exemption(e2e): a compiled binary cannot be made to fault inside its own sampler, so an unhandled fault cannot be injected through it; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: An internal fault exits 2 naming hippo.internal.failure
+    Given a host sampler that faults during a reading
+    When JSON status is requested with that sampler
+    Then it exits 2 naming hippo.internal.failure

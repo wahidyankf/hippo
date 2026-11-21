@@ -76,6 +76,22 @@ import (
 // @scenario specs/behaviours/public-cli.feature: Release monitoring refuses a usage mistake before collecting evidence
 // @scenario specs/behaviours/public-cli.feature: Release output formats cannot share standard output
 // @scenario specs/behaviours/public-cli.feature: The removed TUI command is an unknown command
+// @scenario specs/behaviours/public-cli.feature: A source build reports the dev version with an unknown commit
+// @scenario specs/behaviours/public-cli.feature: The root version flag prints what the version command prints
+// @scenario specs/behaviours/public-cli.feature: Shell completion is generated for bash, fish, and powershell
+// @scenario specs/behaviours/public-cli.feature: A history window longer than thirty days is refused with exit 2
+// @scenario specs/behaviours/public-cli.feature: History refuses --json together with --jsonl as a usage mistake
+// @scenario specs/behaviours/public-cli.feature: A valid history filter that matches no run exits 1
+// @scenario specs/behaviours/public-cli.feature: History JSON Lines output carries one summary object per line
+// @scenario specs/behaviours/public-cli.feature: The failure body names the one flag that caused the failure in error.field
+// @scenario specs/behaviours/public-cli.feature: Colour auto colours a diagnostic only with HIPPO_COLOR=1, TERM set, and NO_COLOR absent
+// @scenario specs/behaviours/public-cli.feature: The JSON failure body is never coloured whatever --color says
+// @scenario specs/behaviours/public-cli.feature: A missing config named by --config or HIPPO_CONFIG exits 125; a missing default falls back
+// @scenario specs/behaviours/public-cli.feature: An unknown --profile exits 125 naming replan-required; an unknown profile in the file names config.unreadable
+// @scenario specs/behaviours/public-cli.feature: hippo-conformance refuses no argument or several arguments with exit 2
+// @scenario specs/behaviours/public-cli.feature: Configuration comes from --config, then HIPPO_CONFIG, then HIPPO_DEFAULT_CONFIG
+// @scenario specs/behaviours/public-cli.feature: Run starts its child in the directory named by --cwd
+// @scenario specs/behaviours/public-cli.feature: Run measures the disk path it is given and stops when that path cannot be measured
 // @scenario specs/behaviours/release.feature: Release overlap rejects failed health evidence
 // @scenario specs/behaviours/release.feature: Release overlap rejects an unresponsive routed journey
 // @scenario specs/behaviours/release.feature: Release overlap accepts a two-CPU host with busy CPU and healthy routed journeys
