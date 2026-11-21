@@ -3,11 +3,17 @@ Feature: Guarded process execution
 
   # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: An exclusive session advertises compatibility coordination
+  Scenario: An exclusive session advertises exclusive coordination
     Given an empty shared coordination root
     When exclusive heavy work acquires a guarded session
     Then the shared root advertises exclusive coordination
-    And releasing its final session removes the coordination marker
+
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: Releasing the final exclusive session removes the coordination marker
+    Given an empty shared coordination root
+    When exclusive heavy work acquires a guarded session
+    Then releasing its final session removes the coordination marker
 
   Scenario: Reservation coordination rejects every compatibility class as a protocol mismatch
     Given the shared root advertises reservation coordination
@@ -225,7 +231,12 @@ Feature: Guarded process execution
     Given exhausted reservation capacity and a run explicitly labeled test-web
     When that run becomes a registered waiter
     Then its full waiter run ID has a display annotation labeled test-web
-    And the queue retains its original resource demand and FIFO position
+
+  @tui-label
+  Scenario: A labeled waiter keeps its original resource demand and FIFO position
+    Given exhausted reservation capacity and a run explicitly labeled test-web
+    When that run becomes a registered waiter
+    Then the queue retains its original resource demand and FIFO position
 
   @tui-label
   Scenario: A default display label uses only the executable basename
@@ -250,11 +261,16 @@ Feature: Guarded process execution
       | dot-dot                 |
 
   @tui-label
-  Scenario: Exclusive owners publish the same advisory label metadata
+  Scenario: An exclusive run publishes its display label
     Given an exclusive compatibility run explicitly labeled build-web
     When its owned session becomes visible
     Then its full session run ID has a display annotation labeled build-web
-    And exclusive coordination and session schema remain unchanged
+
+  @tui-label
+  Scenario: Publishing a label leaves exclusive coordination and the session schema unchanged
+    Given an exclusive compatibility run explicitly labeled build-web
+    When its owned session becomes visible
+    Then exclusive coordination and session schema remain unchanged
 
   @tui-label
   Scenario: Inherited runs preserve the original owner's display label
@@ -264,9 +280,9 @@ Feature: Guarded process execution
     And the nested run creates no replacement annotation
 
   @tui-label
-  Scenario Outline: Owned display annotations retire with their owned tokens
+  Scenario Outline: A display annotation is removed when its run ends
     Given a registered labeled run that reaches <ending>
-    When its owned token is removed under the coordination lock
+    When the run releases its ownership
     Then its matching display annotation is removed
     And no other owner's display annotation changes
 
@@ -278,11 +294,10 @@ Feature: Guarded process execution
       | confirmed forced stop  |
 
   @tui-label
-  Scenario Outline: Advisory annotation failures preserve guarded run outcomes
+  Scenario Outline: A failed annotation write or removal leaves the run outcome unchanged
     Given a labeled guarded run whose annotation <operation> fails
     When that guarded run completes
     Then its admission resources child status and release outcome remain unchanged
-    And the annotation failure is reported without private paths
 
     Examples:
       | operation |
@@ -290,16 +305,32 @@ Feature: Guarded process execution
       | removal   |
 
   @tui-label
-  Scenario: Annotation cleanup requires positive stale ownership evidence
+  Scenario Outline: A failed annotation write or removal is reported without private paths
+    Given a labeled guarded run whose annotation <operation> fails
+    When that guarded run completes
+    Then the annotation failure is reported without private paths
+
+    Examples:
+      | operation |
+      | write     |
+      | removal   |
+
+  @tui-label
+  Scenario: Display annotation cleanup removes only the annotation of a proven stale owner
     Given one proven stale owner and one live owner with display annotations
     And an annotation whose token is temporarily absent from the ledger
-    When locked coordination reconciliation performs annotation cleanup
+    When annotation cleanup runs
     Then only the proven stale owner's annotation is removed
     And the live and unproven annotations remain unchanged
 
   @tui-label
-  Scenario: Mixed versions coordinate without requiring display metadata
+  Scenario: Owners without display annotations stay visible with unavailable labels
     Given old and current owners sharing unchanged coordination schemas
     When current observation reads the owners and their queued work
     Then owners without display annotations remain visible with unavailable labels
-    And admission accounting and FIFO ordering remain unchanged
+
+  @tui-label
+  Scenario: Owners of mixed versions keep their admission accounting and FIFO order
+    Given old and current owners sharing unchanged coordination schemas
+    When current observation reads the owners and their queued work
+    Then admission accounting and FIFO ordering remain unchanged

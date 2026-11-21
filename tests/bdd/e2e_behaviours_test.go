@@ -27,14 +27,18 @@ import (
 // @scenario specs/behaviours/execution.feature: Exclusive coordination refuses an admission wait it cannot apply
 // @scenario specs/behaviours/execution.feature: Explicit display labels are visible before reservation ownership is published
 // @scenario specs/behaviours/execution.feature: Queued work publishes its display label before admission
+// @scenario specs/behaviours/execution.feature: A labeled waiter keeps its original resource demand and FIFO position
 // @scenario specs/behaviours/execution.feature: A default display label uses only the executable basename
 // @scenario specs/behaviours/execution.feature: Invalid explicit display labels fail before registration
-// @scenario specs/behaviours/execution.feature: Exclusive owners publish the same advisory label metadata
+// @scenario specs/behaviours/execution.feature: An exclusive run publishes its display label
+// @scenario specs/behaviours/execution.feature: Publishing a label leaves exclusive coordination and the session schema unchanged
 // @scenario specs/behaviours/execution.feature: Inherited runs preserve the original owner's display label
-// @scenario specs/behaviours/execution.feature: Owned display annotations retire with their owned tokens
-// @scenario specs/behaviours/execution.feature: Advisory annotation failures preserve guarded run outcomes
-// @scenario specs/behaviours/execution.feature: Annotation cleanup requires positive stale ownership evidence
-// @scenario specs/behaviours/execution.feature: Mixed versions coordinate without requiring display metadata
+// @scenario specs/behaviours/execution.feature: A display annotation is removed when its run ends
+// @scenario specs/behaviours/execution.feature: A failed annotation write or removal leaves the run outcome unchanged
+// @scenario specs/behaviours/execution.feature: A failed annotation write or removal is reported without private paths
+// @scenario specs/behaviours/execution.feature: Display annotation cleanup removes only the annotation of a proven stale owner
+// @scenario specs/behaviours/execution.feature: Owners without display annotations stay visible with unavailable labels
+// @scenario specs/behaviours/execution.feature: Owners of mixed versions keep their admission accounting and FIFO order
 // @scenario specs/behaviours/public-cli.feature: Version identifies the exact build
 // @scenario specs/behaviours/public-cli.feature: JSON status exposes the stable evidence schema
 // @scenario specs/behaviours/public-cli.feature: Status exposes live exclusive compatibility owners

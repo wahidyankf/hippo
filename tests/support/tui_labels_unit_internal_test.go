@@ -35,7 +35,7 @@ func requireAnnotationCanonicalFeature(t *testing.T) {
 		"Given a labeled guarded run whose annotation <operation> fails",
 		"When that guarded run completes",
 		"Then its admission resources child status and release outcome remain unchanged",
-		"And the annotation failure is reported without private paths",
+		"Then the annotation failure is reported without private paths",
 	}
 	for _, line := range canonical {
 		if !strings.Contains(string(feature), line) {
