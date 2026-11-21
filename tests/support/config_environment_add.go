@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,9 +97,7 @@ func (driver *Driver) stageIdentityEnvironment(fromEnvironment, fromDefault stri
 // so the identity variables decide the run's source.
 func (driver *Driver) runPassingWithoutSource() error {
 	values := map[string]string{hippoRootEnvironment: driver.leaseRoot}
-	for name, path := range driver.addCLI.identityEnvironment {
-		values[name] = path
-	}
+	maps.Copy(values, driver.addCLI.identityEnvironment)
 
 	return driver.runCommandWith(values, runCommandName, diskPathFlag, driver.leaseRoot, "--", shellPath, "-c", "true")
 }
@@ -162,9 +161,7 @@ func (driver *Driver) releaseMonitorFromEnvironment() error {
 	}
 	driver.leaseRoot = root
 	values := map[string]string{hippoRootEnvironment: root}
-	for name, value := range driver.addCLI.endpointEnvironment {
-		values[name] = value
-	}
+	maps.Copy(values, driver.addCLI.endpointEnvironment)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code, _ := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environmentPairs(values),
