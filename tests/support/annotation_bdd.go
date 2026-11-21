@@ -927,7 +927,10 @@ func (fixture *annotationBDD) start(parent context.Context, label, inherited str
 	var stdout io.Writer = &job.output
 	if printf {
 		// The actual printf child blocks on its owned output pipe until assertions
-		// inspect the live annotation, rather than racing a fast child exit.
+		// inspect the live annotation, rather than racing a fast child exit. The
+		// output must exceed the 64 KiB Linux pipe capacity, but GNU and uutils
+		// printf do not share a width limit above 65536. Reusing the format for a
+		// second argument writes 131072 bytes within both limits.
 		job.pipeReader, job.pipeWriter, err = os.Pipe()
 		if err != nil {
 			cancel()
@@ -936,7 +939,7 @@ func (fixture *annotationBDD) start(parent context.Context, label, inherited str
 		}
 		stdout = job.pipeWriter
 		args = args[:len(args)-5]
-		args = append(args, "--", "/usr/bin/printf", "%1048576s", "private text")
+		args = append(args, "--", "/usr/bin/printf", "%65536s", "private text", "private text")
 	}
 	if fixture.adapter.Name == contract.E2E {
 		if err := fixture.startPublicJob(ctx, job, args, environment, stdout); err != nil {
