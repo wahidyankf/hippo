@@ -65,42 +65,18 @@ Feature: Release resource ownership
     When release overlap evidence is assessed
     Then the release evidence is accepted
 
-  Scenario: Release overlap rejects swap-outs with low available memory
-    Given a release summary with 1024 swap-outs and under 4 GiB available memory
+  Scenario Outline: Release overlap judges swap-outs against the memory-scaled threshold
+    Given a release summary <origin> <swap_outs> swap-outs and <available> available memory
     When release overlap evidence is assessed
-    Then the release evidence is rejected
+    Then the release evidence is <outcome>
 
-  Scenario: Release overlap accepts swap-outs with 4 GiB available memory
-    Given a release summary with 1024 swap-outs and 4 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap accepts swap-outs above the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 1024 swap-outs and 3.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap accepts 31 swap-outs below the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 31 swap-outs and 2.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap accepts 1023 swap-outs below the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 1023 swap-outs and 2.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap rejects 1024 swap-outs below the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 1024 swap-outs and 2.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is rejected
-
-  Scenario: Release overlap keeps the 4 GiB swap threshold on a 16 GiB host
-    Given a release summary from a 16 GiB host with 1024 swap-outs and 3.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is rejected
-
-  Scenario: Release overlap keeps the 4 GiB swap threshold when physical memory is absent
-    Given a release summary without physical memory with 1024 swap-outs and 3.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is rejected
+    Examples:
+      | origin                       | swap_outs | available   | outcome  |
+      | with                         | 1024      | under 4 GiB | rejected |
+      | with                         | 1024      | 4 GiB       | accepted |
+      | from an 8 GiB host with      | 1024      | 3.5 GiB     | accepted |
+      | from an 8 GiB host with      | 31        | 2.5 GiB     | accepted |
+      | from an 8 GiB host with      | 1023      | 2.5 GiB     | accepted |
+      | from an 8 GiB host with      | 1024      | 2.5 GiB     | rejected |
+      | from a 16 GiB host with      | 1024      | 3.5 GiB     | rejected |
+      | without physical memory with | 1024      | 3.5 GiB     | rejected |

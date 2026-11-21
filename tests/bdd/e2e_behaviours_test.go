@@ -78,14 +78,7 @@ import (
 // @scenario specs/behaviours/release.feature: Release overlap keeps the CPU ceiling for a two-CPU host without routed evidence
 // @scenario specs/behaviours/release.feature: Release overlap keeps the CPU ceiling for a four-CPU host
 // @scenario specs/behaviours/release.feature: Release overlap accepts swap-ins with low available memory
-// @scenario specs/behaviours/release.feature: Release overlap rejects swap-outs with low available memory
-// @scenario specs/behaviours/release.feature: Release overlap accepts swap-outs with 4 GiB available memory
-// @scenario specs/behaviours/release.feature: Release overlap accepts swap-outs above the scaled threshold of an 8 GiB host
-// @scenario specs/behaviours/release.feature: Release overlap accepts 31 swap-outs below the scaled threshold of an 8 GiB host
-// @scenario specs/behaviours/release.feature: Release overlap accepts 1023 swap-outs below the scaled threshold of an 8 GiB host
-// @scenario specs/behaviours/release.feature: Release overlap rejects 1024 swap-outs below the scaled threshold of an 8 GiB host
-// @scenario specs/behaviours/release.feature: Release overlap keeps the 4 GiB swap threshold on a 16 GiB host
-// @scenario specs/behaviours/release.feature: Release overlap keeps the 4 GiB swap threshold when physical memory is absent
+// @scenario specs/behaviours/release.feature: Release overlap judges swap-outs against the memory-scaled threshold
 // @scenario specs/behaviours/reservations.feature: A coordination lock held through the whole wait still leaves a never-started receipt
 // @scenario specs/behaviours/reservations.feature: A signal while a run waits for the coordination lock leaves a never-started receipt
 // @scenario specs/behaviours/reservations.feature: A signal to a queued run ends it with the signal status and keeps its receipt
