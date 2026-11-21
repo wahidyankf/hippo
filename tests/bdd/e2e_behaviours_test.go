@@ -16,6 +16,7 @@ import (
 // @scenario specs/behaviours/evidence.feature: Status reports a coordination lock it cannot open as a refused write
 // @scenario specs/behaviours/evidence.feature: A refused never-started receipt is reported rather than hidden by the signal
 // @scenario specs/behaviours/evidence.feature: A passed run records the CPU and wall time its child used
+// @scenario specs/behaviours/evidence.feature: A history row carries no command, argument, working directory, or path after a passed run
 // @scenario specs/behaviours/evidence.feature: A waited grandchild counts toward the run's child CPU
 // @scenario specs/behaviours/evidence.feature: A failed run still records the CPU its child used
 // @scenario specs/behaviours/evidence.feature: Compacting a summary keeps its child usage
