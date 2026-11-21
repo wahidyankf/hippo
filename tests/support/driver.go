@@ -397,11 +397,21 @@ func (driver *Driver) Close() {
 	}
 }
 
+// developerConfigurationNames are the configuration variables a developer's shell
+// may export. A child the harness starts never inherits them, so a scenario that
+// names no configuration cannot read the developer's file.
+var developerConfigurationNames = []string{"HIPPO_CONFIG", "HIPPO_DEFAULT_CONFIG"}
+
 func environmentWith(values map[string]string) []string {
-	prefixes := make([]string, 0, len(values))
+	prefixes := make([]string, 0, len(values)+len(developerConfigurationNames))
 
 	for name := range values {
 		prefixes = append(prefixes, name+"=")
+	}
+	for _, name := range developerConfigurationNames {
+		if _, set := values[name]; !set {
+			prefixes = append(prefixes, name+"=")
+		}
 	}
 
 	environment := make([]string, 0, len(os.Environ())+len(values))
