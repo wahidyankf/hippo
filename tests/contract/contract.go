@@ -297,7 +297,8 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release archives have normalized ownership metadata", Boundary: releaseArtifactsBoundary, Reason: reasonReleaseArchives},
 		{Scenario: "Native release identity works from a path containing spaces", Boundary: releaseArtifactsBoundary, Reason: "requires executing a native archive member from a controlled spaced path"},
 		// This reviewed boundary retains the original observation scope.
-		{Scenario: "Display annotations do not change public status or watch comparison", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
+		{Scenario: "A display annotation adds no field to status", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
+		{Scenario: "A changed display annotation does not make watch emit another snapshot", Boundary: "observation fixture ownership", Reason: "requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence"},
 	},
 }
 

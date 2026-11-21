@@ -40,15 +40,15 @@ Feature: Public HIPPO CLI
     When JSON history is filtered to one source for thirty days
     Then only the matching privacy-safe summary is returned
 
-  Scenario: History lists an outcome this version does not know as recorded
-    Given a current summary whose outcome is future-outcome
+  Scenario Outline: History lists a value this version does not know as recorded
+    Given a current summary whose <field> is <value>
     When JSON history is requested for thirty days
-    Then it exits 0 and that row's outcome reads future-outcome
+    Then it exits 0 and that row's <field> reads <value>
 
-  Scenario: History lists a task class this version does not know as recorded
-    Given a current summary whose task class is batch
-    When JSON history is requested for thirty days
-    Then it exits 0 and that row's task class reads batch
+    Examples:
+      | field      | value          |
+      | outcome    | future-outcome |
+      | task class | batch          |
 
   # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
@@ -120,7 +120,7 @@ Feature: Public HIPPO CLI
     When JSON status aggregates the queued reservation demand
     Then status reports a privacy-safe coordination error instead of wrapped totals
 
-  Scenario: Command discovery uses Cobra help
+  Scenario: Command discovery lists the public commands in help
     Given the compiled HIPPO binary
     When root command help is requested
     Then help lists the public command tree and exits successfully
@@ -335,8 +335,14 @@ Feature: Public HIPPO CLI
 
   # Exemption(e2e): requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence; alternative-proof: test:quick
   @e2e-exempt
-  Scenario: Display annotations do not change public status or watch comparison
+  Scenario: A display annotation adds no field to status
     Given stable observation evidence whose display annotation changes between requests
     When JSON status and watch inspect that evidence
     Then status retains schema version 5 without display annotation fields
-    And watch emits only the first unchanged schema five snapshot
+
+  # Exemption(e2e): requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A changed display annotation does not make watch emit another snapshot
+    Given stable observation evidence whose display annotation changes between requests
+    When JSON status and watch inspect that evidence
+    Then watch emits only the first unchanged schema five snapshot

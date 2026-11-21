@@ -38,13 +38,12 @@ import (
 // @scenario specs/behaviours/public-cli.feature: JSON status exposes the stable evidence schema
 // @scenario specs/behaviours/public-cli.feature: Status exposes live exclusive compatibility owners
 // @scenario specs/behaviours/public-cli.feature: Status classifies invalid exclusive compatibility state
-// @scenario specs/behaviours/public-cli.feature: History lists an outcome this version does not know as recorded
-// @scenario specs/behaviours/public-cli.feature: History lists a task class this version does not know as recorded
+// @scenario specs/behaviours/public-cli.feature: History lists a value this version does not know as recorded
 // @scenario specs/behaviours/public-cli.feature: A signal ends watch with the signal status
 // @scenario specs/behaviours/public-cli.feature: JSON status fails closed on corrupt coordination state
 // @scenario specs/behaviours/public-cli.feature: JSON status gives active coordination markers precedence
 // @scenario specs/behaviours/public-cli.feature: JSON status rejects overflowing queued demand
-// @scenario specs/behaviours/public-cli.feature: Command discovery uses Cobra help
+// @scenario specs/behaviours/public-cli.feature: Command discovery lists the public commands in help
 // @scenario specs/behaviours/public-cli.feature: Help identifies the HIPPO acronym
 // @scenario specs/behaviours/public-cli.feature: Help states the exit-code contract
 // @scenario specs/behaviours/public-cli.feature: Release discovery uses grouped help
