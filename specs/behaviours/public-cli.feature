@@ -551,3 +551,9 @@ Feature: Public HIPPO CLI
     Given HIPPO_HEALTH_URL names a health endpoint and HIPPO_ROUTED_ORIGIN names a routed origin
     When release monitoring is requested with output paths and no endpoint flags
     Then the release monitor is given the health endpoint and the routed origin those variables name
+
+  # Behaviour: HI-CLI-076
+  Scenario: Release monitoring counts a listed service port in its memory samples
+    Given a service listening on a port the release monitor is asked to count
+    When release monitoring is requested with that port as its service port
+    Then the release summary reports the memory of that service as above zero

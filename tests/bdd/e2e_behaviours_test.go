@@ -98,6 +98,7 @@ import (
 // @scenario specs/behaviours/public-cli.feature: Configuration comes from --config, then HIPPO_CONFIG, then HIPPO_DEFAULT_CONFIG
 // @scenario specs/behaviours/public-cli.feature: Run starts its child in the directory named by --cwd
 // @scenario specs/behaviours/public-cli.feature: Run measures the disk path it is given and stops when that path cannot be measured
+// @scenario specs/behaviours/public-cli.feature: Release monitoring counts a listed service port in its memory samples
 // @scenario specs/behaviours/release.feature: Release overlap rejects failed health evidence
 // @scenario specs/behaviours/release.feature: Release overlap rejects an unresponsive routed journey
 // @scenario specs/behaviours/release.feature: Release overlap accepts a two-CPU host with busy CPU and healthy routed journeys

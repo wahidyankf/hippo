@@ -40,6 +40,7 @@ type publicCLIAddState struct {
 	endpointEnvironment  map[string]string
 	identityEnvironment  map[string]string
 	capturedMonitor      *application.MonitorConfig
+	servicePort          int
 }
 
 // faultingCollector stands for a host sampler that faults in the middle of a
