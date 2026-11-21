@@ -56,30 +56,18 @@ Feature: Portable host evidence
 
   # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
-  Scenario: A Linux host without swap has no swap allowance
-    Given a Linux host with 4 GiB of memory and 1 GiB of available memory
-    And that host has no swap
+  Scenario Outline: A host that cannot count swap has no swap allowance
+    Given a <host> with 4 GiB of memory and 1 GiB of available memory
+    And that host has <swap>
     And swap counting is on
     When development pressure is assessed
     Then the swap allowance is 0 bytes
 
-  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
-  @e2e-exempt
-  Scenario: A Linux host whose swap cannot be read has no swap allowance
-    Given a Linux host with 4 GiB of memory and 1 GiB of available memory
-    And that host has swap that is unreadable
-    And swap counting is on
-    When development pressure is assessed
-    Then the swap allowance is 0 bytes
-
-  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
-  @e2e-exempt
-  Scenario: A macOS host never counts swap
-    Given a macOS host with 4 GiB of memory and 1 GiB of available memory
-    And that host has 8 GiB of swap of which 1 GiB is in use
-    And swap counting is on
-    When development pressure is assessed
-    Then the swap allowance is 0 bytes
+    Examples:
+      | host       | swap                                   |
+      | Linux host | no swap                                |
+      | Linux host | swap that is unreadable                |
+      | macOS host | 8 GiB of swap of which 1 GiB is in use |
 
   # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
