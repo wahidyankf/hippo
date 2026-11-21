@@ -37,6 +37,9 @@ type publicCLIAddState struct {
 	childMarker          string
 	conformanceBinary    string
 	configurationPaths   map[string]string
+	endpointEnvironment  map[string]string
+	identityEnvironment  map[string]string
+	capturedMonitor      *application.MonitorConfig
 }
 
 // faultingCollector stands for a host sampler that faults in the middle of a

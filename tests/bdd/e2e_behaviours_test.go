@@ -10,6 +10,10 @@ import (
 // referenced scenario by scenario: a whole-file `*` would mark each exempt scenario stale (B06).
 // Each exempt scenario is covered by its exemption comment in the feature file instead.
 // @scenario specs/behaviours/admission.feature: Unreadable host evidence names its own reason
+// @scenario specs/behaviours/admission.feature: A schema-2 file that names countSwap is refused at load
+// @scenario specs/behaviours/admission.feature: A memoryPolicy percent outside 0 to 100 or a negative floor is refused at load
+// @scenario specs/behaviours/admission.feature: A swapUsedMaxMultiple that is not positive is refused at load
+// @scenario specs/behaviours/admission.feature: A profile that weakens an immutable safety floor is refused at load
 // @scenario specs/behaviours/conformance.feature: A signal ends a conformance run with the signal status
 // @scenario specs/behaviours/evidence.feature: A refused evidence root stops a run before launch
 // @scenario specs/behaviours/evidence.feature: A refused coordination write stops a run before launch
@@ -40,6 +44,8 @@ import (
 // @scenario specs/behaviours/execution.feature: Owners without display annotations stay visible with unavailable labels
 // @scenario specs/behaviours/execution.feature: Owners of mixed versions keep their admission accounting and FIFO order
 // @scenario specs/behaviours/public-cli.feature: Version identifies the exact build
+// @scenario specs/behaviours/public-cli.feature: JSON status reports the SHA-256 of the configuration file it loaded
+// @scenario specs/behaviours/public-cli.feature: A run takes its identity from HIPPO_IDENTITY ahead of HIPPO_DEFAULT_IDENTITY
 // @scenario specs/behaviours/public-cli.feature: JSON status exposes the stable evidence schema
 // @scenario specs/behaviours/public-cli.feature: Status exposes live exclusive compatibility owners
 // @scenario specs/behaviours/public-cli.feature: Status classifies invalid exclusive compatibility state

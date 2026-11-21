@@ -68,3 +68,17 @@ Feature: Optional very-heavy resource tier
       | a schema three configuration without the very-heavy tier |
       | a schema three configuration that declares the very-heavy tier within the pool |
       | no configuration file                                    |
+
+  # Behaviour: HI-CFG-005
+  Scenario Outline: A schema-3 file missing a required pool, owner, promotion, or tier field is refused
+    Given a schema three configuration without <missing>
+    When a guarded run requests the light tier with a command that exits zero
+    Then the tier run exits 125 naming hippo.config.unreadable with "<message>"
+    And the tier payload did not run and no history row was written
+
+    Examples:
+      | missing            | message                                          |
+      | a pool limit       | schema 3 requires positive pool and owner limits |
+      | an owner limit     | schema 3 requires positive pool and owner limits |
+      | the promotion gate | schema 3 requires a promotion gate               |
+      | the heavy tier     | schema 3 requires heavy resource tier            |

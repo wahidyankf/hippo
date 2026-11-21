@@ -249,6 +249,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Release summary streams to standard output", Boundary: hostEvidenceBoundary, Reason: "requires injected health probes and deterministic cancellation unavailable to the compiled binary fixture"},
 		{Scenario: "Release monitoring refuses missing health inputs before its deadline", Boundary: hostEvidenceBoundary, Reason: "requires a monitoring deadline that has already passed when the command starts, which cannot be injected through the compiled binary"},
 		{Scenario: "Release streaming propagates downstream failure", Boundary: "output stream", Reason: "requires an injected failing writer unavailable through the compiled binary process boundary"},
+		{Scenario: "HIPPO_HEALTH_URL and HIPPO_ROUTED_ORIGIN supply the release monitor flags they default", Boundary: "release monitor endpoints", Reason: "a compiled monitor reports no endpoint it was given, and a live health service that would show them cannot be fixed by the scenario"},
 		{Scenario: "Bootstrap cache retention is bounded", Boundary: "bootstrap wrapper", Reason: "cache retention is owned by the wrapper outside the compiled binary boundary"},
 		{Scenario: "Release versions use exact semantic syntax", Boundary: repositoryStateBoundary, Reason: reasonRepositoryHistory},
 		{Scenario: "Release commits are full lowercase real commits", Boundary: repositoryStateBoundary, Reason: "requires isolated valid and invalid Git object identities"},

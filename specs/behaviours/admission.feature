@@ -242,3 +242,42 @@ Feature: Resource-aware admission
     Given an admitted child whose host evidence becomes unreadable while it runs
     When the guard samples the host after launch
     Then it exits 125 naming hippo.supervision.failed after the child started
+
+  # Behaviour: HI-CFG-011
+  Scenario: A schema-2 file that names countSwap is refused at load
+    Given the compiled HIPPO binary
+    And a schema two configuration file that names countSwap
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable
+
+  # Behaviour: HI-CFG-013
+  Scenario Outline: A memoryPolicy percent outside 0 to 100 or a negative floor is refused at load
+    Given the compiled HIPPO binary
+    And a schema three configuration whose memoryPolicy sets <setting>
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable
+
+    Examples:
+      | setting             |
+      | warningPercent 0    |
+      | criticalPercent 101 |
+      | warningFloorMiB -1  |
+
+  # Behaviour: HI-CFG-015
+  Scenario Outline: A swapUsedMaxMultiple that is not positive is refused at load
+    Given the compiled HIPPO binary
+    And a schema three configuration whose swapUsedMaxMultiple is <multiple>
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable
+
+    Examples:
+      | multiple |
+      | 0        |
+      | -1       |
+
+  # Behaviour: HI-CFG-017
+  Scenario: A profile that weakens an immutable safety floor is refused at load
+    Given the compiled HIPPO binary
+    And a configuration whose custom profile sets memoryReserveMinMiB to 64
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable

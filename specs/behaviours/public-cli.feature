@@ -529,3 +529,25 @@ Feature: Public HIPPO CLI
     Given a host sampler that faults during a reading
     When JSON status is requested with that sampler
     Then it exits 2 naming hippo.internal.failure
+
+  # Behaviour: HI-CFG-020
+  Scenario: JSON status reports the SHA-256 of the configuration file it loaded
+    Given the compiled HIPPO binary
+    And a schema two configuration file
+    When JSON status is requested with that configuration file
+    Then status reports the SHA-256 of that file's bytes as its configHash
+
+  # Behaviour: HI-ENV-005
+  Scenario: A run takes its identity from HIPPO_IDENTITY ahead of HIPPO_DEFAULT_IDENTITY
+    Given the compiled HIPPO binary
+    And HIPPO_IDENTITY names an identity from source fixture-identity and HIPPO_DEFAULT_IDENTITY names one from source default-identity
+    When a guarded run of a passing command is requested without a source flag
+    Then the history of that run names fixture-identity and does not name default-identity
+
+  # Behaviour: HI-ENV-008
+  # Exemption(e2e): a compiled monitor reports no endpoint it was given, and a live health service that would show them cannot be fixed by the scenario; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: HIPPO_HEALTH_URL and HIPPO_ROUTED_ORIGIN supply the release monitor flags they default
+    Given HIPPO_HEALTH_URL names a health endpoint and HIPPO_ROUTED_ORIGIN names a routed origin
+    When release monitoring is requested with output paths and no endpoint flags
+    Then the release monitor is given the health endpoint and the routed origin those variables name

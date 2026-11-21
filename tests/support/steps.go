@@ -26,6 +26,8 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.publicCLIAddBindings(),
 		driver.publicCLIAddObserverBindings(),
 		driver.publicCLIAddRunBindings(),
+		driver.configAddBindings(),
+		driver.configEnvironmentAddBindings(),
 		driver.releaseBindings(),
 		driver.artifactBindings(),
 		driver.portabilityBindings(),
