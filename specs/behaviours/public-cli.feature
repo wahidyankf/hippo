@@ -557,3 +557,18 @@ Feature: Public HIPPO CLI
     Given a service listening on a port the release monitor is asked to count
     When release monitoring is requested with that port as its service port
     Then the release summary reports the memory of that service as above zero
+
+  # Behaviour: HI-ERR-020
+  # Exemption(e2e): requires synthetic disk, capacity, and critical pressure evidence that the compiled binary cannot inject; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario Outline: Only capacity deferral and pressure shed are retryable in the failure body
+    Given <condition>
+    When the run is refused and its failure body is read
+    Then the failure body names <code> with retryable <retryable>
+
+    Examples:
+      | condition                                                    | code                          | retryable |
+      | a host whose disk is below the storage floor                 | hippo.limit.storage-blocked   | false     |
+      | a shared root whose capacity never frees for a waiting owner | hippo.limit.capacity-deferred | true      |
+      | an admitted child that critical host pressure sheds          | hippo.limit.pressure-shed     | true      |
+      | a mistyped flag on the run command                           | hippo.args.invalid            | false     |

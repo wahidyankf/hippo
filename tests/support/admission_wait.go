@@ -194,7 +194,8 @@ func (driver *Driver) requireBlockedNoticeSurvivesQuieting() error {
 // sleep is the scenario's clock: it counts queue polls, advances the budget by
 // exactly what admission asked to wait, and frees capacity at the arranged
 // poll, so the outcome never depends on how fast the host happens to be.
-func (driver *Driver) runWaitingForAdmission(budget time.Duration, childExit int) error {
+// Global flags, such as --output json, go after the run command name.
+func (driver *Driver) runWaitingForAdmission(budget time.Duration, childExit int, globalFlags ...string) error {
 	root := driver.leaseRoot
 	runs := filepath.Join(root, "child-runs")
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
@@ -225,8 +226,8 @@ func (driver *Driver) runWaitingForAdmission(budget time.Duration, childExit int
 		}
 	}
 
-	code, err := application.Run(context.Background(), []string{
-		runCommandName,
+	arguments := append([]string{runCommandName}, globalFlags...)
+	arguments = append(arguments,
 		taskClassFlag, taskClassEphemeral,
 		configFlag, driver.configPath,
 		diskPathFlag, ".",
@@ -234,7 +235,8 @@ func (driver *Driver) runWaitingForAdmission(budget time.Duration, childExit int
 		"--reserve-cpu", "1", "--reserve-memory-mib", "256",
 		"--", shellPath, "-c",
 		fmt.Sprintf(`printf x >> "$HIPPO_CHILD_RUNS"; exit %d`, childExit),
-	})
+	)
+	code, err := application.Run(context.Background(), arguments)
 
 	driver.exitCode = code
 	driver.output = stdout.String()
