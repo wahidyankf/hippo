@@ -42,6 +42,7 @@ type publicCLIAddState struct {
 	capturedMonitor      *application.MonitorConfig
 	servicePort          int
 	refusal              string
+	bootstrap            bootstrapRuns
 }
 
 // faultingCollector stands for a host sampler that faults in the middle of a

@@ -30,6 +30,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.configEnvironmentAddBindings(),
 		driver.releaseMonitorAddBindings(),
 		driver.failureBodyAddBindings(),
+		driver.bootstrapAddBindings(),
 		driver.releaseBindings(),
 		driver.artifactBindings(),
 		driver.portabilityBindings(),

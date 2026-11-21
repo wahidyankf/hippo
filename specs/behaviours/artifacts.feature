@@ -137,3 +137,12 @@ Feature: HIPPO build artifacts
     Given valid release assets in a directory whose path contains spaces
     When the native version command is executed
     Then its quoted binary path emits the exact release identity
+
+  # Behaviour: HI-DOC-003
+  # Behaviour: HI-ENV-006
+  # Exemption(e2e): the bootstrap wrapper that compiles the binary runs outside the compiled binary boundary; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: The bootstrap reuses its compiled binary from HIPPO_BUILD_CACHE on a second run
+    Given an empty build cache named by HIPPO_BUILD_CACHE
+    When the bootstrap is run twice in a row
+    Then both runs exit 0 and only the first run compiles the binary
