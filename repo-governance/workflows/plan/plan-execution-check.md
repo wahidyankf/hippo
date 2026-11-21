@@ -17,6 +17,10 @@ produces findings that contradict each other.
 5. **Cleanup.** Are the task-owned artifacts gone, and is their absence proven rather than assumed?
 6. **Knowledge capture.** Is every `learnings.md` entry resolved to a durable owner or discarded with a reason?
 
+Where a step asks for past proof that can no longer be produced, judge the recorded observation of current behaviour
+that replaces it, per [Current Behaviour Over Past Proof][current-behaviour]. A missing past record alone is not a
+finding.
+
 ## Exit
 
 One terminal verdict is recorded. Archival proceeds only on a verdict that permits it.
@@ -31,3 +35,5 @@ the meaning of the root for every plan already in it.
 
 The remedy is always the same: resolve the item, then re-run the check. There is no partial archival and no archival
 with a note explaining what was left open.
+
+[current-behaviour]: ../../conventions/plans/007-evidence-and-quality.md#current-behaviour-over-past-proof
