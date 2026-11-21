@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -145,7 +146,7 @@ func (driver *Driver) conformanceUsageRequested(arguments string) error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code := 0
 	if driver.mode == contract.E2E {
-		command := exec.Command(driver.addCLI.conformanceBinary, operands...) //nolint:gosec // The binary is the one this scenario compiled from the working tree.
+		command := exec.Command(driver.addCLI.conformanceBinary, operands...)
 		command.Stdout, command.Stderr = stdout, stderr
 		if err := command.Run(); err != nil {
 			exitError := &exec.ExitError{}
@@ -310,6 +311,15 @@ func (driver *Driver) requireOneSummaryObjectPerLine() error {
 	return nil
 }
 
+// colourEnvironmentName and noColourEnvironmentName are the colour variables the
+// colour scenarios set or remove.
+const (
+	colourEnvironmentName   = "HIPPO_COLOR"
+	noColourEnvironmentName = "NO_COLOR"
+	terminalEnvironmentName = "TERM"
+	terminalType            = "xterm-256color"
+)
+
 // colourEnvironments names the environment each phrase of a colour scenario
 // sets, and the variables it removes, so the scenario never reads the runner's
 // own terminal settings.
@@ -318,22 +328,22 @@ var colourEnvironments = map[string]struct {
 	removed []string
 }{
 	"HIPPO_COLOR=1 and TERM set": {
-		set:     map[string]string{"HIPPO_COLOR": "1", "TERM": "xterm-256color"},
-		removed: []string{"NO_COLOR"},
+		set:     map[string]string{colourEnvironmentName: "1", terminalEnvironmentName: terminalType},
+		removed: []string{noColourEnvironmentName},
 	},
 	"HIPPO_COLOR=1, TERM set, and NO_COLOR set": {
-		set: map[string]string{"HIPPO_COLOR": "1", "TERM": "xterm-256color", "NO_COLOR": "1"},
+		set: map[string]string{colourEnvironmentName: "1", terminalEnvironmentName: terminalType, noColourEnvironmentName: "1"},
 	},
 	"HIPPO_COLOR=1 and TERM unset": {
-		set:     map[string]string{"HIPPO_COLOR": "1"},
-		removed: []string{"TERM", "NO_COLOR"},
+		set:     map[string]string{colourEnvironmentName: "1"},
+		removed: []string{terminalEnvironmentName, noColourEnvironmentName},
 	},
 	"HIPPO_COLOR unset and TERM set": {
-		set:     map[string]string{"TERM": "xterm-256color"},
-		removed: []string{"HIPPO_COLOR", "NO_COLOR"},
+		set:     map[string]string{terminalEnvironmentName: terminalType},
+		removed: []string{colourEnvironmentName, noColourEnvironmentName},
 	},
 	"no colour variables": {
-		removed: []string{"HIPPO_COLOR", "TERM", "NO_COLOR"},
+		removed: []string{colourEnvironmentName, terminalEnvironmentName, noColourEnvironmentName},
 	},
 }
 
@@ -351,7 +361,7 @@ func (driver *Driver) setColourEnvironment(phrase string) error {
 // usageMistakeWithColour runs an unknown flag with the given colour setting. The
 // unknown flag is a usage mistake, so its diagnostic is the one line colour applies to.
 func (driver *Driver) usageMistakeWithColour(colour string) error {
-	arguments := []string{"--color", colour, "--no-such-flag"}
+	arguments := []string{annotationColorFlag, colour, "--no-such-flag"}
 	if driver.mode != contract.E2E {
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 		code, _ := bootstrap.WithDefaults(cli.Application{
@@ -385,7 +395,7 @@ func environmentPairs(values map[string]string) []string {
 }
 
 // filterEnvironment drops every entry whose name is in removed.
-func filterEnvironment(environment []string, removed []string) []string {
+func filterEnvironment(environment, removed []string) []string {
 	kept := make([]string, 0, len(environment))
 	for _, entry := range environment {
 		name, _, _ := strings.Cut(entry, "=")
@@ -398,13 +408,7 @@ func filterEnvironment(environment []string, removed []string) []string {
 }
 
 func contains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(values, want)
 }
 
 func (driver *Driver) requireDiagnosticColour(want string) error {
@@ -422,7 +426,7 @@ func (driver *Driver) requireDiagnosticColour(want string) error {
 // failureBodyLine returns the JSON failure body on stderr, the one line that
 // starts with an object brace.
 func (driver *Driver) failureBodyLine() (string, error) {
-	for _, line := range strings.Split(driver.errorOutput, "\n") {
+	for line := range strings.SplitSeq(driver.errorOutput, "\n") {
 		if strings.HasPrefix(line, "{") {
 			return line, nil
 		}

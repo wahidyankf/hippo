@@ -83,7 +83,7 @@ func (driver *Driver) runChildInCwd() error {
 	driver.addCLI.cwdDirectory, driver.addCLI.childMarker = work, marker
 
 	return driver.runGuardedCommand(root, marker,
-		runCommandName, "--source", hippoFixtureName, diskPathFlag, root, "--cwd", work,
+		runCommandName, sourceFlagName, hippoFixtureName, diskPathFlag, root, "--cwd", work,
 		"--", shellPath, "-c", childWorkingDirectoryScript)
 }
 
@@ -119,7 +119,7 @@ func (driver *Driver) runWithUnmeasurableDisk() error {
 	unreadable := filepath.Join(root, unmeasurableDiskName)
 	marker := filepath.Join(root, "child-started")
 	driver.addCLI.childMarker = marker
-	arguments := []string{runCommandName, "--source", hippoFixtureName, diskPathFlag, unreadable, "--", shellPath, "-c", childStartedScript}
+	arguments := []string{runCommandName, sourceFlagName, hippoFixtureName, diskPathFlag, unreadable, "--", shellPath, "-c", childStartedScript}
 	if driver.mode == contract.E2E {
 		return driver.runGuardedCommand(root, marker, arguments...)
 	}
@@ -145,7 +145,7 @@ func (driver *Driver) requireUnmeasurableDiskRefused() error {
 		return fmt.Errorf("exit=%d stderr=%q, want exit 125 naming %s", driver.exitCode, driver.errorOutput, status.CodeHostUnreadable)
 	}
 	if _, err := os.Stat(driver.addCLI.childMarker); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("the child started before the disk path was measured: %v", err)
+		return fmt.Errorf("the child started before the disk path was measured: %w", err)
 	}
 
 	return nil

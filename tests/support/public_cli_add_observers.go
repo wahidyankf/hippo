@@ -23,6 +23,14 @@ import (
 // unknownProfileName is a profile no built-in or configured profile carries.
 const unknownProfileName = "nosuch-profile"
 
+// defaultConfigEnvironment names the variable that points at the default
+// configuration file. shortMonitorInterval is the sampling interval the text
+// monitor scenario asks for.
+const (
+	defaultConfigEnvironment = "HIPPO_DEFAULT_CONFIG"
+	shortMonitorInterval     = "1ms"
+)
+
 func (driver *Driver) publicCLIAddObserverBindings() []contract.StepBinding {
 	return []contract.StepBinding{
 		step(`^text status is requested for that shared root$`, driver.textStatusForSharedRoot),
@@ -46,16 +54,16 @@ func (driver *Driver) publicCLIAddObserverBindings() []contract.StepBinding {
 // profile its file declares. Each source gets a different profile, so the
 // profile status reports names the one source that was read.
 var configurationSources = map[string]string{
-	configFlag:             "constrained",
-	"HIPPO_CONFIG":         "minimal",
-	"HIPPO_DEFAULT_CONFIG": "balanced",
+	configFlag:               "constrained",
+	tierEnvironmentConfig:    "minimal",
+	defaultConfigEnvironment: profileBalanced,
 }
 
 // configurationSourceSets names which sources each scenario row sets.
 var configurationSourceSets = map[string][]string{
-	"every source":                          {configFlag, "HIPPO_CONFIG", "HIPPO_DEFAULT_CONFIG"},
-	"HIPPO_CONFIG and HIPPO_DEFAULT_CONFIG": {"HIPPO_CONFIG", "HIPPO_DEFAULT_CONFIG"},
-	"HIPPO_DEFAULT_CONFIG alone":            {"HIPPO_DEFAULT_CONFIG"},
+	"every source":                          {configFlag, tierEnvironmentConfig, defaultConfigEnvironment},
+	"HIPPO_CONFIG and HIPPO_DEFAULT_CONFIG": {tierEnvironmentConfig, defaultConfigEnvironment},
+	"HIPPO_DEFAULT_CONFIG alone":            {defaultConfigEnvironment},
 }
 
 // setConfigurationSources writes one configuration file per set source, each
@@ -220,7 +228,7 @@ func (driver *Driver) textMonitorRequested() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	code, err := bootstrap.WithDefaults(cli.Application{
 		Stdout: stdout, Stderr: stderr, Collector: collector,
-	}).Run(ctx, []string{monitorCommandName, intervalFlagName, "1ms", diskPathFlag, "."})
+	}).Run(ctx, []string{monitorCommandName, intervalFlagName, shortMonitorInterval, diskPathFlag, "."})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
 	return err
@@ -258,10 +266,10 @@ func (driver *Driver) statusWithMissingConfig(source string) error {
 	switch source {
 	case configFlag:
 		arguments = append(arguments, configFlag, missing)
-	case "HIPPO_CONFIG":
-		values["HIPPO_CONFIG"] = missing
-	case "HIPPO_DEFAULT_CONFIG":
-		values["HIPPO_DEFAULT_CONFIG"] = missing
+	case tierEnvironmentConfig:
+		values[tierEnvironmentConfig] = missing
+	case defaultConfigEnvironment:
+		values[defaultConfigEnvironment] = missing
 	default:
 		return fmt.Errorf("unknown configuration source %q", source)
 	}
