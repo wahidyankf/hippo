@@ -59,7 +59,7 @@ func (driver *Driver) emptyBuildCache() error {
 		return err
 	}
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = build ]; then printf 'build\\n' >> '%s'; fi\nexec '%s' \"$@\"\n", runs.buildLog, goPath)
-	if err = os.WriteFile(filepath.Join(runs.shim, "go"), []byte(script), 0o700); err != nil { //nolint:gosec // the shim is a test fixture that must be executable.
+	if err = os.WriteFile(filepath.Join(runs.shim, "go"), []byte(script), 0o700); err != nil {
 		return err
 	}
 	driver.addCLI.bootstrap = runs
@@ -83,7 +83,7 @@ func (driver *Driver) runBootstrapTwice() error {
 		"PATH":                 runs.shim + string(os.PathListSeparator) + os.Getenv("PATH"),
 	}
 	for range 2 {
-		command := exec.Command(filepath.Join(repository, "hippo"), "version") //nolint:gosec // the bootstrap is the repository's own wrapper, named by the harness.
+		command := exec.Command(filepath.Join(repository, "hippo"), "version")
 		command.Env = environmentWith(values)
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 		command.Stdout, command.Stderr = stdout, stderr

@@ -55,14 +55,14 @@ func (driver *Driver) refuseRunAndReadBody() error {
 			return err
 		}
 
-		return driver.runWaitingForAdmission(time.Second, 3, "--output", "json")
+		return driver.runWaitingForAdmission(time.Second, "--output", "json")
 	case pressureShedRefusal:
 		return driver.refuseOnPressureShed()
 	case usageMistakeRefusal:
 		return driver.refuseOnUsageMistake()
 	}
 
-	return fmt.Errorf("no refusal condition was staged")
+	return errors.New("no refusal condition was staged")
 }
 
 // refusalRoot makes a state root and a schema-one configuration for one refusal run.

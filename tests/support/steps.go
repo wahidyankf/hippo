@@ -599,16 +599,16 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^it reclaims the capacity and names no abandoned process group$`, driver.requireNoAbandonedGroupNamed),
 		step(`^a shared root that defers one owner before capacity frees$`, driver.deferringRootFreeingCapacity),
 		step(`^that owner runs with a budget to wait for admission$`, func() error {
-			return driver.runWaitingForAdmission(30*time.Second, 3)
+			return driver.runWaitingForAdmission(30 * time.Second)
 		}),
 		step(`^it stays registered once and reports the admitted child's own exit code$`, driver.requireRetriedThenAdmitted),
 		step(`^a shared root whose capacity never frees$`, driver.permanentlyDeferringRoot),
 		step(`^an owner waits for admission within a bounded budget$`, func() error {
-			return driver.runWaitingForAdmission(time.Second, 3)
+			return driver.runWaitingForAdmission(time.Second)
 		}),
 		step(`^it stops waiting before launch and reports the deferral as exit 124 naming hippo\.limit\.capacity-deferred$`, driver.requireDeferralSurvivesTheBudget),
 		step(`^an owner waits for admission across many polls$`, func() error {
-			return driver.runWaitingForAdmission(5*time.Second, 3)
+			return driver.runWaitingForAdmission(5 * time.Second)
 		}),
 		step(`^the queue and final deferral are each reported once without launching$`, driver.requireDeferralReportedOnce),
 		step(`^a shared root that frees capacity onto exhausted storage$`, driver.deferringRootFreeingCapacityOntoExhaustedStorage),

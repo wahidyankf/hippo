@@ -1,6 +1,7 @@
 package support
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func (driver *Driver) stageStateHome(condition string) error {
 
 func (driver *Driver) resolveDefaultStateRoot() error {
 	if driver.addCLI.stateEnvironment == nil {
-		return fmt.Errorf("no state environment was staged")
+		return errors.New("no state environment was staged")
 	}
 	driver.addCLI.stateRoot = config.DefaultEvidenceRoot(driver.addCLI.stateEnvironment)
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,7 +41,7 @@ func (driver *Driver) stageStatusHost(condition string) error {
 // stop the profile for the staged condition, in an isolated state root.
 func (driver *Driver) requestStatusForStagedHost() error {
 	if driver.mode == contract.E2E {
-		return fmt.Errorf("the end-to-end boundary cannot stage a stopped profile; its scenario is exempt")
+		return errors.New("the end-to-end boundary cannot stage a stopped profile; its scenario is exempt")
 	}
 	root, err := driver.temporaryRoot()
 	if err != nil {
@@ -59,7 +60,7 @@ func (driver *Driver) requestStatusForStagedHost() error {
 		critical.MemoryPressureLevel = &level
 		first, second = critical, critical
 	default:
-		return fmt.Errorf("no stopped profile was staged")
+		return errors.New("no stopped profile was staged")
 	}
 
 	var stdout, stderr bytes.Buffer

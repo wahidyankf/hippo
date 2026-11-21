@@ -1,6 +1,7 @@
 package support
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -68,7 +69,7 @@ func (driver *Driver) seedCompactionWindows() error {
 func (driver *Driver) enforceCompactionWindows() error {
 	state := driver.addCLI.compaction
 	if state.root == "" {
-		return fmt.Errorf("no evidence root was seeded")
+		return errors.New("no evidence root was seeded")
 	}
 
 	return evidence.Cleanup(state.root, state.now)

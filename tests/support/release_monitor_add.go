@@ -3,6 +3,7 @@ package support
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -50,7 +51,7 @@ func (driver *Driver) listenForServiceMemory() error {
 // scenarios use.
 func (driver *Driver) requestMonitorWithServicePort() error {
 	if driver.addCLI.servicePort == 0 {
-		return fmt.Errorf("no listening service port was arranged")
+		return errors.New("no listening service port was arranged")
 	}
 	root, err := driver.temporaryRoot()
 	if err != nil {
