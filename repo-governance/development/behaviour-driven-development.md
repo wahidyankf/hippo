@@ -47,8 +47,8 @@ not the deferred comparison predicate; deferred rows never count as PASS.
 ## Serial Adapters
 
 The quick gate runs the three static compliance adapters serially. [E2E placement](end-to-end-testing.md#placement) owns
-the full-only executing corpus. Order is not incidental: a failure at the unit boundary is the cheapest one to read, and
-reaching it first is worth more than reaching all three at once.
+the executing corpus that runs only on `main`. Order is not incidental: a failure at the unit boundary is the cheapest
+one to read, and reaching it first is worth more than reaching all three at once.
 
 See [specification maintenance](specification-maintenance.md) for the cycle, and
 [end-to-end testing](end-to-end-testing.md) for the outermost boundary.

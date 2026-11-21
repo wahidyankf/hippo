@@ -1,30 +1,35 @@
 Feature: Resource-aware admission
   Repository work adapts to the effective capacity exposed by macOS or Linux.
 
+  # Exemption(e2e): requires synthetic samples that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Healthy consecutive samples admit work
     Given three healthy host samples
     When development admission is assessed
     Then the work is admitted
 
+  # Exemption(e2e): requires synthetic samples that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Stable macOS warning admits degraded work
     Given a full stable Darwin warning window with safe headroom
     When development admission is assessed
     Then ephemeral work is admitted with concurrency one
 
+  # Exemption(e2e): requires synthetic compressor counters that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Growing pressure defers degraded work
     Given Darwin warning samples with excessive compressor growth
     When development admission is assessed
     Then degraded work is deferred
 
+  # Exemption(e2e): requires synthetic samples that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Strict work never uses degraded admission
     Given stable Darwin warning samples for a transactional task
     When development admission is assessed
     Then degraded work is deferred
 
+  # Exemption(e2e): requires synthetic samples that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A configured profile derived from balanced admits degraded work
     Given a configuration whose default profile extends balanced
@@ -32,6 +37,7 @@ Feature: Resource-aware admission
     When the guard runs ephemeral work under that configuration
     Then the guard admits the child at concurrency one and says so
 
+  # Exemption(e2e): requires synthetic samples that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A configured profile outside balanced's lineage never uses degraded admission
     Given a configuration whose default profile extends constrained
@@ -39,12 +45,14 @@ Feature: Resource-aware admission
     When the guard runs ephemeral work under that configuration
     Then the guard defers the work naming hippo.limit.capacity-deferred
 
+  # Exemption(e2e): requires synthetic host capacity that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Balanced work falls back on a small runner
     Given a healthy 5 GiB runner without swap
     When development admission is assessed
     Then the constrained profile is selected
 
+  # Exemption(e2e): requires synthetic host capacity that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: The last-resort floor follows the minimal lineage
     Given a healthy 1 GiB machine without swap and <configuration>
@@ -58,18 +66,21 @@ Feature: Resource-aware admission
       | a default profile extending minimal, falling back to minimal | the minimal profile is selected with concurrency one    |
       | a profile extending constrained, no fallback                 | exit 125 names hippo.policy.replan-required             |
 
+  # Exemption(e2e): requires synthetic disk evidence that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Exhausted storage requires cleanup
     Given a host sample below the 256 MiB disk floor
     When development admission is assessed
     Then admission is storage blocked with exit 124 naming hippo.limit.storage-blocked
 
+  # Exemption(e2e): requires synthetic swap counters that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Swap-out growth is normalized to the policy window
     Given swap-outs grow by 128 MiB over 15 seconds
     When development pressure is assessed
     Then the state is warning because of swap pressure
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Swap headroom counts as memory while the host is within its allowance
     Given a Linux host with 4 GiB of memory and 64 MiB of available memory
@@ -78,6 +89,7 @@ Feature: Resource-aware admission
     When development pressure is assessed
     Then the resource state is normal with reason "normal"
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Without swap counting the same host is critical on memory
     Given a Linux host with 4 GiB of memory and 64 MiB of available memory
@@ -85,6 +97,7 @@ Feature: Resource-aware admission
     When development pressure is assessed
     Then the resource state is critical with reason "memory-critical"
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Swap use beyond the allowance is reported without changing the state
     Given a Linux host with 4 GiB of memory and 3 GiB of available memory
@@ -94,6 +107,7 @@ Feature: Resource-aware admission
     Then the resource state is normal with reason "normal"
     And the advisory "swap-over-allowance" is reported
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Critical memory pressure stays critical within the allowance
     Given a Linux host with 4 GiB of memory and 3 GiB of available memory
@@ -103,6 +117,7 @@ Feature: Resource-aware admission
     When development pressure is assessed
     Then the resource state is critical with reason "memory-psi"
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: The memory PSI warning band counts only beyond the swap allowance
     Given a Linux host with 4 GiB of memory and 3 GiB of available memory
@@ -117,6 +132,7 @@ Feature: Resource-aware admission
       | 1 GiB | normal  | normal     |
       | 5 GiB | warning | memory-psi |
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Swap-out growth is left to memory PSI while counting is on
     Given a Linux host with 4 GiB of memory and 3 GiB of available memory
@@ -127,6 +143,7 @@ Feature: Resource-aware admission
     When development pressure is assessed
     Then the resource state is normal with reason "normal"
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A RAM-proportional warning fires below the percent threshold
     Given a Linux host with 16 GiB of memory and 3 GiB of available memory
@@ -134,6 +151,7 @@ Feature: Resource-aware admission
     When development pressure is assessed
     Then the resource state is warning with reason "memory-warning"
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: A RAM-proportional warning honors its floor
     Given a Linux host with 16 GiB of memory and <available> of available memory
@@ -147,6 +165,7 @@ Feature: Resource-aware admission
       | 4 GiB     | warning | memory-warning |
       | 6 GiB     | normal  | normal         |
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A RAM-proportional critical fires above the fixed critical floor
     Given a Linux host with 16 GiB of memory and 2 GiB of available memory
@@ -154,6 +173,7 @@ Feature: Resource-aware admission
     When development pressure is assessed
     Then the resource state is critical with reason "memory-critical"
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: Swap-out pressure within the swap multiple is waived
     Given a Linux host with 4 GiB of memory and 3 GiB of available memory
@@ -169,6 +189,7 @@ Feature: Resource-aware admission
       | 4 GiB | 1        | normal  | normal       |
       | 5 GiB | 1        | warning | swap-warning |
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: The swap multiple never waives critical memory pressure
     Given a Linux host with 4 GiB of memory and 3 GiB of available memory
@@ -178,6 +199,7 @@ Feature: Resource-aware admission
     When development pressure is assessed
     Then the resource state is critical with reason "memory-psi"
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: The swap multiple keeps the over-allowance advisory
     Given a Linux host with 4 GiB of memory and 3 GiB of available memory
@@ -189,12 +211,14 @@ Feature: Resource-aware admission
     Then the resource state is normal with reason "normal"
     And the advisory "swap-over-allowance" is reported
 
+  # Exemption(e2e): requires synthetic compressor counters that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Compressor growth requires both payload and growth
     Given compressor payload is 12 GiB and grows 1 GiB over 15 seconds
     When development pressure is assessed
     Then the state is warning because of compressor pressure
 
+  # Exemption(e2e): requires a synthetic capacity mismatch that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A strict transaction does not silently downgrade
     Given a strict transactional task that does not fit its requested profile
@@ -212,6 +236,7 @@ Feature: Resource-aware admission
       | run           |
       | release check |
 
+  # Exemption(e2e): requires injected host evidence that becomes unreadable only after the child has started; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A host lost after launch stays a supervision failure
     Given an admitted child whose host evidence becomes unreadable while it runs

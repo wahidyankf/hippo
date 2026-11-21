@@ -17,7 +17,7 @@ import (
 // none of them names is compiled by the gate but its tests never execute.
 var testRunningScripts = []string{
 	filepath.Join("scripts", "test-quick.sh"),
-	filepath.Join("scripts", "test.sh"),
+	filepath.Join("scripts", "test-integration.sh"),
 	filepath.Join("tests", "e2e", "run.sh"),
 	filepath.Join("tests", "e2e", "mixed-version.sh"),
 }
@@ -49,6 +49,39 @@ func gatedTestPatterns(root string) ([]string, error) {
 					patterns = append(patterns, field)
 				}
 			}
+		}
+	}
+
+	registered, err := registryTestPatterns(root)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(patterns, registered...), nil
+}
+
+// registryGoTest matches one registry check whose executable is go, with its argument list.
+var registryGoTest = regexp.MustCompile(`executable: go\s+args:\s*\[([^\]]*)\]`)
+
+// registryPackage matches a package literal among the arguments of a registry check.
+var registryPackage = regexp.MustCompile(`literal: (\./[^\s}]+)`)
+
+// registryTestPatterns returns the package patterns that go test checks in the gate registry run. The pull-request
+// surface runs the architecture and contract suites as registry checks, not from a script, so a script scan alone
+// would call those packages ungated.
+func registryTestPatterns(root string) ([]string, error) {
+	config, err := os.ReadFile(filepath.Join(root, "repo-config.yml"))
+	if err != nil {
+		return nil, err
+	}
+
+	var patterns []string
+	for _, match := range registryGoTest.FindAllStringSubmatch(string(config), -1) {
+		if !strings.Contains(match[1], "literal: test }") {
+			continue
+		}
+		for _, field := range registryPackage.FindAllStringSubmatch(match[1], -1) {
+			patterns = append(patterns, field[1])
 		}
 	}
 
@@ -298,10 +331,6 @@ func gatePublicEntries() []string {
 
 func gateOrdinaryEntries() []string {
 	return append(gateCorpusEntries(), gatePublicEntries()...)
-}
-
-func gateMeasuredEntries() []string {
-	return append(gateCorpusEntries()[1:], gatePublicEntries()...)
 }
 
 func gateRequiredPublicEntries() []string {

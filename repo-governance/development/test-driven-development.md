@@ -59,9 +59,11 @@ require judgement; static text checks do not establish semantic test execution.
 
 ## Coverage
 
-Deterministic production core coverage stays at or above **99%**, measured in the same run that executes the unit
-adapter. Measured once rather than twice, because two runs can disagree and the number that gates has to be the number
-the passing run produced.
+Unit-level coverage stays at or above **99%**, measured in the same run that executes the unit adapter, and never
+combined with another level. Measured once rather than twice, because two runs can disagree and the number that gates
+has to be the number the passing run produced. The gate measures the packages [quality gates](quality-gates.md#targets)
+name; the contract's full set, `cmd`, `internal`, and `scripts/release-archive`, is the open target of
+[quality gates](quality-gates.md#the-test-and-gate-contract).
 
 Coverage is a floor, not a goal. Platform and process boundaries are proved through the integration and E2E adapters
 instead, which is a stronger claim than a line count — see

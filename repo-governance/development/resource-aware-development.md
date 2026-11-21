@@ -9,7 +9,7 @@ independent work on one workstation shares the machine instead of fighting for i
 
 Here the wrapper builds this same tool from the working tree. A gate run beneath it would be arbitrated by the change
 under test, so a change that broke the guard could hang, shed, or wave through the very gate meant to catch it. So
-`.husky/pre-push`, `scripts/test-quick.sh`, and `scripts/test.sh` all run directly.
+`.husky/*` hooks, `scripts/test-quick.sh`, `scripts/test-integration.sh`, and `tests/e2e/run.sh` run directly.
 
 CI is unguarded for a second, independent reason: a GitHub runner is dedicated and ephemeral and has no competing work,
 so the guard would add a source build and an exit-`124` path that cannot occur and therefore cannot be tested.

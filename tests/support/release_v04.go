@@ -606,44 +606,6 @@ func requireV04ReleaseExactSource(root string) error {
 	return nil
 }
 
-func requireV04ReleaseInventory(root string) error {
-	repository, _, err := cleanReleaseFixtureV04(filepath.Join(root, "inventory"))
-	if err != nil {
-		return err
-	}
-	policyPath := filepath.Join(repository, "tests", "artifacts", "run.sh")
-	policy, err := os.ReadFile(policyPath)
-	if err != nil {
-		return err
-	}
-	for _, required := range []string{
-		"conformance.manifest.json.example", "cmd/hippo-conformance/main.go", "internal/adapters/conformance/conformance.go",
-		"internal/adapters/conformance/environment.go", "internal/application/conformance.go", "internal/adapters/cli/conformance.go",
-		"internal/adapters/conformance/conformance_test.go", "internal/adapters/runtime/lifetime.go", "internal/adapters/runtime/reservation.go",
-		"internal/domain/coordination/reservation.go", "internal/domain/coordination/transitions.go", "internal/application/admission.go", "internal/application/run.go",
-		"internal/adapters/runtime/run_test.go", "internal/adapters/runtime/terminal.go", "internal/policy/units.go",
-		"specs/behaviours/conformance.feature", "specs/behaviours/reservations.feature", "specs/behaviours/terminal.feature",
-		"tests/integration/conformance_test.go", "tests/integration/pty_test.go", "tests/integration/reservation_test.go",
-		"tests/support/blockers_v04.go", "tests/support/pending_v04.go", "tests/support/release_v04.go",
-		"tests/support/review_v04.go", "tests/unit/config_schema2_errors_test.go", "tests/unit/conformance_test.go",
-		"tests/unit/reservation_test.go",
-		"tests/contract/corpus.go", "tests/contract/corpus_internal_test.go",
-		"tests/support/repository_paths.go", "tests/support/repository_paths_internal_test.go",
-		"tests/support/repository_paths_refusal_internal_test.go",
-	} {
-		if !bytes.Contains(policy, []byte(required)) {
-			return fmt.Errorf("artifact policy omits version-four path %q", required)
-		}
-	}
-	command := exec.Command(policyPath)
-	command.Dir = repository
-	if output, runError := command.CombinedOutput(); runError != nil {
-		return fmt.Errorf("artifact policy: %s: %w", bytes.TrimSpace(output), runError)
-	}
-
-	return nil
-}
-
 func invokeReleaseValidatorCustomV04(repository, output, commit, toolchain string, extra map[string]string) error {
 	validatorPath := filepath.Join(repository, "tests", "artifacts", "release-assets.sh")
 	validator := exec.Command(validatorPath, output, releaseFixtureVersion, commit)

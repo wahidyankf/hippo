@@ -1,16 +1,16 @@
 name: Main Test
 
-# The full gate runs here, after a change has merged, rather than on every pull
-# request. Its two operating systems took 22 to 38 minutes, and the strict
+# The main surface runs here, after a change has merged, rather than on every
+# pull request. Its two operating systems took 22 to 38 minutes, and the strict
 # up-to-date ruleset sent every other pull request back to rebase and wait after
 # each merge. The cost is accepted: a regression can reach main before this
 # detects it. A failure here is an immediate defect to fix forward or revert
 # before any release is cut, and the release workflow refuses a commit that has
 # no passing run.
 #
-# The pull-request gate keeps everything the hooks already run. What moves here
-# is what a hook must not make anyone wait for: the full suite, race detection,
-# the vulnerability scan, and the macOS release reproducibility check.
+# The main surface holds the entries that must not run per pull request: the
+# quick gate, the integration suites, the end-to-end suites, and the
+# vulnerability scan (HI-1). The pull-request gate keeps everything else.
 on:
   push:
     branches: [main]
@@ -34,36 +34,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The macOS leg is the recorded physically-bound layer for the
+        # darwin-tagged host code: the Linux leg cannot compile or exercise
+        # those files, so only this leg proves them.
         os: [ubuntu-24.04, macos-15]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 24
+          node-version: "24.22.3"
           cache: npm
 
       - run: npm ci --ignore-scripts
 
-      # A superset of the quick gate `.husky/pre-push` runs. This adds the
-      # integration and E2E adapters, race detection, and a vulnerability scan
-      # -- boundaries a hook has no business making someone wait for, on two
-      # operating systems a workstation cannot provide at once.
-      - run: ./scripts/test.sh
+      - name: Run the main surface
+        run: |
+          set -eu
+          export PATH="${GITHUB_WORKSPACE}/node_modules/.bin:${PATH}"
+          ./rhino gate run --surface main
 
   release-build:
     name: Release build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: false
@@ -98,9 +101,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: false

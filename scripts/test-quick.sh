@@ -19,22 +19,14 @@ trap public_host_helper_cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
-# Helper acquisition below follows the existing cheap layout/format checks.
 
-# The quick contract covers formatting, compilation, strict lint, unit tests,
-# 99% deterministic-core coverage, behavior adapters, and repository policy.
-#
-# Documentation hygiene is not here. It is declared in repo-config.yml on the
-# same `pre-push` surface that dispatches this script, so the push runs it
-# either way; calling it from inside a gate would make this file re-enter the
-# dispatcher that invoked it.
-./scripts/check-worktree-layout.sh
-./scripts/format-check.sh
-# Keep native policy transport covered on the same surfaces as this quick gate.
-bash .commandcode/hooks/agent-policy-selector.test.sh
-bash .commandcode/hooks/git-fixture-isolation.test.sh
-bash .muse/hooks/run-policy-hook.test.sh
+# The quick contract: typecheck, strict lint, unit tests with -race, the static
+# behaviour adapters, 99% deterministic-core coverage, and the behaviour
+# coverage validation last. Formatting, layout, hook transport, architecture,
+# contract, artifact, and wiring checks are registry entries of the
+# pull-request surface (C14), so they are not repeated here.
 public_host_helper_prepare "$root"
+go vet ./...
 go test -run '^$' ./...
 go tool golangci-lint run
 # NilAway follows nil flow across functions and packages, which golangci-lint's
@@ -44,15 +36,16 @@ go tool golangci-lint run
 # pass. A false positive is excluded where it stands with a reasoned
 # //nolint:nilaway directive.
 go tool nilaway -include-pkgs=github.com/wahidyankf/hippo -pretty-print=false ./...
-# The production graph and negative fixtures cover every supported platform,
-# even when the current host excludes a platform's build-tagged Go files.
-go test -count=1 ./tests/architecture
-# Every package's own tests. The scenario "Every package with tests runs in a
-# gate" fails if a package holding tests falls outside these patterns.
-go test -count=1 ./cmd/... ./internal/... ./tests/support ./tests/support/hostprobe ./tests/support/oldidentity ./tests/coverage ./tests/bdd \
+# Every package's own tests, with the race detector. The scenario "Every package
+# with tests runs in a gate" fails if a package holding tests falls outside
+# these patterns.
+go test -race -count=1 ./cmd/... ./internal/... ./tests/support ./tests/support/hostprobe ./tests/support/oldidentity ./tests/unit ./tests/coverage ./tests/bdd \
 	-skip '^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$'
-# Portable corpus discovery and execution contracts have their own package.
-go test -count=1 ./tests/contract
+HIPPO_BDD_SUITE=unit go test -race -count=1 -run '^TestUnitBehaviours$' ./tests/bdd
+# Resolve the complete composed registry without executing a corpus or candidate.
+HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
+HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
+HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
 # The unit corpus and pure package tests share one measured coverage execution.
 # Explicit leaf directories keep the threshold helper's nonrecursive discovery
 # complete as domain packages acquire new deterministic functions.
@@ -66,9 +59,5 @@ go test -count=1 \
 go run ./tests/coverage --profile coverage/unit.out \
 	--directories internal/policy,internal/domain/coordination,internal/domain/evidence,internal/identity,internal/status,internal/application \
 	--files internal/adapters/config/config.go,internal/adapters/host/collector.go,internal/adapters/host/linux_parsers.go --minimum 99
-# Resolve the complete composed registry without executing a corpus or candidate.
-HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
-HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
-HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
-
-./tests/artifacts/run.sh
+# test:behaviour:coverage, the static check; it runs no test (C14).
+./rhino behaviour coverage validate

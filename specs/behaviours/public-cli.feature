@@ -26,12 +26,14 @@ Feature: Public HIPPO CLI
       | malformed | 125  |
       | future    | 125  |
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Status exposes privacy-safe labeled owner rows
     Given a labeled reservation owner in the shared queue
     When JSON status is filtered by its source and worktree tag
     Then the matching owner row exposes tier and labels without private paths
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: History filters current labeled summaries
     Given current summaries from two labeled sources
@@ -48,12 +50,14 @@ Feature: Public HIPPO CLI
     When JSON history is requested for thirty days
     Then it exits 0 and that row's task class reads batch
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: An unreadable history archive is not reported as a refused write
     Given a history archive that is not valid gzip
     When history is queried for thirty days
     Then it exits 125 naming hippo.evidence.unreadable and leaves the archive bytes unchanged
 
+  # Exemption(e2e): requires injected stable host samples and deterministic cancellation timing; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Watch emits only changed admission snapshots
     Given stable host and queue state for watch
@@ -70,6 +74,7 @@ Feature: Public HIPPO CLI
       | SIGINT  | 130    |
       | SIGTERM | 143    |
 
+  # Exemption(e2e): requires an injected collector that is interrupted part way through one host sample; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: A signal while an observer collects a sample ends it with the signal status
     Given stable host state for <command> sampling
@@ -81,6 +86,7 @@ Feature: Public HIPPO CLI
       | watch   |
       | monitor |
 
+  # Exemption(e2e): requires an injected release capture that observes its own cancellation instead of live health endpoints; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Release monitoring reports a signal but not its own duration
     Given a release capture that runs until it is stopped
@@ -97,6 +103,7 @@ Feature: Public HIPPO CLI
     When JSON status is requested for that coordination root
     Then status reports the coordination error instead of schema five zero totals
 
+  # Exemption(e2e): requires a peer holding the shared coordination lock for a bounded window, which no compiled binary invocation can arrange; alternative-proof: test:integration
   @e2e-exempt
   Scenario: JSON status waits out a busy coordination root
     Given a coordination root whose lock is briefly held by a peer
@@ -259,6 +266,7 @@ Feature: Public HIPPO CLI
     When release summary assessment is requested from standard input
     Then the release evidence is accepted on standard output
 
+  # Exemption(e2e): requires deterministic repeated and changing host states that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Development monitor emits machine-readable transitions
     Given repeated and changing resource states
@@ -270,6 +278,7 @@ Feature: Public HIPPO CLI
     When release monitoring is requested
     Then the command exits 2 naming hippo.args.invalid for the missing generic health URL
 
+  # Exemption(e2e): requires a monitoring deadline that has already passed when the command starts, which cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Release monitoring refuses missing health inputs before its deadline
     Given release monitor output paths without endpoint inputs
@@ -293,12 +302,14 @@ Feature: Public HIPPO CLI
       | a negative duration          |
       | an out-of-range service port |
 
+  # Exemption(e2e): requires injected health probes and deterministic cancellation unavailable to the compiled binary fixture; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Release raw evidence streams to standard output
     Given a bounded release monitor with raw standard output
     When release monitoring completes
     Then raw JSON lines use standard output and the summary remains a file
 
+  # Exemption(e2e): requires injected health probes and deterministic cancellation unavailable to the compiled binary fixture; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Release summary streams to standard output
     Given a bounded release monitor with summary standard output
@@ -310,6 +321,7 @@ Feature: Public HIPPO CLI
     When release monitoring is requested
     Then the command rejects mixed standard output before collecting evidence
 
+  # Exemption(e2e): requires an injected failing writer unavailable through the compiled binary process boundary; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Release streaming propagates downstream failure
     Given a release raw stream whose downstream writer fails
@@ -321,6 +333,7 @@ Feature: Public HIPPO CLI
     When the removed TUI command is requested
     Then the diagnostic names the removed command and exits with code 2
 
+  # Exemption(e2e): requires an owned command/frame fixture that changes display annotations while retaining stable observation evidence; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Display annotations do not change public status or watch comparison
     Given stable observation evidence whose display annotation changes between requests

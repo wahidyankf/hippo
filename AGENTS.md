@@ -98,7 +98,7 @@ One canonical instruction body, expressed per harness:
 
 Keep [task state in the repository](repo-governance/conventions/task-tracking.md). Run at most
 [three delegated agents at once](repo-governance/conventions/delegated-agent-concurrency.md).
-[Exhaust the repository before asking](repo-governance/conventions/last-resort-questions.md). Diagrams are
-[ASCII](repo-governance/conventions/markdown-visualizations.md), Markdown
+[Exhaust the repository before asking](repo-governance/conventions/last-resort-questions.md). Diagrams are rendered
+[Mermaid](repo-governance/conventions/markdown-visualizations.md). Markdown
 [fits 120 columns](repo-governance/conventions/markdown-line-length.md), and every internal
 [link resolves](repo-governance/conventions/markdown-links.md).

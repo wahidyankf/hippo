@@ -10,8 +10,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-
-	"github.com/wahidyankf/hippo/tests/contract"
 )
 
 // testBuildVersion is the version every harness-built binary carries.
@@ -26,11 +24,6 @@ const testBuildVersion = "v0.0.0-test"
 func StampedBuildLinkerFlags() string {
 	return "-X github.com/wahidyankf/hippo/internal/adapters/cli.Version=" + testBuildVersion +
 		" -X github.com/wahidyankf/hippo/internal/adapters/cli.Commit=" + strings.Repeat("0", 40)
-}
-
-// e2eBinarySelection is what one binary-selection scenario staged and chose.
-type e2eBinarySelection struct {
-	inherited, chosen string
 }
 
 // RunCompiled is the end-to-end package's TestMain body. It chooses the binary
@@ -138,71 +131,6 @@ func validateOwnedCandidateDirectory(canonical string) error {
 	if !ok || int64(stat.Uid) != int64(os.Getuid()) {
 		return errors.New("candidate build directory has a foreign owner")
 	}
-	return nil
-}
-
-func (driver *Driver) e2eBinaryBindings() []contract.StepBinding {
-	return []contract.StepBinding{
-		step(
-			`^(no binary|an unstamped build|a build stamped v0\.0\.0-test) as the inherited HIPPO_BIN$`,
-			driver.inheritedE2EBinary,
-		),
-		step(`^the end-to-end adapter chooses the binary it runs$`, driver.chooseE2EBinary),
-		step(`^it runs a build of the working tree stamped v0\.0\.0-test$`, driver.requireBuiltE2EBinary),
-		step(`^it runs that build unchanged$`, driver.requireInheritedE2EBinary),
-	}
-}
-
-// inheritedE2EBinary stages what an invoking shell may have exported. An
-// unstamped build stands in for the one an enclosing guard exports as its own
-// HIPPO_BIN; both fixtures answer only the version query the choice asks.
-func (driver *Driver) inheritedE2EBinary(kind string) error {
-	if kind == "no binary" {
-		return nil
-	}
-	directory, err := os.MkdirTemp("", "hippo-inherited-")
-	if err != nil {
-		return err
-	}
-	driver.temporaryPaths = append(driver.temporaryPaths, directory)
-	version, commit := "dev", "unknown"
-	if kind == "a build stamped v0.0.0-test" {
-		version, commit = testBuildVersion, strings.Repeat("0", 40)
-	}
-	driver.e2eSelection.inherited = filepath.Join(directory, "hippo")
-	program := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' '{\"schemaVersion\":1,\"version\":%q,\"commit\":%q}'\n", version, commit)
-
-	return os.WriteFile(driver.e2eSelection.inherited, []byte(program), 0o700)
-}
-
-func (driver *Driver) chooseE2EBinary() error {
-	chosen, _, err := e2eBinary(driver.e2eSelection.inherited)
-	if err != nil {
-		return err
-	}
-	driver.e2eSelection.chosen = chosen
-	// A build lives in a directory of its own, removed with the scenario's
-	// other temporary paths once the outcome has queried it.
-	if chosen != driver.e2eSelection.inherited {
-		driver.temporaryPaths = append(driver.temporaryPaths, filepath.Dir(chosen))
-	}
-
-	return nil
-}
-
-func (driver *Driver) requireBuiltE2EBinary() error {
-	if driver.e2eSelection.chosen == driver.e2eSelection.inherited {
-		return fmt.Errorf("the adapter kept the inherited binary %q", driver.e2eSelection.inherited)
-	}
-
-	return requireTestStamp(driver.e2eSelection.chosen)
-}
-
-func (driver *Driver) requireInheritedE2EBinary() error {
-	if driver.e2eSelection.chosen != driver.e2eSelection.inherited {
-		return fmt.Errorf("the adapter replaced the stamped binary it was handed with %q", driver.e2eSelection.chosen)
-	}
-
 	return nil
 }
 

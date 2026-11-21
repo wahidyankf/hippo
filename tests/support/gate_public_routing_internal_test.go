@@ -74,7 +74,7 @@ func TestBDDGatePublicInspectorRejectsEachMissingOrNonexecutingEntry(t *testing.
 }
 
 func TestBDDGatePublicOrdinarySelectorsRetainUnitAndPureControls(t *testing.T) {
-	for _, script := range []string{"scripts/test-quick.sh", "scripts/test.sh"} {
+	for _, script := range []string{"scripts/test-quick.sh"} {
 		calls, code := recordBDDGate(t, script, "")
 		if code != 0 {
 			t.Fatalf("recording %s exited %d", script, code)

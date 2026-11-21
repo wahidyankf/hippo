@@ -1,30 +1,35 @@
 Feature: Portable host evidence
   Host-specific signals are normalized without requiring unavailable capabilities.
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Linux cgroup memory limits host capacity
     Given Linux host and cgroup memory evidence
     When the Linux evidence is collected
     Then effective memory is 4 GiB
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Linux reclaimable file cache stays available
     Given a Linux cgroup whose usage is mostly inactive file cache
     When the Linux evidence is collected
     Then available memory excludes the inactive file cache
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Linux without swap remains usable
     Given Linux reports no usable swap
     When development pressure is assessed
     Then swap is unavailable without causing critical pressure
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Linux PSI detects active memory contention
     Given Linux memory PSI some average is 10 percent
     When development pressure is assessed
     Then the state is warning because of memory PSI
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Linux swap counts toward the allowance when counting is on
     Given a Linux host with 7618 MiB of memory and 1 GiB of available memory
@@ -34,6 +39,7 @@ Feature: Portable host evidence
     Then the swap allowance is 8 GiB
     And the swap headroom is 7 GiB
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: The swap allowance is the smaller of memory and swap, rounded up to whole GiB
     Given a Linux host with <memory> of memory and 1 GiB of available memory
@@ -48,6 +54,7 @@ Feature: Portable host evidence
       | 7618 MiB | 8 GiB | 8 GiB     |
       | 4 GiB    | 8 GiB | 4 GiB     |
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A Linux host without swap has no swap allowance
     Given a Linux host with 4 GiB of memory and 1 GiB of available memory
@@ -56,6 +63,7 @@ Feature: Portable host evidence
     When development pressure is assessed
     Then the swap allowance is 0 bytes
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A Linux host whose swap cannot be read has no swap allowance
     Given a Linux host with 4 GiB of memory and 1 GiB of available memory
@@ -64,6 +72,7 @@ Feature: Portable host evidence
     When development pressure is assessed
     Then the swap allowance is 0 bytes
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A macOS host never counts swap
     Given a macOS host with 4 GiB of memory and 1 GiB of available memory
@@ -72,6 +81,7 @@ Feature: Portable host evidence
     When development pressure is assessed
     Then the swap allowance is 0 bytes
 
+  # Exemption(e2e): a compiled binary reads the real host, so its samples, counters, and timing cannot be set to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Swap is not counted when the setting is off
     Given a Linux host with 4 GiB of memory and 1 GiB of available memory

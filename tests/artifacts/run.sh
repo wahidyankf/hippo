@@ -16,7 +16,7 @@ if git ls-files --error-unmatch hippo.local.json >/dev/null 2>&1; then
 fi
 
 # Conversely, source, specs, examples, and enforcement must remain publishable.
-for tracked in go.mod go.sum package.json package-lock.json commitlint.config.cjs lint-staged.config.mjs hippo hippo.local.json.example .husky/commit-msg .husky/pre-commit .husky/pre-push specs/behaviours/README.md scripts/format-check.sh scripts/test.sh scripts/test-quick.sh scripts/build-release.sh; do
+for tracked in go.mod go.sum package.json package-lock.json commitlint.config.cjs hippo hippo.local.json.example .husky/commit-msg .husky/pre-commit .husky/pre-push specs/behaviours/README.md scripts/format-check.sh scripts/test-integration.sh scripts/test-quick.sh scripts/build-release.sh; do
 	git check-ignore --quiet "$tracked" && {
 		echo "$tracked must remain committable" >&2
 		exit 1

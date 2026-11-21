@@ -29,10 +29,10 @@ Read it before acting; this skill exists to make sure it is the thing that gets 
 
 ## Traps
 
-- A sibling `*-worktrees/` directory is forbidden, and `scripts/check-worktree-layout.sh` fails the quick gate when a
-  worktree or a tracked instruction uses one.
-- `pre-push` runs the whole quick gate and takes minutes. A push that returns quickly probably did not push; read the
-  captured output rather than the exit code.
+- A sibling `*-worktrees/` directory is forbidden, and `scripts/check-worktree-layout.sh` fails the pull-request gate
+  when a worktree or a tracked instruction uses one.
+- `pre-push` runs only the leak scan over the pushed range, which can take minutes on a large range. A push that returns
+  quickly probably did not push; read the captured output rather than the exit code.
 - Exit `124` from the guard means a limit stopped the work, and on a workstation that usually means it was busy. The
   reason on stderr says which limit. Retry the same invocation once it clears; it is not a failure of the change.
 - `--no-verify` only under the [worktree-to-PR exception][hook-exception]: safety screens and the push leak review must

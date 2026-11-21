@@ -1,8 +1,9 @@
 # Compiled end-to-end tests
 
 `./tests/e2e/run.sh` builds one stamped current candidate, prepares the host helper and both immutable release binaries,
-then runs direct and composed public tests serially. `npm test` invokes this same entrypoint as part of the full gate.
-Preparation needs no caller-supplied binary, digest, or receipt.
+then runs direct and composed public tests serially. `npm run test:e2e` invokes this same entrypoint, and the `main`
+surface runs it after each merge; it never runs per pull request. Preparation needs no caller-supplied binary, digest,
+or receipt.
 
 Six forced public terminal-fault rows are deferred by the acceptance owner: startup, input read, live output write,
 restoration, restoration failure taking precedence over interruption, and global JSON restoration-before-report. Their
@@ -23,10 +24,10 @@ executes that extracted binary's `version --json`. The selected Go tool strictly
 version, and full commit must match the selected immutable release. Both preparations reject unexpected stderr or
 altered raw version output.
 
-The pull-request gate runs this same leaf alone through `tests/e2e/mixed-version.sh`, with the same candidate and
-preparation, on its `ubuntu-24.04` runner. After merge, `tests/e2e/run.sh` runs it again as part of the full suite. The
-gate then executes `TestMixedVersionV085DisplayInteroperability` once with `-tags=mixedversion -count=1`, a 120-second
-test timeout, and the same current candidate used by the retained v0.8.4 public suite. The v0.8.5 preparation exports
+The mixed-version leaf is an end-to-end layer, not a pull-request job. `tests/e2e/run.sh` runs it as part of the suite,
+with the same candidate and preparation, after each merge on `main`. The gate then executes
+`TestMixedVersionV085DisplayInteroperability` once with `-tags=mixedversion -count=1`, a 120-second test timeout, and
+the same current candidate used by the retained v0.8.4 public suite. The v0.8.5 preparation exports
 `HIPPO_PUBLIC_V085_BIN`, `HIPPO_PUBLIC_V085_BIN_SHA256`, and `HIPPO_PUBLIC_V085_VERSION_RECEIPT` to the harness. The
 existing v0.8.4 inputs remain separate. These artifact inputs never become product environment. A preparation or
 compatibility failure stops the gate; no missing-input skip exists.

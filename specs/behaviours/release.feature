@@ -9,12 +9,14 @@ Feature: Release resource ownership
   hosts with less than 10 GiB, so a fixed absolute threshold does not punish a small-RAM host. Summaries without
   physical memory keep 4 GiB.
 
+  # Exemption(e2e): requires synthetic release capacity that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Release admission preserves the requested capacity envelope
     Given a release host below its requested balanced capacity
     When release admission is assessed
     Then the release requires replanning instead of automatic fallback
 
+  # Exemption(e2e): requires synthetic release pressure, disk, and collector failures that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: A failed release stability check names its own reason in one line
     Given a release host whose <condition>

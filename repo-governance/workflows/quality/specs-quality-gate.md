@@ -23,14 +23,14 @@ specification tree. Any other `max-cycles` value, or a missing subject, refuses 
 
 The checker reports none of these properties. The entry and exit checks run their owners instead.
 
-| Property                           | Owned by                 | This repository runs                        |
-| ---------------------------------- | ------------------------ | ------------------------------------------- |
-| Every step resolves to one binding | the compliance check     | `scripts/test-quick.sh`                     |
-| Scenario syntax                    | the corpus parser        | `scripts/test-quick.sh`                     |
-| Scenarios pass at each adapter     | the behaviour adapters   | `scripts/test-quick.sh`, `scripts/test.sh`  |
-| Markdown formatting                | the formatter and linter | `prettier`, `markdownlint-cli2`             |
-| Internal links                     | the link validator       | `./rhino md internal-link validate`         |
-| Directory maps                     | the map validator        | `./rhino governance directory-map validate` |
+| Property                           | Owned by                 | This repository runs                         |
+| ---------------------------------- | ------------------------ | -------------------------------------------- |
+| Every step resolves to one binding | the compliance check     | `scripts/test-quick.sh`                      |
+| Scenario syntax                    | the corpus parser        | `scripts/test-quick.sh`                      |
+| Scenarios pass at each adapter     | the behaviour adapters   | `test:quick`, `test:integration`, `test:e2e` |
+| Markdown formatting                | the formatter and linter | `prettier`, `markdownlint-cli2`              |
+| Internal links                     | the link validator       | `./rhino md internal-link validate`          |
+| Directory maps                     | the map validator        | `./rhino governance directory-map validate`  |
 
 A property no tool of its own owns leaves the table and becomes judgeable, per Deterministic and Judgement Validation.
 

@@ -34,9 +34,9 @@ One push of a task-owned branch may skip its pre-push hook when every condition 
 - Record in the task record: the receipt, the authorizing human, the safety-screen result, and the pull request.
 - The branch does not merge until the hosted gate passes on the exact pushed head. A later push replaces that head and
   owes a fresh pass; nothing about this exception waives it.
-- Suites the pull-request gate does not run, such as the full suite, race detection, and the vulnerability scan in
-  `scripts/test.sh` via the post-merge `main-test` workflow, stay owed where their own standards place them. This
-  exception moves no suite.
+- Suites the pull-request gate does not run, such as the end-to-end suite and the vulnerability scan, which the
+  post-merge `main-test` workflow runs on `main`, stay owed where their own standards place them. This exception moves
+  no suite.
 
 ## What This Never Covers
 

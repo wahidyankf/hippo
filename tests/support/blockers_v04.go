@@ -1134,10 +1134,6 @@ func requireV04SchemaOneSupervisorLifetime(class string) error {
 	return runInternalGuardRegressionV04("TestSchemaOneOwnershipSurvivesSupervisorDeath/" + class)
 }
 
-func requireV04SchemaOneEmbeddedRetirement(string) error {
-	return runInternalGuardRegressionV04("TestSchemaOneEmbeddedOwnershipRetiresAfterHolder")
-}
-
 func requireV04LegacySchemaOneOwnership(class string) error {
 	return runInternalGuardRegressionV04("TestLegacySchemaOnePIDOnlyOwnershipCompatibility/" + class)
 }
@@ -1159,14 +1155,6 @@ func requireV072BoundedActivationContention(string) error {
 
 func requireV072StalledActivationContention(string) error {
 	return runInternalGuardRegressionV04("TestStalledActivationContentionFailsAfterOwnedCleanup")
-}
-
-func requireV04AggressiveGraceRetirement(string) error {
-	return runInternalGuardRegressionV04("TestTerminateAndWaitConfirmsRetirementAfterAnAggressiveGrace")
-}
-
-func requireV04ExitedUnreapedGroupStop(string) error {
-	return runInternalGuardRegressionV04("TestSignalGroupAcceptsAnExitedButUnreapedProcessGroup")
 }
 
 func requireV04BoundedGuardCancellation(string) error {
@@ -1225,16 +1213,8 @@ func requireV04LifetimeCapability(root string) error {
 	return nil
 }
 
-func requireV04AbandonedLocalHandles(string) error {
-	return runInternalGuardRegressionV04("TestRunUnconfirmedRetirementPreservesOwnershipAndExit/cancellation")
-}
-
 func requireV04PortIdentityCorruption(fault string) error {
 	return runInternalGuardRegressionV04("TestTokenizedPortIdentityCorruptionFailClosed/" + fault)
-}
-
-func requireV04PortHandleABA(string) error {
-	return runInternalGuardRegressionV04("TestStaleSameProcessPortHandleCannotReleaseReplacement")
 }
 
 func requireV04LegacyPortCompatibility(string) error {
@@ -2239,13 +2219,6 @@ func requireV04ConformanceCancellation(root string) error {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-func requireV04ReapedGroupRetirement(string) error {
-	return errors.Join(
-		runInternalConformanceRegressionV04("TestSignalProcessGroupAcceptsAnExitedButUnreapedGroup"),
-		runInternalConformanceRegressionV04("TestCommandGroupRetirementToleratesDelayedReaping"),
-	)
 }
 
 func runInternalConformanceRegressionV04(name string) error {

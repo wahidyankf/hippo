@@ -196,9 +196,10 @@ HIPPO has no OSE-specific defaults; consumers supply commands, paths, ports, and
 Source contributors need Go 1.26.1 and Node.js 24.
 
 ```sh
-npm ci            # installs locked tooling and, via prepare, Git hooks
-npm run test:quick # format, lint, unit, coverage, behavior adapters, artifact and repository policy
-npm test           # the quick gate plus integration, end-to-end, race and vulnerability checks
+npm ci                     # installs locked tooling and Git hooks
+npm run test:quick         # lint, unit tests, coverage, behavior adapters
+npm run test:integration   # integration suites
+npm run test:e2e           # end-to-end suites
 ```
 
 Only `main` persists. Work reaches it through a pull request from a branch at `{repository location}/worktrees/<task>`;
@@ -206,9 +207,10 @@ sibling `*-worktrees` directories are forbidden. Direct pushes are refused for e
 `Quality gate`, is defined in `.github/workflows/`.
 
 ShellCheck and documentation gates are in neither script: they run under [RHINO](https://github.com/wahidyankf/rhino) on
-push and pull request, pinned by tag and SHA-256 in `rhino.lock`; `repo-config.yml` supplies the lifecycle and three
-native harness projections. Regenerate those projections only with `./rhino harness adapters generate` and prove them
-with `./rhino harness adapters validate`. RHINO guards its own builds with a pinned `./hippo`.
+pull request, while pre-push runs only the leak scan; RHINO is pinned by tag and SHA-256 in `rhino.lock`;
+`repo-config.yml` supplies the lifecycle and three native harness projections. Regenerate those projections only with
+`./rhino harness adapters generate` and prove them with `./rhino harness adapters validate`. RHINO guards its own builds
+with a pinned `./hippo`.
 
 Everything else — the coverage floor, the exemption boundaries, where a worktree may live, how a release is cut — is in
 `repo-governance/`.

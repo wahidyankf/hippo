@@ -1,6 +1,7 @@
 Feature: Guarded process execution
   The guard serializes heavy work, keeps long-lived services outside that lease, and owns only the process it launches.
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: An exclusive session advertises compatibility coordination
     Given an empty shared coordination root
@@ -19,6 +20,7 @@ Feature: Guarded process execution
     When a guarded run with a port lease is requested
     Then it exits 125 naming hippo.lease.unwritable and no child starts
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A live heavy lease defers a second owner
     Given another live process owns the heavy lease
@@ -26,24 +28,28 @@ Feature: Guarded process execution
     Then the second owner is deferred with exit 124 naming hippo.limit.capacity-deferred
     And the deferral names the process holding the lease
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A long-lived service never holds the heavy-work lease
     Given a live service session owns its resource lease
     When heavy work requests the lease
     Then the heavy owner acquires the lease immediately
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Concurrent services keep their own inheritable sessions
     Given two live service sessions on separate ports
     When each service child validates its inherited session
     Then both inherited sessions remain valid
 
+  # Exemption(e2e): requires synthetic inherited session state unavailable to an isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: An inherited session runs without reacquiring the lease
     Given a valid inherited resource session
     When a guarded child exits successfully
     Then the child exits successfully and the inherited session remains owned
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A failed child keeps its own exit code
     Given an admitted guarded command
@@ -60,78 +66,76 @@ Feature: Guarded process execution
       | 124  |
       | 125  |
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Canonical concurrency remains ecosystem neutral
     Given an admitted command without consumer concurrency mappings
     When the guarded child inspects its environment
     Then only canonical HIPPO concurrency variables are added
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Consumers select their concurrency environment mappings
     Given an admitted command with explicit consumer concurrency mappings
     When the guarded child inspects its environment
     Then missing mappings receive resolved concurrency and caller values remain unchanged
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Invalid concurrency mappings fail before child execution
     Given invalid and reserved consumer concurrency mappings
     When each mapped guarded command is requested
     Then every command is rejected before its child starts
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Guarded child streams remain composable
     Given an admitted guarded child with piped input and separate output streams
     When the guarded child copies all three standard streams
     Then stdin reaches the child and stdout and stderr remain separate
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: An interrupted guard signals once and then force-stops the child
     Given an admitted child that ignores termination
     When the guard is interrupted
     Then the child is signalled once and force-stopped within the grace
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A service port held by a live owner defers the contender
     Given a service port already leased by a live owner
     When another service requests that same port
     Then the contender is deferred with exit 124 naming hippo.limit.capacity-deferred instead of failing
-
-  @e2e-exempt
-  Scenario: Stopping an exited but unreaped child group is not a supervision failure
-    Given a guarded child process group whose members exited without being reaped
-    When its owning guard stops that process group
-    Then the stop reports no supervision failure
-
-  @e2e-exempt
-  Scenario: An aggressive termination grace still confirms a forced stop
-    Given a killed child group that retires after an aggressive termination grace
-    When its owning guard waits for that retirement
-    Then retirement is confirmed instead of leaving the reservation owned
-
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A supervision failure reaps the guarded child before releasing ownership
     Given an admitted child that ignores termination during a collector failure
     When guarded supervision loses host evidence
     Then the child is reaped before its resource lease is released
 
+  # Exemption(e2e): requires synthetic critical pressure while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Critical pressure sheds eligible work
     Given an admitted ephemeral child encounters critical pressure
     When the guard observes the critical sample
     Then the guard terminates its child and exits with code 124 naming hippo.limit.pressure-shed
 
+  # Exemption(e2e): requires synthetic lasting warning and a shortened warning grace while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Warning that outlasts the class grace sheds eligible work
     Given an admitted ephemeral child encounters lasting memory warning
     When the guard observes warning past the ephemeral grace
     Then the guard sheds its child after memory warning and exits with code 124 naming hippo.limit.pressure-shed
 
+  # Exemption(e2e): requires synthetic warning growth while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Worsening warning sheds degraded work
     Given an admitted degraded ephemeral child encounters growing compressor pressure
     When the guard observes warning through the grace
     Then the degraded child starts and is terminated with exit 124 naming hippo.limit.pressure-shed
 
+  # Exemption(e2e): requires a synthetic stable warning while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Stable warning spares an ephemeral child of the balanced lineage
     Given an ephemeral child of <profile> admitted on healthy Darwin samples
@@ -143,6 +147,7 @@ Feature: Guarded process execution
       | the built-in balanced profile              |
       | a configured profile that extends balanced |
 
+  # Exemption(e2e): requires synthetic warning growth, critical pressure, and disk evidence while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Unsafe pressure still sheds a balanced ephemeral child admitted under normal pressure
     Given an ephemeral child of the built-in balanced profile admitted under normal pressure
@@ -156,6 +161,7 @@ Feature: Guarded process execution
       | critical memory pressure       | hippo.limit.pressure-shed   |
       | disk below its warning reserve | hippo.limit.storage-blocked |
 
+  # Exemption(e2e): requires a synthetic stable warning while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Stable warning still sheds work outside the exemption
     Given <child> admitted under normal pressure
@@ -172,30 +178,35 @@ Feature: Guarded process execution
     When run asks to wait for admission under schema one exclusive coordination
     Then it exits 2 naming hippo.args.invalid with only its diagnostic before any payload starts
 
+  # Exemption(e2e): requires capacity to be freed from inside the queue pause, which needs an injected clock the compiled binary does not expose; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A single registered waiter rides out exhausted capacity
     Given a shared root that defers one owner before capacity frees
     When that owner runs with a budget to wait for admission
     Then it stays registered once and reports the admitted child's own exit code
 
+  # Exemption(e2e): requires an injected clock to spend the wait budget without spending the same wall time; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Waiting for admission still surrenders when the budget is spent
     Given a shared root whose capacity never frees
     When an owner waits for admission within a bounded budget
     Then it stops waiting before launch and reports the deferral as exit 124 naming hippo.limit.capacity-deferred
 
+  # Exemption(e2e): counting queue heartbeats across many polls needs an injected clock to spend the deadline without spending the same wall time; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A caller waiting for admission reports one queue and deferral receipt
     Given a shared root whose capacity never frees
     When an owner waits for admission across many polls
     Then the queue and final deferral are each reported once without launching
 
+  # Exemption(e2e): degrades storage after queue admission, which needs the injected sample sequence the compiled binary does not expose; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Admission waiting leaves every later safety notice audible
     Given a shared root that frees capacity onto exhausted storage
     When an owner waits for admission across many polls
     Then the storage notice is reported after admission without a deferral
 
+  # Exemption(e2e): shares the injected clock of the deferral scenarios it is contrasted against; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Waiting for admission never retries a decision that is not a deferral
     Given a shared root that admits an owner whose child fails

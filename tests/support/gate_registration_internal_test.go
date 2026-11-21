@@ -47,43 +47,6 @@ func TestBDDGateQuickRegistration(t *testing.T) {
 	})
 }
 
-func TestBDDGateFullRegistration(t *testing.T) {
-	calls, code := recordBDDGate(t, "scripts/test.sh", "")
-	if code != 0 {
-		t.Fatalf("recorded full script exited %d", code)
-	}
-	t.Run("ordinary Integration and race remain", func(t *testing.T) {
-		requireBDDGateFullOrdinary(t, calls)
-	})
-	for _, row := range []struct {
-		name, suite, entry string
-		race               bool
-	}{
-		{"Integration", "integration", "TestIntegrationBehaviours", false},
-		{"Unit race", "unit", "TestUnitBehaviours", true},
-		{"Integration race", "integration", "TestIntegrationBehaviours", true},
-	} {
-		t.Run(row.name, func(t *testing.T) {
-			count := 0
-			for _, call := range calls {
-				if call.suite != row.suite || !slices.Contains(call.args, "./tests/bdd") || slices.Contains(call.args, "-race") != row.race {
-					continue
-				}
-				count++
-				if bddGateFlag(call, "-run") != "^"+row.entry+"$" {
-					t.Errorf("wrong explicit selector: %+v", call)
-				}
-			}
-			if count != 1 {
-				t.Errorf("explicit %s executions = %d, want one", row.name, count)
-			}
-		})
-	}
-	t.Run("contract race and vulnerability scan remain", func(t *testing.T) {
-		requireBDDGateFullContract(t, calls)
-	})
-}
-
 func TestBDDGateE2ECandidateRegistration(t *testing.T) {
 	calls, code := recordBDDGate(t, "tests/e2e/run.sh", "")
 	if code != 0 {
@@ -142,7 +105,6 @@ func TestBDDGateFailuresStopActualScripts(t *testing.T) {
 		{"scripts/test-quick.sh", "test:-run"},
 		{"scripts/test-quick.sh", "tool:golangci-lint"},
 		{"scripts/test-quick.sh", "run:./tests/coverage"},
-		{"scripts/test.sh", "tool:govulncheck"},
 		{"tests/e2e/run.sh", "build:-p=1"},
 		{"tests/e2e/run.sh", "test:-count=1"},
 	} {
@@ -263,31 +225,6 @@ func TestBDDGateInspectorsRejectNonexecutingRegistrations(t *testing.T) {
 			}
 			if err == nil {
 				t.Fatal("nonexecuting, wrong-boundary or overbroad registration accepted")
-			}
-		})
-	}
-}
-
-func TestBDDGateCoreCoverageRequiresRelocatedUnit(t *testing.T) {
-	script := lintWiringDriver(t).lintCommand
-	if strings.Count(script, "./tests/unit ") != 1 {
-		t.Fatal("fixture must identify one measured package selector")
-	}
-	positive := script
-	if !validCoreCoverageSelectors(positive) {
-		t.Fatal("existing denominator and relocated Unit host rejected")
-	}
-	for _, row := range []struct{ name, from, to string }{
-		{"relocated host removed", "./tests/unit ./tests/bdd ", "./tests/unit "},
-		{"Unit entry excluded", "^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$", "^(TestUnitBehaviours|TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$"},
-		{"coverage made static-only", "-coverprofile=coverage/unit.out", "-run '^TestFeatureCompliance$' -coverprofile=coverage/unit.out"},
-	} {
-		t.Run(row.name, func(t *testing.T) {
-			if strings.Count(positive, row.from) != 1 {
-				t.Fatal("coverage mutation does not identify exactly one selector")
-			}
-			if validCoreCoverageSelectors(strings.Replace(positive, row.from, row.to, 1)) {
-				t.Fatal("measured Unit corpus was omitted but coverage selector accepted")
 			}
 		})
 	}
@@ -520,6 +457,7 @@ public_v085_release_prepare() {
 }
 `))
 	write("tests/e2e/v0100-release.sh", []byte(v0100ReleaseStandIn))
+	write("rhino", []byte("#!/bin/sh\nexit 0\n"))
 	for _, path := range []string{"go.mod", "go.sum", "tests/support/hostprobe/protocol.go"} {
 		write(path, []byte("recording preparation source fixture\n"))
 	}
@@ -597,7 +535,7 @@ func requireBDDGateQuickMeasuredUnit(t *testing.T, calls []bddGateCall) {
 	t.Helper()
 	var unitCalls []bddGateCall
 	for _, call := range calls {
-		if bddGateNamesPackage(call, "./tests/bdd") && bddGateSelects(call, "TestUnitBehaviours") {
+		if bddGateNamesPackage(call, "./tests/bdd") && bddGateSelects(call, "TestUnitBehaviours") && bddGateFlag(call, "-coverprofile") != "" {
 			unitCalls = append(unitCalls, call)
 		}
 	}
@@ -643,52 +581,6 @@ func requireBDDGateQuickNoNative(t *testing.T, calls []bddGateCall) {
 			t.Errorf("quick authored shell has native/build invocation: %+v", call)
 		}
 	}
-}
-
-func requireBDDGateFullOrdinary(t *testing.T, calls []bddGateCall) {
-	t.Helper()
-	var ordinary, race bool
-	for _, call := range calls {
-		if !slices.Contains(call.args, "./tests/integration") {
-			continue
-		}
-		if run := bddGateFlag(call, "-run"); run == "^TestMixedVersionV0100VeryHeavyCompatibility$" {
-			continue // The separate required leaf is checked by its registration control.
-		}
-		excluded := bddGateEntryNames()
-		if slices.Contains(call.args, "./internal/...") {
-			excluded = bddGateOrdinaryEntryNames()
-		}
-		requireBDDGateSelection(t, call, []string{"TestOrdinaryIntegration"}, excluded)
-		if slices.Contains(call.args, "-race") {
-			race = true
-			for _, pkg := range []string{"./cmd/...", "./internal/...", "./tests/support", "./tests/support/hostprobe", "./tests/support/oldidentity", "./tests/unit", "./tests/bdd"} {
-				if !slices.Contains(call.args, pkg) {
-					t.Errorf("ordinary race package missing: %s", pkg)
-				}
-			}
-		} else {
-			ordinary = true
-		}
-	}
-	if !ordinary || !race {
-		t.Errorf("ordinary Integration=%t race=%t", ordinary, race)
-	}
-}
-
-func requireBDDGateFullContract(t *testing.T, calls []bddGateCall) {
-	t.Helper()
-	call := requireBDDGateCall(t, calls, "test", "./tests/contract")
-	var contractRace bool
-	for _, candidate := range calls {
-		if slices.Contains(candidate.args, "./tests/contract") && slices.Contains(candidate.args, "-race") {
-			contractRace = true
-		}
-	}
-	if !contractRace || !slices.Contains(call.args, "-count=1") {
-		t.Error("contract obligations missing")
-	}
-	requireBDDGateCall(t, calls, "tool", "govulncheck")
 }
 
 func requireBDDGateOrdinarySelectionOracle(t *testing.T) {

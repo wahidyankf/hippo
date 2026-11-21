@@ -139,6 +139,9 @@ func TestGateTestPatternsRejectCompileOnlyAndSkipAll(t *testing.T) {
 func fixtureGatePatterns(t *testing.T, flag string) []string {
 	t.Helper()
 	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "repo-config.yml"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for _, script := range testRunningScripts {
 		path := filepath.Join(root, script)
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {

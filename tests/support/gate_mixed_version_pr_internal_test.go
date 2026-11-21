@@ -58,9 +58,9 @@ func TestPullRequestVeryHeavyLeafFailureStopsAndCleansCandidate(t *testing.T) {
 	}
 }
 
-// The pull request gate gains exactly one job on the operating system it already
-// uses, and the single required check waits for it. No full suite and no matrix.
-func TestPullRequestGateRunsMixedVersionLeafOnItsOwnJob(t *testing.T) {
+// The pull request gate runs no mixed-version job: the v0.10.0 compatibility leaf is an end-to-end layer (D20), and the
+// pull-request workflow must not run it or the full suite per pull request.
+func TestPullRequestGateRunsNoMixedVersionLeaf(t *testing.T) {
 	root, err := toolRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -70,17 +70,7 @@ func TestPullRequestGateRunsMixedVersionLeafOnItsOwnJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflow := string(data)
-	if !containsAll(workflow,
-		"\n  mixed-version:\n",
-		"name: Mixed-version compatibility",
-		"runs-on: ubuntu-24.04",
-		"timeout-minutes: 20",
-		"run: ./tests/e2e/mixed-version.sh",
-		"        release-build,\n        mixed-version,\n      ]",
-	) {
-		t.Fatal("pull-request gate does not run the mixed-version leaf on ubuntu-24.04 and wait for it in the quality gate")
-	}
-	if strings.Contains(workflow, "./scripts/test.sh") || strings.Count(workflow, "mixed-version:") != 1 {
-		t.Fatal("pull-request gate runs the full suite or declares the mixed-version job more than once")
+	if strings.Contains(workflow, "\n  mixed-version:") || strings.Contains(workflow, "./tests/e2e/mixed-version.sh") || strings.Contains(workflow, "./scripts/test.sh") {
+		t.Fatal("pull-request gate runs the mixed-version leaf or the removed full suite")
 	}
 }

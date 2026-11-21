@@ -1,6 +1,7 @@
 Feature: Bounded runtime evidence
   Raw evidence retains a recent window while summaries cover the complete monitored lifetime.
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Active evidence rotates without truncating its lifetime summary
     Given a guarded evidence stream with small test chunks
@@ -8,12 +9,14 @@ Feature: Bounded runtime evidence
     Then only the bounded newest raw chunks remain
     And the evidence summary counts every recorded sample
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A shared root admits at most twenty live evidence streams
     Given twenty live evidence streams in one shared root
     When another evidence stream starts
     Then the new stream is rejected before raw evidence is created
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Inactive evidence is pruned to the shared storage budget
     Given inactive evidence above the shared storage budget
@@ -46,6 +49,7 @@ Feature: Bounded runtime evidence
     When the queued run receives SIGINT before it is admitted
     Then it exits 125 naming hippo.evidence.unwritable and no child starts
 
+  # Exemption(e2e): requires injected host samples that fail, or change the command, at a deterministic point in admission sampling; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: A run HIPPO stops before launch is summarized as admission-failed
     Given a guarded run that has begun sampling the host
@@ -79,6 +83,7 @@ Feature: Bounded runtime evidence
     And JSON history is requested for thirty days
     Then the history row outcome reads task-failed and records at least 0.8 seconds of child CPU
 
+  # Exemption(e2e): requires synthetic critical pressure and an unreaped grandchild that the compiled binary cannot inject; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A shed run records only a lower bound of its child usage
     Given an empty evidence root for guarded runs

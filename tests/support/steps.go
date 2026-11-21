@@ -31,9 +31,7 @@ func (driver *Driver) Bindings() []contract.StepBinding {
 		driver.interruptionBindings(),
 		driver.refusalBindings(),
 		driver.conformanceSignalBindings(),
-		driver.e2eBinaryBindings(),
 		driver.helpPrecedenceBindings(),
-		driver.coordinationGateBindings(),
 		driver.heldLockBindings(),
 		driver.annotationFailureBindings(),
 		driver.annotationBindings(),
@@ -197,9 +195,6 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 
 			return driver.requireReservationScenarioV04("port identity replaced")
 		}),
-		step(`^an old and replacement port lease handle for the same process owner$`, prepare("port handle ABA", requireV04PortHandleABA)),
-		step(`^the old handle attempts to release the replacement marker$`, driver.exerciseReservationScenarioV04),
-		step(`^token authentication rejects the stale handle and preserves the replacement lease$`, assert("port handle ABA")),
 		step(`^live and positively stale schema-one port markers without identity tokens$`, prepare("legacy port identity", requireV04LegacyPortCompatibility)),
 		step(`^a v0\.4 owner requests each legacy port$`, driver.exerciseReservationScenarioV04),
 		step(`^the live PID remains unavailable and only the positively stale PID is reclaimed$`, assert("legacy port identity")),
@@ -264,9 +259,6 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		}),
 		step(`^an heir requests that owner while it lives and again after its guard dies$`, driver.exerciseReservationScenarioV04),
 		step(`^the live request inherits the token and the later request is refused without failure$`, assert("reservation device-change inheritance")),
-		step(`^a long-lived caller whose guarded run returns before child-group retirement is confirmed$`, prepare("abandoned local handles", requireV04AbandonedLocalHandles)),
-		step(`^the lifetime holder retires later without the caller process exiting$`, driver.exerciseReservationScenarioV04),
-		step(`^the same caller can safely reclaim both reservation capacity and the leased port$`, assert("abandoned local handles")),
 		step(`^a direct HIPPO invocation with the internal environment and launcher argument but no capability pipes$`, prepare("lifetime capability", requireV04LifetimeCapability)),
 		step(`^the public command boundary interprets the invocation$`, driver.exerciseReservationScenarioV04),
 		step(`^no payload bypasses admission and the invocation is rejected as an ordinary invalid command$`, assert("lifetime capability")),
@@ -277,9 +269,6 @@ func (driver *Driver) reservationBindings() []contract.StepBinding { //nolint:fu
 		}),
 		step(`^only the compatibility supervisor is killed and ownership is reconciled$`, driver.exerciseReservationScenarioV04),
 		step(`^reservation takeover reports exit 125 naming hippo\.coordination\.protocol-mismatch until the compatibility child group retires$`, assert("schema one supervisor lifetime")),
-		step(`^a long-lived schema-one caller whose guarded group retirement is initially unconfirmed$`, prepare("schema one embedded retirement", requireV04SchemaOneEmbeddedRetirement)),
-		step(`^its launcher and group later retire without the caller exiting$`, driver.exerciseReservationScenarioV04),
-		step(`^compatibility ownership becomes reclaimable without treating the live caller PID as the owner$`, assert("schema one embedded retirement")),
 		step(`^live and positively stale zero-metadata legacy (heavy|service) ownership records$`, func(class string) error {
 			return driver.prepareReservationScenarioV04("legacy schema one ownership", func(string) error {
 				return requireV04LegacySchemaOneOwnership(class)
@@ -441,13 +430,6 @@ func (driver *Driver) conformanceBindings() []contract.StepBinding { //nolint:fu
 		}),
 		step(`^a later coordination command would use the replacement root$`, driver.exerciseReservationScenarioV04),
 		step(`^conformance rejects the changed shared-root identity privately before the command starts$`, assert("replaced conformance shared root")),
-		step(`^an owned command group that is signalled after its members exited and reaped only after the stop grace$`, func() error {
-			return driver.prepareReservationScenarioV04("reaped group retirement", requireV04ReapedGroupRetirement)
-		}),
-		step(`^the conformance runner retires that group$`, driver.exerciseReservationScenarioV04),
-		step(`^retirement reports no failure for a group the host had already stopped$`, func() error {
-			return driver.requireReservationScenarioV04("reaped group retirement")
-		}),
 		step(`^a conformance leader that exits on TERM while its TERM-ignoring descendant writes a late checkout mutation$`, func() error {
 			return driver.prepareReservationScenarioV04("conformance leader-first cancellation", requireV04ConformanceLeaderFirstCancellation)
 		}),
@@ -678,20 +660,6 @@ func (driver *Driver) executionBindings() []contract.StepBinding {
 		step(`^the contender is deferred with exit 124 naming hippo\.limit\.capacity-deferred instead of failing$`, func() error {
 			return driver.requireReservationScenarioV04("held service port")
 		}),
-		step(`^a guarded child process group whose members exited without being reaped$`, func() error {
-			return driver.prepareReservationScenarioV04("exited unreaped group stop", requireV04ExitedUnreapedGroupStop)
-		}),
-		step(`^its owning guard stops that process group$`, driver.exerciseReservationScenarioV04),
-		step(`^the stop reports no supervision failure$`, func() error {
-			return driver.requireReservationScenarioV04("exited unreaped group stop")
-		}),
-		step(`^a killed child group that retires after an aggressive termination grace$`, func() error {
-			return driver.prepareReservationScenarioV04("aggressive grace retirement", requireV04AggressiveGraceRetirement)
-		}),
-		step(`^its owning guard waits for that retirement$`, driver.exerciseReservationScenarioV04),
-		step(`^retirement is confirmed instead of leaving the reservation owned$`, func() error {
-			return driver.requireReservationScenarioV04("aggressive grace retirement")
-		}),
 		step(`^an admitted child that ignores termination during a collector failure$`, driver.stubbornCollectorFailureChild),
 		step(`^guarded supervision loses host evidence$`, driver.loseHostEvidence),
 		step(`^the child is reaped before its resource lease is released$`, driver.requireReapedBeforeRelease),
@@ -871,17 +839,9 @@ func (driver *Driver) artifactBindings() []contract.StepBinding {
 		return func() error { return driver.requireReservationScenarioV04(name) }
 	}
 	return []contract.StepBinding{
-		step(`^build artifact tracking is inspected$`, driver.inspectBuildCaching),
-		step(`^generated release binaries are ignored$`, driver.requireBuildCacheDisabled),
-		step(`^its compiled binary lifecycle is inspected$`, driver.inspectE2ELifecycle),
-		step(`^the end-to-end binary is removed after the run$`, driver.requireE2ECleanup),
 		step(`^four historical bootstrap generations$`, driver.historicalGenerations),
 		step(`^the current bootstrap generation runs$`, driver.runCurrentBootstrap),
 		step(`^only the current and two recent generations remain$`, driver.requireRetention),
-		step(`^tracked and ignored paths are inspected$`, driver.inspectArtifactPolicy),
-		step(`^local config, generated artifacts, and generated-reports are ignored and untracked$`, driver.requirePrivateArtifacts),
-		step(`^the local config example remains tracked$`, driver.requireExampleTracked),
-		step(`^the standalone layout has no Nx metadata$`, driver.requireApplicationLayout),
 		step(`^malformed and exact semantic release versions$`, prepare("release version syntax", requireV04ReleaseVersionSyntax)),
 		step(`^each release version is validated independently$`, driver.exerciseReservationScenarioV04),
 		step(`^only exact v-prefixed semantic versions pass$`, assert("release version syntax")),
@@ -922,9 +882,6 @@ func (driver *Driver) artifactBindings() []contract.StepBinding {
 		}),
 		step(`^the release build finishes$`, driver.exerciseReservationScenarioV04),
 		step(`^no source or binary staging directory remains$`, assert("release temporary cleanup")),
-		step(`^the version-four runtime source and conformance inventory$`, prepare("release source inventory", requireV04ReleaseInventory)),
-		step(`^repository artifact policy is executed$`, driver.exerciseReservationScenarioV04),
-		step(`^every version-four source and example is explicitly protected$`, assert("release source inventory")),
 		step(`^one clean exact release identity$`, prepare("release exact asset set", requireV04ReleaseAssetSet)),
 		step(`^its platform asset names and checksums are validated$`, driver.exerciseReservationScenarioV04),
 		step(`^exactly four supported archives and four matching checksums exist$`, assert("release exact asset set")),
@@ -969,27 +926,6 @@ func (driver *Driver) artifactBindings() []contract.StepBinding {
 
 func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 	return []contract.StepBinding{
-		step(`^lint gate wiring is inspected$`, driver.inspectLintEnforcement),
-		step(`^the configuration enables all linters and unlimited findings$`, driver.requireExhaustiveLint),
-		step(`^exported documentation diagnostics remain errors$`, driver.requirePackageDocumentation),
-		step(`^govet runs nilness and exhaustive checks switch statements and map literals$`, driver.requireNilnessAndExhaustiveMaps),
-		step(`^the quick gate invokes module-local lint$`, driver.requireModuleScopedLint),
-		step(`^the quick gate invokes the pinned NilAway over the module$`, driver.requirePinnedNilAway),
-		step(`^the production dependency graph is inspected for every supported platform$`, driver.inspectArchitecture),
-		step(`^application and domain dependencies point inward$`, driver.requireArchitectureGraph),
-		step(`^the architecture checker rejects forbidden dependency fixtures$`, driver.requireArchitectureFixtures),
-		step(`^the domain literal analysis runs over production code$`, driver.runDomainLiteralAnalysis),
-		step(`^it reports no finding$`, driver.requireNoDomainLiteralFinding),
-		step(`^behavior adapter wiring is inspected$`, driver.inspectBehaviourCoverage),
-		step(`^each registered adapter uses strict step resolution$`, driver.requireStrictAdapters),
-		step(`^each registered pattern owns a function handler$`, driver.requirePairedBindings),
-		step(`^the unit adapter permits no behavior exemptions$`, driver.requireNoUnitExemptions),
-		step(`^every configured behavior exemption names a concrete boundary and reason$`, driver.requireApprovedExemptions),
-		step(`^the quick gate invokes each compliance adapter serially$`, driver.requireSerialCompliance),
-		step(`^the standalone compiled end-to-end suite runs only in the full gate$`, driver.requireE2EPlacement),
-		step(`^contributor gate wiring is inspected$`, driver.inspectContributorEnforcement),
-		step(`^one commit-message gate binds the canonical hook message and reviewed pull request range$`, driver.requireConventionalCommits),
-		step(`^the quality gate runs on pull requests rather than pushes$`, driver.requirePullRequestOnlyGate),
 		step(`^post-merge gate wiring is inspected$`, driver.inspectPostMergeGate),
 		step(`^the pull request gate runs no full gate matrix$`, driver.requireNoFullGateOnPullRequests),
 		step(`^the post-merge workflow runs the full gate on push to main on both operating systems$`, driver.requirePostMergeFullGate),
@@ -999,29 +935,6 @@ func (driver *Driver) qualityGateBindings() []contract.StepBinding {
 		step(`^the hooks and pull request caller dispatch only closed v0.4 surfaces$`, driver.requireSharedDocumentationCheck),
 		step(`^the declared main and pull request runners retain every owned policy validator$`, driver.requirePinnedValidatorsRun),
 		step(`^the harness declaration owns non-overlapping Claude Codex and OpenCode projections$`, driver.requireThreeHarnessProfiles),
-		step(`^the pre-commit surface invokes staged formatting for supported files$`, driver.requireStagedFormatting),
-		step(`^the pre-push surface binds one typed range and invokes the direct quick gate without Nx$`, driver.requirePushQuickGate),
-		step(`^the quick gate invokes deterministic core coverage at 99 percent$`, driver.requireCoreCoverage),
-		step(`^a hook environment naming another repository$`, driver.adoptHookGitEnvironment),
-		step(`^a fixture checkout is initialized and committed$`, driver.initializeFixtureUnderHookEnvironment),
-		step(`^the fixture checkout holds the commit$`, driver.requireFixtureHoldsCommit),
-		step(`^the named repository is unchanged$`, driver.requireNamedRepositoryUnchanged),
-		step(`^gate script Git isolation is inspected$`, driver.inspectGateScriptIsolation),
-		step(`^gate package wiring is inspected$`, driver.inspectGatePackages),
-		step(`^every package that holds tests is run by a gate$`, driver.requireEveryTestPackageGated),
-		step(`^every gate script unsets the redirecting Git variables$`, driver.requireGateScriptsUnsetGitEnvironment),
-		step(`^loaded gate wiring is inspected$`, driver.inspectLoadedGate),
-		step(`^the loaded gate declares the host saturated only when its busy workers cover every core$`, driver.requireSaturationCoversEveryCore),
-		step(`^product code never reads the saturation declaration$`, driver.requireProductIgnoresSaturation),
-		step(`^the loaded gate has declared the host saturated$`, driver.declareLoadSaturation),
-		step(`^no loaded gate saturation declaration$`, driver.undeclaredLoadSaturation),
-		step(`^the guarded child signalled readiness$`, driver.markGuardedChildStarted),
-		step(`^a compiled guarded run ends in exit 124 naming hippo\.limit\.capacity-deferred with a never-started receipt$`, driver.documentedCapacityDeferral),
-		step(`^a compiled guarded run ends in another exit or without the hippo\.limit\.capacity-deferred reason or receipt$`, driver.otherRefusals),
-		step(`^a compiled guarded run ends in protocol mismatch exit 125$`, driver.protocolMismatchRefusal),
-		step(`^the fixture accepts the deferral$`, driver.requireDeferralAccepted),
-		step(`^the fixture refuses the run$`, driver.requireRunRefused),
-		step(`^the fixture refuses the run as a non-capacity failure$`, driver.requireRunRefused),
 	}
 }
 

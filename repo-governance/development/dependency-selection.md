@@ -8,7 +8,7 @@ build.
 - **Is it needed?** The standard library and the Go toolchain cover most of what this repository does. Reach for them
   first — see [minimal sufficiency](../principles/minimal-sufficiency.md).
 - **What does it pull in?** A dependency's own tree is part of what is being adopted. `govulncheck` runs over all of it
-  in the full gate.
+  on the `main` surface.
 - **What happens when it is abandoned?** Prefer something small enough to vendor or replace over something large enough
   to be unavoidable.
 - **Does it reach the network, the filesystem, or the process table?** Those are the boundaries this repository is

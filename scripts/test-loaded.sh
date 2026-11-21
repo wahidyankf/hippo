@@ -63,4 +63,6 @@ if [ "$workers" -ge "$cores" ]; then
 fi
 
 echo "running the release gate against $workers busy workers on $cores cores"
-./scripts/test.sh
+./scripts/test-quick.sh
+./scripts/test-integration.sh
+./tests/e2e/run.sh

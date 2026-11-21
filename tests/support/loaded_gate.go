@@ -120,20 +120,6 @@ func (driver *Driver) requireProductIgnoresSaturation() error {
 	return nil
 }
 
-func (driver *Driver) declareLoadSaturation() {
-	driver.loadSaturationDeclared = true
-	driver.guardedChildStarted = false
-}
-
-func (driver *Driver) undeclaredLoadSaturation() {
-	driver.loadSaturationDeclared = false
-	driver.guardedChildStarted = false
-}
-
-func (driver *Driver) markGuardedChildStarted() {
-	driver.guardedChildStarted = true
-}
-
 // capacityDeferralOutput is the stderr a compiled guard writes when host
 // admission never came: its progress sentence, then the closed reason.
 const capacityDeferralOutput = capacityDeferralMessage + "\n" + capacityDeferralReason +
@@ -143,67 +129,3 @@ const capacityDeferralOutput = capacityDeferralMessage + "\n" + capacityDeferral
 // capacity deferral. It was never an exit status, so a deferral that exits with
 // it is one the documented contract refuses.
 const internalDeferralStatus = 75
-
-func (driver *Driver) documentedCapacityDeferral() {
-	driver.deferralAccepted = acceptsSaturatedDeferralV04(
-		driver.loadSaturationDeclared, status.LimitShed,
-		[]byte(capacityDeferralOutput), driver.guardedChildStarted, true,
-	)
-}
-
-// otherRefusals tries every near miss of the documented deferral: its reason
-// with another exit, and its exit with another reason, only the progress
-// sentence, or nothing.
-func (driver *Driver) otherRefusals() {
-	nearMisses := []struct {
-		exitCode            int
-		output              string
-		neverStartedReceipt bool
-	}{
-		{exitCode: 1, output: capacityDeferralOutput, neverStartedReceipt: true},
-		{exitCode: internalDeferralStatus, output: capacityDeferralOutput, neverStartedReceipt: true},
-		{exitCode: status.GuardFailed, output: capacityDeferralOutput, neverStartedReceipt: true},
-		{exitCode: status.LimitShed, output: "HIPPO stayed deferred across 4 attempts in 1m0s.", neverStartedReceipt: true},
-		{exitCode: status.LimitShed, output: capacityDeferralMessage, neverStartedReceipt: true},
-		{exitCode: status.LimitShed, output: "hippo: [hippo.limit.pressure-shed] host pressure shed this work", neverStartedReceipt: true},
-		{exitCode: status.LimitShed, output: "", neverStartedReceipt: true},
-		{exitCode: status.LimitShed, output: capacityDeferralOutput},
-	}
-
-	driver.deferralAccepted = false
-
-	for _, nearMiss := range nearMisses {
-		if acceptsSaturatedDeferralV04(
-			driver.loadSaturationDeclared, nearMiss.exitCode, []byte(nearMiss.output), driver.guardedChildStarted,
-			nearMiss.neverStartedReceipt,
-		) {
-			driver.deferralAccepted = true
-		}
-	}
-}
-
-func (driver *Driver) protocolMismatchRefusal() {
-	driver.deferralAccepted = acceptsSaturatedDeferralV04(
-		driver.loadSaturationDeclared,
-		status.GuardFailed,
-		[]byte("HIPPO protocol mismatch: incompatible peer coordination.\n"+
-			"hippo: ["+string(status.CodeCoordinationProtocolMismatch)+"] live peer coordination state this client cannot safely join\n"),
-		driver.guardedChildStarted, true,
-	)
-}
-
-func (driver *Driver) requireDeferralAccepted() error {
-	if !driver.deferralAccepted {
-		return errors.New("the documented deferral on a declared saturated host was refused")
-	}
-
-	return nil
-}
-
-func (driver *Driver) requireRunRefused() error {
-	if driver.deferralAccepted {
-		return errors.New("the fixture accepted a run it must refuse")
-	}
-
-	return nil
-}
