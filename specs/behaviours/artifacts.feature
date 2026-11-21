@@ -27,19 +27,17 @@ Feature: HIPPO build artifacts
     When a release is requested for the non-HEAD commit
     Then the release is rejected before output
 
-  # Exemption(e2e): requires an isolated tracked-dirty checkout; alternative-proof: test:integration
+  # Exemption(e2e): a compiled binary run cannot be given an isolated checkout with tracked or untracked dirt; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Release checkout has no tracked changes
-    Given a fixture repository with one tracked change
+  Scenario Outline: A release checkout with tracked or untracked changes is rejected
+    Given a fixture repository with <change>
     When its release identity is validated
-    Then tracked dirt rejects the release
+    Then <dirt> dirt rejects the release
 
-  # Exemption(e2e): requires an isolated untracked-dirty checkout; alternative-proof: test:integration
-  @e2e-exempt
-  Scenario: Release checkout has no untracked changes
-    Given a fixture repository with one untracked file
-    When its release identity is validated
-    Then untracked dirt rejects the release
+    Examples:
+      | change             | dirt      |
+      | one tracked change | tracked   |
+      | one untracked file | untracked |
 
   # Exemption(e2e): a compiled binary run cannot be given an isolated Git history with a chosen commit, tag, or dirty state; alternative-proof: test:integration
   @e2e-exempt

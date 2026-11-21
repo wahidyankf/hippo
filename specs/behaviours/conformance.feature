@@ -17,24 +17,16 @@ Feature: Generic consumer conformance
 
   # Exemption(e2e): a consumer manifest and its checkouts are driven by the harness, outside any one compiled binary run; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Empty HIPPO binary input cannot resolve from the manifest directory
-    Given a conformance manifest with an empty raw HIPPO binary path
+  Scenario Outline: An empty raw conformance manifest input is rejected privately before it is used
+    Given a conformance manifest <setup>
     When the raw manifest inputs are validated
-    Then the empty binary input is rejected privately before path resolution
+    Then the empty <input> is rejected privately before <stage>
 
-  # Exemption(e2e): a consumer manifest and its checkouts are driven by the harness, outside any one compiled binary run; alternative-proof: test:integration
-  @e2e-exempt
-  Scenario: Empty shared-root input cannot resolve from the manifest directory
-    Given a conformance manifest with an empty raw shared-root path
-    When the raw manifest inputs are validated
-    Then the empty shared-root input is rejected privately before path resolution
-
-  # Exemption(e2e): a consumer manifest and its checkouts are driven by the harness, outside any one compiled binary run; alternative-proof: test:integration
-  @e2e-exempt
-  Scenario: Empty consumer path cannot resolve to its manifest checkout
-    Given a conformance manifest inside a valid checkout with one empty raw consumer path
-    When the raw manifest inputs are validated
-    Then the empty consumer path is rejected privately before checkout commands
+    Examples:
+      | setup                                                    | input             | stage             |
+      | with an empty raw HIPPO binary path                      | binary input      | path resolution   |
+      | with an empty raw shared-root path                       | shared-root input | path resolution   |
+      | inside a valid checkout with one empty raw consumer path | consumer path     | checkout commands |
 
   # Exemption(e2e): requires intentionally mutating temporary checkouts across failing manifest phases; alternative-proof: test:integration
   @e2e-exempt
@@ -157,24 +149,16 @@ Feature: Generic consumer conformance
 
   # Exemption(e2e): a consumer manifest and its checkouts are driven by the harness, outside any one compiled binary run; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: A HIPPO binary FIFO is rejected boundedly
-    Given a manifest whose HIPPO binary identity is a FIFO
+  Scenario Outline: A conformance manifest whose HIPPO binary is not a regular executable file is rejected without exposing its path
+    Given a manifest whose HIPPO binary <identity>
     When conformance validates the binary identity
-    Then validation rejects the special file without blocking or exposing its path
+    Then validation rejects <subject>
 
-  # Exemption(e2e): a consumer manifest and its checkouts are driven by the harness, outside any one compiled binary run; alternative-proof: test:integration
-  @e2e-exempt
-  Scenario: A HIPPO binary directory is rejected
-    Given a manifest whose HIPPO binary identity is a directory
-    When conformance validates the binary identity
-    Then validation rejects the directory without exposing its path
-
-  # Exemption(e2e): a consumer manifest and its checkouts are driven by the harness, outside any one compiled binary run; alternative-proof: test:integration
-  @e2e-exempt
-  Scenario: A HIPPO binary must be executable
-    Given a manifest whose HIPPO binary is a non-executable regular file
-    When conformance validates the binary identity
-    Then validation rejects the non-executable file without exposing its path
+    Examples:
+      | identity                         | subject                                                |
+      | identity is a FIFO               | the special file without blocking or exposing its path |
+      | identity is a directory          | the directory without exposing its path                |
+      | is a non-executable regular file | the non-executable file without exposing its path      |
 
   # Exemption(e2e): a consumer manifest and its checkouts are driven by the harness, outside any one compiled binary run; alternative-proof: test:integration
   @e2e-exempt
