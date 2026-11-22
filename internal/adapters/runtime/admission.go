@@ -59,9 +59,6 @@ func (engine *Engine) BeginAdmission(ctx context.Context, config application.Run
 		}
 		return application.Admission{Attempt: state.attemptExclusive, Receipt: state.receipt, Close: state.close}, nil
 	}
-	if wait < 0 {
-		return application.Admission{}, errors.New("reservation wait must be nonnegative")
-	}
 	minimum, maximum, err := coordination.PlanBounds(config.ReservationPlan)
 	if err != nil {
 		return application.Admission{}, err
