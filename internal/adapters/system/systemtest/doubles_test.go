@@ -479,3 +479,72 @@ func TestRandomAndDiskDoubles(t *testing.T) {
 		t.Fatal("disk doubles not bound")
 	}
 }
+
+func TestTerminalAnswersTheConfiguredForegroundGroup(t *testing.T) {
+	host := NewHost(start)
+	port := host.Port()
+	probe, err := os.CreateTemp(t.TempDir(), "fg-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = probe.Close() }()
+	if _, err := port.Terminal.ForegroundGroup(probe); err == nil {
+		t.Fatal("foreground of an unconfigured file = nil, want an error")
+	}
+	host.Terminal.Groups[probe.Name()] = 7
+	if group, err := port.Terminal.ForegroundGroup(probe); err != nil || group != 7 {
+		t.Fatalf("foreground = %d, %v, want 7, nil", group, err)
+	}
+	if err := port.Terminal.SetForegroundGroup(probe, 7); err != nil {
+		t.Fatal(err)
+	}
+	if len(host.Terminal.Set) != 1 || host.Terminal.Set[0].Group != 7 {
+		t.Fatalf("foreground sets = %+v, want one placement on group 7", host.Terminal.Set)
+	}
+	host.Terminal.SetErr = errors.New("floor: set refused")
+	if err := port.Terminal.SetForegroundGroup(probe, 7); err == nil {
+		t.Fatal("foreground set with a configured failure = nil, want error")
+	}
+	host.Terminal.ForegroundErr = errors.New("floor: query refused")
+	if _, err := port.Terminal.ForegroundGroup(probe); err == nil {
+		t.Fatal("foreground with a configured failure = nil, want error")
+	}
+}
+
+func TestFilesCreateTempWithoutAStarAppendsTheCounter(t *testing.T) {
+	host := NewHost(start)
+	port := host.Port()
+	first, err := port.Files.CreateTemp("work", "run-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = first.Close() }()
+	if first.Name() != "work/run-1" {
+		t.Fatalf("starless temp = %q, want work/run-1", first.Name())
+	}
+	second, err := port.Files.CreateTemp("work", "run-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = second.Close() }()
+	if second.Name() != "work/run-2" {
+		t.Fatalf("star temp = %q, want work/run-2", second.Name())
+	}
+}
+
+func TestFilesRenameCarriesTheModificationTime(t *testing.T) {
+	host := NewHost(start)
+	port := host.Port()
+	host.Files.Contents["work/a.txt"] = []byte("x")
+	modified := start.Add(-time.Hour)
+	host.Files.Modified["work/a.txt"] = modified
+	if err := port.Files.Rename("work/a.txt", "work/c.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if got := host.Files.Modified["work/c.txt"]; !got.Equal(modified) {
+		t.Fatalf("renamed modification time = %v, want %v", got, modified)
+	}
+	if _, kept := host.Files.Modified["work/a.txt"]; kept {
+		t.Fatal("rename kept the old modification time")
+	}
+}
