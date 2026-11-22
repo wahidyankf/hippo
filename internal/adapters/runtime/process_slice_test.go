@@ -3,6 +3,7 @@ package runtime //nolint:testpackage // Slice (b) doubles run inside the product
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"syscall"
 	"testing"
@@ -191,6 +192,51 @@ func TestLaunchConfiguredLifetimeRefusesAnUnknownCommand(t *testing.T) {
 	config := RunConfig{Command: "missing"}
 	if _, err := launchConfiguredLifetime(port, context.Background(), config, &Session{}, nil); err == nil {
 		t.Fatal("launch unknown command = nil, want error")
+	}
+}
+
+func TestSignalGroupReturnsAnUnclassifiedKillError(t *testing.T) {
+	_, port := processSliceSystem()
+	port.Processes.Kill = func(pid int, signal syscall.Signal) error {
+		if pid != -4242 || signal != syscall.SIGTERM {
+			t.Errorf("signalled pid = %d signal = %v, want the group -4242 SIGTERM", pid, signal)
+		}
+
+		return syscall.EIO
+	}
+	if err := signalGroup(port, 4242, syscall.SIGTERM); !errors.Is(err, syscall.EIO) {
+		t.Fatalf("signal unclassified error = %v, want the EIO", err)
+	}
+}
+
+func TestWaitStatusCodeFallsBackToOne(t *testing.T) {
+	if code := waitStatusCode(errors.New("boom")); code != 1 {
+		t.Fatalf("wait status code = %d, want one for an unclassified error", code)
+	}
+}
+
+func TestCheckCommandIsRunnableRefusesAnUnclassifiedLookupError(t *testing.T) {
+	_, port := processSliceSystem()
+	port.Runner.LookPath = func(string) (string, error) { return "", errors.New("lookup exploded") }
+	if failure := checkCommandIsRunnable(port, "tool"); failure == nil {
+		t.Fatal("unclassified lookup error = nil, want a failure")
+	}
+}
+
+func TestCheckCommandIsRunnableRefusesAnUnclassifiedStatError(t *testing.T) {
+	host, port := processSliceSystem()
+	host.Runner.Executables["tool"] = "/bin/tool"
+	port.Files.Stat = func(string) (fs.FileInfo, error) { return nil, errors.New("stat exploded") }
+	if failure := checkCommandIsRunnable(port, "tool"); failure == nil {
+		t.Fatal("unclassified stat error = nil, want a failure")
+	}
+}
+
+func TestExecutableGuardPathFallsBackToEmptyOnRunnerError(t *testing.T) {
+	_, port := processSliceSystem()
+	port.Runner.Executable = func() (string, error) { return "", errors.New("runner exploded") }
+	if path := executableGuardPath(port); path != "" {
+		t.Fatalf("guard path = %q, want empty when the runner fails", path)
 	}
 }
 
