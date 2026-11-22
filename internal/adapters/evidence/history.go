@@ -525,18 +525,15 @@ func copyGzip(port system.System, destination io.Writer, source string) error {
 		return err
 	}
 	defer reader.Close() //nolint:errcheck // Copy/decompressor errors are returned.
-	written, err := io.CopyN(destination, reader, RawMaximumBytes+1)
+	_, err = io.CopyN(destination, reader, RawMaximumBytes+1)
 	if errors.Is(err, io.EOF) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if written > RawMaximumBytes {
-		return errors.New("raw gzip expands beyond the shared evidence cap")
-	}
 
-	return nil
+	return errors.New("raw gzip expands beyond the shared evidence cap")
 }
 
 // EvaluatePromotion reads retained rows and delegates their pure evaluation.
