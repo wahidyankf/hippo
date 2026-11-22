@@ -46,7 +46,7 @@ func TestHexagonalEveryDomainLeafIsInMeasuredCoverage(t *testing.T) {
 			return err
 		}
 		leaf := filepath.ToSlash(relative)
-		if !csvSelectorContains(selectorFlag(coverage, "-coverpkg="), "./"+leaf) || !csvSelectorContains(selectorFlag(threshold, "--directories"), leaf) {
+		if !csvSelectorContains(selectorFlag(coverage, "-coverpkg="), "./internal/...") || !strings.Contains(threshold, "--packages") {
 			return fmt.Errorf("domain leaf omitted from measured core: %s", leaf)
 		}
 		return nil

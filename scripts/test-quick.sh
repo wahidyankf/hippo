@@ -56,7 +56,7 @@ HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./tests/bd
 listed=$(go list ./cmd/... ./internal/... ./scripts/release-archive)
 packages=$(printf '%s\n' "$listed" | grep -v -e '/internal/adapters/system/systemtest$' | paste -sd, -)
 mkdir -p coverage
-go test -count=1 -coverpkg="$packages" \
+go test -count=1 -coverpkg=./cmd/...,./internal/...,./scripts/release-archive \
 	-coverprofile=coverage/unit.out \
 	-skip '^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$' \
 	./tests/unit ./tests/bdd ./cmd/... ./internal/... ./scripts/release-archive

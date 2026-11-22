@@ -547,7 +547,7 @@ func requireBDDGateQuickMeasuredUnit(t *testing.T, calls []bddGateCall) {
 		t.Errorf("Unit is not measured: %v", call.args)
 	}
 	requireBDDGateSelection(t, call, []string{"TestUnitBehaviours", "TestOrdinaryDirect"}, bddGateOrdinaryEntryNames()[1:])
-	for _, pkg := range []string{"./tests/unit", "./internal/application", "./internal/domain/coordination", "./internal/domain/evidence", "./internal/identity", "./internal/status"} {
+	for _, pkg := range []string{"./tests/unit", "./cmd/...", "./internal/...", "./scripts/release-archive"} {
 		if !slices.Contains(call.args, pkg) {
 			t.Errorf("measured package %s missing", pkg)
 		}
