@@ -287,10 +287,10 @@ func readCoordinationMarker(root string) (coordinationMarker, bool, error) {
 		if keyError != nil {
 			return coordinationMarker{}, false, fmt.Errorf("decode coordination marker field: %w", keyError)
 		}
-		key, keyOK := keyToken.(string)
-		if !keyOK {
-			return coordinationMarker{}, false, errors.New("coordination marker field name must be a string")
-		}
+		// A non-string object key fails the Token call above (encoding/json
+		// ErrNonStringName), so the assertion below cannot fail.
+		key := keyToken.(string) //nolint:forcetypeassert // Token guarantees a string key when it returns nil.
+
 		if seen[key] {
 			return coordinationMarker{}, false, fmt.Errorf("duplicate coordination marker field %q", key)
 		}
