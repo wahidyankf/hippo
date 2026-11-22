@@ -426,7 +426,7 @@ func TestConformanceApplicationDefaultClockAndWaitCancel(t *testing.T) {
 		}
 		return nil
 	}
-	service := application.ConformanceService{Environment: fakeConformanceEnvironment{session: session}}
+	service := application.ConformanceService{Environment: fakeConformanceEnvironment{session: session}, Now: func() time.Time { return time.Time{} }}
 	if err := service.Run(ctx, "manifest", nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled probe error: %v", err)
 	}

@@ -102,5 +102,5 @@ func Execute(ctx context.Context, args []string) int {
 
 // ConformanceService composes the real consumer-conformance capabilities.
 func ConformanceService() app.ConformanceService {
-	return app.ConformanceService{Environment: conformance.Environment{}}
+	return app.ConformanceService{Environment: conformance.Environment{}, Now: time.Now}
 }

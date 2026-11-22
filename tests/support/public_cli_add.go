@@ -168,7 +168,7 @@ func (driver *Driver) conformanceUsageRequested(arguments string) error {
 			code = exitError.ExitCode()
 		}
 	} else {
-		code = cli.ConformanceMain(context.Background(), operands, stdout, stderr, application.ConformanceService{})
+		code = cli.ConformanceMain(context.Background(), operands, stdout, stderr, application.ConformanceService{Now: time.Now})
 	}
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
 
