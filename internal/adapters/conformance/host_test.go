@@ -730,23 +730,23 @@ func TestNewNeverStartedReceiptValidatesNewReceipts(t *testing.T) {
 			host.Files.Contents[redReceipts+"/new.json"] = neverStarted
 		}, verified: true},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			host := redHost()
 			port := host.Port()
-			if tc.setup != nil {
-				tc.setup(host, &port)
+			if testCase.setup != nil {
+				testCase.setup(host, &port)
 			}
-			before := tc.before
+			before := testCase.before
 			if before == nil {
 				before = map[string]struct{}{}
 			}
 			verified, err := newNeverStartedReceipt(port, redSharedRoot, before)
-			if tc.fails != (err != nil) {
-				t.Fatalf("error = %v, want failure %t", err, tc.fails)
+			if testCase.fails != (err != nil) {
+				t.Fatalf("error = %v, want failure %t", err, testCase.fails)
 			}
-			if verified != tc.verified {
-				t.Fatalf("verified = %t, want %t", verified, tc.verified)
+			if verified != testCase.verified {
+				t.Fatalf("verified = %t, want %t", verified, testCase.verified)
 			}
 		})
 	}
@@ -1036,17 +1036,17 @@ func TestEnvironmentOpenReportsSetupFailures(t *testing.T) {
 			}
 		}},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			host := redHost()
 			manifest := redFixture(host)
-			if tc.corrupt != nil {
-				tc.corrupt(&manifest)
+			if testCase.corrupt != nil {
+				testCase.corrupt(&manifest)
 			}
 			redWriteManifest(t, host, manifest)
 			port := host.Port()
-			if tc.mutate != nil {
-				tc.mutate(&port)
+			if testCase.mutate != nil {
+				testCase.mutate(&port)
 			}
 			if _, err := (Environment{Host: port}).Open(context.Background(), redManifestPath); err == nil {
 				t.Fatal("a session opened despite the setup failure")
@@ -1140,7 +1140,7 @@ func TestSessionCloseReportsBinaryCleanupFailure(t *testing.T) {
 	}
 }
 
-func TestDeferralFixtureReportsEachFailure(t *testing.T) {
+func TestDeferralFixtureReportsEachFailure(t *testing.T) { //nolint:gocognit // Every deferral failure shape stays visible in the one fixture that reports it.
 	cases := []struct {
 		name   string
 		stage  string
@@ -1198,11 +1198,11 @@ func TestDeferralFixtureReportsEachFailure(t *testing.T) {
 		}},
 		{name: "probe is usable", stage: ""},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			host, session := redOpenSession(t, tc.mutate)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			host, session := redOpenSession(t, testCase.mutate)
 			fixture, err := session.DeferralFixture()
-			if tc.stage == "setup" {
+			if testCase.stage == "setup" {
 				if err == nil {
 					t.Fatal("a deferral probe was built despite the failure")
 				}
@@ -1219,12 +1219,12 @@ func TestDeferralFixtureReportsEachFailure(t *testing.T) {
 				t.Fatalf("probe root is %q, want %q", fixture.Root(), redDeferralRoot)
 			}
 			releaseErr := fixture.Release()
-			if (tc.stage == "release") != (releaseErr != nil) {
-				t.Fatalf("release returned %v, want failure %t", releaseErr, tc.stage == "release")
+			if (testCase.stage == "release") != (releaseErr != nil) {
+				t.Fatalf("release returned %v, want failure %t", releaseErr, testCase.stage == "release")
 			}
 			closeErr := fixture.Close()
-			if (tc.stage == "close") != (closeErr != nil) {
-				t.Fatalf("close returned %v, want failure %t", closeErr, tc.stage == "close")
+			if (testCase.stage == "close") != (closeErr != nil) {
+				t.Fatalf("close returned %v, want failure %t", closeErr, testCase.stage == "close")
 			}
 		})
 	}
