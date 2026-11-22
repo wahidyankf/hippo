@@ -706,7 +706,7 @@ func abandonReservationIdentity(session *Session) error {
 // peer completes the release, and reports shared-lock contention as a deferred
 // cleanup rather than a caller failure.
 func retainReleaseForReconciliation(
-	port system.System, ctx context.Context, root string, session *Session, lockError error,
+	port system.System, ctx context.Context, root string, session *Session, lockError error, //nolint:revive // The system port leads every adapter signature; the context follows it.
 ) error {
 	if retainError := retainReservationOwnerUntilRelease(port, ctx, root, session); retainError != nil {
 		return errors.Join(lockError, retainError)
@@ -734,7 +734,7 @@ func releaseReservation(port system.System, root string, session *Session, retai
 }
 
 func releaseReservationContext(
-	port system.System, ctx context.Context, root string, session *Session, retainOnFailure bool,
+	port system.System, ctx context.Context, root string, session *Session, retainOnFailure bool, //nolint:revive // The system port leads every adapter signature; the context follows it.
 ) (returnError error) {
 	if session == nil {
 		return nil
@@ -799,7 +799,7 @@ func releaseReservationOwnershipLocked(port system.System, root string, session 
 }
 
 func retainReservationOwnerUntilRelease(
-	port system.System, ctx context.Context, root string, session *Session,
+	port system.System, ctx context.Context, root string, session *Session, //nolint:revive // The system port leads every adapter signature; the context follows it.
 ) error {
 	retained := &Session{Token: session.Token, identityLock: session.identityLock}
 	session.identityLock = nil
@@ -930,7 +930,7 @@ func ReservationOwnerPeak(ctx context.Context, root string, session *Session) (i
 }
 
 func reservationVictimPresent(
-	port system.System, ctx context.Context, root string, victim ReservationOwner,
+	port system.System, ctx context.Context, root string, victim ReservationOwner, //nolint:revive // The system port leads every adapter signature; the context follows it.
 ) (bool, error) {
 	lock, err := acquireCoordinationLock(port, ctx, root, coordinationLifecycleWait)
 	if err != nil {
