@@ -346,3 +346,60 @@ func TestFloorRemoveReservationIdentityMatrix(t *testing.T) {
 		}
 	})
 }
+
+func TestFloorReservationIdentityAnchorRefusesBadToken(t *testing.T) {
+	if _, err := reservationIdentityAnchorPath(t.TempDir(), "../escape"); err == nil {
+		t.Fatal("reservationIdentityAnchorPath on an invalid token = nil, want error")
+	}
+}
+
+func TestFloorOpenReservationIdentityRefusesTakenAnchor(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "reservation-identities"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	anchor, err := reservationIdentityAnchorPath(root, floorToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(anchor, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openReservationIdentity(system.Production, root, floorToken); err == nil {
+		t.Fatal("openReservationIdentity with a taken anchor = nil, want error")
+	}
+}
+
+func TestFloorReservationIdentityMetadataRefusesClosedIdentity(t *testing.T) {
+	identity, err := os.CreateTemp(t.TempDir(), "identity-*.lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := identity.Name()
+	_ = identity.Close()
+	identity, err = os.OpenFile(name, os.O_RDONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = identity.Close()
+	if _, _, err := reservationIdentityMetadata(identity); err == nil {
+		t.Fatal("reservationIdentityMetadata on a closed identity = nil, want error")
+	}
+}
+
+func TestFloorConsumeReservationJSONRefusesNonStringKey(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(reservationLedgerPath(root), []byte(`{{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, port := floorDoublesSystem()
+	if _, err := readReservationLedger(port, root); err == nil {
+		t.Fatal("readReservationLedger with a non-string ledger key = nil, want error")
+	}
+}
+
+func TestFloorRemoveReservationIdentityRefusesBadToken(t *testing.T) {
+	if err := removeReservationIdentity(t.TempDir(), "../escape"); err == nil {
+		t.Fatal("removeReservationIdentity on an invalid token = nil, want error")
+	}
+}
