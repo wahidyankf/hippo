@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
 
 func TestExecuteDoesNotStartWithPreCancelledContext(t *testing.T) {
@@ -29,7 +31,7 @@ func TestExecuteDoesNotStartWithPreCancelledContext(t *testing.T) {
 			return nil
 		},
 	}
-	err := executeWithRuntime(ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
+	err := executeWithRuntime(system.Production, ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
 	if err == nil || starts.Load() != 0 {
 		t.Fatalf("pre-cancelled execution started %d commands with error %v", starts.Load(), err)
 	}
@@ -82,23 +84,23 @@ func TestNewNeverStartedReceiptRequiresANewValidReceipt(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(receipts, "old.json"), []byte(`{"schemaVersion":1,"state":"never-started"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	before, err := receiptSnapshot(root)
+	before, err := receiptSnapshot(system.Production, root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if verified, verifyError := newNeverStartedReceipt(root, before); verifyError != nil || verified {
+	if verified, verifyError := newNeverStartedReceipt(system.Production, root, before); verifyError != nil || verified {
 		t.Fatalf("old receipt verified=%t error=%v", verified, verifyError)
 	}
 	if err = os.WriteFile(filepath.Join(receipts, "new.json"), []byte(`{"schemaVersion":1,"state":"never-started"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if verified, verifyError := newNeverStartedReceipt(root, before); verifyError != nil || !verified {
+	if verified, verifyError := newNeverStartedReceipt(system.Production, root, before); verifyError != nil || !verified {
 		t.Fatalf("new receipt verified=%t error=%v", verified, verifyError)
 	}
 	if err = os.WriteFile(filepath.Join(receipts, "started.json"), []byte(`{"schemaVersion":1,"state":"started-safety-stop"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if verified, verifyError := newNeverStartedReceipt(root, before); verifyError == nil || verified {
+	if verified, verifyError := newNeverStartedReceipt(system.Production, root, before); verifyError == nil || verified {
 		t.Fatalf("mixed started receipt verified=%t error=%v", verified, verifyError)
 	}
 }
@@ -123,7 +125,7 @@ func TestExecuteBoundsPostKillReapFailure(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- executeWithRuntime(ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
+		done <- executeWithRuntime(system.Production, ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
 	}()
 	select {
 	case err := <-done:
@@ -166,7 +168,7 @@ func TestExecuteReportsForceStopSignalFailure(t *testing.T) {
 			return nil
 		},
 	}
-	err := executeWithRuntime(ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
+	err := executeWithRuntime(system.Production, ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
 	if err == nil || !strings.Contains(err.Error(), "force-stop signal failed") {
 		t.Fatalf("force-stop signal failure was not reported: %v", err)
 	}
@@ -200,7 +202,7 @@ func TestExecuteObservesLiveGroupAfterKillFailureAndLeaderReap(t *testing.T) {
 		alive: func(*os.Process) (bool, error) { return true, nil },
 	}
 	start := time.Now()
-	err := executeWithRuntime(ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
+	err := executeWithRuntime(system.Production, ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
 	if err == nil || !strings.Contains(err.Error(), "force-stop reap timed out") {
 		t.Fatalf("live group after kill failure was not reported privately: %v", err)
 	}
@@ -231,7 +233,7 @@ func TestExecuteReturnsAfterTermReap(t *testing.T) {
 			return nil
 		},
 	}
-	err := executeWithRuntime(ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
+	err := executeWithRuntime(system.Production, ctx, ".", Command{Arguments: []string{"true"}}, nil, &bytes.Buffer{}, runtime)
 	if err == nil || !strings.Contains(err.Error(), "cancelled") || signalCount != 1 {
 		t.Fatalf("TERM completion returned %v after %d signals", err, signalCount)
 	}
@@ -262,7 +264,7 @@ func TestSignalProcessGroupAcceptsAnExitedButUnreapedGroup(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	signalError := signalProcessGroup(command.Process, syscall.SIGTERM)
+	signalError := signalProcessGroup(system.Production, command.Process, syscall.SIGTERM)
 	_ = command.Wait()
 
 	if signalError != nil {
@@ -283,14 +285,14 @@ func TestCommandGroupRetirementToleratesDelayedReaping(t *testing.T) {
 		alive:  func(*os.Process) (bool, error) { return time.Now().Before(retired), nil },
 	}
 
-	if err := retireCompletedCommandGroup(runtime, nil); err != nil {
+	if err := retireCompletedCommandGroup(system.Production, runtime, nil); err != nil {
 		t.Fatalf("retiring a group reaped after the stop grace reported %v", err)
 	}
 }
 
 func TestDeferralFixtureReleaseErrorsRemainPrivate(t *testing.T) {
 	sentinel := "private-deferral-root-sentinel"
-	fixture := &deferralFixture{root: filepath.Join(t.TempDir(), sentinel)}
+	fixture := &deferralFixture{host: system.Production, root: filepath.Join(t.TempDir(), sentinel)}
 	err := fixture.Release()
 	if err == nil || strings.Contains(err.Error(), sentinel) {
 		t.Fatalf("release error exposed fixture root or disappeared: %v", err)
