@@ -12,6 +12,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -37,15 +38,20 @@ type Host struct {
 // NewHost returns a host whose clock reads start, whose environment and file tree are
 // empty, and whose input is empty.
 func NewHost(start time.Time) *Host {
+	clock := &Clock{Current: start}
+
 	return &Host{
-		Clock:       &Clock{Current: start},
+		Clock:       clock,
 		Environment: &Environment{Values: map[string]string{}, Input: strings.NewReader("")},
 		Signals:     &Signals{},
-		Files:       &Files{Contents: map[string][]byte{}, Modes: map[string]fs.FileMode{}, Dirs: map[string]bool{}},
-		Processes:   &Processes{Alive: map[int]bool{}, Groups: map[int]int{}},
-		Runner:      &Runner{Executables: map[string]string{}, Stdout: map[string][]byte{}, Failures: map[string]error{}},
-		Random:      &Random{},
-		Disk:        &Disk{},
+		Files: &Files{
+			Contents: map[string][]byte{}, Modes: map[string]fs.FileMode{}, Dirs: map[string]bool{},
+			Modified: map[string]time.Time{}, clock: clock,
+		},
+		Processes: &Processes{Alive: map[int]bool{}, Groups: map[int]int{}},
+		Runner:    &Runner{Executables: map[string]string{}, Stdout: map[string][]byte{}, Failures: map[string]error{}},
+		Random:    &Random{},
+		Disk:      &Disk{},
 	}
 }
 
@@ -171,14 +177,20 @@ func (signals *Signals) port() system.SignalSource {
 	}
 }
 
-// Files is an in-memory file tree. Parents are not checked on create, and links are
-// not modelled: Link, Symlink, and Readlink fail with fs.ErrInvalid, and EvalSymlinks
-// fails for a link entry. SameFile compares the name and the Sys value of two entries,
-// the only identity a double carries, so a test replaces an entry by giving it another Sys.
+// Files is an in-memory file tree. Contents holds the bytes of each file, Dirs each directory, and Modes the mode of
+// each entry. Modified holds the modification time a test or Chtimes sets. An entry without one reads the host
+// clock's current time, as an entry written now would. Parents are not checked on create.
+//
+// Links are not modelled, except that Link copies an entry: the double has no inodes, so a write to one name does not
+// show under the other. Symlink and Readlink fail with fs.ErrInvalid, and EvalSymlinks fails for a link entry. SameFile
+// compares the name and the Sys value of two entries, the only identity a double carries, so a test replaces an entry
+// by giving it another Sys.
 type Files struct {
 	Contents map[string][]byte
 	Modes    map[string]fs.FileMode
 	Dirs     map[string]bool
+	Modified map[string]time.Time
+	clock    *Clock
 	temps    int
 }
 
@@ -210,14 +222,7 @@ func (files *Files) port() system.FileSystem {
 		Readlink: func(name string) (string, error) {
 			return "", pathError("readlink", name, fs.ErrInvalid)
 		},
-		Mkdir: func(name string, _ fs.FileMode) error {
-			if _, exists := files.info(name); exists {
-				return pathError("mkdir", name, fs.ErrExist)
-			}
-			files.Dirs[name] = true
-
-			return nil
-		},
+		Mkdir: files.mkdir,
 		MkdirAll: func(name string, _ fs.FileMode) error {
 			files.Dirs[name] = true
 
@@ -230,31 +235,17 @@ func (files *Files) port() system.FileSystem {
 
 			return name, nil
 		},
-		Remove: func(name string) error {
+		Remove:    files.remove,
+		RemoveAll: files.removeAll,
+		Rename:    files.rename,
+		Link:      files.link,
+		Symlink:   unsupported("symlink"),
+		Chmod:     files.chmod,
+		Chtimes: func(name string, _, modified time.Time) error {
 			if _, exists := files.info(name); !exists {
-				return pathError("remove", name, fs.ErrNotExist)
+				return pathError("chtimes", name, fs.ErrNotExist)
 			}
-			files.forget(name)
-
-			return nil
-		},
-		RemoveAll: func(name string) error {
-			for _, key := range files.keys() {
-				if key == name || strings.HasPrefix(key, name+"/") {
-					files.forget(key)
-				}
-			}
-
-			return nil
-		},
-		Rename:  files.rename,
-		Link:    unsupported("link"),
-		Symlink: unsupported("symlink"),
-		Chmod: func(name string, mode fs.FileMode) error {
-			if _, exists := files.info(name); !exists {
-				return pathError("chmod", name, fs.ErrNotExist)
-			}
-			files.Modes[name] = mode
+			files.Modified[name] = modified
 
 			return nil
 		},
@@ -276,18 +267,212 @@ func (files *Files) port() system.FileSystem {
 
 			return first.Name() == second.Name() && first.Sys() == second.Sys()
 		},
+		OpenFile:      files.open,
+		CreateTemp:    files.createTemp,
+		OpenDirectory: files.openDirectory,
+		// The double has no other holder of a lock, so every lock is granted.
+		Flock: func(system.File, int) error { return nil },
 	}
 }
 
+func (files *Files) mkdir(name string, _ fs.FileMode) error {
+	if _, exists := files.info(name); exists {
+		return pathError("mkdir", name, fs.ErrExist)
+	}
+	files.Dirs[name] = true
+
+	return nil
+}
+
+func (files *Files) remove(name string) error {
+	if _, exists := files.info(name); !exists {
+		return pathError("remove", name, fs.ErrNotExist)
+	}
+	files.forget(name)
+
+	return nil
+}
+
+func (files *Files) removeAll(name string) error {
+	for _, key := range files.keys() {
+		if key == name || strings.HasPrefix(key, name+"/") {
+			files.forget(key)
+		}
+	}
+
+	return nil
+}
+
+func (files *Files) chmod(name string, mode fs.FileMode) error {
+	if _, exists := files.info(name); !exists {
+		return pathError("chmod", name, fs.ErrNotExist)
+	}
+	files.Modes[name] = mode
+
+	return nil
+}
+
+// open opens name with the os.O_* flags it is given. A missing name is created only under os.O_CREATE, an existing
+// one fails with fs.ErrExist under os.O_EXCL, and os.O_TRUNC empties a file. Each handle writes at its own offset.
+func (files *Files) open(name string, flag int, perm fs.FileMode) (system.File, error) {
+	_, exists := files.info(name)
+	switch {
+	case exists && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0:
+		return nil, pathError("open", name, fs.ErrExist)
+	case files.Dirs[name]:
+		return nil, pathError("open", name, syscall.EISDIR)
+	case !exists && flag&os.O_CREATE == 0:
+		return nil, pathError("open", name, fs.ErrNotExist)
+	case !exists:
+		files.Contents[name] = []byte{}
+		files.Modes[name] = perm
+	case flag&os.O_TRUNC != 0:
+		files.Contents[name] = []byte{}
+	}
+
+	return &fileHandle{files: files, name: name}, nil
+}
+
+// createTemp creates a file in dir named by pattern, whose last "*" a counter replaces, as os.CreateTemp replaces it
+// with a random string.
+func (files *Files) createTemp(dir, pattern string) (system.File, error) {
+	files.temps++
+
+	return files.open(path.Join(dir, tempName(pattern, files.temps)), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+}
+
+func tempName(pattern string, counter int) string {
+	number := strconv.Itoa(counter)
+	index := strings.LastIndex(pattern, "*")
+	if index < 0 {
+		return pattern + number
+	}
+
+	return pattern[:index] + number + pattern[index+1:]
+}
+
+// openDirectory opens the directory named by name. A name that is not a directory of the tree is not found.
+func (files *Files) openDirectory(name string) (system.Directory, error) {
+	if !files.Dirs[name] {
+		return nil, pathError("open", name, fs.ErrNotExist)
+	}
+
+	return directory{files: files, name: name}, nil
+}
+
+// link gives newname a copy of oldname. It fails with fs.ErrNotExist when
+// oldname is not a file and with fs.ErrExist when newname is taken.
+func (files *Files) link(oldname, newname string) error {
+	data, exists := files.Contents[oldname]
+	if !exists {
+		return &os.LinkError{Op: "link", Old: oldname, New: newname, Err: fs.ErrNotExist}
+	}
+	if _, taken := files.info(newname); taken {
+		return &os.LinkError{Op: "link", Old: oldname, New: newname, Err: fs.ErrExist}
+	}
+	files.Contents[newname] = bytes.Clone(data)
+	files.Modes[newname] = files.Modes[oldname]
+
+	return nil
+}
+
+// fileHandle is an open file of the tree. It reads and writes the entry it names, at its own offset.
+type fileHandle struct {
+	files  *Files
+	name   string
+	offset int64
+}
+
+func (handle *fileHandle) Read(buffer []byte) (int, error) {
+	data := handle.files.Contents[handle.name]
+	if handle.offset >= int64(len(data)) {
+		return 0, io.EOF
+	}
+	count := copy(buffer, data[handle.offset:])
+	handle.offset += int64(count)
+
+	return count, nil
+}
+
+func (handle *fileHandle) Write(data []byte) (int, error) {
+	content := handle.files.Contents[handle.name]
+	end := handle.offset + int64(len(data))
+	if end > int64(len(content)) {
+		content = append(content, make([]byte, end-int64(len(content)))...)
+	}
+	copy(content[handle.offset:], data)
+	handle.files.Contents[handle.name] = content
+	handle.offset = end
+
+	return len(data), nil
+}
+
+func (handle *fileHandle) Close() error { return nil }
+
+func (handle *fileHandle) Name() string { return handle.name }
+
+func (handle *fileHandle) Stat() (fs.FileInfo, error) { return handle.files.stat(handle.name) }
+
+func (handle *fileHandle) Sync() error { return nil }
+
+func (handle *fileHandle) Chmod(mode fs.FileMode) error { return handle.files.chmod(handle.name, mode) }
+
+// directory is an open directory of the tree, named by its full path. The names it takes are relative to it.
+type directory struct {
+	files *Files
+	name  string
+}
+
+func (dir directory) full(name string) string { return path.Join(dir.name, name) }
+
+func (dir directory) OpenFile(name string, flag int, perm fs.FileMode) (system.File, error) {
+	return dir.files.open(dir.full(name), flag, perm)
+}
+
+func (dir directory) OpenDirectory(name string) (system.Directory, error) {
+	return dir.files.openDirectory(dir.full(name))
+}
+
+func (dir directory) Mkdir(name string, perm fs.FileMode) error {
+	return dir.files.mkdir(dir.full(name), perm)
+}
+
+func (dir directory) Rename(oldname, newname string) error {
+	return dir.files.rename(dir.full(oldname), dir.full(newname))
+}
+
+func (dir directory) Remove(name string) error { return dir.files.remove(dir.full(name)) }
+
+func (dir directory) Stat(name string) (fs.FileInfo, error) { return dir.files.stat(dir.full(name)) }
+
+// ReadDir lists every entry of the directory, whatever count the caller asks for, as ReadDir(-1) does.
+func (dir directory) ReadDir(int) ([]fs.DirEntry, error) { return dir.files.children(dir.name), nil }
+
+func (dir directory) Chmod(mode fs.FileMode) error { return dir.files.chmod(dir.name, mode) }
+
+func (dir directory) Close() error { return nil }
+
 func (files *Files) info(name string) (fileInfo, bool) {
 	if data, ok := files.Contents[name]; ok {
-		return fileInfo{name: path.Base(name), size: int64(len(data)), mode: files.Modes[name]}, true
+		return fileInfo{
+			name: path.Base(name), size: int64(len(data)), mode: files.Modes[name], modified: files.modified(name),
+		}, true
 	}
 	if files.Dirs[name] {
-		return fileInfo{name: path.Base(name), mode: fs.ModeDir | 0o755}, true
+		return fileInfo{name: path.Base(name), mode: fs.ModeDir | 0o755, modified: files.modified(name)}, true
 	}
 
 	return fileInfo{}, false
+}
+
+// modified is the modification time an entry reports: the one a test or Chtimes set, or else the host clock's current
+// time.
+func (files *Files) modified(name string) time.Time {
+	if modified, ok := files.Modified[name]; ok {
+		return modified
+	}
+
+	return files.clock.Current
 }
 
 func (files *Files) stat(name string) (fs.FileInfo, error) {
@@ -329,6 +514,7 @@ func (files *Files) forget(name string) {
 	delete(files.Contents, name)
 	delete(files.Dirs, name)
 	delete(files.Modes, name)
+	delete(files.Modified, name)
 }
 
 func (files *Files) rename(oldpath, newpath string) error {
@@ -340,6 +526,9 @@ func (files *Files) rename(oldpath, newpath string) error {
 	}
 	if mode, ok := files.Modes[oldpath]; ok {
 		files.Modes[newpath] = mode
+	}
+	if modified, ok := files.Modified[oldpath]; ok {
+		files.Modified[newpath] = modified
 	}
 	if files.Dirs[oldpath] {
 		files.Dirs[newpath] = true
@@ -359,17 +548,18 @@ func pathError(operation, name string, err error) error {
 	return &fs.PathError{Op: operation, Path: name, Err: err}
 }
 
-// fileInfo is the fs.FileInfo of an in-memory entry; its modification time is the zero time.
+// fileInfo is the fs.FileInfo of an in-memory entry, with the modification time the tree reports for it.
 type fileInfo struct {
-	name string
-	size int64
-	mode fs.FileMode
+	name     string
+	size     int64
+	mode     fs.FileMode
+	modified time.Time
 }
 
 func (info fileInfo) Name() string       { return info.name }
 func (info fileInfo) Size() int64        { return info.size }
 func (info fileInfo) Mode() fs.FileMode  { return info.mode }
-func (info fileInfo) ModTime() time.Time { return time.Time{} }
+func (info fileInfo) ModTime() time.Time { return info.modified }
 func (info fileInfo) IsDir() bool        { return info.mode.IsDir() }
 func (info fileInfo) Sys() any           { return nil }
 

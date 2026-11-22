@@ -3,6 +3,7 @@ package systemtest_test
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -70,7 +71,8 @@ func TestEnvironmentRecordsStreamsAndExit(t *testing.T) {
 	if _, err := host.Port().Environment.UserHomeDir(); err == nil {
 		t.Fatal("empty home directory accepted")
 	}
-	if port.Environment.TempDir() != "/tmp/fixture" || port.Environment.GOOS != "linux" || len(port.Environment.Args) != 2 {
+	if port.Environment.TempDir() != "/tmp/fixture" || port.Environment.GOOS != "linux" ||
+		len(port.Environment.Args) != 2 {
 		t.Fatal("platform, temporary directory, or arguments not bound")
 	}
 	if dir, err := port.Environment.Getwd(); err != nil || dir != "/work" {
@@ -83,7 +85,8 @@ func TestEnvironmentRecordsStreamsAndExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	port.Environment.Exit(3)
-	if host.Environment.Output.String() != "out" || host.Environment.Errors.String() != "err" || host.Environment.Exits[0] != 3 {
+	if host.Environment.Output.String() != "out" || host.Environment.Errors.String() != "err" ||
+		host.Environment.Exits[0] != 3 {
 		t.Fatal("streams or exit not recorded")
 	}
 	if _, err := port.Environment.Stdin.Read(make([]byte, 1)); err == nil {
@@ -127,7 +130,8 @@ func TestFilesReadWriteAndStat(t *testing.T) {
 		t.Fatal("read returned the stored slice")
 	}
 	info, err := port.Files.Stat("dir/a.txt")
-	if err != nil || info.Size() != 5 || info.Mode() != 0o600 || info.IsDir() || info.Name() != "a.txt" || !info.ModTime().IsZero() || info.Sys() != nil {
+	if err != nil || info.Size() != 5 || info.Mode() != 0o600 || info.IsDir() || info.Name() != "a.txt" ||
+		!info.ModTime().Equal(start) || info.Sys() != nil {
 		t.Fatalf("stat %+v %v", info, err)
 	}
 	if _, err := port.Files.Lstat("missing"); !errors.Is(err, fs.ErrNotExist) {
@@ -215,11 +219,132 @@ func TestFilesRejectLinksAndReadlink(t *testing.T) {
 	if _, err := port.Files.Readlink("link"); !errors.Is(err, fs.ErrInvalid) {
 		t.Fatalf("readlink: %v", err)
 	}
-	if err := port.Files.Link("a", "b"); !errors.Is(err, fs.ErrInvalid) {
-		t.Fatalf("link: %v", err)
-	}
 	if err := port.Files.Symlink("a", "b"); !errors.Is(err, fs.ErrInvalid) {
 		t.Fatalf("symlink: %v", err)
+	}
+}
+
+func TestFilesLinkCopiesAnEntryAndRefusesATakenName(t *testing.T) {
+	host := NewHost(start)
+	port := host.Port()
+	if err := port.Files.WriteFile("a", []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := port.Files.Link("a", "b"); err != nil || string(host.Files.Contents["b"]) != "x" {
+		t.Fatalf("link: %v", err)
+	}
+	if err := port.Files.Link("a", "b"); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("link over a taken name: %v", err)
+	}
+	if err := port.Files.Link("missing", "c"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("link of a missing file: %v", err)
+	}
+}
+
+func TestFilesOpenFollowsTheFlagsAndHandlesAddressTheirOwnOffset(t *testing.T) {
+	host := NewHost(start)
+	port := host.Port()
+	if _, err := port.Files.OpenFile("a", os.O_RDONLY, 0); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("open without create: %v", err)
+	}
+	file, err := port.Files.OpenFile("a", os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o640)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = port.Files.OpenFile("a", os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o640); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("exclusive create over a file: %v", err)
+	}
+	if _, err = file.Write([]byte("abc")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = file.Write([]byte("d")); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := port.Files.OpenFile("a", os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil || string(data) != "abcd" || host.Files.Modes["a"] != 0o640 || file.Name() != "a" {
+		t.Fatalf("read %q with %v, mode %o", data, err, host.Files.Modes["a"])
+	}
+	if info, err := reader.Stat(); err != nil || info.Size() != 4 {
+		t.Fatalf("handle stat %+v with %v", info, err)
+	}
+	if _, err := port.Files.OpenFile("a", os.O_RDWR|os.O_TRUNC, 0); err != nil || len(host.Files.Contents["a"]) != 0 {
+		t.Fatalf("truncate: %v", err)
+	}
+	if _, err := port.Files.CreateTemp("missing-dir", ".tmp-*.x"); err != nil {
+		t.Fatalf("temporary: %v", err)
+	}
+	temp, err := port.Files.CreateTemp("dir", ".history-*.tmp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if temp.Name() != "dir/.history-2.tmp" {
+		t.Fatalf("temporary name %q", temp.Name())
+	}
+}
+
+func TestDirectoriesResolveNamesInsideTheirOwnTree(t *testing.T) {
+	host := NewHost(start)
+	host.Files.Dirs["/root"] = true
+	host.Files.Dirs["/root/sub"] = true
+	port := host.Port()
+	if _, err := port.Files.OpenDirectory("/absent"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("missing directory: %v", err)
+	}
+	root, err := port.Files.OpenDirectory("/root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = root.Mkdir("sub", 0o700); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("mkdir over a directory: %v", err)
+	}
+	if err = root.Mkdir("new", 0o700); err != nil || !host.Files.Dirs["/root/new"] {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err = root.Rename("new", "renamed"); err != nil || !host.Files.Dirs["/root/renamed"] {
+		t.Fatalf("rename: %v", err)
+	}
+	if err = root.Remove("renamed"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if err = root.Chmod(0o750); err != nil || host.Files.Modes["/root"] != 0o750 {
+		t.Fatalf("chmod: %v", err)
+	}
+	if _, err = root.Stat("sub"); err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	entries, err := root.ReadDir(-1)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "sub" {
+		t.Fatalf("entries %v with %v", entries, err)
+	}
+	if _, err = root.OpenFile("sub", os.O_RDONLY, 0); !errors.Is(err, syscall.EISDIR) {
+		t.Fatalf("open of a directory as a file: %v", err)
+	}
+	if err = root.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestChtimesSetsTheModificationTime(t *testing.T) {
+	host := NewHost(start)
+	port := host.Port()
+	if err := port.Files.Chtimes("missing", start, start); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("chtimes of a missing file: %v", err)
+	}
+	host.Files.Contents["a"] = []byte("x")
+	modified := start.Add(-time.Hour)
+	if err := port.Files.Chtimes("a", modified, modified); err != nil {
+		t.Fatal(err)
+	}
+	info, err := port.Files.Stat("a")
+	if err != nil || !info.ModTime().Equal(modified) {
+		t.Fatalf("modification time of %+v with %v", info, err)
+	}
+	if err = port.Files.Flock(nil, 0); err != nil {
+		t.Fatalf("lock: %v", err)
 	}
 }
 
@@ -309,17 +434,20 @@ func TestRunnerAnswersCapturesAndRecordsEveryCall(t *testing.T) {
 	host.Runner.Stdout["ps"] = []byte("1024\n")
 	host.Runner.Failures["lsof"] = errors.New("lsof failed")
 	port := host.Port()
-	if out, err := port.Runner.CaptureOutput(context.Background(), "ps", "-o", "rss="); err != nil || string(out) != "1024\n" {
+	out, err := port.Runner.CaptureOutput(context.Background(), "ps", "-o", "rss=")
+	if err != nil || string(out) != "1024\n" {
 		t.Fatalf("capture %q %v", out, err)
 	}
-	if _, err := port.Runner.CaptureOutput(context.Background(), "lsof", "-t"); err == nil || err.Error() != "lsof failed" {
+	if _, err := port.Runner.CaptureOutput(context.Background(), "lsof", "-t"); err == nil ||
+		err.Error() != "lsof failed" {
 		t.Fatalf("configured failure not returned: %v", err)
 	}
 	if _, err := port.Runner.CaptureOutput(context.Background(), "absent"); !errors.Is(err, exec.ErrNotFound) {
 		t.Fatalf("absent capture: %v", err)
 	}
 	captures := host.Runner.Captures
-	if len(captures) != 3 || captures[0].Name != "ps" || !slices.Equal(captures[0].Arguments, []string{"-o", "rss="}) || captures[2].Name != "absent" {
+	if len(captures) != 3 || captures[0].Name != "ps" || captures[2].Name != "absent" ||
+		!slices.Equal(captures[0].Arguments, []string{"-o", "rss="}) {
 		t.Fatalf("captures %+v", captures)
 	}
 }
