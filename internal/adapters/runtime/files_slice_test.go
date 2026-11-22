@@ -190,7 +190,7 @@ func TestWriteSafetyReceiptRoundTrip(t *testing.T) {
 	); err != nil {
 		t.Fatalf("write safety receipt: %v", err)
 	}
-	var names []string
+	names := make([]string, 0, len(host.Files.Contents))
 	for name := range host.Files.Contents {
 		names = append(names, name)
 	}
