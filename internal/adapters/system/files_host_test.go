@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/unix" //nolint:depguard // The host assertion must name the same flock constants as the production call.
 
 	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
