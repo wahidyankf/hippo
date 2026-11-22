@@ -88,6 +88,7 @@ type redFileFaults struct {
 // redFile applies redFileFaults to a file the host double opened or created.
 type redFile struct {
 	system.File
+
 	faults redFileFaults
 	writes int
 }
@@ -156,13 +157,14 @@ type redDirFaults struct {
 	only                                                     string
 	openFile, openDir, mkdir, rename, remove, chmod, readDir error
 	closeErr                                                 error
-	stat                                                     func(name string, real redStatFunc) (fs.FileInfo, error)
+	stat                                                     func(name string, actual redStatFunc) (fs.FileInfo, error)
 	file                                                     redFileFaults
 }
 
 // redDirectory applies redDirFaults to a directory handle the host double opened.
 type redDirectory struct {
 	system.Directory
+
 	faults redDirFaults
 }
 
@@ -170,7 +172,7 @@ func (dir redDirectory) hits(name string) bool {
 	return dir.faults.only == "" || dir.faults.only == name
 }
 
-func (dir redDirectory) OpenFile(name string, flag int, perm fs.FileMode) (system.File, error) {
+func (dir redDirectory) OpenFile(name string, flag int, perm fs.FileMode) (system.File, error) { //nolint:ireturn // The Directory interface dictates this signature.
 	if dir.faults.openFile != nil && dir.hits(name) {
 		return nil, dir.faults.openFile
 	}
@@ -182,7 +184,7 @@ func (dir redDirectory) OpenFile(name string, flag int, perm fs.FileMode) (syste
 	return &redFile{File: file, faults: dir.faults.file}, nil
 }
 
-func (dir redDirectory) OpenDirectory(name string) (system.Directory, error) {
+func (dir redDirectory) OpenDirectory(name string) (system.Directory, error) { //nolint:ireturn // The Directory interface dictates this signature.
 	if dir.faults.openDir != nil && dir.hits(name) {
 		return nil, dir.faults.openDir
 	}
@@ -308,6 +310,7 @@ func redListing(port *system.System, dir string, nth int, change func([]fs.DirEn
 // redEntry is a listed entry whose Info is computed by a test.
 type redEntry struct {
 	fs.DirEntry
+
 	info func(fs.DirEntry) (fs.FileInfo, error)
 }
 
@@ -330,6 +333,7 @@ func redEntryInfo(port *system.System, entryPath string, info func(fs.DirEntry) 
 // redSized reports the real entry's identity with a size chosen by a test.
 type redSized struct {
 	fs.FileInfo
+
 	size int64
 }
 
@@ -338,12 +342,12 @@ func (info redSized) Size() int64 { return info.size }
 // redEntrySize makes the entry at entryPath report the given size in every listing.
 func redEntrySize(port *system.System, entryPath string, size int64) {
 	redEntryInfo(port, entryPath, func(entry fs.DirEntry) (fs.FileInfo, error) {
-		real, err := entry.Info()
+		actual, err := entry.Info()
 		if err != nil {
 			return nil, err
 		}
 
-		return redSized{FileInfo: real, size: size}, nil
+		return redSized{FileInfo: actual, size: size}, nil
 	})
 }
 
