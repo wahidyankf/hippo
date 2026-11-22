@@ -45,7 +45,7 @@ func redDisplayRecord(t *testing.T, runID, label string) []byte {
 }
 
 // redOpenDisplay returns the run-display directory of the host, carrying the faults.
-func redOpenDisplay(t *testing.T, host *systemtest.Host, faults redDirFaults) system.Directory {
+func redOpenDisplay(t *testing.T, host *systemtest.Host, faults redDirFaults) system.Directory { //nolint:ireturn // The helper wraps the Directory interface the display code takes.
 	t.Helper()
 	dir, err := openDisplayDirectory(host.Port(), redRoot, false)
 	if err != nil {
@@ -527,12 +527,12 @@ func TestPruneDisplaySkipsATemporaryThatVanishedAfterListing(t *testing.T) {
 	host := redDisplayHost()
 	host.Files.Contents[redDisplayDir+"/"+redTempName] = []byte("x")
 	port := host.Port()
-	redWrapOpenDirectory(&port, redDirFaults{stat: func(name string, real redStatFunc) (fs.FileInfo, error) {
+	redWrapOpenDirectory(&port, redDirFaults{stat: func(name string, actual redStatFunc) (fs.FileInfo, error) {
 		if name == redTempName {
 			return nil, fs.ErrNotExist
 		}
 
-		return real(name)
+		return actual(name)
 	}})
 	if err := pruneDisplay(port, redRoot, nil, redStart); err != nil {
 		t.Fatalf("vanished temporary prune error = %v", err)
@@ -543,12 +543,12 @@ func TestPruneDisplayReportsAFailedTemporaryStat(t *testing.T) {
 	host := redDisplayHost()
 	host.Files.Contents[redDisplayDir+"/"+redTempName] = []byte("x")
 	port := host.Port()
-	redWrapOpenDirectory(&port, redDirFaults{stat: func(name string, real redStatFunc) (fs.FileInfo, error) {
+	redWrapOpenDirectory(&port, redDirFaults{stat: func(name string, actual redStatFunc) (fs.FileInfo, error) {
 		if name == redTempName {
 			return nil, errRed
 		}
 
-		return real(name)
+		return actual(name)
 	}})
 	if err := pruneDisplay(port, redRoot, nil, redStart); !errors.Is(err, errRed) {
 		t.Fatalf("temporary stat error = %v, want the injected failure", err)
@@ -559,12 +559,12 @@ func TestPruneDisplaySkipsATemporaryThatIsNoLongerRegular(t *testing.T) {
 	host := redDisplayHost()
 	host.Files.Contents[redDisplayDir+"/"+redTempName] = []byte("x")
 	port := host.Port()
-	redWrapOpenDirectory(&port, redDirFaults{stat: func(name string, real redStatFunc) (fs.FileInfo, error) {
+	redWrapOpenDirectory(&port, redDirFaults{stat: func(name string, actual redStatFunc) (fs.FileInfo, error) {
 		if name == redTempName {
 			return redDirInfo(t, host), nil
 		}
 
-		return real(name)
+		return actual(name)
 	}})
 	if err := pruneDisplay(port, redRoot, nil, redStart); err != nil {
 		t.Fatalf("non-regular temporary prune error = %v", err)
