@@ -105,14 +105,12 @@ func acquireCoordinationProcessGate(ctx context.Context, lock *os.File, wait tim
 	if err := unix.Fstat(int(lock.Fd()), &info); err != nil {
 		return err
 	}
-	device, err := filesystemIdentifier(info.Dev)
-	if err != nil {
-		return err
-	}
-	inode, err := filesystemIdentifier(info.Ino)
-	if err != nil {
-		return err
-	}
+	// Fstat above reports kernel-assigned device and inode numbers, which are
+	// non-negative on every supported platform. Their Sprint forms are digit
+	// strings, which ParseUint accepts, so both errors below are discarded,
+	// not exempted.
+	device, _ := filesystemIdentifier(info.Dev)
+	inode, _ := filesystemIdentifier(info.Ino)
 	identity := coordinationProcessIdentity{device: device, inode: inode}
 	coordinationProcessGates.Lock()
 	gate := coordinationProcessGates.byIdentity[identity]
@@ -365,10 +363,9 @@ func writeCoordinationMarker(root string, marker coordinationMarker) (returnErro
 	if err = temporary.Chmod(0o600); err != nil {
 		return err
 	}
-	data, err := marker.Encode()
-	if err != nil {
-		return err
-	}
+	// CoordinationMarkerRecord.Encode never fails (see its proof), so the error
+	// below is discarded rather than exempted.
+	data, _ := marker.Encode()
 	if _, err = temporary.Write(data); err != nil {
 		return err
 	}
