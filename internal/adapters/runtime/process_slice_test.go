@@ -107,9 +107,10 @@ func TestStopConfiguredLifetimeHonoursTheHook(t *testing.T) {
 	called := 0
 	config := RunConfig{
 		Policy: policy.DefaultPolicy(),
-		stopLifetime: func(lifetime *supervisedLifetime, grace time.Duration) (error, error) {
+		stopLifetime: func(_ *supervisedLifetime, _ time.Duration) (error, error) {
 			called++
 
+			//nolint:nilnil // The hook models a stop that ran with nothing to report.
 			return nil, nil
 		},
 	}
@@ -243,7 +244,7 @@ func TestExecutableGuardPathFallsBackToEmptyOnRunnerError(t *testing.T) {
 func TestWaitForContext(t *testing.T) {
 	_, port := processSliceSystem()
 	paused := 0
-	pause := func(duration time.Duration) { paused++ }
+	pause := func(_ time.Duration) { paused++ }
 	if err := waitForContext(context.Background(), port.Clock, time.Second, pause); err != nil {
 		t.Fatalf("wait with pause: %v", err)
 	}
