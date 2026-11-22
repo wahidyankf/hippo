@@ -172,7 +172,7 @@ func awaitLifetimeHandshake(ctx context.Context, report io.Reader, timeout time.
 
 func startSupervisedLifetime(
 	port system.System,
-	ctx context.Context,
+	ctx context.Context, //nolint:revive // The system port leads every adapter signature; the context follows it.
 	config RunConfig,
 	executable string,
 	environment []string,
@@ -190,7 +190,7 @@ func startSupervisedLifetime(
 
 func startSupervisedLifetimeWithLauncher(
 	port system.System,
-	ctx context.Context,
+	ctx context.Context, //nolint:revive // The system port leads every adapter signature; the context follows it.
 	config RunConfig,
 	executable string,
 	environment []string,
