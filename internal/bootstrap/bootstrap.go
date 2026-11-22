@@ -95,9 +95,16 @@ func WithDefaults(application cli.Application) cli.Application {
 	return application
 }
 
-// Execute runs the composed production command boundary.
-func Execute(ctx context.Context, args []string) int {
-	code, _ := WithDefaults(cli.Application{}).Run(ctx, args)
+// Execute runs the composed command boundary against the given host's streams, environment, and clock. The entry
+// point that supplies the host decides where those come from.
+func Execute(ctx context.Context, host system.System, args []string) int {
+	code, _ := WithDefaults(cli.Application{
+		Stdin:       host.Environment.Stdin,
+		Stdout:      host.Environment.Stdout,
+		Stderr:      host.Environment.Stderr,
+		Environment: host.Environment.Environ(),
+		Now:         host.Clock.Now,
+	}).Run(ctx, args)
 	return code
 }
 
