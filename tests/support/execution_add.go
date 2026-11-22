@@ -288,7 +288,7 @@ func (driver *Driver) requirePortLeaseRootInTemporaryDirectory() error {
 	}
 	info, err := os.Stat(filepath.Join(driver.leaseRoot, leaseTemporaryName, "hippo-port-leases"))
 	if err != nil || !info.IsDir() {
-		return fmt.Errorf("no hippo-port-leases directory under TMPDIR: %v", err)
+		return fmt.Errorf("no hippo-port-leases directory under TMPDIR: %w", err)
 	}
 
 	return nil
@@ -298,9 +298,9 @@ func (driver *Driver) requirePortLeaseRootInTemporaryDirectory() error {
 // process at the unit and integration boundaries and through the compiled binary
 // at the end-to-end one.
 func (driver *Driver) runGuardedCommandIn(root string, command ...string) error {
-	arguments := []string{runCommandName, diskPathFlag, ".", resourceTierFlag, standardTierName, "--"}
+	arguments := append([]string{runCommandName, diskPathFlag, ".", resourceTierFlag, standardTierName, "--"}, command...)
 
-	return driver.runGuardInRoot(root, append(arguments, command...)...)
+	return driver.runGuardInRoot(root, arguments...)
 }
 
 // stageUnexecutableCommand writes a command file the owner cannot execute: it is

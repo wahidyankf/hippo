@@ -32,6 +32,7 @@ const (
 	evidenceFilesystemBoundary  = "evidence filesystem"
 	consumerHarnessBoundary     = "consumer harness"
 	repositoryStateBoundary     = "repository state"
+	sessionInheritanceBoundary  = "session inheritance"
 	releaseArtifactsBoundary    = "release artifacts"
 	releaseWorkflowBoundary     = "release workflow"
 	testHarnessBoundary         = "test harness"
@@ -115,7 +116,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "A request larger than a shrunk shared pool is deferred without poisoning the root", Boundary: leaseOwnershipBoundary, Reason: reasonCoordinationState},
 		{Scenario: "FIFO head cannot be bypassed by a smaller request", Boundary: leaseOwnershipBoundary, Reason: reasonCoordinationState},
 		{Scenario: "A reservation queue at its highest position restarts only after its stale epoch empties", Boundary: leaseOwnershipBoundary, Reason: reasonCoordinationState},
-		{Scenario: "Inherited sessions reuse their fixed allocation", Boundary: "session inheritance", Reason: reasonCoordinationState},
+		{Scenario: "Inherited sessions reuse their fixed allocation", Boundary: sessionInheritanceBoundary, Reason: reasonCoordinationState},
 		{Scenario: "Fixed allocations clamp concurrency mappings", Boundary: processControlBoundary, Reason: reasonProcessControl},
 		{Scenario: "Stale identity cannot retain or inherit capacity", Boundary: leaseOwnershipBoundary, Reason: reasonCoordinationState},
 		{Scenario: "Active exclusive compatibility blocks reservation takeover", Boundary: leaseOwnershipBoundary, Reason: reasonCoordinationState},
@@ -213,7 +214,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "A live heavy lease defers a second owner", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
 		{Scenario: "A long-lived service never holds the heavy-work lease", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
 		{Scenario: "Concurrent services keep their own inheritable sessions", Boundary: leaseOwnershipBoundary, Reason: liveLeaseExemption},
-		{Scenario: "An inherited session runs without reacquiring the lease", Boundary: "session inheritance", Reason: "requires synthetic inherited session state unavailable to an isolated binary fixture"},
+		{Scenario: "An inherited session runs without reacquiring the lease", Boundary: sessionInheritanceBoundary, Reason: "requires synthetic inherited session state unavailable to an isolated binary fixture"},
 		{Scenario: "A failed child keeps its own exit code", Boundary: processControlBoundary, Reason: reasonProcessControl},
 		{Scenario: "Canonical concurrency remains ecosystem neutral", Boundary: processControlBoundary, Reason: reasonProcessControl},
 		{Scenario: "Consumers select their concurrency environment mappings", Boundary: processControlBoundary, Reason: reasonProcessControl},
@@ -229,7 +230,7 @@ var ApprovedExemptions = map[string][]Exemption{
 		{Scenario: "Waiting for admission never retries a decision that is not a deferral", Boundary: reservationCapacityBoundary, Reason: "shares the injected clock of the deferral scenarios it is contrasted against"},
 		{Scenario: "A caller waiting for admission reports one queue and deferral receipt", Boundary: reservationCapacityBoundary, Reason: "counting queue heartbeats across many polls needs an injected clock to spend the deadline without spending the same wall time"},
 		{Scenario: "A queued run reports its run ID, queue position, and remaining deadline every 30 seconds", Boundary: reservationCapacityBoundary, Reason: "counting queue heartbeats across many polls needs an injected clock to spend the deadline without spending the same wall time"},
-		{Scenario: "The last of a duplicated HIPPO_SESSION value decides the inherited session", Boundary: "session inheritance", Reason: "the harness starts a compiled binary with one value per variable name, so a duplicated HIPPO_SESSION cannot reach it"},
+		{Scenario: "The last of a duplicated HIPPO_SESSION value decides the inherited session", Boundary: sessionInheritanceBoundary, Reason: "the harness starts a compiled binary with one value per variable name, so a duplicated HIPPO_SESSION cannot reach it"},
 		{Scenario: "A configured automatic owner share overrides the share its lineage gives", Boundary: reservationCapacityBoundary, Reason: "a compiled binary plans with owner shares it does not publish, so only the loaded configuration shows the override"},
 		{Scenario: "Admission waiting leaves every later safety notice audible", Boundary: reservationCapacityBoundary, Reason: "degrades storage after queue admission, which needs the injected sample sequence the compiled binary does not expose"},
 		{Scenario: "A consumer that waits out a capacity deferral passes its probe", Boundary: consumerHarnessBoundary, Reason: reasonConsumerHarness},
