@@ -292,8 +292,18 @@ func waitForProcessGroupRetirement(processGroup int) error {
 }
 
 func runLifetimeLauncher(workingDirectory, executable string, arguments []string) int {
-	report := os.NewFile(3, "hippo-lifetime-report")
-	capabilityReader := os.NewFile(4, "hippo-lifetime-capability")
+	return runLifetimeLauncherFiles(
+		os.NewFile(3, "hippo-lifetime-report"), os.NewFile(4, "hippo-lifetime-capability"),
+		workingDirectory, executable, arguments,
+	)
+}
+
+// runLifetimeLauncherFiles is the launcher body behind its descriptor binding:
+// file descriptors 3 and 4 only exist across the exec boundary, so the binding
+// stays in runLifetimeLauncher while everything after it is directly testable.
+func runLifetimeLauncherFiles(
+	report, capabilityReader *os.File, workingDirectory, executable string, arguments []string,
+) int {
 	if report == nil || capabilityReader == nil {
 		return 1
 	}
