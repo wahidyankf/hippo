@@ -390,7 +390,7 @@ func (files *Files) chmod(name string, mode fs.FileMode) error {
 
 // open opens name with the os.O_* flags it is given. A missing name is created only under os.O_CREATE, an existing
 // one fails with fs.ErrExist under os.O_EXCL, and os.O_TRUNC empties a file. Each handle writes at its own offset.
-func (files *Files) open(name string, flag int, perm fs.FileMode) (system.File, error) {
+func (files *Files) open(name string, flag int, perm fs.FileMode) (system.File, error) { //nolint:ireturn // The double implements the same port interfaces as the OS files.
 	_, exists := files.info(name)
 	switch {
 	case exists && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0:
@@ -411,7 +411,7 @@ func (files *Files) open(name string, flag int, perm fs.FileMode) (system.File, 
 
 // createTemp creates a file in dir named by pattern, whose last "*" a counter replaces, as os.CreateTemp replaces it
 // with a random string.
-func (files *Files) createTemp(dir, pattern string) (system.File, error) {
+func (files *Files) createTemp(dir, pattern string) (system.File, error) { //nolint:ireturn // The double implements the same port interfaces as the OS files.
 	files.temps++
 
 	return files.open(path.Join(dir, tempName(pattern, files.temps)), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
@@ -428,7 +428,7 @@ func tempName(pattern string, counter int) string {
 }
 
 // openDirectory opens the directory named by name. A name that is not a directory of the tree is not found.
-func (files *Files) openDirectory(name string) (system.Directory, error) {
+func (files *Files) openDirectory(name string) (system.Directory, error) { //nolint:ireturn // The double implements the same port interfaces as the OS directories.
 	if !files.Dirs[name] {
 		return nil, pathError("open", name, fs.ErrNotExist)
 	}
@@ -501,11 +501,11 @@ type directory struct {
 
 func (dir directory) full(name string) string { return path.Join(dir.name, name) }
 
-func (dir directory) OpenFile(name string, flag int, perm fs.FileMode) (system.File, error) {
+func (dir directory) OpenFile(name string, flag int, perm fs.FileMode) (system.File, error) { //nolint:ireturn // The Directory interface dictates this signature.
 	return dir.files.open(dir.full(name), flag, perm)
 }
 
-func (dir directory) OpenDirectory(name string) (system.Directory, error) {
+func (dir directory) OpenDirectory(name string) (system.Directory, error) { //nolint:ireturn // The Directory interface dictates this signature.
 	return dir.files.openDirectory(dir.full(name))
 }
 
