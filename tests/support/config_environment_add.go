@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -110,7 +111,7 @@ func (driver *Driver) runCommandWith(values map[string]string, arguments ...stri
 		return driver.runBinaryWith(values, arguments...)
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: append(environmentPairs(values), isolatedPath),
 		Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now()), healthySample(time.Now())}},
 		Sleep:     func(time.Duration) {},
@@ -163,7 +164,7 @@ func (driver *Driver) releaseMonitorFromEnvironment() error {
 	values := map[string]string{hippoRootEnvironment: root}
 	maps.Copy(values, driver.addCLI.endpointEnvironment)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environmentPairs(values),
 		MonitorRelease: func(_ context.Context, configuration application.MonitorConfig) error {
 			driver.addCLI.capturedMonitor = &configuration

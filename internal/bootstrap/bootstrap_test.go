@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -33,7 +34,7 @@ func (collector *countingCollector) Collect(_ context.Context, previous policy.C
 func TestBootstrapUsesPauseChangedBeforeRun(t *testing.T) {
 	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
 	collector := &countingCollector{now: now}
-	boundary := bootstrap.WithDefaults(cli.Application{
+	boundary := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, Collector: collector,
 		Environment: []string{"HIPPO_ROOT=" + t.TempDir(), "HOME=" + t.TempDir()},
 		Now:         func() time.Time { return now },
@@ -55,7 +56,7 @@ func TestBootstrapUsesCollectorClockAndStreamsChangedBeforeRun(t *testing.T) {
 	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
 	original, replacement := &countingCollector{now: now}, &countingCollector{now: now}
 	oldOutput, newOutput := &bytes.Buffer{}, &bytes.Buffer{}
-	boundary := bootstrap.WithDefaults(cli.Application{
+	boundary := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: oldOutput, Stderr: &bytes.Buffer{}, Collector: original, Sleep: func(time.Duration) {},
 		Environment: []string{"HIPPO_ROOT=" + t.TempDir(), "HOME=" + t.TempDir()},
 		Now:         func() time.Time { return now },
@@ -98,7 +99,7 @@ func TestBootstrapPreservesCustomMonitorCallbacks(t *testing.T) {
 			if when == "before composition" {
 				input.MonitorRelease = monitor
 			}
-			boundary := bootstrap.WithDefaults(input)
+			boundary := bootstrap.WithDefaults(system.Production, input)
 			if when == "after composition" {
 				boundary.MonitorRelease = monitor
 			}

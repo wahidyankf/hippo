@@ -3,9 +3,7 @@ package bootstrap
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
@@ -55,25 +53,28 @@ func environmentMap(environment []string) map[string]string {
 	return result
 }
 
-// WithDefaults composes production adapters for one CLI invocation.
-func WithDefaults(application cli.Application) cli.Application {
-	application.Compose = WithDefaults
+// WithDefaults composes the adapters for one CLI invocation. A field the application leaves unset takes the matching
+// port of host, so the production entry point passes system.Production and a test passes only the doubles it needs.
+func WithDefaults(host system.System, application cli.Application) cli.Application {
+	application.Compose = func(current cli.Application) cli.Application {
+		return WithDefaults(host, current)
+	}
 	if application.Stdin == nil {
-		application.Stdin = os.Stdin
+		application.Stdin = host.Environment.Stdin
 	}
 	if application.Stdout == nil {
-		application.Stdout = os.Stdout
+		application.Stdout = host.Environment.Stdout
 	}
 	if application.Stderr == nil {
-		application.Stderr = os.Stderr
+		application.Stderr = host.Environment.Stderr
 	}
 
 	if application.Environment == nil {
-		application.Environment = os.Environ()
+		application.Environment = host.Environment.Environ()
 	}
 
 	if application.Now == nil {
-		application.Now = time.Now
+		application.Now = host.Clock.Now
 	}
 
 	if application.Version == "" {
@@ -89,7 +90,7 @@ func WithDefaults(application cli.Application) cli.Application {
 	application.Configuration = resourceconfig.Provider{}
 	engine := runtimeadapter.NewEngine()
 	application.RunServices = app.RunServices{Coordination: engine, Workload: engine, Ports: engine, Evidence: engine, Clock: runtimeadapter.RunClock{}}
-	application.ReleaseServices = app.ReleaseServices{Configuration: application.Configuration, Collector: application.Collector, Environment: environmentMap(application.Environment), Clock: runtimeadapter.ReleaseClock{NowFunc: application.Now, Pause: application.Sleep}, Health: health.Probe{Host: system.Production}, Evidence: evidence.ReleaseRepository{}}
+	application.ReleaseServices = app.ReleaseServices{Configuration: application.Configuration, Collector: application.Collector, Environment: environmentMap(application.Environment), Clock: runtimeadapter.ReleaseClock{NowFunc: application.Now, Pause: application.Sleep}, Health: health.Probe{Host: host}, Evidence: evidence.ReleaseRepository{}}
 	application.Observer = app.ObservationServices{Configuration: application.Configuration, Collector: application.Collector, Runtime: engine, Evidence: evidence.HistoryRepository{}, Annotations: evidence.DisplayRepository{}, Clock: runtimeadapter.ObservationClock{NowFunc: application.Now, Pause: application.Sleep}, Environment: environmentMap(application.Environment)}
 	application.RunEntry = app.RunEntryServices{Configuration: application.Configuration, Observation: application.Observer, Run: application.RunServices, Collector: application.Collector, Environment: application.Environment, Now: application.Now, Sleep: application.Sleep, Stdin: application.Stdin, Stdout: application.Stdout, Stderr: application.Stderr, PortLeaseRoot: resourceconfig.PortLeaseRoot(environmentMap(application.Environment))}
 	return application
@@ -98,7 +99,7 @@ func WithDefaults(application cli.Application) cli.Application {
 // Execute runs the composed command boundary against the given host's streams, environment, and clock. The entry
 // point that supplies the host decides where those come from.
 func Execute(ctx context.Context, host system.System, args []string) int {
-	code, _ := WithDefaults(cli.Application{
+	code, _ := WithDefaults(host, cli.Application{
 		Stdin:       host.Environment.Stdin,
 		Stdout:      host.Environment.Stdout,
 		Stderr:      host.Environment.Stderr,

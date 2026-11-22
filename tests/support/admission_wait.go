@@ -16,6 +16,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -206,7 +207,7 @@ func (driver *Driver) runWaitingForAdmission(budget time.Duration, globalFlags .
 	driver.admissionAttempts = 0
 	driver.admissionElapsed = 0
 
-	application := bootstrap.WithDefaults(cli.Application{
+	application := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      stdout,
 		Stderr:      stderr,
 		Environment: []string{"HIPPO_ROOT=" + root, "HIPPO_CHILD_RUNS=" + runs},

@@ -17,6 +17,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	runtimeadapter "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
@@ -384,7 +385,7 @@ func (driver *Driver) runCompiledAnnotation(ctx context.Context, state *annotati
 }
 
 func (driver *Driver) runEmbeddedAnnotation(ctx context.Context, state *annotationNativeRun, arguments, environment []string) {
-	boundary := bootstrap.WithDefaults(cli.Application{Stdin: strings.NewReader(""), Stdout: &state.output, Stderr: state.lockWriter, Environment: environment, Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now())}}, Sleep: func(time.Duration) {}})
+	boundary := bootstrap.WithDefaults(system.Production, cli.Application{Stdin: strings.NewReader(""), Stdout: &state.output, Stderr: state.lockWriter, Environment: environment, Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now())}}, Sleep: func(time.Duration) {}})
 	state.exit, state.runError = boundary.Run(ctx, arguments)
 }
 

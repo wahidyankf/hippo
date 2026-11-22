@@ -27,6 +27,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/conformance"
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 	"golang.org/x/sys/unix" //nolint:depguard // Cross-process flock fixtures must exercise the production kernel primitive.
@@ -399,7 +400,7 @@ func (driver *Driver) requireCheckedMiBConversionV04(root string) error {
 	}
 	base := time.Unix(0, 0)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, runError := bootstrap.WithDefaults(cli.Application{
+	code, runError := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr,
 		Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(base)}},
 		Environment: []string{"HIPPO_ROOT=" + filepath.Join(root, "cli-root")},
@@ -2695,7 +2696,7 @@ func (driver *Driver) statusModeV04(configPath, root string) (string, error) {
 	} else {
 		base := time.Unix(0, 0)
 		stdout := &bytes.Buffer{}
-		code, err := bootstrap.WithDefaults(cli.Application{
+		code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdout: stdout, Stderr: &bytes.Buffer{},
 			Collector: &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 			Sleep:     func(time.Duration) {}, Environment: []string{"HIPPO_ROOT=" + root},
@@ -2782,7 +2783,7 @@ func (driver *Driver) requestCompiledWaiterOverflowStatusV04() error {
 		driver.exitCode = exitCode(err)
 	} else {
 		base := time.Unix(0, 0)
-		driver.exitCode, err = bootstrap.WithDefaults(cli.Application{
+		driver.exitCode, err = bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdout: stdout, Stderr: stderr, Sleep: func(time.Duration) {},
 			Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 			Environment: []string{"HIPPO_ROOT=" + root},

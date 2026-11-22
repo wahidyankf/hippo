@@ -14,6 +14,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	evidenceadapter "github.com/wahidyankf/hippo/internal/adapters/evidence"
 	runtimeadapter "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"github.com/wahidyankf/hippo/internal/identity"
@@ -259,7 +260,7 @@ func (driver *Driver) runCompatibilityInProcess(ctx context.Context, root string
 	}
 	defer func() { _ = os.Chdir(workingDirectory) }()
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environment,
 	}).Run(ctx, arguments)
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
@@ -287,7 +288,7 @@ func (driver *Driver) readCompatibilityWatch() error {
 			return err
 		}
 		defer func() { _ = os.Chdir(workingDirectory) }()
-		_, _ = bootstrap.WithDefaults(cli.Application{
+		_, _ = bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdout: &stdout, Stderr: &stderr, Environment: environment,
 		}).Run(ctx, arguments)
 	}

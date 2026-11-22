@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/tests/contract"
@@ -83,7 +84,7 @@ func (driver *Driver) refusalRoot() (string, string, error) {
 // and records its exit status and both streams.
 func (driver *Driver) runScriptedRefusal(root string, samples []policy.Sample, arguments ...string) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      stdout,
 		Stderr:      stderr,
 		Environment: []string{hippoRootEnvironment + "=" + root, isolatedPath},

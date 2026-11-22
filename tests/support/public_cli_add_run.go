@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -57,7 +58,7 @@ func (driver *Driver) runGuardedCommand(root, marker string, arguments ...string
 		return driver.runBinaryWith(values, arguments...)
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: append(environmentPairs(values), isolatedPath),
 		Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now()), healthySample(time.Now())}},
 		Sleep:     func(time.Duration) {},
@@ -128,7 +129,7 @@ func (driver *Driver) runWithUnmeasurableDisk() error {
 		collector = unmeasurableDiskCollector{unreadable: unreadable}
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr,
 		Environment: []string{hippoRootEnvironment + "=" + root, "CHILD_MARKER=" + marker, isolatedPath},
 		Collector:   collector,

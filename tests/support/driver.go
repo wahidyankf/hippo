@@ -25,6 +25,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	"github.com/wahidyankf/hippo/internal/adapters/host"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	releaseguard "github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -718,7 +719,7 @@ func (driver *Driver) inspectGuardedEnvironment() error {
 	)
 	environment := append([]string{}, driver.childEnvironment...)
 	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      stdout,
 		Stderr:      stderr,
 		Environment: environment,
@@ -809,7 +810,7 @@ func (driver *Driver) copyGuardedStreams() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	environment := append([]string{}, driver.childEnvironment...)
 	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdin:       strings.NewReader(driver.childInput),
 		Stdout:      stdout,
 		Stderr:      stderr,
@@ -1920,7 +1921,7 @@ func (driver *Driver) jsonStatus() error {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	var stdout, stderr bytes.Buffer
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    &stdout,
 		Stderr:    &stderr,
 		Collector: collector,
@@ -1940,7 +1941,7 @@ func (driver *Driver) jsonVersion() error {
 	}
 
 	var stdout bytes.Buffer
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:  &stdout,
 		Stderr:  &bytes.Buffer{},
 		Version: "v0.0.0-test",
@@ -2001,7 +2002,7 @@ func (driver *Driver) runCLI(arguments ...string) error {
 	}
 
 	var stdout, stderr bytes.Buffer
-	exitCode, err := bootstrap.WithDefaults(cli.Application{
+	exitCode, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}).Run(context.Background(), arguments)
@@ -2138,7 +2139,7 @@ func (driver *Driver) invalidRun() error {
 		return nil
 	}
 
-	_, err := bootstrap.WithDefaults(cli.Application{
+	_, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    &bytes.Buffer{},
 		Stderr:    &bytes.Buffer{},
 		Collector: &sequenceCollector{},
@@ -2266,7 +2267,7 @@ func (driver *Driver) assessSummaryInput() error {
 		driver.runBinaryWithInput(driver.childInput, arguments...)
 	} else {
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-		code, err := bootstrap.WithDefaults(cli.Application{
+		code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdin:  strings.NewReader(driver.childInput),
 			Stdout: stdout,
 			Stderr: stderr,
@@ -2318,7 +2319,7 @@ func (driver *Driver) monitorJSON() error {
 	collector := &sequenceCollector{samples: driver.samples, cancel: cancel, cancelAfter: len(driver.samples)}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    stdout,
 		Stderr:    stderr,
 		Collector: collector,
@@ -2373,7 +2374,7 @@ func (driver *Driver) releasePathsWithoutEndpoints() error {
 
 func runReleaseMonitorCLI(arguments []string, standardOutput io.Writer) (int, string, error) {
 	standardError := &bytes.Buffer{}
-	application := bootstrap.WithDefaults(cli.Application{
+	application := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      standardOutput,
 		Stderr:      standardError,
 		Environment: []string{},
@@ -2646,7 +2647,7 @@ func (driver *Driver) runReleaseMonitoring(ctx context.Context) {
 		collector = &sequenceCollector{samples: []policy.Sample{healthySample(base)}}
 	}
 	stderr := &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      &bytes.Buffer{},
 		Stderr:      stderr,
 		Environment: []string{},
@@ -3427,7 +3428,7 @@ func (driver *Driver) statusWithConfig() {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	stdout := &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    stdout,
 		Stderr:    &bytes.Buffer{},
 		Collector: collector,

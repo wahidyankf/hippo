@@ -15,6 +15,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -270,7 +271,7 @@ func (driver *Driver) runIsolatedCLI(arguments ...string) error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	// A refused invocation is an outcome the scenario asserts, so its exit status
 	// is recorded, not returned as a step failure.
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + root},
 	}).Run(context.Background(), arguments)
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
@@ -376,7 +377,7 @@ func (driver *Driver) usageMistakeWithColour(colour string) error {
 	arguments := []string{annotationColorFlag, colour, "--no-such-flag"}
 	if driver.mode != contract.E2E {
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-		code, _ := bootstrap.WithDefaults(cli.Application{
+		code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdout: stdout, Stderr: stderr, Environment: environmentPairs(driver.addCLI.colourValues),
 		}).Run(context.Background(), arguments)
 		driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
@@ -510,7 +511,7 @@ func (driver *Driver) jsonStatusWithFaultingSampler() error {
 		return err
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + root},
 		Collector: faultingCollector{}, Sleep: func(time.Duration) {},
 	}).Run(context.Background(), []string{statusCommandName, jsonFlag, diskPathFlag, "."})

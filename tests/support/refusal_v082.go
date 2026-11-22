@@ -17,6 +17,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/adapters/host"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
@@ -266,7 +267,7 @@ func (driver *Driver) sampleAfterLaunchV082() error {
 		"--", shellPath, "-c", `printf started > "$CHILD_MARKER"; sleep 30`,
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 		Collector: collector, Sleep: func(time.Duration) {},
 	}).Run(context.Background(), arguments)

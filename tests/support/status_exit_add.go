@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/tests/contract"
@@ -64,7 +65,7 @@ func (driver *Driver) requestStatusForStagedHost() error {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code, runError := bootstrap.WithDefaults(cli.Application{
+	code, runError := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      &stdout,
 		Stderr:      &stderr,
 		Environment: []string{hippoRootEnvironment + "=" + root, isolatedPath},

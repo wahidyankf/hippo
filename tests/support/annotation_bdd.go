@@ -21,6 +21,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	runtimeadapter "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
@@ -950,7 +951,7 @@ func (fixture *annotationBDD) start(parent context.Context, label, inherited str
 	} else {
 		go func() {
 			defer close(job.joined)
-			boundary := bootstrap.WithDefaults(cli.Application{Stdin: strings.NewReader(""), Stdout: stdout, Stderr: &job.diagnostic, Environment: environment, Collector: annotationBDDCollector{}, Sleep: func(time.Duration) {}})
+			boundary := bootstrap.WithDefaults(system.Production, cli.Application{Stdin: strings.NewReader(""), Stdout: stdout, Stderr: &job.diagnostic, Environment: environment, Collector: annotationBDDCollector{}, Sleep: func(time.Duration) {}})
 			job.code, job.err = boundary.Run(ctx, args)
 		}()
 	}

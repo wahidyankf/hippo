@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -132,7 +133,7 @@ func (driver *Driver) runStatusWith(values map[string]string, arguments ...strin
 		return driver.runBinaryWith(values, arguments...)
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environmentPairs(values),
 		Collector: &sequenceCollector{samples: []policy.Sample{healthySample(time.Now()), healthySample(time.Now())}},
 		Sleep:     func(time.Duration) {},
@@ -191,7 +192,7 @@ func (driver *Driver) watchWaitsBetweenSnapshots(interval string) error {
 	defer interrupt(nil)
 	waits := []time.Duration{}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + driver.leaseRoot},
 		Collector: &sequenceCollector{samples: driver.samples},
 		Sleep: func(wait time.Duration) {
@@ -226,7 +227,7 @@ func (driver *Driver) textMonitorRequested() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	collector := &sequenceCollector{samples: driver.samples, cancel: cancel, cancelAfter: len(driver.samples)}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Collector: collector,
 	}).Run(ctx, []string{monitorCommandName, intervalFlagName, shortMonitorInterval, diskPathFlag, "."})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()

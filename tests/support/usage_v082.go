@@ -16,6 +16,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/status"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -181,7 +182,7 @@ func (driver *Driver) attemptUsageContext(ctx context.Context, arguments []strin
 		return usageAttempt{}, err
 	}
 	defer func() { _ = os.Chdir(workingDirectory) }()
-	attempt.exitCode, _ = bootstrap.WithDefaults(cli.Application{
+	attempt.exitCode, _ = bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environment,
 	}).Run(ctx, arguments)
 	attempt.stdout, attempt.stderr = stdout.String(), stderr.String()
@@ -550,7 +551,7 @@ func (driver *Driver) requestRunWithInvalidLabel(value string) error {
 		return err
 	}
 	defer func() { _ = os.Chdir(workingDirectory) }()
-	driver.exitCode, _ = bootstrap.WithDefaults(cli.Application{
+	driver.exitCode, _ = bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: environment,
 	}).Run(ctx, arguments)
 	driver.output, driver.errorOutput = stdout.String(), stderr.String()

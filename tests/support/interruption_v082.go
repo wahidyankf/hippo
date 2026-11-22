@@ -21,6 +21,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	releaseguard "github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -154,7 +155,7 @@ func (driver *Driver) requireNoSummaryV082() error {
 // would hide the run behind a usage mistake, so it must answer 0 and list it.
 func (driver *Driver) requireHistoryOutcomeV082(outcome string) error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 	}).Run(context.Background(), []string{historyCommandName, "--outcome", outcome, "--jsonl"})
 	if code != 0 || err != nil {
@@ -251,7 +252,7 @@ func (driver *Driver) signalWatchV082(name string) error {
 
 func (driver *Driver) runInterruptible(ctx context.Context, arguments []string, collector policy.Collector, sleep func(time.Duration)) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 		Collector: collector, Sleep: sleep,
 	}).Run(ctx, arguments)
@@ -426,7 +427,7 @@ func (driver *Driver) endReleaseCaptureV082(end string) error {
 	}
 	root := driver.interruption.root
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: driver.interruptionEnvironment(),
 		Collector: &sequenceCollector{samples: driver.samples},
 		MonitorRelease: func(monitorContext context.Context, _ releaseguard.MonitorConfig) error {

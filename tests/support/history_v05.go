@@ -19,6 +19,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -61,7 +62,7 @@ func (driver *Driver) labeledReservationOwnerV05() error {
 
 func (driver *Driver) filteredLabeledStatusV05() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 		Collector: &sequenceCollector{samples: driver.samples}, Sleep: func(time.Duration) {},
 	}).Run(context.Background(), []string{
@@ -129,7 +130,7 @@ func (driver *Driver) labeledHistoryV05() error {
 
 func (driver *Driver) filteredHistoryV05() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, historyWindow, "--source", hippoFixtureName, jsonFlag})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
@@ -170,7 +171,7 @@ func (driver *Driver) jsonWatchV05() error {
 	defer interrupt(nil)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	sleeps := 0
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 		Collector: &sequenceCollector{samples: driver.samples},
 		Sleep: func(time.Duration) {
@@ -262,7 +263,7 @@ func (driver *Driver) corruptHistoryArchive() error {
 
 func (driver *Driver) queryHistory() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{"HIPPO_ROOT=" + driver.leaseRoot},
 	}).Run(context.Background(), []string{historyCommandName, sinceFlagName, historyWindow})
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()
@@ -336,7 +337,7 @@ func (driver *Driver) requestJSONHistory() error {
 		return driver.runBinaryInRoot(driver.leaseRoot, arguments...)
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + driver.leaseRoot},
 	}).Run(context.Background(), arguments)
 	driver.exitCode, driver.output, driver.errorOutput = code, stdout.String(), stderr.String()

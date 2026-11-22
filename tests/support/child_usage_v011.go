@@ -16,6 +16,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
@@ -122,7 +123,7 @@ func (driver *Driver) runGuardInRoot(root string, arguments ...string) error {
 	}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	base := time.Now()
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Environment: []string{hippoRootEnvironment + "=" + root},
 		Collector: &sequenceCollector{samples: []policy.Sample{
 			healthySample(base), healthySample(base.Add(time.Millisecond)), healthySample(base.Add(2 * time.Millisecond)),
