@@ -205,6 +205,34 @@ func floorLauncherReport(t *testing.T, reader *os.File) string {
 	return string(data)
 }
 
+func TestFloorRunLifetimeLauncherFilesRefusesNil(t *testing.T) {
+	if code := runLifetimeLauncherFiles(nil, nil, t.TempDir(), "true", nil); code != 1 {
+		t.Fatalf("launcher files(nil, nil) = %d, want 1", code)
+	}
+	reportReader, reportWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = reportReader.Close()
+		_ = reportWriter.Close()
+	}()
+	if code := runLifetimeLauncherFiles(reportWriter, nil, t.TempDir(), "true", nil); code != 1 {
+		t.Fatalf("launcher files(report, nil) = %d, want 1", code)
+	}
+	capabilityReader, capabilityWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = capabilityReader.Close()
+		_ = capabilityWriter.Close()
+	}()
+	if code := runLifetimeLauncherFiles(nil, capabilityReader, t.TempDir(), "true", nil); code != 1 {
+		t.Fatalf("launcher files(nil, capability) = %d, want 1", code)
+	}
+}
+
 func TestFloorRunLifetimeLauncherFilesMatrix(t *testing.T) { //nolint:gocognit // One files matrix covers every launcher exit through the same pipe harness.
 	truePath, err := exec.LookPath("true")
 	if err != nil {
@@ -297,4 +325,59 @@ func TestFloorRunLifetimeLauncherFilesMatrix(t *testing.T) { //nolint:gocognit /
 			t.Fatalf("launcher files with an unwritable report = %d, want 1", code)
 		}
 	})
+}
+
+func TestFloorStartSupervisedLifetimeReportsExecutableFailure(t *testing.T) {
+	host, port := floorDoublesSystem()
+	host.Runner.ExecutableErr = errors.New("floor: executable refused")
+	if _, err := startSupervisedLifetime(
+		port, context.Background(), RunConfig{}, "exe", nil,
+	); err == nil {
+		t.Fatal("startSupervisedLifetime with a refused executable = nil, want error")
+	}
+}
+
+func TestFloorStartSupervisedLifetimeReportsCapabilityWriteFailure(t *testing.T) {
+	host, port := floorDoublesSystem()
+	host.Random.Bytes = []byte("0123456789abcdef")
+	calls := 0
+	port.Files.Pipe = func() (*os.File, *os.File, error) {
+		calls++
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			return nil, nil, err
+		}
+		if calls > 1 {
+			_ = writer.Close()
+		}
+		return reader, writer, nil
+	}
+	_, err := startSupervisedLifetimeWithLauncher(
+		port, context.Background(), RunConfig{}, "exe", nil, "launcher", time.Second,
+	)
+	if err == nil {
+		t.Fatal("startSupervisedLifetimeWithLauncher with a closed capability pipe = nil, want error")
+	}
+}
+
+func TestFloorStartSupervisedLifetimeReportsLauncherFailure(t *testing.T) {
+	host, port := floorDoublesSystem()
+	host.Random.Bytes = []byte("0123456789abcdef")
+	host.Runner.Started = func(command *exec.Cmd) error {
+		report := command.ExtraFiles[0]
+		data, err := json.Marshal(lifetimeHandshake{Failure: "floor: launcher refused"})
+		if err != nil {
+			return err
+		}
+		if _, err := report.Write(data); err != nil {
+			return err
+		}
+		return report.Close()
+	}
+	_, err := startSupervisedLifetimeWithLauncher(
+		port, context.Background(), RunConfig{}, "exe", nil, "launcher", 10*time.Second,
+	)
+	if err == nil {
+		t.Fatal("startSupervisedLifetimeWithLauncher with a failing launcher = nil, want error")
+	}
 }
