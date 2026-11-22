@@ -24,7 +24,7 @@ func TestFloorRescueMonitorPassthroughReturnsLockError(t *testing.T) {
 	session := &Session{Token: floorToken, identityLock: identity}
 	boom := errors.New("floor: reconcile probe refused")
 	err = retainReleaseForReconciliation(system.Production, context.Background(), root, session, boom)
-	if err != boom {
+	if !errors.Is(err, boom) {
 		t.Fatalf("retainReleaseForReconciliation on a foreign failure = %v, want the failure itself", err)
 	}
 	if session.identityLock != nil {
