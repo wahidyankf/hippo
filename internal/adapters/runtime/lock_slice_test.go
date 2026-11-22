@@ -11,7 +11,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/adapters/system/systemtest"
 	"github.com/wahidyankf/hippo/internal/application"
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/unix" //nolint:depguard // Slice doubles must observe the same flock errors and flags as production.
 )
 
 func lockSliceSystem() (*systemtest.Host, system.System) {
