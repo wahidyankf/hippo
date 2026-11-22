@@ -1,6 +1,7 @@
 package system_test
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -12,6 +13,18 @@ import (
 func TestProductionBindsEveryPort(t *testing.T) {
 	if missing := unboundFields(reflect.ValueOf(system.Production), "System"); len(missing) > 0 {
 		t.Fatalf("unbound port fields: %v", missing)
+	}
+}
+
+// TestProductionCaptureOutputReadsStandardOutput proves the bound runner returns a command's standard output and
+// reports a command that cannot start.
+func TestProductionCaptureOutputReadsStandardOutput(t *testing.T) {
+	ctx := context.Background()
+	if out, err := system.Production.Runner.CaptureOutput(ctx, "echo", "hippo"); err != nil || string(out) != "hippo\n" {
+		t.Fatalf("capture %q %v", out, err)
+	}
+	if _, err := system.Production.Runner.CaptureOutput(ctx, "hippo-no-such-command"); err == nil {
+		t.Fatal("a missing command captured output without an error")
 	}
 }
 

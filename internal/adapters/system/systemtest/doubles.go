@@ -2,6 +2,7 @@ package systemtest
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -41,7 +43,7 @@ func NewHost(start time.Time) *Host {
 		Signals:     &Signals{},
 		Files:       &Files{Contents: map[string][]byte{}, Modes: map[string]fs.FileMode{}, Dirs: map[string]bool{}},
 		Processes:   &Processes{Alive: map[int]bool{}, Groups: map[int]int{}},
-		Runner:      &Runner{Executables: map[string]string{}},
+		Runner:      &Runner{Executables: map[string]string{}, Stdout: map[string][]byte{}, Failures: map[string]error{}},
 		Random:      &Random{},
 		Disk:        &Disk{},
 	}
@@ -396,10 +398,34 @@ func (processes *Processes) port() system.ProcessTable {
 	}
 }
 
-// Runner resolves executables from a fixed table and reports a fixed own path.
+// Runner resolves executables from a fixed table, reports a fixed own path, and answers
+// captured runs from fixed standard output or a fixed failure, keyed by command name. A
+// failure wins over output. A command with neither fails as not found. Every capture is
+// recorded in Captures in call order.
 type Runner struct {
 	Executables map[string]string
 	Self        string
+	Stdout      map[string][]byte
+	Failures    map[string]error
+	Captures    []Capture
+}
+
+// Capture is one call to CaptureOutput: the command name and its arguments.
+type Capture struct {
+	Name      string
+	Arguments []string
+}
+
+func (runner *Runner) capture(_ context.Context, name string, arguments ...string) ([]byte, error) {
+	runner.Captures = append(runner.Captures, Capture{Name: name, Arguments: slices.Clone(arguments)})
+	if err, failed := runner.Failures[name]; failed {
+		return nil, err
+	}
+	if data, ok := runner.Stdout[name]; ok {
+		return bytes.Clone(data), nil
+	}
+
+	return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
 }
 
 func (runner *Runner) port() system.ProcessRunner {
@@ -411,7 +437,8 @@ func (runner *Runner) port() system.ProcessRunner {
 
 			return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 		},
-		Executable: func() (string, error) { return runner.Self, nil },
+		Executable:    func() (string, error) { return runner.Self, nil },
+		CaptureOutput: runner.capture,
 	}
 }
 

@@ -1,10 +1,12 @@
 package systemtest_test
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -260,6 +262,26 @@ func TestRunnerResolvesExecutables(t *testing.T) {
 	}
 	if self, err := port.Runner.Executable(); err != nil || self != "/opt/hippo" {
 		t.Fatalf("self %q %v", self, err)
+	}
+}
+
+func TestRunnerAnswersCapturesAndRecordsEveryCall(t *testing.T) {
+	host := NewHost(start)
+	host.Runner.Stdout["ps"] = []byte("1024\n")
+	host.Runner.Failures["lsof"] = errors.New("lsof failed")
+	port := host.Port()
+	if out, err := port.Runner.CaptureOutput(context.Background(), "ps", "-o", "rss="); err != nil || string(out) != "1024\n" {
+		t.Fatalf("capture %q %v", out, err)
+	}
+	if _, err := port.Runner.CaptureOutput(context.Background(), "lsof", "-t"); err == nil || err.Error() != "lsof failed" {
+		t.Fatalf("configured failure not returned: %v", err)
+	}
+	if _, err := port.Runner.CaptureOutput(context.Background(), "absent"); !errors.Is(err, exec.ErrNotFound) {
+		t.Fatalf("absent capture: %v", err)
+	}
+	captures := host.Runner.Captures
+	if len(captures) != 3 || captures[0].Name != "ps" || !slices.Equal(captures[0].Arguments, []string{"-o", "rss="}) || captures[2].Name != "absent" {
+		t.Fatalf("captures %+v", captures)
 	}
 }
 

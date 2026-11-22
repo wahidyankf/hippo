@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"crypto/rand"
 	"io"
 	"io/fs"
@@ -58,11 +59,13 @@ type ProcessTable struct {
 	Kill    func(pid int, signal syscall.Signal) error
 }
 
-// ProcessRunner is the port for locating and identifying executables. Starting and waiting for a child is bound
-// by the adapter that first starts one, because it needs a handle a double can control.
+// ProcessRunner is the port for locating and identifying executables and for capturing the standard output of a
+// command that runs to completion. Starting a child and driving its pipes step by step is still bound by the adapter
+// that first needs one, because it needs a handle a double can control.
 type ProcessRunner struct {
-	LookPath   func(file string) (string, error)
-	Executable func() (string, error)
+	LookPath      func(file string) (string, error)
+	Executable    func() (string, error)
+	CaptureOutput func(ctx context.Context, name string, arguments ...string) ([]byte, error)
 }
 
 // Environment is the process environment port: variables, the working and home directories, the platform, the
@@ -119,7 +122,7 @@ var Production = System{
 		Notify: signal.Notify, Stop: signal.Stop, Ignore: signal.Ignore, Reset: signal.Reset,
 	},
 	Processes: ProcessTable{Getpid: os.Getpid, Getpgrp: syscall.Getpgrp, Getpgid: syscall.Getpgid, Kill: syscall.Kill},
-	Runner:    ProcessRunner{LookPath: exec.LookPath, Executable: os.Executable},
+	Runner:    ProcessRunner{LookPath: exec.LookPath, Executable: os.Executable, CaptureOutput: captureOutput},
 	Environment: Environment{
 		Environ: os.Environ, Getenv: os.Getenv, LookupEnv: os.LookupEnv, UserHomeDir: os.UserHomeDir,
 		TempDir: os.TempDir, Getwd: os.Getwd, Exit: os.Exit, GOOS: runtime.GOOS, Args: os.Args,
@@ -127,4 +130,11 @@ var Production = System{
 	},
 	Random: TokenSource{Read: rand.Read},
 	Disk:   DiskStats{PageSize: os.Getpagesize, CPUCount: runtime.NumCPU},
+}
+
+// captureOutput runs the named command to completion and returns what it wrote to standard output. It is not a
+// standard-library function: os/exec returns the output from a method of its command value, so this adapter is the
+// one statement the runner port adds.
+func captureOutput(ctx context.Context, name string, arguments ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, arguments...).Output()
 }
