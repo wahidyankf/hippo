@@ -92,6 +92,27 @@ func TestAcquireCoordinationLockHonoursCancellation(t *testing.T) {
 	}
 }
 
+func TestAcquireCoordinationLockReportsCancellationWhileWaiting(t *testing.T) {
+	_, port := lockSliceSystem()
+	root := t.TempDir()
+	holder, err := acquireCoordinationLock(port, context.Background(), root, time.Hour)
+	if err != nil || holder == nil {
+		t.Fatalf("acquire coordination lock = %v, %v, want a held lock", holder, err)
+	}
+	defer func() { _ = releaseCoordinationLock(port, holder) }()
+	cancelled, cancel := context.WithCancel(context.Background())
+	waiter := make(chan error, 1)
+	go func() {
+		_, waiterError := acquireCoordinationLock(port, cancelled, root, time.Hour)
+		waiter <- waiterError
+	}()
+	time.Sleep(500 * time.Millisecond)
+	cancel()
+	if err = <-waiter; !errors.Is(err, context.Canceled) {
+		t.Fatalf("waiting acquire = %v, want context canceled", err)
+	}
+}
+
 func TestReleaseCoordinationLockToleratesNil(t *testing.T) {
 	_, port := lockSliceSystem()
 	if err := releaseCoordinationLock(port, nil); err != nil {
