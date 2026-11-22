@@ -47,6 +47,8 @@ func TestFloorReadCoordinationMarkerMatrix(t *testing.T) {
 		"future schema":        {content: `{"schemaVersion":2,"mode":"exclusive"}`, wantErr: true},
 		"missing schema":       {content: `{}`, wantErr: true},
 		"unknown mode":         {content: `{"schemaVersion":1,"mode":"bogus"}`, wantErr: true},
+		"object opener key":    {content: `{{}}`, wantErr: true},
+		"bracket closer":       {content: `{"schemaVersion":1,"mode":"exclusive"]`, wantErr: true},
 		"missing mode":         {content: `{"schemaVersion":1}`, wantErr: true},
 		"exclusive marker":     {content: `{"schemaVersion":1,"mode":"exclusive"}`, wantPresent: true},
 		"reservation marker":   {content: `{"schemaVersion":1,"mode":"reservation"}`, wantPresent: true},
