@@ -195,7 +195,7 @@ func releaseCoordinationLock(port system.System, lock *os.File) error {
 }
 
 func acquireCoordinationLock(
-	port system.System, ctx context.Context, root string, wait time.Duration,
+	port system.System, ctx context.Context, root string, wait time.Duration, //nolint:revive // The system port leads every adapter signature; the context follows it.
 ) (*os.File, error) {
 	lock, err := openCoordinationLock(root)
 	if err != nil {
@@ -248,7 +248,7 @@ func lockCoordinationForRelease(port system.System, root string) (*os.File, erro
 }
 
 func lockCoordinationForReleaseContext(
-	port system.System, ctx context.Context, root string,
+	port system.System, ctx context.Context, root string, //nolint:revive // The system port leads every adapter signature; the context follows it.
 ) (*os.File, error) {
 	// Retirement must survive caller cancellation while retaining its context
 	// values and the same finite coordination-lock allowance as legacy release.
