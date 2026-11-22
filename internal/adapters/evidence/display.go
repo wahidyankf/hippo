@@ -81,7 +81,7 @@ func readDisplays(
 			result[runID] = application.DisplayAnnotation{Availability: application.DisplayInvalid}
 			continue
 		}
-		if directoryError != nil {
+		if directoryError != nil || directory == nil {
 			availability := application.DisplayUnreadable
 			if errors.Is(directoryError, fs.ErrNotExist) {
 				availability = application.DisplayMissing
