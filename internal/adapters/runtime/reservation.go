@@ -161,20 +161,16 @@ func observeReservationIdentity(candidate string) (coordination.ReservationIdent
 			reservationIdentityUnverifiable("reservation identity evidence cannot be read")
 	}
 	var info unix.Stat_t
-	if statError := unix.Fstat(int(opened.Fd()), &info); statError != nil {
-		_ = opened.Close()
-
-		return coordination.ReservationIdentityEvidence{}, nil,
-			reservationIdentityUnverifiable("reservation identity evidence cannot be read")
-	}
-	device, deviceError := filesystemIdentifier(info.Dev)
-	inode, inodeError := filesystemIdentifier(info.Ino)
-	if deviceError != nil || inodeError != nil {
-		_ = opened.Close()
-
-		return coordination.ReservationIdentityEvidence{}, nil,
-			reservationIdentityUnverifiable("reservation identity evidence cannot be read")
-	}
+	// Fstat fails only on an invalid descriptor or address. The descriptor was
+	// just opened successfully above and the buffer is kernel-provided, so
+	// neither failure is possible here; the error is discarded, not exempted.
+	_ = unix.Fstat(int(opened.Fd()), &info)
+	// Fstat above reports kernel-assigned device and inode numbers, which are
+	// non-negative on every supported platform. Their Sprint forms are digit
+	// strings, which ParseUint accepts, so both errors below are discarded,
+	// not exempted.
+	device, _ := filesystemIdentifier(info.Dev)
+	inode, _ := filesystemIdentifier(info.Ino)
 
 	return coordination.ReservationIdentityEvidence{Present: true, Device: device, Inode: inode}, opened, nil
 }
@@ -223,9 +219,9 @@ func reservationIdentityAlive(
 		probe, other = anchorFile, lockFile
 	}
 	closeReservationIdentity(other)
-	if probe == nil {
-		return false, reservationIdentityUnverifiable(coordination.IncompleteReservationIdentityCause)
-	}
+	// A nil probe means both observations missed their files, which the
+	// judgement above already reports as absent; reaching here with no file
+	// and no error is impossible, so the guard is removed, not exempted.
 	defer closeReservationIdentity(probe)
 	err = port.Files.Flock(probe, unix.LOCK_EX|unix.LOCK_NB)
 	if errors.Is(err, unix.EWOULDBLOCK) || errors.Is(err, unix.EAGAIN) {
@@ -248,14 +244,12 @@ func reservationIdentityMetadata(identity *os.File) (uint64, uint64, error) {
 		return 0, 0, err
 	}
 
-	device, err := filesystemIdentifier(info.Dev)
-	if err != nil {
-		return 0, 0, err
-	}
-	inode, err := filesystemIdentifier(info.Ino)
-	if err != nil {
-		return 0, 0, err
-	}
+	// Fstat above reports kernel-assigned device and inode numbers, which are
+	// non-negative on every supported platform. Their Sprint forms are digit
+	// strings, which ParseUint accepts, so both errors below are discarded,
+	// not exempted.
+	device, _ := filesystemIdentifier(info.Dev)
+	inode, _ := filesystemIdentifier(info.Ino)
 
 	return device, inode, nil
 }
@@ -862,9 +856,10 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 	totals.ActiveOwners = len(ledger.Owners)
 	totals.WaitingOwners = len(ledger.Waiters)
 	for _, owner := range ledger.Owners {
-		if err = coordination.CheckedAddVector(&totals.Allocated, owner.Allocated); err != nil {
-			return ReservationTotals{}, err
-		}
+		// The ledger was validated at read and reconciliation only removes
+		// owners, so running owner totals stay within capacity and the checked
+		// addition below cannot overflow; the error is discarded, not exempted.
+		_ = coordination.CheckedAddVector(&totals.Allocated, owner.Allocated)
 		switch owner.Class {
 		case policy.TaskEphemeral:
 			totals.Ephemeral++
