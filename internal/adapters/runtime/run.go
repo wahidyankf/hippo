@@ -233,7 +233,7 @@ func waitForContext(
 
 func launchConfiguredLifetime(
 	port system.System,
-	ctx context.Context,
+	ctx context.Context, //nolint:revive // The system port leads every adapter signature; the context follows it.
 	config RunConfig,
 	session *Session,
 	portLease *PortLease,
