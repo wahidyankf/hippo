@@ -12,7 +12,7 @@ import (
 
 // openFile opens name with os.OpenFile. It returns a nil File on failure, so a failed open never yields an interface
 // that holds a nil *os.File.
-func openFile(name string, flag int, perm fs.FileMode) (File, error) {
+func openFile(name string, flag int, perm fs.FileMode) (File, error) { //nolint:ireturn // Callers share the File interface across host and double trees.
 	file, err := os.OpenFile(name, flag, perm)
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func openFile(name string, flag int, perm fs.FileMode) (File, error) {
 }
 
 // createTemp creates a temporary file with os.CreateTemp, with the same nil-on-failure rule as openFile.
-func createTemp(dir, pattern string) (File, error) {
+func createTemp(dir, pattern string) (File, error) { //nolint:ireturn // Callers share the File interface across host and double trees.
 	file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return nil, err
@@ -43,7 +43,7 @@ func flock(file File, how int) error {
 
 // openDirectory opens the named directory, following links on its path as the open call does. Every name the
 // returned Directory takes is then resolved against its descriptor, and none of them follows a link.
-func openDirectory(name string) (Directory, error) {
+func openDirectory(name string) (Directory, error) { //nolint:ireturn // Callers share the Directory interface across host and double trees.
 	descriptor, err := unix.Open(name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ type directory struct {
 
 func (dir directory) descriptor() int { return int(dir.file.Fd()) }
 
-func (dir directory) OpenFile(name string, flag int, perm fs.FileMode) (File, error) {
+func (dir directory) OpenFile(name string, flag int, perm fs.FileMode) (File, error) { //nolint:ireturn // The Directory interface dictates this signature.
 	descriptor, err := unix.Openat(dir.descriptor(), name, flag|unix.O_CLOEXEC, uint32(perm.Perm()))
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (dir directory) OpenFile(name string, flag int, perm fs.FileMode) (File, er
 	return os.NewFile(uintptr(descriptor), name), nil
 }
 
-func (dir directory) OpenDirectory(name string) (Directory, error) {
+func (dir directory) OpenDirectory(name string) (Directory, error) { //nolint:ireturn // The Directory interface dictates this signature.
 	flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O_CLOEXEC
 	descriptor, err := unix.Openat(dir.descriptor(), name, flags, 0)
 	if err != nil {
@@ -107,9 +107,11 @@ type statInfo struct {
 	stat unix.Stat_t
 }
 
-func (info statInfo) Name() string       { return info.name }
-func (info statInfo) Size() int64        { return info.stat.Size }
-func (info statInfo) Mode() fs.FileMode  { return fileMode(uint32(info.stat.Mode)) }
+func (info statInfo) Name() string { return info.name }
+func (info statInfo) Size() int64  { return info.stat.Size }
+func (info statInfo) Mode() fs.FileMode {
+	return fileMode(uint32(info.stat.Mode)) //nolint:unconvert // The uint32 conversion is required on darwin where Mode is uint16.
+}
 func (info statInfo) ModTime() time.Time { return modTime(&info.stat) }
 func (info statInfo) IsDir() bool        { return info.Mode().IsDir() }
 func (info statInfo) Sys() any           { return &info.stat }
