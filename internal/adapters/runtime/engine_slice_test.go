@@ -114,3 +114,10 @@ func TestRunClockTickerBindsTheDouble(t *testing.T) {
 		t.Fatalf("ticker stops = %d, want one", host.Clock.Stops)
 	}
 }
+
+func TestDescribeHeavyReportsNoLiveOwnerForAnEmptyRoot(t *testing.T) {
+	engine := &Engine{}
+	if got := engine.DescribeHeavy(t.TempDir()); got != "the heavy-work lease reports no live owner" {
+		t.Fatalf("heavy description = %q, want the empty-root report", got)
+	}
+}
