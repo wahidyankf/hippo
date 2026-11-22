@@ -251,7 +251,7 @@ func compactSummaries(
 		if readError == nil {
 			for _, summary := range archived {
 				// A decoded summary holds only recorded words and finite numbers, so encoding it cannot fail.
-				encoded, _ := json.Marshal(summary)
+				encoded, _ := json.Marshal(summary) //nolint:errchkjson // A decoded summary holds only recorded words and finite numbers.
 				rows[summary.RunID] = encoded
 			}
 		} else if !errors.Is(readError, fs.ErrNotExist) {
@@ -272,7 +272,7 @@ func compactSummaries(
 				key = hex.EncodeToString(hash[:])
 			}
 			// Decoded from one summary, this value encodes for the same reason the archived rows above do.
-			encoded, _ := json.Marshal(summary)
+			encoded, _ := json.Marshal(summary) //nolint:errchkjson // Decoded from one summary, it holds only recorded words and finite numbers.
 			rows[key] = encoded
 		}
 		keys := make([]string, 0, len(rows))
@@ -473,7 +473,7 @@ func pruneHistory(port system.System, path string, now time.Time) error {
 		encoded := make([][]byte, 0, len(aggregates))
 		for _, aggregate := range aggregates {
 			// An aggregate takes recorded words and the largest of finite decoded numbers, so encoding it cannot fail.
-			row, _ := json.Marshal(aggregate)
+			row, _ := json.Marshal(aggregate) //nolint:errchkjson // An aggregate takes recorded words and the largest of finite decoded numbers.
 			encoded = append(encoded, row)
 		}
 		if err = atomicGzipWrite(port, oldest.path, encoded, oldest.modified); err != nil {
