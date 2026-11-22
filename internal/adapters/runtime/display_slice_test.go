@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/unix" //nolint:depguard // Slice doubles must observe the same flock errors and flags as production.
 
 	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/adapters/system/systemtest"
