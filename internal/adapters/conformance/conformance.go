@@ -135,7 +135,7 @@ func consumeManifestJSON(decoder *json.Decoder) error {
 				return keyError
 			}
 			// Token returns a string for every object key; any other token is the keyError above.
-			key := keyToken.(string)
+			key := keyToken.(string) //nolint:forcetypeassert // Token returns a string for every object key.
 			if seen[key] {
 				return fmt.Errorf("duplicate conformance manifest field %q", key)
 			}
@@ -681,13 +681,13 @@ func newNeverStartedReceipt(port system.System, root string, before map[string]s
 	return found, nil
 }
 
-func execute(port system.System, ctx context.Context, directory string, command Command, environment []string, output io.Writer) error {
+func execute(port system.System, ctx context.Context, directory string, command Command, environment []string, output io.Writer) error { //nolint:revive // The system port leads every adapter signature; the context follows it.
 	return executeWithRuntime(port, ctx, directory, command, environment, output, defaultCommandRuntime(port))
 }
 
 func executeVerifiedCommand(
 	port system.System,
-	ctx context.Context,
+	ctx context.Context, //nolint:revive // The system port leads every adapter signature; the context follows it.
 	directory string,
 	command Command,
 	environment []string,
@@ -709,7 +709,7 @@ func executeVerifiedCommand(
 	return errors.Join(executeError, verifyError, cleanupError)
 }
 
-func executeWithRuntime(port system.System, ctx context.Context, directory string, command Command, environment []string, output io.Writer, runtime commandRuntime) error {
+func executeWithRuntime(port system.System, ctx context.Context, directory string, command Command, environment []string, output io.Writer, runtime commandRuntime) error { //nolint:revive // The system port leads every adapter signature; the context follows it.
 	if err := ctx.Err(); err != nil {
 		return &commandError{category: "cancelled before start", exitCode: -1, cause: err}
 	}
@@ -771,7 +771,7 @@ func executeWithRuntime(port system.System, ctx context.Context, directory strin
 }
 
 // gitOutput runs git in the directory. The capture port takes no directory, so git's own -C option selects it.
-func gitOutput(port system.System, ctx context.Context, directory string, arguments ...string) (string, error) {
+func gitOutput(port system.System, ctx context.Context, directory string, arguments ...string) (string, error) { //nolint:revive // The system port leads every adapter signature; the context follows it.
 	output, err := port.Runner.CaptureOutput(ctx, "git", append([]string{"-C", directory}, arguments...)...)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -787,7 +787,7 @@ func gitOutput(port system.System, ctx context.Context, directory string, argume
 	return string(bytes.TrimSpace(output)), nil
 }
 
-func snapshot(port system.System, ctx context.Context, consumer Consumer, identity checkoutIdentity) (checkoutState, error) {
+func snapshot(port system.System, ctx context.Context, consumer Consumer, identity checkoutIdentity) (checkoutState, error) { //nolint:revive // The system port leads every adapter signature; the context follows it.
 	if err := verifyCheckoutIdentity(port, consumer, identity); err != nil {
 		return checkoutState{}, err
 	}
