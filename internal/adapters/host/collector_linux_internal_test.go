@@ -100,6 +100,21 @@ func TestLinuxCollectReturnsCancellationBeforeReading(t *testing.T) {
 	}
 }
 
+func TestLinuxCollectorUsesTheDiskPortsPageSizeAndProcessorCount(t *testing.T) {
+	machine := newLinuxMachine()
+	machine.Disk.PageSize = 4096
+	machine.Disk.CPUs = 3
+	port := machine.Port()
+	collector := SystemCollector{ReadFile: port.Files.ReadFile, PageSize: port.Disk.PageSize, CPUCount: port.Disk.CPUCount}
+	reading, err := collector.Collect(t.Context(), nil, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reading.Sample.PageSizeBytes == nil || *reading.Sample.PageSizeBytes != 4096 || reading.Sample.AvailableParallelism != 3 {
+		t.Fatalf("page size and parallelism came from the operating system, not the disk port: %+v", reading.Sample)
+	}
+}
+
 func TestRootedContextFileReaderMapsPathsBeneathRoot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o700); err != nil {

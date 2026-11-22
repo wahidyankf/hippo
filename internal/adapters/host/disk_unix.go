@@ -15,17 +15,23 @@ func diskCapacity(path string) (*int64, *int64, error) {
 		return nil, nil, err
 	}
 
-	if value.Bsize <= 0 {
+	return blockCapacity(value.Bsize, value.Bavail, value.Blocks)
+}
+
+// blockCapacity converts statfs block counts into byte capacities. A block size that is not positive is invalid, and
+// a product that would overflow int64 is refused rather than wrapped. The block size type differs by platform.
+func blockCapacity[Size int32 | int64 | uint32](blockSize Size, available, blocks uint64) (*int64, *int64, error) {
+	if blockSize <= 0 {
 		return nil, nil, errors.New("disk block size is invalid")
 	}
 
-	blockSize := uint64(value.Bsize)
-	if value.Bavail > math.MaxInt64/blockSize || value.Blocks > math.MaxInt64/blockSize {
+	size := uint64(blockSize)
+	if available > math.MaxInt64/size || blocks > math.MaxInt64/size {
 		return nil, nil, errors.New("disk capacity exceeds supported range")
 	}
 
-	free := int64(value.Bavail * blockSize)  //nolint:gosec // Multiplication is bounded above by math.MaxInt64.
-	total := int64(value.Blocks * blockSize) //nolint:gosec // Multiplication is bounded above by math.MaxInt64.
+	free := int64(available * size) //nolint:gosec // Multiplication is bounded above by math.MaxInt64.
+	total := int64(blocks * size)   //nolint:gosec // Multiplication is bounded above by math.MaxInt64.
 
 	return &free, &total, nil
 }

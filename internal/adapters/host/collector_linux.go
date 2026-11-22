@@ -5,9 +5,7 @@ package host
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -104,7 +102,7 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 	if err != nil {
 		return Reading{}, err
 	}
-	effective, available, parallelism := linuxCgroupCapacity(memory, capacity, runtime.NumCPU())
+	effective, available, parallelism := linuxCgroupCapacity(memory, capacity, collector.cpuCount())
 
 	some, full, pressureLevel, err := linuxMemoryPressure(ctx, read, cgroup)
 	if err != nil {
@@ -136,7 +134,7 @@ func (collector SystemCollector) collect(ctx context.Context, previous CPUState,
 		return Reading{}, fmt.Errorf("read disk capacity: %w", diskError)
 	}
 
-	pageSize := int64(os.Getpagesize())
+	pageSize := collector.pageSize()
 	vmstat, err := readOptionalFiles(ctx, read, "/proc/vmstat")
 	if err != nil {
 		return Reading{}, err

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -29,12 +30,31 @@ type FileReader func(string) ([]byte, error)
 // ContextFileReader reads one local kernel evidence file with caller cancellation.
 type ContextFileReader func(context.Context, string) ([]byte, error)
 
-// SystemCollector gathers platform metrics using system calls and local probes.
+// SystemCollector gathers platform metrics using system calls and local probes. PageSize and CPUCount are the
+// disk port's page size and processor count; a nil field asks the operating system.
 type SystemCollector struct {
 	Run             CommandRunner
 	ReadFile        FileReader
 	ReadFileContext ContextFileReader
 	Now             func() time.Time
+	PageSize        func() int
+	CPUCount        func() int
+}
+
+func (collector SystemCollector) pageSize() int64 {
+	if collector.PageSize == nil {
+		return int64(os.Getpagesize())
+	}
+
+	return int64(collector.PageSize())
+}
+
+func (collector SystemCollector) cpuCount() int {
+	if collector.CPUCount == nil {
+		return runtime.NumCPU()
+	}
+
+	return collector.CPUCount()
 }
 
 // Collect gathers one reading of this host. Evidence the host will not give
@@ -61,8 +81,13 @@ func (collector SystemCollector) Collect(ctx context.Context, previous CPUState,
 // the live filesystem, so /proc/stat is read from root/proc/stat. A path is
 // cleaned as absolute first, so it cannot climb out of root.
 func RootedFileReader(root string) FileReader {
+	return rootedFileReader(root, os.ReadFile)
+}
+
+// rootedFileReader reads through the file port's ReadFile, so a test can bind the reads to an in-memory tree.
+func rootedFileReader(root string, readFile func(string) ([]byte, error)) FileReader {
 	return func(path string) ([]byte, error) {
-		return os.ReadFile(filepath.Join(root, filepath.Clean("/"+path)))
+		return readFile(filepath.Join(root, filepath.Clean("/"+path)))
 	}
 }
 
