@@ -1,0 +1,2 @@
+package cli
+import _ "github.com/wahidyankf/hippo/internal/adapters/system/systemtest"
