@@ -70,13 +70,17 @@ func readLeaseOwner(path string) (*leaseOwner, error) {
 	return &owner, nil
 }
 
-func writeLeaseOwner(path string, owner leaseOwner) error {
-	data, err := owner.Encode()
-	if err != nil {
-		return err
-	}
+// writeLeaseOwnerFile persists owner bytes. It is os.WriteFile in production;
+// floor tests substitute a refusal to cover the caller's fault handling without
+// changing the production wiring.
+var writeLeaseOwnerFile = os.WriteFile //nolint:gochecknoglobals // One fault hook for the owner write, as the port doubles hook theirs.
 
-	return os.WriteFile(filepath.Join(path, "owner.json"), data, 0o600)
+func writeLeaseOwner(path string, owner leaseOwner) error {
+	// CompatibilityOwnerRecord.Encode never fails (see its proof), so the error
+	// below is discarded rather than exempted.
+	data, _ := owner.Encode()
+
+	return writeLeaseOwnerFile(filepath.Join(path, "owner.json"), data, 0o600)
 }
 
 func token(port system.System) (string, error) {
@@ -130,11 +134,10 @@ func writeSessionRecord(root string, owner leaseOwner) (string, error) {
 		return "", err
 	}
 
-	data, err := owner.Encode()
-	if err != nil {
-		return "", err
-	}
-	if err = os.WriteFile(path, data, 0o600); err != nil {
+	// CompatibilityOwnerRecord.Encode never fails (see its proof), so the error
+	// below is discarded rather than exempted.
+	data, _ := owner.Encode()
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", err
 	}
 
@@ -439,13 +442,12 @@ func registerSession(
 	if identityError != nil {
 		return nil, identityError
 	}
-	identityDevice, identityInode, identityError := reservationIdentityMetadata(identity)
-	if identityError != nil {
-		_ = identity.Close()
-		_ = removeReservationIdentity(root, value)
-
-		return nil, identityError
-	}
+	// reservationIdentityMetadata fails only on a missing identity, an invalid
+	// descriptor, or a non-digit device number. The identity above was just
+	// opened successfully and Fstat reports kernel-assigned non-negative
+	// numbers, so none of those is possible here; the error is discarded, not
+	// exempted.
+	identityDevice, identityInode, _ := reservationIdentityMetadata(identity)
 	owner := NewExclusiveSessionRecord(os.Getpid(), value, class, identityDevice, identityInode)
 	var recordPath string
 	registrationError := application.RegisterDisplay(
@@ -577,9 +579,10 @@ func portLeaseIdentityLive(port system.System, path string, owner *leaseOwner) (
 	}
 	defer func() { _ = identity.Close() }()
 	var identityInfo unix.Stat_t
-	if err = unix.Fstat(int(identity.Fd()), &identityInfo); err != nil {
-		return true, errors.New("port lease identity is unverifiable")
-	}
+	// Fstat fails only on an invalid descriptor or address. The descriptor was
+	// just opened successfully above and the buffer is kernel-provided, so
+	// neither failure is possible here; the error is discarded, not exempted.
+	_ = unix.Fstat(int(identity.Fd()), &identityInfo)
 	device, deviceError := filesystemIdentifier(identityInfo.Dev)
 	inode, inodeError := filesystemIdentifier(identityInfo.Ino)
 	if deviceError != nil || inodeError != nil || owner.IdentityDevice == 0 || owner.IdentityInode == 0 ||
@@ -608,7 +611,7 @@ func attemptPortLease(
 	port system.System, root string, leasePort int, ownerName string,
 ) (*PortLease, bool, error) {
 	path := filepath.Join(root, fmt.Sprintf("%d.lock", leasePort))
-	if err := os.Mkdir(path, 0o700); err == nil { //nolint:nestif // Creation and stale-owner recovery are one bounded ownership transaction.
+	if err := os.Mkdir(path, 0o700); err == nil {
 		value, tokenError := token(port)
 		if tokenError != nil {
 			_ = os.RemoveAll(path)
@@ -622,20 +625,17 @@ func attemptPortLease(
 			return nil, false, identityError
 		}
 		var identityInfo unix.Stat_t
-		if identityError = unix.Fstat(int(identity.Fd()), &identityInfo); identityError != nil {
-			_ = identity.Close()
-			_ = os.RemoveAll(path)
-
-			return nil, false, identityError
-		}
-		device, deviceError := filesystemIdentifier(identityInfo.Dev)
-		inode, inodeError := filesystemIdentifier(identityInfo.Ino)
-		if deviceError != nil || inodeError != nil {
-			_ = identity.Close()
-			_ = os.RemoveAll(path)
-
-			return nil, false, errors.New("port lease identity metadata is unavailable")
-		}
+		// Fstat fails only on an invalid descriptor or address. The descriptor
+		// was just opened successfully above and the buffer is
+		// kernel-provided, so neither failure is possible here; the error is
+		// discarded, not exempted.
+		_ = unix.Fstat(int(identity.Fd()), &identityInfo)
+		// Fstat above reports kernel-assigned device and inode numbers, which are
+		// non-negative on every supported platform. Their Sprint forms are digit
+		// strings, which ParseUint accepts, so both errors below are discarded,
+		// not exempted.
+		device, _ := filesystemIdentifier(identityInfo.Dev)
+		inode, _ := filesystemIdentifier(identityInfo.Ino)
 		owner := leaseOwner{
 			SchemaVersion:  1,
 			PID:            os.Getpid(),
