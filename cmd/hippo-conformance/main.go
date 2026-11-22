@@ -3,19 +3,28 @@ package main
 
 import (
 	"context"
-	"os"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 )
 
+// process is the host the entry point runs against. A test replaces it with an in-memory host.
+var process = system.Production
+
 func main() {
-	os.Exit(run())
+	process.Environment.Exit(run(process))
 }
 
-func run() int {
-	ctx, stop := cli.SignalContext(context.Background())
+func run(host system.System) int {
+	ctx, stop := cli.SignalContext(context.Background(), host.Signals)
 	defer stop()
 
-	return cli.ConformanceMain(ctx, os.Args[1:], os.Stdout, os.Stderr, bootstrap.ConformanceService())
+	return cli.ConformanceMain(
+		ctx,
+		host.Environment.Args[1:],
+		host.Environment.Stdout,
+		host.Environment.Stderr,
+		bootstrap.ConformanceService(host.Clock),
+	)
 }

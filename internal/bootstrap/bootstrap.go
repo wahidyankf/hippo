@@ -14,6 +14,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/health"
 	"github.com/wahidyankf/hippo/internal/adapters/host"
 	runtimeadapter "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	app "github.com/wahidyankf/hippo/internal/application"
 )
 
@@ -100,7 +101,8 @@ func Execute(ctx context.Context, args []string) int {
 	return code
 }
 
-// ConformanceService composes the real consumer-conformance capabilities.
-func ConformanceService() app.ConformanceService {
-	return app.ConformanceService{Environment: conformance.Environment{}, Now: time.Now}
+// ConformanceService composes the real consumer-conformance capabilities. The clock is the caller's port, so the
+// entry point that supplies it decides where time comes from.
+func ConformanceService(clock system.Clock) app.ConformanceService {
+	return app.ConformanceService{Environment: conformance.Environment{}, Now: clock.Now}
 }

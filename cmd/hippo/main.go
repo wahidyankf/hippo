@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 )
 
@@ -13,7 +14,7 @@ import (
 // interrupted invocation with the 128+N a shell reports for it after a queued
 // waiter has left its receipt or a guard has stopped its child.
 func run() int {
-	ctx, stop := cli.SignalContext(context.Background())
+	ctx, stop := cli.SignalContext(context.Background(), system.Production.Signals)
 	defer stop()
 
 	return bootstrap.Execute(ctx, os.Args[1:])
