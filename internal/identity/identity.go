@@ -158,14 +158,11 @@ func Validate(value Value) error {
 		}
 	}
 	encoded, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	if len(encoded) > MaximumJSONBytes {
+	if err == nil && len(encoded) > MaximumJSONBytes {
 		return fmt.Errorf("identity exceeds %d encoded bytes", MaximumJSONBytes)
 	}
 
-	return nil
+	return err
 }
 
 // ValidateOverrides checks invocation overrides without reading any file, so
