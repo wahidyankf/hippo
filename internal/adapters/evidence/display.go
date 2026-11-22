@@ -3,16 +3,17 @@ package evidence
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/identity"
 	"golang.org/x/sys/unix"
@@ -31,34 +32,44 @@ type displayRecord struct {
 // DisplayRepository reads optional display context without affecting accounting.
 type DisplayRepository struct{}
 
-func openDisplayDirectory(root string, create bool) (*os.File, error) {
-	rootFD, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+// openDisplayDirectory opens the run-display directory of root. With create, it makes the directory first and
+// tolerates one that exists already.
+func openDisplayDirectory(port system.System, root string, create bool) (system.Directory, error) {
+	rootDirectory, err := port.Files.OpenDirectory(root)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = unix.Close(rootFD) }()
+	defer func() { _ = rootDirectory.Close() }()
 	if create {
-		if err = unix.Mkdirat(rootFD, "run-display", 0o700); err != nil && !errors.Is(err, unix.EEXIST) {
+		if err = rootDirectory.Mkdir("run-display", 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, err
 		}
 	}
-	directoryFD, err := unix.Openat(rootFD, "run-display", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	directory, err := rootDirectory.OpenDirectory("run-display")
 	if err != nil {
 		return nil, err
 	}
-	directory := os.NewFile(uintptr(directoryFD), "run-display")
 	if create {
 		if err = directory.Chmod(0o700); err != nil {
 			return nil, errors.Join(err, directory.Close())
 		}
 	}
+
 	return directory, nil
 }
 
 // ReadDisplay returns one advisory result for each requested complete run ID.
-func (DisplayRepository) ReadDisplay(ctx context.Context, root string, runIDs []string) (map[string]application.DisplayAnnotation, error) {
+func (DisplayRepository) ReadDisplay(
+	ctx context.Context, root string, runIDs []string,
+) (map[string]application.DisplayAnnotation, error) {
+	return readDisplays(system.Production, ctx, root, runIDs)
+}
+
+func readDisplays(
+	port system.System, ctx context.Context, root string, runIDs []string,
+) (map[string]application.DisplayAnnotation, error) {
 	result := make(map[string]application.DisplayAnnotation, len(runIDs))
-	directory, directoryError := openDisplayDirectory(root, false)
+	directory, directoryError := openDisplayDirectory(port, root, false)
 	if directory != nil {
 		defer func() { _ = directory.Close() }()
 	}
@@ -72,7 +83,7 @@ func (DisplayRepository) ReadDisplay(ctx context.Context, root string, runIDs []
 		}
 		if directoryError != nil {
 			availability := application.DisplayUnreadable
-			if errors.Is(directoryError, os.ErrNotExist) {
+			if errors.Is(directoryError, fs.ErrNotExist) {
 				availability = application.DisplayMissing
 			}
 			result[runID] = application.DisplayAnnotation{Availability: availability}
@@ -80,25 +91,27 @@ func (DisplayRepository) ReadDisplay(ctx context.Context, root string, runIDs []
 		}
 		result[runID] = readDisplay(directory, runID)
 	}
-	if errors.Is(directoryError, os.ErrNotExist) {
+	if errors.Is(directoryError, fs.ErrNotExist) {
 		return result, nil
 	}
+
 	return result, directoryError
 }
 
-func readDisplay(directory *os.File, runID string) application.DisplayAnnotation {
-	descriptor, err := unix.Openat(int(directory.Fd()), runID+".json", unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+func readDisplay(directory system.Directory, runID string) application.DisplayAnnotation {
+	file, err := directory.OpenFile(runID+".json", os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
 	if err != nil {
 		availability := application.DisplayUnreadable
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) {
 			availability = application.DisplayMissing
 		}
+
 		return application.DisplayAnnotation{Availability: availability}
 	}
-	file := os.NewFile(uintptr(descriptor), "display annotation")
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		_ = file.Close()
+
 		return application.DisplayAnnotation{Availability: application.DisplayUnreadable}
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maximumDisplayBytes+1))
@@ -108,6 +121,7 @@ func readDisplay(directory *os.File, runID string) application.DisplayAnnotation
 	if len(data) > maximumDisplayBytes {
 		return application.DisplayAnnotation{Availability: application.DisplayInvalid}
 	}
+
 	return decodeDisplay(data, runID)
 }
 
@@ -123,6 +137,7 @@ func decodeDisplay(data []byte, runID string) application.DisplayAnnotation {
 	if err != nil {
 		return application.DisplayAnnotation{Availability: application.DisplayInvalid}
 	}
+
 	return application.DisplayAnnotation{Label: label, Availability: application.DisplayAvailable}
 }
 
@@ -161,45 +176,52 @@ func parseDisplayRecord(data []byte) (displayRecord, error) {
 	if err = decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) || len(seen) != 3 {
 		return displayRecord{}, errors.New("display annotation must contain exactly one complete record")
 	}
+
 	return record, nil
 }
 
 // WriteDisplay atomically publishes private schema-one context for an owned token.
 // The runtime caller holds the coordination lock before making that token visible.
-func WriteDisplay(root, runID string, label identity.DisplayLabel) (returnError error) {
+func WriteDisplay(root, runID string, label identity.DisplayLabel) error {
+	return writeDisplay(system.Production, root, runID, label)
+}
+
+func writeDisplay(port system.System, root, runID string, label identity.DisplayLabel) (returnError error) {
 	if !displayTokenPattern.MatchString(runID) {
 		return errors.New("display annotation token is invalid")
 	}
 	if _, err := identity.ParseDisplayLabel(label.String()); err != nil {
 		return err
 	}
-	directory, err := openDisplayDirectory(root, true)
+	directory, err := openDisplayDirectory(port, root, true)
 	if err != nil {
 		return err
 	}
 	defer func() { returnError = errors.Join(returnError, directory.Close()) }()
 	random := make([]byte, 8)
-	if _, err = rand.Read(random); err != nil {
+	if _, err = port.Random.Read(random); err != nil {
 		return err
 	}
 	temporaryName := ".run-display-" + runID + "-" + hex.EncodeToString(random) + ".tmp"
-	fd, err := unix.Openat(int(directory.Fd()), temporaryName, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+	temporary, err := directory.OpenFile(
+		temporaryName, os.O_WRONLY|os.O_CREATE|os.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600,
+	)
 	if err != nil {
 		return err
 	}
-	temporary := os.NewFile(uintptr(fd), "display annotation temporary")
 	defer func() {
 		if temporary != nil {
 			returnError = errors.Join(returnError, temporary.Close())
 		}
-		if removeError := unix.Unlinkat(int(directory.Fd()), temporaryName, 0); !errors.Is(removeError, unix.ENOENT) {
+		if removeError := directory.Remove(temporaryName); !errors.Is(removeError, fs.ErrNotExist) {
 			returnError = errors.Join(returnError, removeError)
 		}
 	}()
 	if err = temporary.Chmod(0o600); err != nil {
 		return err
 	}
-	if err = json.NewEncoder(temporary).Encode(displayRecord{SchemaVersion: 1, RunID: runID, Label: label.String()}); err != nil {
+	record := displayRecord{SchemaVersion: 1, RunID: runID, Label: label.String()}
+	if err = json.NewEncoder(temporary).Encode(record); err != nil {
 		return err
 	}
 	if err = temporary.Sync(); err != nil {
@@ -210,48 +232,61 @@ func WriteDisplay(root, runID string, label identity.DisplayLabel) (returnError 
 	if err != nil {
 		return err
 	}
-	return unix.Renameat(int(directory.Fd()), temporaryName, int(directory.Fd()), runID+".json")
+
+	return directory.Rename(temporaryName, runID+".json")
 }
 
-func removeDisplayAt(directory *os.File, name string) error {
-	var info unix.Stat_t
-	if err := unix.Fstatat(int(directory.Fd()), name, &info, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		if errors.Is(err, unix.ENOENT) {
+// removeDisplayAt removes the named entry of directory when it is a regular file. A name that is gone is not an error.
+func removeDisplayAt(directory system.Directory, name string) error {
+	info, err := directory.Stat(name)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
+
 		return err
 	}
-	if info.Mode&unix.S_IFMT != unix.S_IFREG {
+	if !info.Mode().IsRegular() {
 		return errors.New("display annotation is not a regular file")
 	}
-	err := unix.Unlinkat(int(directory.Fd()), name, 0)
-	if errors.Is(err, unix.ENOENT) {
+	err = directory.Remove(name)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
+
 	return err
 }
 
 // RemoveDisplay removes only a regular annotation for a validated owned token.
-func RemoveDisplay(root, runID string) (returnError error) {
+func RemoveDisplay(root, runID string) error {
+	return removeDisplay(system.Production, root, runID)
+}
+
+func removeDisplay(port system.System, root, runID string) (returnError error) {
 	if !displayTokenPattern.MatchString(runID) {
 		return errors.New("display annotation token is invalid")
 	}
-	directory, err := openDisplayDirectory(root, false)
-	if errors.Is(err, os.ErrNotExist) {
+	directory, err := openDisplayDirectory(port, root, false)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	defer func() { returnError = errors.Join(returnError, directory.Close()) }()
+
 	return removeDisplayAt(directory, runID+".json")
 }
 
 // DisplayTokens enumerates supported, strictly valid sidecars for orphan census.
 // Unknown, invalid, and unreadable annotations cannot establish protocol ownership.
-func DisplayTokens(root string) (_ []string, returnError error) {
-	directory, err := openDisplayDirectory(root, false)
-	if errors.Is(err, os.ErrNotExist) {
+func DisplayTokens(root string) ([]string, error) {
+	return displayTokens(system.Production, root)
+}
+
+func displayTokens(port system.System, root string) (_ []string, returnError error) {
+	directory, err := openDisplayDirectory(port, root, false)
+	if errors.Is(err, fs.ErrNotExist) {
 		return []string{}, nil
 	}
 	if err != nil {
@@ -265,18 +300,26 @@ func DisplayTokens(root string) (_ []string, returnError error) {
 	tokens := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		runID, matched := strings.CutSuffix(entry.Name(), ".json")
-		if matched && entry.Type().IsRegular() && displayTokenPattern.MatchString(runID) && readDisplay(directory, runID).Availability == application.DisplayAvailable {
+		if !matched || !entry.Type().IsRegular() || !displayTokenPattern.MatchString(runID) {
+			continue
+		}
+		if readDisplay(directory, runID).Availability == application.DisplayAvailable {
 			tokens = append(tokens, runID)
 		}
 	}
+
 	return tokens, nil
 }
 
 // PruneDisplay removes proven-stale annotations and expired regular owned temporaries.
 // The caller supplies a complete liveness proof and holds the coordination lock.
-func PruneDisplay(root string, provenStaleRunIDs []string, now time.Time) (returnError error) {
-	directory, err := openDisplayDirectory(root, false)
-	if errors.Is(err, os.ErrNotExist) {
+func PruneDisplay(root string, provenStaleRunIDs []string, now time.Time) error {
+	return pruneDisplay(system.Production, root, provenStaleRunIDs, now)
+}
+
+func pruneDisplay(port system.System, root string, provenStaleRunIDs []string, now time.Time) (returnError error) {
+	directory, err := openDisplayDirectory(port, root, false)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
@@ -297,22 +340,22 @@ func PruneDisplay(root string, provenStaleRunIDs []string, now time.Time) (retur
 		if !entry.Type().IsRegular() || !displayTemporary(entry.Name()) {
 			continue
 		}
-		var info unix.Stat_t
-		infoError := unix.Fstatat(int(directory.Fd()), entry.Name(), &info, unix.AT_SYMLINK_NOFOLLOW)
+		info, infoError := directory.Stat(entry.Name())
 		if infoError != nil {
-			if errors.Is(infoError, unix.ENOENT) {
+			if errors.Is(infoError, fs.ErrNotExist) {
 				continue
 			}
 			returnError = errors.Join(returnError, infoError)
 			continue
 		}
-		if info.Mode&unix.S_IFMT != unix.S_IFREG {
+		if !info.Mode().IsRegular() {
 			continue
 		}
-		if now.Sub(time.Unix(info.Mtim.Sec, info.Mtim.Nsec)) >= atomicWriteTemporaryRetention {
+		if now.Sub(info.ModTime()) >= atomicWriteTemporaryRetention {
 			returnError = errors.Join(returnError, removeDisplayAt(directory, entry.Name()))
 		}
 	}
+
 	return returnError
 }
 
@@ -323,6 +366,7 @@ func displayTemporary(name string) bool {
 		return false
 	}
 	_, err := hex.DecodeString(value[33:])
+
 	return err == nil
 }
 

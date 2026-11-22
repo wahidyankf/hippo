@@ -8,17 +8,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	domain "github.com/wahidyankf/hippo/internal/domain/evidence"
 )
 
-func readSummaryFile(path string, fallback time.Time) (Summary, error) {
-	data, err := os.ReadFile(path)
+func readSummaryFile(port system.System, path string, fallback time.Time) (Summary, error) {
+	data, err := port.Files.ReadFile(path)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -33,8 +35,8 @@ func readSummaryFile(path string, fallback time.Time) (Summary, error) {
 	return summary, nil
 }
 
-func readGzipSummaries(path string, fallback time.Time) ([]Summary, error) {
-	file, err := os.Open(path)
+func readGzipSummaries(port system.System, path string, fallback time.Time) ([]Summary, error) {
+	file, err := port.Files.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +72,16 @@ func archiveFallback(name string) time.Time {
 
 // ReadHistory reads current summaries and compacted daily archives.
 func ReadHistory(root string, query Query) ([]Summary, error) {
+	return readHistory(system.Production, root, query)
+}
+
+func readHistory(port system.System, root string, query Query) ([]Summary, error) {
 	if query.Now.IsZero() {
-		query.Now = time.Now()
+		query.Now = port.Clock.Now()
 	}
 	rows := []Summary{}
-	entries, err := os.ReadDir(root)
-	if errors.Is(err, os.ErrNotExist) {
+	entries, err := port.Files.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
 		return rows, nil
 	}
 	if err != nil {
@@ -89,7 +95,7 @@ func ReadHistory(root string, query Query) ([]Summary, error) {
 		if infoError != nil {
 			return nil, infoError
 		}
-		summary, readError := readSummaryFile(filepath.Join(root, entry.Name()), info.ModTime())
+		summary, readError := readSummaryFile(port, filepath.Join(root, entry.Name()), info.ModTime())
 		if readError != nil {
 			return nil, readError
 		}
@@ -97,8 +103,8 @@ func ReadHistory(root string, query Query) ([]Summary, error) {
 			rows = append(rows, summary)
 		}
 	}
-	historyEntries, err := os.ReadDir(filepath.Join(root, "history"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	historyEntries, err := port.Files.ReadDir(filepath.Join(root, "history"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	for _, entry := range historyEntries {
@@ -106,7 +112,7 @@ func ReadHistory(root string, query Query) ([]Summary, error) {
 			continue
 		}
 		archived, readError := readGzipSummaries(
-			filepath.Join(root, "history", entry.Name()), archiveFallback(entry.Name()),
+			port, filepath.Join(root, "history", entry.Name()), archiveFallback(entry.Name()),
 		)
 		if readError != nil {
 			return nil, readError
@@ -128,11 +134,11 @@ func ReadHistory(root string, query Query) ([]Summary, error) {
 // optional owner slot. Only a recorded OutcomePassed does: a run that was shed,
 // deferred, or recorded under a word this version does not know never counts,
 // whatever its budget outcome says, so the budget outcome is not consulted.
-func atomicGzipWrite(path string, rows [][]byte, modified time.Time) (returnError error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+func atomicGzipWrite(port system.System, path string, rows [][]byte, modified time.Time) (returnError error) {
+	if err := port.Files.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".history-*.tmp")
+	temporary, err := port.Files.CreateTemp(filepath.Dir(path), ".history-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -142,7 +148,7 @@ func atomicGzipWrite(path string, rows [][]byte, modified time.Time) (returnErro
 		if !closed {
 			returnError = errors.Join(returnError, temporary.Close())
 		}
-		if removeError := os.Remove(temporaryPath); !errors.Is(removeError, os.ErrNotExist) {
+		if removeError := port.Files.Remove(temporaryPath); !errors.Is(removeError, fs.ErrNotExist) {
 			returnError = errors.Join(returnError, removeError)
 		}
 	}()
@@ -165,30 +171,30 @@ func atomicGzipWrite(path string, rows [][]byte, modified time.Time) (returnErro
 		return err
 	}
 	closed = true
-	if err = os.Rename(temporaryPath, path); err != nil {
+	if err = port.Files.Rename(temporaryPath, path); err != nil {
 		return err
 	}
 	if !modified.IsZero() {
-		return os.Chtimes(path, modified, modified)
+		return port.Files.Chtimes(path, modified, modified)
 	}
 
 	return nil
 }
 
-func compressRawFile(source, destination string, modified time.Time) error {
-	data, err := os.ReadFile(source)
+func compressRawFile(port system.System, source, destination string, modified time.Time) error {
+	data, err := port.Files.ReadFile(source)
 	if err != nil {
 		return err
 	}
-	if err = atomicGzipWrite(destination, [][]byte{data}, modified); err != nil {
+	if err = atomicGzipWrite(port, destination, [][]byte{data}, modified); err != nil {
 		return err
 	}
 
-	return os.Remove(source)
+	return port.Files.Remove(source)
 }
 
-func summaryArchiveDay(path string, info os.FileInfo) (time.Time, error) {
-	summary, err := readSummaryFile(path, info.ModTime())
+func summaryArchiveDay(port system.System, path string, info fs.FileInfo) (time.Time, error) {
+	summary, err := readSummaryFile(port, path, info.ModTime())
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -197,8 +203,11 @@ func summaryArchiveDay(path string, info os.FileInfo) (time.Time, error) {
 	return time.Date(measured.UTC().Year(), measured.UTC().Month(), measured.UTC().Day(), 0, 0, 0, 0, time.UTC), nil
 }
 
-func compactSummaries(root string, now time.Time, protected map[string]bool) error { //nolint:gocognit,cyclop // Atomic daily merge keeps discovery, deduplication, write, and source removal visibly ordered.
-	entries, err := os.ReadDir(root)
+//nolint:gocognit,cyclop // Atomic daily merge stays visibly ordered.
+func compactSummaries(
+	port system.System, root string, now time.Time, protected map[string]bool,
+) error {
+	entries, err := port.Files.ReadDir(root)
 	if err != nil {
 		return err
 	}
@@ -220,13 +229,13 @@ func compactSummaries(root string, now time.Time, protected map[string]bool) err
 		// them by their filesystem age before decoding so one corrupt, already
 		// expired file cannot block retention for the shared machine log.
 		if now.Sub(info.ModTime()) > HistoryRetention {
-			if err = os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err = port.Files.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 
 			continue
 		}
-		day, dayError := summaryArchiveDay(path, info)
+		day, dayError := summaryArchiveDay(port, path, info)
 		if dayError != nil {
 			return dayError
 		}
@@ -237,19 +246,19 @@ func compactSummaries(root string, now time.Time, protected map[string]bool) err
 	for day, paths := range groups {
 		destination := filepath.Join(root, "history", day+".jsonl.gz")
 		rows := map[string][]byte{}
-		if archived, readError := readGzipSummaries(destination, archiveFallback(filepath.Base(destination))); readError == nil {
+		fallback := archiveFallback(filepath.Base(destination))
+		archived, readError := readGzipSummaries(port, destination, fallback)
+		if readError == nil {
 			for _, summary := range archived {
-				encoded, encodeError := json.Marshal(summary)
-				if encodeError != nil {
-					return encodeError
-				}
+				// A decoded summary holds only recorded words and finite numbers, so encoding it cannot fail.
+				encoded, _ := json.Marshal(summary)
 				rows[summary.RunID] = encoded
 			}
-		} else if !errors.Is(readError, os.ErrNotExist) {
+		} else if !errors.Is(readError, fs.ErrNotExist) {
 			return readError
 		}
 		for _, path := range paths {
-			data, readError := os.ReadFile(path)
+			data, readError := port.Files.ReadFile(path)
 			if readError != nil {
 				return readError
 			}
@@ -262,10 +271,8 @@ func compactSummaries(root string, now time.Time, protected map[string]bool) err
 				hash := sha256.Sum256(data)
 				key = hex.EncodeToString(hash[:])
 			}
-			encoded, encodeError := json.Marshal(summary)
-			if encodeError != nil {
-				return encodeError
-			}
+			// Decoded from one summary, this value encodes for the same reason the archived rows above do.
+			encoded, _ := json.Marshal(summary)
 			rows[key] = encoded
 		}
 		keys := make([]string, 0, len(rows))
@@ -278,11 +285,11 @@ func compactSummaries(root string, now time.Time, protected map[string]bool) err
 			encoded = append(encoded, bytesTrimSpace(rows[key]))
 		}
 		modified, _ := time.Parse("2006-01-02", day)
-		if err = atomicGzipWrite(destination, encoded, modified); err != nil {
+		if err = atomicGzipWrite(port, destination, encoded, modified); err != nil {
 			return err
 		}
 		for _, path := range paths {
-			if err = os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err = port.Files.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 		}
@@ -295,8 +302,8 @@ func bytesTrimSpace(data []byte) []byte {
 	return []byte(strings.TrimSpace(string(data)))
 }
 
-func compactRaw(root string, now time.Time, active, preserved map[string]bool) error {
-	entries, err := os.ReadDir(root)
+func compactRaw(port system.System, root string, now time.Time, active, preserved map[string]bool) error {
+	entries, err := port.Files.ReadDir(root)
 	if err != nil {
 		return err
 	}
@@ -320,7 +327,7 @@ func compactRaw(root string, now time.Time, active, preserved map[string]bool) e
 			continue
 		}
 		destination := filepath.Join(root, "raw", entry.Name()+".gz")
-		if err = compressRawFile(path, destination, info.ModTime()); err != nil {
+		if err = compressRawFile(port, path, destination, info.ModTime()); err != nil {
 			return err
 		}
 	}
@@ -328,9 +335,12 @@ func compactRaw(root string, now time.Time, active, preserved map[string]bool) e
 	return nil
 }
 
-func pruneDirectory(path string, now time.Time, retention time.Duration, maximumBytes int64) error { //nolint:gocognit // Expiry, temporary handling, accounting, and oldest-first pruning form one directory transaction.
-	entries, err := os.ReadDir(path)
-	if errors.Is(err, os.ErrNotExist) {
+//nolint:gocognit // Expiry, temporary handling, accounting, and oldest-first pruning form one directory transaction.
+func pruneDirectory(
+	port system.System, path string, now time.Time, retention time.Duration, maximumBytes int64,
+) error {
+	entries, err := port.Files.ReadDir(path)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
@@ -349,7 +359,7 @@ func pruneDirectory(path string, now time.Time, retention time.Duration, maximum
 		entryPath := filepath.Join(path, entry.Name())
 		if strings.HasPrefix(entry.Name(), ".") {
 			if now.Sub(info.ModTime()) > atomicWriteTemporaryRetention {
-				if err = os.Remove(entryPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				if err = port.Files.Remove(entryPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 					return err
 				}
 			}
@@ -362,7 +372,7 @@ func pruneDirectory(path string, now time.Time, retention time.Duration, maximum
 			}
 		}
 		if now.Sub(modified) > retention {
-			if err = os.Remove(entryPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err = port.Files.Remove(entryPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 			continue
@@ -375,7 +385,7 @@ func pruneDirectory(path string, now time.Time, retention time.Duration, maximum
 		if total <= maximumBytes {
 			break
 		}
-		if err = os.Remove(entry.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err = port.Files.Remove(entry.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 		total -= entry.size
@@ -384,9 +394,9 @@ func pruneDirectory(path string, now time.Time, retention time.Duration, maximum
 	return nil
 }
 
-func pruneTemporaryFiles(path string, now time.Time) error {
-	entries, err := os.ReadDir(path)
-	if errors.Is(err, os.ErrNotExist) {
+func pruneTemporaryFiles(port system.System, path string, now time.Time) error {
+	entries, err := port.Files.ReadDir(path)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
@@ -401,7 +411,7 @@ func pruneTemporaryFiles(path string, now time.Time) error {
 			return infoError
 		}
 		if now.Sub(info.ModTime()) > atomicWriteTemporaryRetention {
-			if err = os.Remove(filepath.Join(path, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err = port.Files.Remove(filepath.Join(path, entry.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 		}
@@ -410,13 +420,14 @@ func pruneTemporaryFiles(path string, now time.Time) error {
 	return nil
 }
 
-func pruneHistory(path string, now time.Time) error { //nolint:gocognit // The loop must remeasure after each atomic aggregation or removal.
-	if err := pruneDirectory(path, now, HistoryRetention, int64(^uint64(0)>>1)); err != nil {
+//nolint:gocognit // The loop must remeasure after each atomic aggregation or removal.
+func pruneHistory(port system.System, path string, now time.Time) error {
+	if err := pruneDirectory(port, path, now, HistoryRetention, int64(^uint64(0)>>1)); err != nil {
 		return err
 	}
 	for {
-		entries, err := os.ReadDir(path)
-		if errors.Is(err, os.ErrNotExist) {
+		entries, err := port.Files.ReadDir(path)
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		if err != nil {
@@ -443,7 +454,7 @@ func pruneHistory(path string, now time.Time) error { //nolint:gocognit // The l
 		}
 		sort.Slice(retained, func(left, right int) bool { return retained[left].modified.Before(retained[right].modified) })
 		oldest := retained[0]
-		rows, readError := readGzipSummaries(oldest.path, oldest.modified)
+		rows, readError := readGzipSummaries(port, oldest.path, oldest.modified)
 		if readError != nil {
 			return readError
 		}
@@ -452,7 +463,7 @@ func pruneHistory(path string, now time.Time) error { //nolint:gocognit // The l
 			alreadyAggregated = alreadyAggregated && row.AggregateCount > 0
 		}
 		if alreadyAggregated {
-			if err = os.Remove(oldest.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err = port.Files.Remove(oldest.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 
@@ -461,19 +472,17 @@ func pruneHistory(path string, now time.Time) error { //nolint:gocognit // The l
 		aggregates := domain.AggregateHistoryRows(rows)
 		encoded := make([][]byte, 0, len(aggregates))
 		for _, aggregate := range aggregates {
-			row, encodeError := json.Marshal(aggregate)
-			if encodeError != nil {
-				return encodeError
-			}
+			// An aggregate takes recorded words and the largest of finite decoded numbers, so encoding it cannot fail.
+			row, _ := json.Marshal(aggregate)
 			encoded = append(encoded, row)
 		}
-		if err = atomicGzipWrite(oldest.path, encoded, oldest.modified); err != nil {
+		if err = atomicGzipWrite(port, oldest.path, encoded, oldest.modified); err != nil {
 			return err
 		}
 	}
 }
 
-func compactLocked(root string, now time.Time, active, preserved map[string]bool) error {
+func compactLocked(port system.System, root string, now time.Time, active, preserved map[string]bool) error {
 	protected := map[string]bool{}
 	for path := range preserved {
 		protected[path] = true
@@ -481,28 +490,32 @@ func compactLocked(root string, now time.Time, active, preserved map[string]bool
 	for prefix := range active {
 		protected[prefix] = true
 	}
-	if err := compactSummaries(root, now, protected); err != nil {
+	if err := compactSummaries(port, root, now, protected); err != nil {
 		return fmt.Errorf("compact summaries: %w", err)
 	}
-	if err := compactRaw(root, now, active, preserved); err != nil {
+	if err := compactRaw(port, root, now, active, preserved); err != nil {
 		return fmt.Errorf("compact raw evidence: %w", err)
 	}
-	if err := pruneDirectory(filepath.Join(root, "raw"), now, RawRetention, RawMaximumBytes); err != nil {
+	if err := pruneDirectory(port, filepath.Join(root, "raw"), now, RawRetention, RawMaximumBytes); err != nil {
 		return err
 	}
-	if err := pruneTemporaryFiles(filepath.Join(root, "owner-metadata"), now); err != nil {
+	if err := pruneTemporaryFiles(port, filepath.Join(root, "owner-metadata"), now); err != nil {
 		return err
 	}
-	if err := pruneDirectory(filepath.Join(root, "receipts"), now, HistoryRetention, HistoryMaxBytes); err != nil {
+	if err := pruneDirectory(port, filepath.Join(root, "receipts"), now, HistoryRetention, HistoryMaxBytes); err != nil {
 		return err
 	}
 
-	return pruneHistory(filepath.Join(root, "history"), now)
+	return pruneHistory(port, filepath.Join(root, "history"), now)
 }
 
 // CopyGzip expands one compressed raw stream for diagnostic tooling.
 func CopyGzip(destination io.Writer, source string) error {
-	file, err := os.Open(source)
+	return copyGzip(system.Production, destination, source)
+}
+
+func copyGzip(port system.System, destination io.Writer, source string) error {
+	file, err := port.Files.OpenFile(source, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -528,7 +541,13 @@ func CopyGzip(destination io.Writer, source string) error {
 
 // EvaluatePromotion reads retained rows and delegates their pure evaluation.
 func EvaluatePromotion(root string, criteria PromotionCriteria, now time.Time) (PromotionEvaluation, error) {
-	rows, err := ReadHistory(root, Query{Since: HistoryRetention, Now: now})
+	return evaluatePromotion(system.Production, root, criteria, now)
+}
+
+func evaluatePromotion(
+	port system.System, root string, criteria PromotionCriteria, now time.Time,
+) (PromotionEvaluation, error) {
+	rows, err := readHistory(port, root, Query{Since: HistoryRetention, Now: now})
 	if err != nil {
 		return PromotionEvaluation{}, err
 	}

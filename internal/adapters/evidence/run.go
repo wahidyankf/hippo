@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	domain "github.com/wahidyankf/hippo/internal/domain/evidence"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
@@ -18,18 +18,24 @@ import (
 type RunWriter struct {
 	*domain.RunAccumulator
 
+	host        system.System
 	output      *Writer
 	summaryPath string
 }
 
 // NewRunWriter creates an exclusive rotating evidence stream below root.
 func NewRunWriter(root, identifier string, limits Limits) (*RunWriter, error) {
-	output, err := NewWriter(filepath.Join(root, identifier+".jsonl"), limits)
+	return newRunWriter(system.Production, root, identifier, limits)
+}
+
+func newRunWriter(port system.System, root, identifier string, limits Limits) (*RunWriter, error) {
+	output, err := newWriter(port, filepath.Join(root, identifier+".jsonl"), limits)
 	if err != nil {
 		return nil, err
 	}
 
 	return &RunWriter{
+		host:           port,
 		output:         output,
 		summaryPath:    filepath.Join(root, identifier+".summary.json"),
 		RunAccumulator: domain.NewRunAccumulator(identifier),
@@ -49,7 +55,9 @@ func (writer *RunWriter) Append(sample policy.Sample) error {
 }
 
 // Finalize closes the sample stream and writes its aggregate summary once.
-func (writer *RunWriter) Finalize(taskClass policy.TaskClass, outcome domain.Outcome, healthFailures int) (domain.RunSummary, error) {
+func (writer *RunWriter) Finalize(
+	taskClass policy.TaskClass, outcome domain.Outcome, healthFailures int,
+) (domain.RunSummary, error) {
 	if writer == nil || writer.output == nil {
 		return domain.RunSummary{}, errors.New("evidence writer is closed")
 	}
@@ -65,12 +73,13 @@ func (writer *RunWriter) Finalize(taskClass policy.TaskClass, outcome domain.Out
 		return domain.RunSummary{}, err
 	}
 
-	file, err := os.CreateTemp(filepath.Dir(writer.summaryPath), ".summary-*.tmp")
+	port := writer.host
+	file, err := port.Files.CreateTemp(filepath.Dir(writer.summaryPath), ".summary-*.tmp")
 	if err != nil {
 		return domain.RunSummary{}, err
 	}
 	temporaryPath := file.Name()
-	defer func() { _ = os.Remove(temporaryPath) }()
+	defer func() { _ = port.Files.Remove(temporaryPath) }()
 	if err = file.Chmod(0o600); err != nil {
 		_ = file.Close()
 
@@ -86,7 +95,7 @@ func (writer *RunWriter) Finalize(taskClass policy.TaskClass, outcome domain.Out
 	if err := errors.Join(writeError, flushError, syncError, closeError); err != nil {
 		return domain.RunSummary{}, err
 	}
-	if err = os.Link(temporaryPath, writer.summaryPath); err != nil {
+	if err = port.Files.Link(temporaryPath, writer.summaryPath); err != nil {
 		return domain.RunSummary{}, err
 	}
 
