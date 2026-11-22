@@ -14,27 +14,58 @@ import (
 	"time"
 )
 
-// FileSystem is the file-system port: whole-file reads and writes, directory and link operations, the metadata
-// calls, path resolution, and file identity. Each field carries the signature of the standard-library function it is
-// bound to.
+// FileSystem is the file-system port: whole-file reads and writes, handles, directory and link operations, the
+// metadata calls, path resolution, locks, and file identity. Most fields carry the signature of the standard-library
+// function they are bound to. OpenFile, CreateTemp, OpenDirectory, and Flock return or take the File and Directory
+// handles below, so their production bindings are adapters in this package.
 type FileSystem struct {
-	ReadFile     func(name string) ([]byte, error)
-	WriteFile    func(name string, data []byte, perm fs.FileMode) error
-	ReadDir      func(name string) ([]fs.DirEntry, error)
-	Stat         func(name string) (fs.FileInfo, error)
-	Lstat        func(name string) (fs.FileInfo, error)
-	Readlink     func(name string) (string, error)
-	Mkdir        func(name string, perm fs.FileMode) error
-	MkdirAll     func(path string, perm fs.FileMode) error
-	MkdirTemp    func(dir, pattern string) (string, error)
-	Remove       func(name string) error
-	RemoveAll    func(path string) error
-	Rename       func(oldpath, newpath string) error
-	Link         func(oldname, newname string) error
-	Symlink      func(oldname, newname string) error
-	Chmod        func(name string, mode fs.FileMode) error
-	EvalSymlinks func(path string) (string, error)
-	SameFile     func(first, second fs.FileInfo) bool
+	ReadFile      func(name string) ([]byte, error)
+	WriteFile     func(name string, data []byte, perm fs.FileMode) error
+	ReadDir       func(name string) ([]fs.DirEntry, error)
+	Stat          func(name string) (fs.FileInfo, error)
+	Lstat         func(name string) (fs.FileInfo, error)
+	Readlink      func(name string) (string, error)
+	Mkdir         func(name string, perm fs.FileMode) error
+	MkdirAll      func(path string, perm fs.FileMode) error
+	MkdirTemp     func(dir, pattern string) (string, error)
+	Remove        func(name string) error
+	RemoveAll     func(path string) error
+	Rename        func(oldpath, newpath string) error
+	Link          func(oldname, newname string) error
+	Symlink       func(oldname, newname string) error
+	Chmod         func(name string, mode fs.FileMode) error
+	Chtimes       func(name string, accessed, modified time.Time) error
+	EvalSymlinks  func(path string) (string, error)
+	SameFile      func(first, second fs.FileInfo) bool
+	OpenFile      func(name string, flag int, perm fs.FileMode) (File, error)
+	CreateTemp    func(dir, pattern string) (File, error)
+	OpenDirectory func(name string) (Directory, error)
+	Flock         func(file File, how int) error
+}
+
+// File is an open file. The operating-system *os.File satisfies it, and so does a double.
+type File interface {
+	Read(buffer []byte) (int, error)
+	Write(data []byte) (int, error)
+	Close() error
+	Name() string
+	Stat() (fs.FileInfo, error)
+	Sync() error
+	Chmod(mode fs.FileMode) error
+}
+
+// Directory is an open directory. Each name it takes is relative to the directory, and no name follows a link: the
+// operations are the directory-relative calls a caller uses to stay inside the directory it opened.
+type Directory interface {
+	OpenFile(name string, flag int, perm fs.FileMode) (File, error)
+	OpenDirectory(name string) (Directory, error)
+	Mkdir(name string, perm fs.FileMode) error
+	Rename(oldname, newname string) error
+	Remove(name string) error
+	Stat(name string) (fs.FileInfo, error)
+	ReadDir(count int) ([]fs.DirEntry, error)
+	Chmod(mode fs.FileMode) error
+	Close() error
 }
 
 // Clock is the time port. Timers and tickers are not in it yet: their methods need a handle a double can
@@ -123,7 +154,8 @@ var Production = System{
 		ReadFile: os.ReadFile, WriteFile: os.WriteFile, ReadDir: os.ReadDir, Stat: os.Stat, Lstat: os.Lstat,
 		Readlink: os.Readlink, Mkdir: os.Mkdir, MkdirAll: os.MkdirAll, MkdirTemp: os.MkdirTemp, Remove: os.Remove,
 		RemoveAll: os.RemoveAll, Rename: os.Rename, Link: os.Link, Symlink: os.Symlink, Chmod: os.Chmod,
-		EvalSymlinks: filepath.EvalSymlinks, SameFile: os.SameFile,
+		Chtimes: os.Chtimes, EvalSymlinks: filepath.EvalSymlinks, SameFile: os.SameFile,
+		OpenFile: openFile, CreateTemp: createTemp, OpenDirectory: openDirectory, Flock: flock,
 	},
 	Clock: Clock{Now: time.Now, Since: time.Since, Sleep: time.Sleep, After: time.After},
 	Signals: SignalSource{
