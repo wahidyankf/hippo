@@ -46,7 +46,7 @@ type FileSystem struct {
 	// in-memory double can stand in for: the port exists so tests inject a
 	// failure and observe the wiring, while kernel behavior stays in
 	// integration coverage (R-6).
-	Pipe func() (reader *os.File, writer *os.File, err error)
+	Pipe func() (reader, writer *os.File, err error)
 }
 
 // File is an open file. The operating-system *os.File satisfies it, and so does a double.
