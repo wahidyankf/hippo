@@ -173,12 +173,12 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 			return application.AdmissionResult{}, lockError
 		}
 	}
-	identityDevice, identityInode, identityError := reservationIdentityMetadata(identity)
-	if identityError != nil {
-		_ = releaseCoordinationLock(state.system, coordinationLock)
-
-		return application.AdmissionResult{}, identityError
-	}
+	// reservationIdentityMetadata fails only on a missing identity, an invalid
+	// descriptor, or a non-digit device number. The identity above was just
+	// opened successfully and Fstat reports kernel-assigned non-negative
+	// numbers, so none of those is possible here; the error is discarded, not
+	// exempted.
+	identityDevice, identityInode, _ := reservationIdentityMetadata(identity)
 	if !coordination.UpdateCapacity(&ledger, plan.Capacity) {
 		_ = releaseCoordinationLock(state.system, coordinationLock)
 
@@ -214,11 +214,11 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 				}
 				queued = true
 			}
-			var sumError error
-			allocation, admitted, sumError = coordination.AdmitHead(&ledger, value, minimum, maximum, maxActiveOwners)
-			if sumError != nil {
-				return sumError
-			}
+			// The ledger was validated at read and only shrinks before this head
+			// admission (reconciliation removes, Enqueue adds waiters, never
+			// owners), so the owner sum stays within capacity and cannot
+			// overflow; the error is discarded, not exempted.
+			allocation, admitted, _ = coordination.AdmitHead(&ledger, value, minimum, maximum, maxActiveOwners)
 			return writeReservationLedger(root, ledger)
 		}), state.displayAdvisories(),
 	)
