@@ -34,7 +34,7 @@ type DisplayRepository struct{}
 
 // openDisplayDirectory opens the run-display directory of root. With create, it makes the directory first and
 // tolerates one that exists already.
-func openDisplayDirectory(port system.System, root string, create bool) (system.Directory, error) {
+func openDisplayDirectory(port system.System, root string, create bool) (system.Directory, error) { //nolint:ireturn // Callers share the Directory interface across host and double trees.
 	rootDirectory, err := port.Files.OpenDirectory(root)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (DisplayRepository) ReadDisplay(
 }
 
 func readDisplays(
-	port system.System, ctx context.Context, root string, runIDs []string,
+	port system.System, ctx context.Context, root string, runIDs []string, //nolint:revive // The system port leads every adapter signature; the context follows it.
 ) (map[string]application.DisplayAnnotation, error) {
 	result := make(map[string]application.DisplayAnnotation, len(runIDs))
 	directory, directoryError := openDisplayDirectory(port, root, false)
