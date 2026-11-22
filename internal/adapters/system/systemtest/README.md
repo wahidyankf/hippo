@@ -3,6 +3,15 @@
 In-memory doubles for the ports in `internal/adapters/system`. `NewHost` builds a complete host, and `Port` returns the
 `system.System` value that a unit test passes to an adapter.
 
+## Runner Captures
+
+`Host.Runner` answers `CaptureOutput` calls by command name, and records each one:
+
+- `Stdout`: the standard output a captured command returns, keyed by command name.
+- `Failures`: the error a captured command returns, keyed by command name. A failure wins over `Stdout`.
+- A command with neither fails with `exec.ErrNotFound`.
+- `Captures`: every call in call order, each a `Capture` with the command `Name` and its `Arguments`.
+
 ## Why This Package Is Excluded From Coverage
 
 It is test support: the doubles exist only to stand in for the host in unit tests. The coverage gate measures production

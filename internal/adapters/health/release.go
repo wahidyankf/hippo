@@ -3,15 +3,16 @@ package health
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
 
-func output(ctx context.Context, command string, arguments ...string) string {
-	value, err := exec.CommandContext(ctx, command, arguments...).Output()
+// output runs one command through the runner port and returns its trimmed standard output. A command that fails
+// yields an empty string, so a missing tool reads as no data.
+func output(ctx context.Context, runner system.ProcessRunner, command string, arguments ...string) string {
+	value, err := runner.CaptureOutput(ctx, command, arguments...)
 	if err != nil {
 		return ""
 	}
@@ -19,11 +20,12 @@ func output(ctx context.Context, command string, arguments ...string) string {
 	return strings.TrimSpace(string(value))
 }
 
-func serviceRSSBytes(ctx context.Context, ports []int) int64 {
+func serviceRSSBytes(ctx context.Context, runner system.ProcessRunner, ports []int) int64 {
 	pids := map[string]bool{}
 
 	for _, port := range ports {
-		for pid := range strings.FieldsSeq(output(ctx, "lsof", "-nP", fmt.Sprintf("-iTCP:%d", port), "-sTCP:LISTEN", "-t")) {
+		listeners := output(ctx, runner, "lsof", "-nP", fmt.Sprintf("-iTCP:%d", port), "-sTCP:LISTEN", "-t")
+		for pid := range strings.FieldsSeq(listeners) {
 			pids[pid] = true
 		}
 	}
@@ -38,7 +40,7 @@ func serviceRSSBytes(ctx context.Context, ports []int) int64 {
 	}
 
 	var total int64
-	for field := range strings.FieldsSeq(output(ctx, "ps", "-o", "rss=", "-p", strings.Join(list, ","))) {
+	for field := range strings.FieldsSeq(output(ctx, runner, "ps", "-o", "rss=", "-p", strings.Join(list, ","))) {
 		value, _ := strconv.ParseInt(field, 10, 64)
 		total += value * 1024
 	}
@@ -46,17 +48,17 @@ func serviceRSSBytes(ctx context.Context, ports []int) int64 {
 	return total
 }
 
-func probeHTTP(ctx context.Context, target string) (int, float64) {
-	return probeHTTPWithRedirects(ctx, target, false)
+func probeHTTP(ctx context.Context, runner system.ProcessRunner, target string) (int, float64) {
+	return probeHTTPWithRedirects(ctx, runner, target, false)
 }
 
-func probeRoutedHTTP(ctx context.Context, target string) (int, float64) {
-	return probeHTTPWithRedirects(ctx, target, true)
+func probeRoutedHTTP(ctx context.Context, runner system.ProcessRunner, target string) (int, float64) {
+	return probeHTTPWithRedirects(ctx, runner, target, true)
 }
 
-func probeHTTPWithRedirects(ctx context.Context, target string, followRedirects bool) (int, float64) {
+func probeHTTPWithRedirects(ctx context.Context, runner system.ProcessRunner, target string, followRedirects bool) (int, float64) {
 	arguments := HTTPProbeArguments(target, followRedirects)
-	value := output(ctx, "curl", arguments...)
+	value := output(ctx, runner, "curl", arguments...)
 	fields := strings.Fields(value)
 
 	if len(fields) != 2 {
@@ -84,6 +86,8 @@ func HTTPProbeArguments(target string, followRedirects bool) []string {
 	return arguments
 }
 
+// oneMinuteLoad reads the first field of /proc/loadavg. When that file is missing or its first field is not a
+// number, it asks sysctl for vm.loadavg instead, and returns zero when sysctl gives no number either.
 func oneMinuteLoad(ctx context.Context, host system.System) float64 {
 	if data, err := host.Files.ReadFile("/proc/loadavg"); err == nil {
 		fields := strings.Fields(string(data))
@@ -94,7 +98,7 @@ func oneMinuteLoad(ctx context.Context, host system.System) float64 {
 		}
 	}
 
-	fields := strings.Fields(strings.Trim(output(ctx, "sysctl", "-n", "vm.loadavg"), "{} "))
+	fields := strings.Fields(strings.Trim(output(ctx, host.Runner, "sysctl", "-n", "vm.loadavg"), "{} "))
 	if len(fields) == 0 {
 		return 0
 	}
@@ -112,14 +116,18 @@ type Probe struct {
 }
 
 // ServiceRSS observes listeners at the selected ports.
-func (Probe) ServiceRSS(ctx context.Context, ports []int) int64 { return serviceRSSBytes(ctx, ports) }
+func (probe Probe) ServiceRSS(ctx context.Context, ports []int) int64 {
+	return serviceRSSBytes(ctx, probe.Host.Runner, ports)
+}
 
 // Local observes the health endpoint without following redirects.
-func (Probe) Local(ctx context.Context, target string) (int, float64) { return probeHTTP(ctx, target) }
+func (probe Probe) Local(ctx context.Context, target string) (int, float64) {
+	return probeHTTP(ctx, probe.Host.Runner, target)
+}
 
 // Routed observes a routed journey through bounded redirects.
-func (Probe) Routed(ctx context.Context, target string) (int, float64) {
-	return probeRoutedHTTP(ctx, target)
+func (probe Probe) Routed(ctx context.Context, target string) (int, float64) {
+	return probeRoutedHTTP(ctx, probe.Host.Runner, target)
 }
 
 // LoadAverage observes the host one-minute load.
