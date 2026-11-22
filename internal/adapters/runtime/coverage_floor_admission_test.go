@@ -222,3 +222,19 @@ func TestFloorBeginPortRefusesUnwritableRoot(t *testing.T) {
 		t.Fatal("BeginPort under a file = nil, want error")
 	}
 }
+
+func TestFloorBeginAdmissionRefusesUnwritableReservationRoot(t *testing.T) {
+	marker, err := os.CreateTemp(t.TempDir(), "root-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = marker.Close()
+	config := application.RunConfig{
+		EvidenceRoot:      marker.Name(),
+		ReservationPolicy: ReservationPolicy{Enabled: true},
+		ReservationPlan:   validFloorPlan(),
+	}
+	if _, err := NewEngine().BeginAdmission(context.Background(), config); err == nil {
+		t.Fatal("BeginAdmission on a reservation root under a file = nil, want error")
+	}
+}
