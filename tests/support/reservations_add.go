@@ -1,13 +1,29 @@
 package support
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
 	"github.com/wahidyankf/hippo/tests/contract"
 )
+
+// overlappingRunEvidence gives, for each evidence phrase, the summary fields of one
+// completed run that overlapped another owner. The healthy run passes every
+// promotion check; the swap run differs only in its swap-out count.
+var overlappingRunEvidence = map[string]map[string]any{
+	"passed healthy": {
+		"peakOwnerCount": 2, "availableNonCompressedEstimateMinBytes": 12884901888,
+		"memoryPressureLevelMax": 1, "cpuUtilizationP95Percent": 20.0, "swapOutsDelta": 0,
+	},
+	"recorded swap-outs": {
+		"peakOwnerCount": 2, "availableNonCompressedEstimateMinBytes": 12884901888,
+		"memoryPressureLevelMax": 1, "cpuUtilizationP95Percent": 20.0, "swapOutsDelta": 3,
+	},
+}
 
 // coordinationLimitDocuments gives, for each coordination limit a scenario names,
 // the schema-2 file that sets that one limit and nothing else. Each file holds
@@ -31,7 +47,45 @@ func (driver *Driver) reservationsAddBindings() []contract.StepBinding {
 		}),
 		step(`^the configuration is loaded$`, driver.loadStagedConfiguration),
 		step(`^the balanced profile holds seven automatic owner shares$`, driver.requireBalancedOwnerShares),
+		step(`^a schema three configuration whose promotion gate needs one overlapping completed run$`, func() error {
+			return driver.stageTierDocument(tierDocument(""))
+		}),
+		step(`^an overlapping completed run that (passed healthy|recorded swap-outs)$`, driver.stageOverlappingRun),
+		step(`^the owner promotion is (open|closed)$`, driver.requireOwnerPromotion),
 	}
+}
+
+// stageOverlappingRun writes one completed summary that overlapped another owner,
+// into the scenario's evidence root, with the fields the phrase names.
+func (driver *Driver) stageOverlappingRun(phrase string) error {
+	fields, known := overlappingRunEvidence[phrase]
+	if !known {
+		return fmt.Errorf("no overlapping run is named %q", phrase)
+	}
+
+	return writeChildUsageSummary(driver.leaseRoot, "overlapping-run", time.Now(), fields)
+}
+
+// requireOwnerPromotion holds the status promotion to open or closed: open means
+// the third owner slot is eligible.
+func (driver *Driver) requireOwnerPromotion(state string) error {
+	if driver.exitCode != 0 {
+		return fmt.Errorf("status exit=%d stderr=%q, want exit 0", driver.exitCode, driver.errorOutput)
+	}
+	var payload struct {
+		Promotion struct {
+			Eligible bool   `json:"eligible"`
+			Reason   string `json:"reason"`
+		} `json:"promotion"`
+	}
+	if err := json.Unmarshal([]byte(driver.output), &payload); err != nil {
+		return err
+	}
+	if want := state == "open"; payload.Promotion.Eligible != want {
+		return fmt.Errorf("promotion eligible=%t reason=%q, want %s", payload.Promotion.Eligible, payload.Promotion.Reason, state)
+	}
+
+	return nil
 }
 
 // balancedOwnerShares is the automatic owner share the scenario configures for the balanced profile.

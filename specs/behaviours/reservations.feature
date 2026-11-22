@@ -766,3 +766,15 @@ Feature: Shared vector reservations
     Given a schema two configuration that sets the balanced profile to seven automatic owner shares
     When the configuration is loaded
     Then the balanced profile holds seven automatic owner shares
+
+  # Behaviour: HI-CFG-021
+  Scenario Outline: The third owner opens only when overlapping completed runs meet the promotion evidence
+    Given a schema three configuration whose promotion gate needs one overlapping completed run
+    And <evidence>
+    When JSON status is requested with that configuration file
+    Then the owner promotion is <state>
+
+    Examples:
+      | evidence                                             | state  |
+      | an overlapping completed run that passed healthy     | open   |
+      | an overlapping completed run that recorded swap-outs | closed |

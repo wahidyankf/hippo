@@ -125,6 +125,7 @@ import (
 // @scenario specs/behaviours/reservations.feature: Status and development summaries expose schema five reservation totals
 // @scenario specs/behaviours/reservations.feature: A coordination mode other than reservation is refused, and a schema-1 file with coordination too
 // @scenario specs/behaviours/reservations.feature: A maximum memory below 256 MiB or more than 20 active owners is refused at load
+// @scenario specs/behaviours/reservations.feature: The third owner opens only when overlapping completed runs meet the promotion evidence
 // @scenario specs/behaviours/resource-tiers.feature: *
 // @scenario specs/behaviours/terminal.feature: *
 
