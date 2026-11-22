@@ -196,6 +196,7 @@ func TestDecodeDisplayClassifiesEveryRecordShape(t *testing.T) {
 		{name: "unknown field", data: `{"schemaVersion":1,"runId":"TOKEN","label":"build","extra":true}`, want: application.DisplayInvalid},
 		{name: "wrong value type", data: `{"schemaVersion":"one","runId":"TOKEN","label":"build"}`, want: application.DisplayInvalid},
 		{name: "truncated", data: `{"schemaVersion":1,"runId":"TOKEN","label":"build"`, want: application.DisplayInvalid},
+		{name: "bracket closer", data: `{"schemaVersion":1,"runId":"TOKEN","label":"build"]`, want: application.DisplayInvalid},
 		{name: "trailing value", data: `{"schemaVersion":1,"runId":"TOKEN","label":"build"} {}`, want: application.DisplayInvalid},
 		{name: "missing field", data: `{"schemaVersion":1,"runId":"TOKEN"}`, want: application.DisplayInvalid},
 		{name: "zero schema", data: `{"schemaVersion":0,"runId":"TOKEN","label":"build"}`, want: application.DisplayInvalid},
