@@ -54,8 +54,6 @@ type Application struct {
 
 type commandExecution struct {
 	exitCode int
-	// interruption is a terminal input stop, independent of a guarded child status.
-	interruption status.Interruption
 	// childStatus holds the status a started child produced, and is set only
 	// then. Once a child has run, its status is the answer and hippo has
 	// nothing to add: it is passed through exactly, with no diagnostic and no
@@ -215,10 +213,6 @@ func (application Application) Run(ctx context.Context, arguments []string) (exi
 	// while stopping, such as a receipt it could not write, is still reported.
 	if interruption, interrupted := status.Interrupted(ctx); interrupted && endedByInterruption(err) {
 		return interruption.Status(), nil
-	}
-
-	if execution.interruption.Signal != 0 && endedByInterruption(err) {
-		return execution.interruption.Status(), nil
 	}
 
 	failure := classify(execution, err)
