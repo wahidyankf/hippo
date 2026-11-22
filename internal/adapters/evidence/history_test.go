@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	domain "github.com/wahidyankf/hippo/internal/domain/evidence"
 
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -44,7 +45,7 @@ func TestReadHistoryAcceptsLegacyMultilineArchive(t *testing.T) {
 		t.Fatal(err)
 	}
 	archive := filepath.Join(root, "history", "2026-09-15.jsonl.gz")
-	if err = atomicGzipWrite(archive, [][]byte{encoded}, finished); err != nil {
+	if err = atomicGzipWrite(system.Production, archive, [][]byte{encoded}, finished); err != nil {
 		t.Fatal(err)
 	}
 
