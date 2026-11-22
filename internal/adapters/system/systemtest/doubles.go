@@ -693,13 +693,18 @@ func (processes *Processes) port() system.ProcessTable {
 // Runner resolves executables from a fixed table, reports a fixed own path, and answers
 // captured runs from fixed standard output or a fixed failure, keyed by command name. A
 // failure wins over output. A command with neither fails as not found. Every capture is
-// recorded in Captures in call order. Start and Wait fail: a double runs no process.
+// recorded in Captures in call order. Start and Wait fail, as a double runs no process,
+// unless Started replaces Start so a test can drive the parent side of a supervision
+// handshake; ExecutableErr replaces the fixed own path so a test can refuse identity.
 type Runner struct {
 	Executables map[string]string
 	Self        string
 	Stdout      map[string][]byte
 	Failures    map[string]error
 	Captures    []Capture
+
+	ExecutableErr error
+	Started       func(command *exec.Cmd) error
 }
 
 // Capture is one call to CaptureOutput: the command name and its arguments.
@@ -729,10 +734,22 @@ func (runner *Runner) port() system.ProcessRunner {
 
 			return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 		},
-		Executable:    func() (string, error) { return runner.Self, nil },
+		Executable: func() (string, error) {
+			if runner.ExecutableErr != nil {
+				return "", runner.ExecutableErr
+			}
+
+			return runner.Self, nil
+		},
 		CaptureOutput: runner.capture,
-		Start:         func(*exec.Cmd) error { return errNoProcesses },
-		Wait:          func(*exec.Cmd) error { return errNoProcesses },
+		Start: func(command *exec.Cmd) error {
+			if runner.Started != nil {
+				return runner.Started(command)
+			}
+
+			return errNoProcesses
+		},
+		Wait: func(*exec.Cmd) error { return errNoProcesses },
 	}
 }
 
