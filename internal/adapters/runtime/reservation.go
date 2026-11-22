@@ -138,9 +138,6 @@ func openReservationIdentity(port system.System, root, value string) (*os.File, 
 		_ = identity.Close()
 		_ = os.Remove(path)
 		_ = os.Remove(anchor)
-		if err != nil {
-			return nil, err
-		}
 
 		return nil, errors.New("reservation identity anchor could not be created")
 	}
@@ -195,10 +192,7 @@ func reservationIdentityAlive(
 	if err != nil {
 		return false, err
 	}
-	anchor, err := reservationIdentityAnchorPath(root, value)
-	if err != nil {
-		return false, err
-	}
+	anchor, _ := reservationIdentityAnchorPath(root, value)
 	lockEvidence, lockFile, err := observeReservationIdentity(path)
 	if err != nil {
 		return false, err
@@ -295,10 +289,10 @@ func consumeUniqueReservationJSON(decoder *json.Decoder) error {
 			if keyError != nil {
 				return keyError
 			}
-			key, valid := keyValue.(string)
-			if !valid {
-				return errors.New("reservation ledger object key must be a string")
-			}
+			// A non-string object key fails the Token call above (encoding/json
+			// ErrNonStringName), so the assertion below cannot fail.
+			key := keyValue.(string) //nolint:forcetypeassert // Token guarantees a string key when it returns nil.
+
 			if seen[key] {
 				return fmt.Errorf("duplicate reservation ledger field %q", key)
 			}
@@ -406,9 +400,6 @@ func readReservationLedger(port system.System, root string) (reservationLedger, 
 	if err = decoder.Decode(&ledger); err != nil {
 		return reservationLedger{}, fmt.Errorf("decode reservation ledger: %w", err)
 	}
-	if err = decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return reservationLedger{}, errors.New("reservation ledger must contain one JSON value")
-	}
 	if err = coordination.ValidateLedger(ledger); err != nil {
 		return reservationLedger{}, err
 	}
@@ -447,10 +438,7 @@ func removeReservationIdentity(root, value string) error {
 	if err != nil {
 		return err
 	}
-	anchor, err := reservationIdentityAnchorPath(root, value)
-	if err != nil {
-		return err
-	}
+	anchor, _ := reservationIdentityAnchorPath(root, value)
 	var returnError error
 	for _, candidate := range []string{path, anchor} {
 		if removeError := os.Remove(candidate); removeError != nil && !errors.Is(removeError, os.ErrNotExist) {
