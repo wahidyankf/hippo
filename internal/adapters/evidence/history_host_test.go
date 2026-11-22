@@ -838,3 +838,38 @@ func TestEvaluatePromotionReportsAHistoryFailure(t *testing.T) {
 		t.Fatalf("promotion history error = %v, want the injected failure", err)
 	}
 }
+
+func TestPruneHistorySortsMultipleOversizeArchives(t *testing.T) {
+	host := redCompactionHost()
+	history := redRoot + "/history"
+	oldest := history + "/2026-11-20.jsonl.gz"
+	newest := history + "/2026-11-21.jsonl.gz"
+	host.Files.Contents[oldest] = redGzip(t, redMarshal(t, redSummary("old", redStart)))
+	host.Files.Contents[newest] = redGzip(t, redMarshal(t, redSummary("new", redStart)))
+	port := host.Port()
+	redEntrySize(&port, oldest, domain.HistoryMaxBytes+1)
+	redEntrySize(&port, newest, domain.HistoryMaxBytes+1)
+	if err := pruneHistory(port, history, redStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, survived := host.Files.Contents[oldest]; survived {
+		t.Fatal("the oldest oversize archive survived pruning")
+	}
+	if _, survived := host.Files.Contents[newest]; survived {
+		t.Fatal("the newest oversize archive survived pruning")
+	}
+}
+
+func TestPruneHistoryReportsAFailedRemovalOfAnAggregatedArchive(t *testing.T) {
+	host := redCompactionHost()
+	history := redRoot + "/history"
+	archive := history + "/2026-11-20.jsonl.gz"
+	aggregated := domain.Summary{SchemaVersion: 5, RunID: "aggregate", AggregateCount: 3}
+	host.Files.Contents[archive] = redGzip(t, redMarshal(t, aggregated))
+	port := host.Port()
+	redEntrySize(&port, archive, domain.HistoryMaxBytes+1)
+	port.Files.Remove = func(string) error { return errRed }
+	if err := pruneHistory(port, history, redStart); !errors.Is(err, errRed) {
+		t.Fatalf("aggregate removal error = %v, want the injected failure", err)
+	}
+}
