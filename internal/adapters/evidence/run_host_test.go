@@ -127,3 +127,13 @@ func TestRunWriterFinalizePublishesTheSummaryOnce(t *testing.T) {
 		t.Fatal("the summary was not published")
 	}
 }
+
+func TestRunWriterFinalizeRefusesAnUndecidedOutcome(t *testing.T) {
+	writer, err := newRunWriter(redHost().Port(), redRoot, "run", redChunkLimits(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = writer.Finalize(policy.TaskEphemeral, OutcomeUnset, 0); err == nil {
+		t.Fatal("a finalized run without a decided outcome = nil, want error")
+	}
+}
