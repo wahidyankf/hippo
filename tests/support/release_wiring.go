@@ -6,13 +6,14 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	"github.com/wahidyankf/hippo/internal/adapters/health"
 	runtimeadapter "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
 // ReleaseServices wires the real release orchestration to its production adapters.
 func ReleaseServices() application.ReleaseServices {
-	return application.ReleaseServices{Clock: runtimeadapter.ReleaseClock{}, Health: health.Probe{}, Evidence: evidence.ReleaseRepository{}}
+	return application.ReleaseServices{Clock: runtimeadapter.ReleaseClock{}, Health: health.Probe{Host: system.Production}, Evidence: evidence.ReleaseRepository{}}
 }
 
 // RunReleaseMonitor executes the real application release-monitor use case.

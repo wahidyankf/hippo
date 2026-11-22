@@ -3,10 +3,11 @@ package health
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
 
 func output(ctx context.Context, command string, arguments ...string) string {
@@ -83,8 +84,8 @@ func HTTPProbeArguments(target string, followRedirects bool) []string {
 	return arguments
 }
 
-func oneMinuteLoad(ctx context.Context) float64 {
-	if data, err := os.ReadFile("/proc/loadavg"); err == nil {
+func oneMinuteLoad(ctx context.Context, host system.System) float64 {
+	if data, err := host.Files.ReadFile("/proc/loadavg"); err == nil {
 		fields := strings.Fields(string(data))
 		if len(fields) > 0 {
 			if value, parseError := strconv.ParseFloat(fields[0], 64); parseError == nil {
@@ -105,8 +106,10 @@ func oneMinuteLoad(ctx context.Context) float64 {
 	return value
 }
 
-// Probe implements the release health capabilities.
-type Probe struct{}
+// Probe implements the release health capabilities over the host ports it is given.
+type Probe struct {
+	Host system.System
+}
 
 // ServiceRSS observes listeners at the selected ports.
 func (Probe) ServiceRSS(ctx context.Context, ports []int) int64 { return serviceRSSBytes(ctx, ports) }
@@ -120,4 +123,4 @@ func (Probe) Routed(ctx context.Context, target string) (int, float64) {
 }
 
 // LoadAverage observes the host one-minute load.
-func (Probe) LoadAverage(ctx context.Context) float64 { return oneMinuteLoad(ctx) }
+func (probe Probe) LoadAverage(ctx context.Context) float64 { return oneMinuteLoad(ctx, probe.Host) }
