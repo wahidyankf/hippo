@@ -334,3 +334,80 @@ Feature: Guarded process execution
     Given old and current owners sharing unchanged coordination schemas
     When current observation reads the owners and their queued work
     Then admission accounting and FIFO ordering remain unchanged
+
+  # Behaviour: HI-CLI-088
+  Scenario: A healthy guarded run writes nothing of its own to stderr
+    Given an empty guarded run root
+    When a guarded command that exits zero runs in that root
+    Then the guard writes nothing to standard error
+
+  # Behaviour: HI-EXT-007
+  # Behaviour: HI-ERR-017
+  Scenario: A command that exists but cannot be executed exits 126 naming hippo.child.not-executable
+    Given a guarded run root holding a command file that cannot be executed
+    When a guarded run executes that command file
+    Then it exits 126 naming hippo.child.not-executable
+
+  # Behaviour: HI-EXT-008
+  # Behaviour: HI-ERR-018
+  Scenario: A missing command exits 127 naming hippo.child.not-found
+    Given an empty guarded run root
+    When a guarded run executes a command path that does not exist
+    Then it exits 127 naming hippo.child.not-found
+
+  # Behaviour: HI-EXT-009
+  Scenario Outline: A child ended by a signal makes the guard exit with 128 plus the signal number
+    Given an empty guarded run root
+    When a guarded child ends itself with signal <signal>
+    Then the guard exits with status <code>
+
+    Examples:
+      | signal | code |
+      | TERM   | 143  |
+      | KILL   | 137  |
+
+  # Behaviour: HI-CLI-064
+  Scenario: A leased service port is released when its child exits
+    Given a service port leased by a guarded run whose child exits zero
+    When another guarded run leases that same service port
+    Then the second run exits zero and its child starts
+
+  # Behaviour: HI-ENV-009
+  Scenario: TMPDIR names the base of the hippo-port-leases root
+    Given TMPDIR names an empty scenario directory
+    When a guarded run leases a service port and its child exits zero
+    Then the port lease root is the hippo-port-leases directory inside TMPDIR
+
+  # Behaviour: HI-ENV-011
+  Scenario: A reserved run exports its allocated memory in HIPPO_RESERVED_MEMORY_BYTES
+    Given a schema two configuration
+    When a guarded child records its HIPPO_RESERVED_MEMORY_BYTES variable
+    Then the child reads a positive byte count
+
+  # Behaviour: HI-ENV-012
+  Scenario: A guarded child receives HIPPO_BIN naming the absolute path of the running executable
+    Given an empty guarded run root
+    When a guarded child records its HIPPO_BIN variable
+    Then HIPPO_BIN names the running executable by absolute path
+
+  # Behaviour: HI-CLI-065
+  # Exemption(e2e): counting queue heartbeats across many polls needs an injected clock to spend the deadline without spending the same wall time; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A queued run reports its run ID, queue position, and remaining deadline every 30 seconds
+    Given a shared root whose capacity never frees
+    When an owner waits for admission for sixty-five seconds
+    Then the queue reports its run ID, position, and remaining deadline at 0, 30, and 60 seconds
+
+  # Behaviour: HI-ENV-013
+  # Exemption(e2e): the harness starts a compiled binary with one value per variable name, so a duplicated HIPPO_SESSION cannot reach it; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: The last of a duplicated HIPPO_SESSION value decides the inherited session
+    Given a valid inherited resource session
+    When a guarded child runs with a stale HIPPO_SESSION value ahead of that session's token
+    Then the child exits successfully and the inherited session remains owned
+
+  # Behaviour: HI-CLI-056
+  Scenario: A run under schema three without a resource tier is refused before any work
+    Given a schema three configuration that declares the very-heavy tier within the pool
+    When a guarded run names no resource tier and a command that exits zero
+    Then it exits 2 naming hippo.args.invalid and its payload does not start

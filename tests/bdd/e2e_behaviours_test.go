@@ -43,6 +43,15 @@ import (
 // @scenario specs/behaviours/execution.feature: Display annotation cleanup removes only the annotation of a proven stale owner
 // @scenario specs/behaviours/execution.feature: Owners without display annotations stay visible with unavailable labels
 // @scenario specs/behaviours/execution.feature: Owners of mixed versions keep their admission accounting and FIFO order
+// @scenario specs/behaviours/execution.feature: A healthy guarded run writes nothing of its own to stderr
+// @scenario specs/behaviours/execution.feature: A command that exists but cannot be executed exits 126 naming hippo.child.not-executable
+// @scenario specs/behaviours/execution.feature: A missing command exits 127 naming hippo.child.not-found
+// @scenario specs/behaviours/execution.feature: A child ended by a signal makes the guard exit with 128 plus the signal number
+// @scenario specs/behaviours/execution.feature: A leased service port is released when its child exits
+// @scenario specs/behaviours/execution.feature: TMPDIR names the base of the hippo-port-leases root
+// @scenario specs/behaviours/execution.feature: A reserved run exports its allocated memory in HIPPO_RESERVED_MEMORY_BYTES
+// @scenario specs/behaviours/execution.feature: A guarded child receives HIPPO_BIN naming the absolute path of the running executable
+// @scenario specs/behaviours/execution.feature: A run under schema three without a resource tier is refused before any work
 // @scenario specs/behaviours/public-cli.feature: Version identifies the exact build
 // @scenario specs/behaviours/public-cli.feature: JSON status reports the SHA-256 of the configuration file it loaded
 // @scenario specs/behaviours/public-cli.feature: A run takes its identity from HIPPO_IDENTITY ahead of HIPPO_DEFAULT_IDENTITY
@@ -114,6 +123,8 @@ import (
 // @scenario specs/behaviours/reservations.feature: Schema two configuration preserves schema one compatibility
 // @scenario specs/behaviours/reservations.feature: A memory request too large to represent requires replanning
 // @scenario specs/behaviours/reservations.feature: Status and development summaries expose schema five reservation totals
+// @scenario specs/behaviours/reservations.feature: A coordination mode other than reservation is refused, and a schema-1 file with coordination too
+// @scenario specs/behaviours/reservations.feature: A maximum memory below 256 MiB or more than 20 active owners is refused at load
 // @scenario specs/behaviours/resource-tiers.feature: *
 // @scenario specs/behaviours/terminal.feature: *
 

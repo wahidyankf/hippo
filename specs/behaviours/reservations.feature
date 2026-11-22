@@ -734,3 +734,35 @@ Feature: Shared vector reservations
       | guard is gone while its process group still runs   | it keeps the capacity held for the running payload and names its process group |
       | guard is still running alongside its process group | it counts the held reservation and names no abandoned process group |
       | guard and process group are both gone              | it reclaims the capacity and names no abandoned process group |
+
+  # Behaviour: HI-CFG-006
+  Scenario Outline: A coordination mode other than reservation is refused, and a schema-1 file with coordination too
+    Given the compiled HIPPO binary
+    And <configuration>
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable
+
+    Examples:
+      | configuration                                                     |
+      | a schema three configuration whose coordination mode is exclusive |
+      | a schema one configuration that names coordination                |
+
+  # Behaviour: HI-CFG-007
+  Scenario Outline: A maximum memory below 256 MiB or more than 20 active owners is refused at load
+    Given the compiled HIPPO binary
+    And a schema two configuration whose coordination sets <limit>
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable
+
+    Examples:
+      | limit              |
+      | maxMemoryMiB 255   |
+      | maxActiveOwners 21 |
+
+  # Behaviour: HI-CFG-009
+  # Exemption(e2e): the compiled binary plans with owner shares it does not publish, so only the loaded configuration shows the override; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: A configured automatic owner share overrides the share its lineage gives
+    Given a schema two configuration that sets the balanced profile to seven automatic owner shares
+    When the configuration is loaded
+    Then the balanced profile holds seven automatic owner shares

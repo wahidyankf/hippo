@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
+	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -41,6 +42,7 @@ type publicCLIAddState struct {
 	identityEnvironment  map[string]string
 	capturedMonitor      *application.MonitorConfig
 	servicePort          int
+	loadedConfiguration  *resourceconfig.Result
 	refusal              string
 	bootstrap            bootstrapRuns
 	compaction           compactionWindows
