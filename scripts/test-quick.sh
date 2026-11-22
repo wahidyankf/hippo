@@ -21,8 +21,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # The quick contract: typecheck, strict lint, unit tests with -race, the static
-# behaviour adapters, 99% deterministic-core coverage, and the behaviour
-# coverage validation last. Formatting, layout, hook transport, architecture,
+# behaviour adapters, the behaviour coverage validation, and 99% unit coverage
+# of every authored package, measured last. Formatting, layout, hook transport, architecture,
 # contract, artifact, and wiring checks are registry entries of the
 # pull-request surface (C14), so they are not repeated here.
 public_host_helper_prepare "$root"
@@ -46,18 +46,18 @@ HIPPO_BDD_SUITE=unit go test -race -count=1 -run '^TestUnitBehaviours$' ./tests/
 HIPPO_BDD_ADAPTER=unit go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
 HIPPO_BDD_ADAPTER=integration go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
 HIPPO_BDD_ADAPTER=e2e go test -count=1 -run '^TestFeatureCompliance$' ./tests/bdd
-# The unit corpus and pure package tests share one measured coverage execution.
-# Explicit leaf directories keep the threshold helper's nonrecursive discovery
-# complete as domain packages acquire new deterministic functions.
-mkdir -p coverage
-go test -count=1 \
-	-coverpkg=./internal/policy,./internal/adapters/config,./internal/adapters/host,./internal/adapters/evidence,./internal/domain/coordination,./internal/domain/evidence,./internal/identity,./internal/status,./internal/application \
-	-coverprofile=coverage/unit.out \
-	-skip '^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$' \
-	./tests/unit ./tests/bdd ./internal/application ./internal/domain/coordination ./internal/domain/evidence \
-	./internal/identity ./internal/status
-go run ./tests/coverage --profile coverage/unit.out \
-	--directories internal/policy,internal/domain/coordination,internal/domain/evidence,internal/identity,internal/status,internal/application \
-	--files internal/adapters/config/config.go,internal/adapters/host/collector.go,internal/adapters/host/linux_parsers.go --minimum 99
 # test:behaviour:coverage, the static check; it runs no test (C14).
 ./rhino behaviour coverage validate
+
+# Unit coverage is measured last, so every step above still gates on its own. The package set is what go list reports
+# for the authored production tree, minus the named test-support packages, so a new package under cmd, internal, or
+# scripts/release-archive is measured without editing this script. The unit run instruments that set with -coverpkg,
+# and the floor applies to every package and to the aggregate; a package below it is named by the step.
+listed=$(go list ./cmd/... ./internal/... ./scripts/release-archive)
+packages=$(printf '%s\n' "$listed" | grep -v -e '/internal/adapters/system/systemtest$' | paste -sd, -)
+mkdir -p coverage
+go test -count=1 -coverpkg="$packages" \
+	-coverprofile=coverage/unit.out \
+	-skip '^(TestIntegrationBehaviours|TestE2EBehaviours|TestFeatureCompliance)$' \
+	./tests/unit ./tests/bdd ./cmd/... ./internal/... ./scripts/release-archive
+go run ./tests/coverage --profile coverage/unit.out --packages "$packages" --minimum 99
