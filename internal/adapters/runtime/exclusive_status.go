@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -30,9 +31,9 @@ func ExclusiveStatus(ctx context.Context, root string) (ReservationTotals, error
 	if err != nil || !present {
 		return totals, err
 	}
-	housekeepDisplayLocked(root, time.Now())
+	housekeepDisplayLocked(system.Production, root, time.Now())
 
-	owners, err := liveExclusiveSessionOwners(root)
+	owners, err := liveExclusiveSessionOwners(system.Production, root)
 	if err != nil {
 		return ReservationTotals{}, err
 	}
@@ -41,7 +42,7 @@ func ExclusiveStatus(ctx context.Context, root string) (ReservationTotals, error
 		seen[owner.Token] = owner
 		appendExclusiveOwner(&totals, owner.Token, owner)
 	}
-	heavy, live, err := liveExclusiveHeavyOwner(root)
+	heavy, live, err := liveExclusiveHeavyOwner(system.Production, root)
 	if err != nil {
 		return ReservationTotals{}, err
 	}
@@ -76,9 +77,9 @@ func exclusiveMarkerPresent(root string) (bool, error) {
 	return true, nil
 }
 
-func liveExclusiveSessionOwners(root string) ([]leaseOwner, error) {
+func liveExclusiveSessionOwners(port system.System, root string) ([]leaseOwner, error) {
 	owners := []leaseOwner{}
-	entries, err := os.ReadDir(filepath.Join(root, "sessions"))
+	entries, err := port.Files.ReadDir(filepath.Join(root, "sessions"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, compatibilityStateError("exclusive compatibility session inventory cannot be enumerated")
 	}
@@ -121,9 +122,9 @@ func liveExclusiveSessionOwner(root, token string) (*leaseOwner, bool, error) {
 	return owner, alive, nil
 }
 
-func liveExclusiveHeavyOwner(root string) (*leaseOwner, bool, error) {
+func liveExclusiveHeavyOwner(port system.System, root string) (*leaseOwner, bool, error) {
 	heavyPath := filepath.Join(root, "heavy.lock")
-	if _, err := os.Stat(heavyPath); errors.Is(err, os.ErrNotExist) {
+	if _, err := port.Files.Stat(heavyPath); errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
 	} else if err != nil {
 		return nil, false, compatibilityStateError("exclusive compatibility heavy ownership cannot be inspected")

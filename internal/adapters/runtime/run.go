@@ -14,6 +14,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/application"
 
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -84,10 +85,10 @@ func ReservationEnvironment(environment []string, resolution policy.Resolution, 
 	return application.ReservationEnvironment(environment, resolution, allocation, requested)
 }
 
-func checkCommandIsRunnable(command string) *status.Failure {
+func checkCommandIsRunnable(port system.System, command string) *status.Failure {
 	resolved := command
 	if !strings.ContainsRune(command, os.PathSeparator) {
-		found, lookError := exec.LookPath(command)
+		found, lookError := port.Runner.LookPath(command)
 		if lookError != nil {
 			if errors.Is(lookError, exec.ErrNotFound) {
 				failure := status.Fail(status.CodeChildNotFound, "%s: command not found", command)
@@ -102,7 +103,7 @@ func checkCommandIsRunnable(command string) *status.Failure {
 		resolved = found
 	}
 
-	info, statError := os.Stat(resolved)
+	info, statError := port.Files.Stat(resolved)
 	switch {
 	case errors.Is(statError, os.ErrNotExist):
 		failure := status.Fail(status.CodeChildNotFound, "%s: no such file or directory", command)
@@ -142,12 +143,12 @@ func waitStatusCode(err error) int {
 	return 1
 }
 
-func signalGroup(processGroup int, signal syscall.Signal) error {
+func signalGroup(port system.System, processGroup int, signal syscall.Signal) error {
 	if processGroup <= 0 {
 		return errors.New("child process group is unavailable")
 	}
 
-	groupError := syscall.Kill(-processGroup, signal)
+	groupError := port.Processes.Kill(-processGroup, signal)
 	// A group signal reports ESRCH once the group is gone and, on Darwin, EPERM
 	// while its members have exited but have not been reaped yet: no member is
 	// left that this process may signal. Neither answer says the payload is
@@ -172,7 +173,9 @@ var errChildRetirementUnconfirmed = application.ErrChildRetirementUnconfirmed
 // from a coordination root every repository shares.
 const childRetirementConfirmation = 2 * time.Second
 
-func terminateAndWait(lifetime *supervisedLifetime, grace, confirmation time.Duration) (error, error) {
+func terminateAndWait(
+	port system.System, lifetime *supervisedLifetime, grace, confirmation time.Duration,
+) (error, error) {
 	if confirmation <= 0 {
 		confirmation = childRetirementConfirmation
 	}
@@ -183,7 +186,7 @@ func terminateAndWait(lifetime *supervisedLifetime, grace, confirmation time.Dur
 	default:
 	}
 
-	signalError := signalGroup(lifetime.processGroup, syscall.SIGTERM)
+	signalError := signalGroup(port, lifetime.processGroup, syscall.SIGTERM)
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
 
@@ -191,7 +194,7 @@ func terminateAndWait(lifetime *supervisedLifetime, grace, confirmation time.Dur
 	case waitError := <-lifetime.exited:
 		return waitError, signalError
 	case <-timer.C:
-		killError := signalGroup(lifetime.processGroup, syscall.SIGKILL)
+		killError := signalGroup(port, lifetime.processGroup, syscall.SIGKILL)
 		postKill := time.NewTimer(max(grace, confirmation))
 		defer postKill.Stop()
 		select {
@@ -203,36 +206,44 @@ func terminateAndWait(lifetime *supervisedLifetime, grace, confirmation time.Dur
 	}
 }
 
-func waitForContext(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
+func waitForContext(
+	ctx context.Context, clock system.Clock, duration time.Duration, pause func(time.Duration),
+) error {
 	if pause != nil {
 		pause(duration)
 
 		return ctx.Err()
 	}
 
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
+	// A caller that cancels before waiting observes the cancellation even when
+	// the clock has already elapsed: the race below would answer either way.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-timer.C:
+	case <-clock.After(duration):
 		return nil
 	}
 }
 
 func launchConfiguredLifetime(
+	port system.System,
 	ctx context.Context,
 	config RunConfig,
 	session *Session,
 	portLease *PortLease,
 ) (*supervisedLifetime, error) {
 	environment := withEnvironment(config.Environment, "HIPPO_SESSION", session.Token)
-	executable, err := exec.LookPath(config.Command)
+	executable, err := port.Runner.LookPath(config.Command)
 	if err != nil {
 		return nil, err
 	}
-	environment = withEnvironment(environment, "HIPPO_BIN", executableGuardPath())
+	environment = withEnvironment(environment, "HIPPO_BIN", executableGuardPath(port))
 	var reservationIdentity, portIdentity *os.File
 	if session != nil {
 		reservationIdentity = session.identityLock
@@ -249,12 +260,14 @@ func launchConfiguredLifetime(
 	return starter(ctx, config, executable, environment, reservationIdentity, portIdentity)
 }
 
-func stopConfiguredLifetime(config RunConfig, lifetime *supervisedLifetime) (error, error) {
+func stopConfiguredLifetime(
+	port system.System, config RunConfig, lifetime *supervisedLifetime,
+) (error, error) {
 	if config.stopLifetime != nil {
 		return config.stopLifetime(lifetime, config.Policy.TerminationGrace)
 	}
 
-	return terminateAndWait(lifetime, config.Policy.TerminationGrace, config.RetirementConfirmation)
+	return terminateAndWait(port, lifetime, config.Policy.TerminationGrace, config.RetirementConfirmation)
 }
 
 // refusedEvidenceWrite names a write the evidence root refused before any child
@@ -268,8 +281,8 @@ func refusedEvidenceWrite(action string, err error) error {
 	return status.Fail(status.CodeEvidenceUnwritable, "%s: %v", action, err)
 }
 
-func executableGuardPath() string {
-	path, err := os.Executable()
+func executableGuardPath(port system.System) string {
+	path, err := port.Runner.Executable()
 	if err != nil {
 		return ""
 	}

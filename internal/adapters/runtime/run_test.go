@@ -22,6 +22,8 @@ import (
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
+	"github.com/wahidyankf/hippo/internal/adapters/system/systemtest"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 	"golang.org/x/sys/unix" //nolint:depguard // Kernel-lock fixtures must exercise the same flock implementation as production.
@@ -2936,22 +2938,18 @@ func TestTerminateAndWaitBoundsUnconfirmedPressureShed(t *testing.T) {
 
 func assertTerminateAndWaitIsBounded(t *testing.T) {
 	t.Helper()
-	command := exec.Command("/bin/sh", "-c", "sleep 60")
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := command.Start(); err != nil {
-		t.Fatal(err)
-	}
-	exited := make(chan error)
+	host := systemtest.NewHost(time.Now())
+	port := host.Port()
+	host.Processes.Alive[-4242] = true
 	done := make(chan error, 1)
 	go func() {
-		_, stopError := terminateAndWait(&supervisedLifetime{
-			command: command, processGroup: command.Process.Pid, exited: exited,
+		_, stopError := terminateAndWait(port, &supervisedLifetime{
+			processGroup: 4242, exited: make(chan error),
 		}, 10*time.Millisecond, 0)
 		done <- stopError
 	}()
 	select {
 	case stopError := <-done:
-		_ = command.Wait()
 		if !errors.Is(stopError, errChildRetirementUnconfirmed) {
 			t.Fatalf("expected unconfirmed retirement error, got %v", stopError)
 		}
@@ -2959,8 +2957,6 @@ func assertTerminateAndWaitIsBounded(t *testing.T) {
 	// caller's termination grace, so this deadline tracks the constant instead
 	// of a hand-picked millisecond budget.
 	case <-time.After(childRetirementConfirmation + time.Second):
-		_ = command.Process.Kill()
-		_ = command.Wait()
 		t.Fatal("post-KILL child retirement wait was unbounded")
 	}
 }
@@ -2991,7 +2987,7 @@ func TestSignalGroupAcceptsAnExitedButUnreapedProcessGroup(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	stopError := signalGroup(processGroup, syscall.SIGTERM)
+	stopError := signalGroup(system.Production, processGroup, syscall.SIGTERM)
 	_ = command.Wait()
 
 	if stopError != nil {
@@ -3005,18 +3001,15 @@ func TestTerminateAndWaitConfirmsRetirementAfterAnAggressiveGrace(t *testing.T) 
 	// retire and reap a killed group. Deriving the second from the first makes
 	// an aggressive policy report healthy force-stops as unconfirmed, which
 	// leaves the reservation owned and leaks shared capacity.
-	command := exec.Command("/bin/sh", "-c", "sleep 60")
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := command.Start(); err != nil {
-		t.Fatal(err)
-	}
+	host := systemtest.NewHost(time.Now())
+	port := host.Port()
+	host.Processes.Alive[-4242] = true
 	exited := make(chan error, 1)
-	time.AfterFunc(400*time.Millisecond, func() { exited <- nil })
+	retireAfter(exited, 400*time.Millisecond, nil)
 
-	_, stopError := terminateAndWait(&supervisedLifetime{
-		command: command, processGroup: command.Process.Pid, exited: exited,
+	_, stopError := terminateAndWait(port, &supervisedLifetime{
+		processGroup: 4242, exited: exited,
 	}, 10*time.Millisecond, 0)
-	_ = command.Wait()
 
 	if errors.Is(stopError, errChildRetirementUnconfirmed) {
 		t.Fatal("a child that retired well inside the confirmation window was reported unconfirmed")
@@ -3026,43 +3019,32 @@ func TestTerminateAndWaitConfirmsRetirementAfterAnAggressiveGrace(t *testing.T) 
 	}
 }
 
-func startRetirementSubject(t *testing.T) *exec.Cmd {
-	t.Helper()
-	command := exec.Command("/bin/sh", "-c", "sleep 60")
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := command.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-		_ = command.Wait()
-	})
-
-	return command
-}
-
 func TestTerminateAndWaitHonoursAConfiguredRetirementConfirmation(t *testing.T) {
 	// A caller that knows its host can outlast the fixed confirmation window
 	// sets its own, so a forced stop is judged by the killed group's real exit
 	// rather than by how quickly a loaded host reaps it.
 	t.Run("longer than the default confirms a slow retirement", func(t *testing.T) {
-		command := startRetirementSubject(t)
+		host := systemtest.NewHost(time.Now())
+		port := host.Port()
+		host.Processes.Alive[-4242] = true
 		exited := make(chan error, 1)
-		time.AfterFunc(childRetirementConfirmation+300*time.Millisecond, func() { exited <- nil })
+		retireAfter(exited, childRetirementConfirmation+300*time.Millisecond, nil)
 
-		_, stopError := terminateAndWait(&supervisedLifetime{
-			command: command, processGroup: command.Process.Pid, exited: exited,
+		_, stopError := terminateAndWait(port, &supervisedLifetime{
+			processGroup: 4242, exited: exited,
 		}, 10*time.Millisecond, time.Hour)
 		if stopError != nil {
 			t.Fatalf("a retirement inside the configured window reported %v", stopError)
 		}
 	})
 	t.Run("shorter than the default bounds the wait", func(t *testing.T) {
-		command := startRetirementSubject(t)
+		host := systemtest.NewHost(time.Now())
+		port := host.Port()
+		host.Processes.Alive[-4242] = true
 		started := time.Now()
 
-		_, stopError := terminateAndWait(&supervisedLifetime{
-			command: command, processGroup: command.Process.Pid, exited: make(chan error),
+		_, stopError := terminateAndWait(port, &supervisedLifetime{
+			processGroup: 4242, exited: make(chan error),
 		}, 10*time.Millisecond, 100*time.Millisecond)
 		if !errors.Is(stopError, errChildRetirementUnconfirmed) {
 			t.Fatalf("expected unconfirmed retirement, got %v", stopError)
@@ -3074,13 +3056,15 @@ func TestTerminateAndWaitHonoursAConfiguredRetirementConfirmation(t *testing.T) 
 }
 
 func TestStopConfiguredLifetimeCarriesTheRetirementConfirmation(t *testing.T) {
-	command := startRetirementSubject(t)
+	host := systemtest.NewHost(time.Now())
+	port := host.Port()
+	host.Processes.Alive[-4242] = true
 	config := RunConfig{Policy: policy.DefaultPolicy(), RetirementConfirmation: 100 * time.Millisecond}
 	config.Policy.TerminationGrace = 10 * time.Millisecond
 	started := time.Now()
 
-	_, stopError := stopConfiguredLifetime(config, &supervisedLifetime{
-		command: command, processGroup: command.Process.Pid, exited: make(chan error),
+	_, stopError := stopConfiguredLifetime(port, config, &supervisedLifetime{
+		processGroup: 4242, exited: make(chan error),
 	})
 	if !errors.Is(stopError, errChildRetirementUnconfirmed) {
 		t.Fatalf("expected unconfirmed retirement, got %v", stopError)

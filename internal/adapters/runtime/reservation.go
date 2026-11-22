@@ -18,6 +18,7 @@ import (
 	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
 
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"golang.org/x/sys/unix"
 )
@@ -454,7 +455,7 @@ func removeReservationIdentity(root, value string) error {
 			returnError = errors.Join(returnError, removeError)
 		}
 	}
-	returnError = errors.Join(returnError, removeReservationMetadata(root, value))
+	returnError = errors.Join(returnError, removeReservationMetadata(system.Production, root, value))
 
 	return returnError
 }
@@ -588,7 +589,7 @@ func neverStartedAtCoordinationLock(
 	default:
 		return lockError
 	}
-	receiptError := writeSafetyReceipt(root, runID, "never-started", reason, metadata, class, now)
+	receiptError := writeSafetyReceipt(system.Production, root, runID, "never-started", reason, metadata, class, now)
 	if receiptError == nil {
 		return lockError
 	}
@@ -848,10 +849,10 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 	if err = reconcileReservationLedger(root, &ledger); err != nil {
 		return ReservationTotals{}, err
 	}
-	if err = pruneReservationMetadata(root, ledger); err != nil {
+	if err = pruneReservationMetadata(system.Production, root, ledger); err != nil {
 		return ReservationTotals{}, err
 	}
-	housekeepDisplayLocked(root, time.Now())
+	housekeepDisplayLocked(system.Production, root, time.Now())
 	totals.AbandonedProcessGroups = abandoned
 	totals.Capacity = ledger.Capacity
 	totals.ActiveOwners = len(ledger.Owners)
@@ -871,7 +872,8 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 			// Release workloads use the separate strict release guard.
 		}
 		entry, entryError := reservationEntry(
-			root, owner.Token, "active", 0, owner.Class, owner.Profile, owner.Requested, owner.Allocated,
+			system.Production, root, owner.Token, "active", 0, owner.Class, owner.Profile, owner.Requested,
+			owner.Allocated,
 		)
 		if entryError != nil {
 			return ReservationTotals{}, entryError
@@ -886,7 +888,7 @@ func ReservationStatus(ctx context.Context, root string) (ReservationTotals, err
 			return ReservationTotals{}, err
 		}
 		entry, entryError := reservationEntry(
-			root, waiter.Token, "waiting", index+1, waiter.Class, waiter.Profile,
+			system.Production, root, waiter.Token, "waiting", index+1, waiter.Class, waiter.Profile,
 			waiter.Requested, ReservationVector{},
 		)
 		if entryError != nil {

@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"github.com/wahidyankf/hippo/internal/identity"
@@ -47,8 +49,10 @@ func (state *admissionState) reportDisplayAdvisories() {
 	}
 }
 
-func retireUnregisteredDisplay(root, runID string, wait time.Duration, advisories *application.DisplayAdvisories) {
-	present, err := displayRegularPath(filepath.Join(root, "run-display", runID+".json"))
+func retireUnregisteredDisplay(
+	port system.System, root, runID string, wait time.Duration, advisories *application.DisplayAdvisories,
+) {
+	present, err := displayRegularPath(port, filepath.Join(root, "run-display", runID+".json"))
 	if err != nil || !present {
 		return
 	}
@@ -65,8 +69,8 @@ func retireUnregisteredDisplay(root, runID string, wait time.Duration, advisorie
 	}
 }
 
-func displayRegularPath(path string) (bool, error) {
-	info, err := os.Lstat(path)
+func displayRegularPath(port system.System, path string) (bool, error) {
+	info, err := port.Files.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
@@ -79,12 +83,12 @@ func displayRegularPath(path string) (bool, error) {
 	return true, nil
 }
 
-func readDisplayCensusRecord(path string, destination any) (bool, error) {
-	present, err := displayRegularPath(path)
+func readDisplayCensusRecord(port system.System, path string, destination any) (bool, error) {
+	present, err := displayRegularPath(port, path)
 	if err != nil || !present {
 		return present, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := port.Files.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
@@ -103,9 +107,9 @@ func readDisplayCensusRecord(path string, destination any) (bool, error) {
 	return true, nil
 }
 
-func displayReservationCensus(root string, live *[]application.DisplayLiveness) error {
+func displayReservationCensus(port system.System, root string, live *[]application.DisplayLiveness) error {
 	var ledger reservationLedger
-	present, err := readDisplayCensusRecord(reservationLedgerPath(root), &ledger)
+	present, err := readDisplayCensusRecord(port, reservationLedgerPath(root), &ledger)
 	if err != nil || !present {
 		return err
 	}
@@ -129,8 +133,8 @@ func displayReservationCensus(root string, live *[]application.DisplayLiveness) 
 	return nil
 }
 
-func displayExclusiveCensus(root string, live *[]application.DisplayLiveness) error {
-	entries, err := displayDirectoryEntries(filepath.Join(root, "sessions"))
+func displayExclusiveCensus(port system.System, root string, live *[]application.DisplayLiveness) error {
+	entries, err := displayDirectoryEntries(port, filepath.Join(root, "sessions"))
 	if err != nil {
 		return err
 	}
@@ -140,7 +144,7 @@ func displayExclusiveCensus(root string, live *[]application.DisplayLiveness) er
 			return errors.New("display census session inventory is unverifiable")
 		}
 		var owner leaseOwner
-		present, readError := readDisplayCensusRecord(filepath.Join(root, "sessions", entry.Name()), &owner)
+		present, readError := readDisplayCensusRecord(port, filepath.Join(root, "sessions", entry.Name()), &owner)
 		if readError != nil || !present || !validSessionRecord(&owner, runID) {
 			return errors.New("display census session record is unverifiable")
 		}
@@ -151,7 +155,7 @@ func displayExclusiveCensus(root string, live *[]application.DisplayLiveness) er
 		*live = append(*live, application.DisplayLiveness{RunID: runID, Live: alive})
 	}
 	var heavy leaseOwner
-	heavyEntries, err := displayDirectoryEntries(filepath.Join(root, "heavy.lock"))
+	heavyEntries, err := displayDirectoryEntries(port, filepath.Join(root, "heavy.lock"))
 	if err != nil {
 		return err
 	}
@@ -160,12 +164,12 @@ func displayExclusiveCensus(root string, live *[]application.DisplayLiveness) er
 			return errors.New("display census heavy inventory is unverifiable")
 		}
 	}
-	present, err := readDisplayCensusRecord(filepath.Join(root, "heavy.lock", "owner.json"), &heavy)
+	present, err := readDisplayCensusRecord(port, filepath.Join(root, "heavy.lock", "owner.json"), &heavy)
 	if err != nil {
 		return err
 	}
 	if !present {
-		if _, statError := os.Lstat(filepath.Join(root, "heavy.lock")); !errors.Is(statError, os.ErrNotExist) {
+		if _, statError := port.Files.Lstat(filepath.Join(root, "heavy.lock")); !errors.Is(statError, os.ErrNotExist) {
 			return errors.New("display census heavy ownership is unverifiable")
 		}
 		return nil
@@ -181,22 +185,22 @@ func displayExclusiveCensus(root string, live *[]application.DisplayLiveness) er
 	return nil
 }
 
-func displayDirectoryEntries(directory string) ([]os.DirEntry, error) {
-	info, err := os.Lstat(directory)
+func displayDirectoryEntries(port system.System, directory string) ([]fs.DirEntry, error) {
+	info, err := port.Files.Lstat(directory)
 	if errors.Is(err, os.ErrNotExist) {
-		return []os.DirEntry{}, nil
+		return []fs.DirEntry{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
 		return nil, errors.New("display census inventory is not a directory")
 	}
-	return os.ReadDir(directory)
+	return port.Files.ReadDir(directory)
 }
 
-func displayIdentityCensus(root string, live *[]application.DisplayLiveness) error {
-	entries, err := displayDirectoryEntries(filepath.Join(root, "reservation-identities"))
+func displayIdentityCensus(port system.System, root string, live *[]application.DisplayLiveness) error {
+	entries, err := displayDirectoryEntries(port, filepath.Join(root, "reservation-identities"))
 	if err != nil {
 		return err
 	}
@@ -229,10 +233,10 @@ func displayIdentityCensus(root string, live *[]application.DisplayLiveness) err
 	return nil
 }
 
-func displayCensus(root string) (application.DisplayCensus, error) {
+func displayCensus(port system.System, root string) (application.DisplayCensus, error) {
 	// The marker is validated even though every registry is inspected in all
 	// modes. Unknown protocols prevent claiming that the census is complete.
-	present, err := displayRegularPath(coordinationMarkerPath(root))
+	present, err := displayRegularPath(port, coordinationMarkerPath(root))
 	if err != nil {
 		return application.DisplayCensus{}, err
 	}
@@ -242,22 +246,22 @@ func displayCensus(root string) (application.DisplayCensus, error) {
 		}
 	}
 	var live []application.DisplayLiveness
-	if err = displayReservationCensus(root, &live); err != nil {
+	if err = displayReservationCensus(port, root, &live); err != nil {
 		return application.DisplayCensus{}, err
 	}
-	if err = displayExclusiveCensus(root, &live); err != nil {
+	if err = displayExclusiveCensus(port, root, &live); err != nil {
 		return application.DisplayCensus{}, err
 	}
-	if err = displayIdentityCensus(root, &live); err != nil {
+	if err = displayIdentityCensus(port, root, &live); err != nil {
 		return application.DisplayCensus{}, err
 	}
 	return application.DisplayCensus{Complete: true, Liveness: live}, nil
 }
 
-func housekeepDisplayLocked(root string, now time.Time) {
+func housekeepDisplayLocked(port system.System, root string, now time.Time) {
 	if err := application.CleanupDisplay(application.DisplayCleanupEffects{
 		PruneTemporaries: func() error { return evidence.PruneDisplay(root, nil, now) },
-		Census:           func() (application.DisplayCensus, error) { return displayCensus(root) },
+		Census:           func() (application.DisplayCensus, error) { return displayCensus(port, root) },
 		SupportedIDs:     func() ([]string, error) { return evidence.DisplayTokens(root) },
 		Prune:            func(ids []string) error { return evidence.PruneDisplay(root, ids, now) },
 	}); err != nil {
@@ -266,14 +270,14 @@ func housekeepDisplayLocked(root string, now time.Time) {
 	}
 }
 
-func housekeepIdleDisplay(ctx context.Context, root string) {
-	info, err := os.Lstat(filepath.Join(root, "run-display"))
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+func housekeepIdleDisplay(ctx context.Context, port system.System, root string) {
+	info, err := port.Files.Lstat(filepath.Join(root, "run-display"))
+	if err != nil || !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
 		return
 	}
 	// Real publishers already created this lock. An ordinary absent root or
 	// state with no lock is never initialized just to prune annotations.
-	present, err := displayRegularPath(filepath.Join(root, "coordination.lock"))
+	present, err := displayRegularPath(port, filepath.Join(root, "coordination.lock"))
 	if err != nil || !present {
 		return
 	}
@@ -281,7 +285,7 @@ func housekeepIdleDisplay(ctx context.Context, root string) {
 	if err != nil {
 		return
 	}
-	housekeepDisplayLocked(root, time.Now())
+	housekeepDisplayLocked(port, root, time.Now())
 	if err = releaseCoordinationLock(lock); err != nil {
 		return
 	}

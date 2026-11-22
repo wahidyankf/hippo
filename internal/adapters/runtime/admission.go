@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"golang.org/x/sys/unix"
@@ -115,7 +116,7 @@ func (state *admissionState) attemptExclusive(ctx context.Context, remaining tim
 	if err != nil {
 		return application.AdmissionResult{}, err
 	}
-	housekeepDisplayLocked(config.EvidenceRoot, config.Now())
+	housekeepDisplayLocked(system.Production, config.EvidenceRoot, config.Now())
 	session, deferred, acquireError := acquireSessionLocked(config.EvidenceRoot, environmentValue(config.Environment, "HIPPO_SESSION"), config.TaskClass, config.Label, state)
 	if err = errors.Join(acquireError, releaseCoordinationLock(lock)); err != nil {
 		return application.AdmissionResult{}, err
@@ -161,7 +162,7 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 
 		return application.AdmissionResult{}, reconcileError
 	}
-	housekeepDisplayLocked(root, current)
+	housekeepDisplayLocked(system.Production, root, current)
 	if identity == nil {
 		identity, lockError = openReservationIdentity(root, value)
 		if lockError != nil {
@@ -192,7 +193,7 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 	if !queued {
 		if options.Metadata.Source != "" {
 			if lockError = writeReservationMetadata(
-				root, value, options.Metadata, minimum, maximum, started, deadline,
+				system.Production, root, value, options.Metadata, minimum, maximum, started, deadline,
 			); lockError != nil {
 				_ = releaseCoordinationLock(coordinationLock)
 
@@ -249,7 +250,10 @@ func (state *admissionState) receipt(reason string, now time.Time) error {
 	if !state.config.ReservationPolicy.Enabled {
 		return nil
 	}
-	return writeSafetyReceipt(state.config.EvidenceRoot, state.value, "never-started", reason, state.config.ReservationMetadata, state.config.TaskClass, now)
+	return writeSafetyReceipt(
+		system.Production, state.config.EvidenceRoot, state.value, "never-started", reason,
+		state.config.ReservationMetadata, state.config.TaskClass, now,
+	)
 }
 
 func (state *admissionState) close() {
@@ -266,7 +270,9 @@ func (state *admissionState) close() {
 	}
 	if state.identity != nil {
 		if !state.queued {
-			retireUnregisteredDisplay(state.config.EvidenceRoot, state.value, state.cleanupWait, state.advisories)
+			retireUnregisteredDisplay(
+				system.Production, state.config.EvidenceRoot, state.value, state.cleanupWait, state.advisories,
+			)
 		}
 		_ = unix.Flock(int(state.identity.Fd()), unix.LOCK_UN)
 		_ = state.identity.Close()

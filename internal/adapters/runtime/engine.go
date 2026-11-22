@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -148,7 +149,7 @@ func (engine *Engine) Normalize(config application.RunConfig) application.RunCon
 
 // ValidateCommand checks executable availability without starting a payload.
 func (*Engine) ValidateCommand(command string) *status.Failure {
-	return checkCommandIsRunnable(command)
+	return checkCommandIsRunnable(system.Production, command)
 }
 
 // Release drops only this invocation's positively retired ownership.
@@ -222,7 +223,7 @@ func (engine *Engine) Start(ctx context.Context, config application.RunConfig, l
 	if port != nil {
 		portLease = engine.ports[port.ID]
 	}
-	lifetime, err := launchConfiguredLifetime(ctx, engine.configured(config), session, portLease)
+	lifetime, err := launchConfiguredLifetime(system.Production, ctx, engine.configured(config), session, portLease)
 	if lifetime == nil {
 		return nil, err
 	}
@@ -252,7 +253,7 @@ func (engine *Engine) Stop(config application.RunConfig, workload *application.W
 	}
 	lifetime := *entry.lifetime
 	lifetime.exited = entry.stopExited
-	waitError, stopError := stopConfiguredLifetime(engine.configured(config), &lifetime)
+	waitError, stopError := stopConfiguredLifetime(system.Production, engine.configured(config), &lifetime)
 	if !errors.Is(stopError, errChildRetirementUnconfirmed) {
 		entry.closeBridge()
 	}
@@ -284,7 +285,7 @@ func (*Engine) Snapshot(ctx context.Context, root, mode string) (coordination.Re
 		return totals, refusedEvidenceWrite("reading coordination evidence", err)
 	}
 	if !present {
-		housekeepIdleDisplay(ctx, root)
+		housekeepIdleDisplay(ctx, system.Production, root)
 		return totals, nil
 	}
 	if active != "reservation" {
@@ -342,7 +343,7 @@ func (*Engine) Open(config application.RunConfig) (application.RunSink, error) {
 
 // Receipt records a never-started or safety outcome without exposing persistence.
 func (*Engine) Receipt(root, runID, state, reason string, metadata coordination.ReservationMetadata, class policy.TaskClass, now time.Time) error {
-	return writeSafetyReceipt(root, runID, state, reason, metadata, class, now)
+	return writeSafetyReceipt(system.Production, root, runID, state, reason, metadata, class, now)
 }
 
 // WriteRefused identifies refused filesystem evidence writes at the adapter boundary.
@@ -356,7 +357,7 @@ func (RunClock) Now() time.Time { return time.Now() }
 
 // Wait waits cancellably, preserving explicit fixture pauses.
 func (RunClock) Wait(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
-	return waitForContext(ctx, duration, pause)
+	return waitForContext(ctx, system.Production.Clock, duration, pause)
 }
 
 // Ticker creates an owned sampling timer.
