@@ -1,23 +1,28 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
-	"runtime"
+
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
 
 // DefaultEvidenceRoot resolves private evidence storage from environment or user home.
 func DefaultEvidenceRoot(environment map[string]string) string {
+	return evidenceRoot(system.Production, environment)
+}
+
+// evidenceRoot applies DefaultEvidenceRoot to the host's home directory and platform.
+func evidenceRoot(host system.System, environment map[string]string) string {
 	if root := environment["HIPPO_ROOT"]; root != "" {
 		return root
 	}
 
-	home, err := os.UserHomeDir()
+	home, err := host.Environment.UserHomeDir()
 	if err != nil {
 		return ""
 	}
 
-	if runtime.GOOS == "darwin" {
+	if host.Environment.GOOS == "darwin" {
 		return filepath.Join(home, "Library", "Application Support", "hippo")
 	}
 
