@@ -30,6 +30,6 @@ it with its binding and its double, and records the choice in its evidence.
   (`*at` calls) take a file or descriptor the double must stand in for.
 - `Clock` timers and tickers (`NewTimer`, `NewTicker`) return `*time.Timer` and `*time.Ticker`, whose channels a double
   cannot drive.
-- `ProcessRunner` start, wait, and pipes need a child handle. Output of a command that runs to completion is the
-  `CaptureOutput` field, which needs no handle.
+- `ProcessRunner` pipes need the child's stream handles. `Start` and `Wait` take the `*exec.Cmd` the caller built, so
+  they are fields now; output of a command that runs to completion is the `CaptureOutput` field.
 - `DiskStats` `statfs` returns a platform-specific struct.

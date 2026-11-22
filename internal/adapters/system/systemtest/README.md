@@ -25,7 +25,9 @@ rejects an import from any other production file, and `tests/architecture/import
 
 ## Limits
 
-- Links are not modelled: `Link`, `Symlink`, and `Readlink` fail, so a test that needs a link must use the real tree in
-  the integration suite.
+- Links are not modelled: `Link`, `Symlink`, and `Readlink` fail, and `EvalSymlinks` fails for a link entry, so a test
+  that needs a link must use the real tree in the integration suite.
+- `SameFile` compares the name and the `Sys` value of two entries. A test that replaces an entry gives it another `Sys`.
+- `Start` and `Wait` fail with an error, because a double runs no process.
 - Parents are not checked on create, and modification times are zero.
 - A `Deliver` into a full channel blocks, so the test must size the channel.

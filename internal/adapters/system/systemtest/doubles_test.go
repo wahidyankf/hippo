@@ -223,6 +223,45 @@ func TestFilesRejectLinksAndReadlink(t *testing.T) {
 	}
 }
 
+// otherIdentity reports the same entry as the wrapped FileInfo, under a different Sys value.
+type otherIdentity struct{ fs.FileInfo }
+
+func (otherIdentity) Sys() any { return "other" }
+
+func TestFilesResolvePathsAndIdentity(t *testing.T) {
+	host := NewHost(start)
+	host.Files.Dirs["/hippo"] = true
+	host.Files.Contents["/hippo/link"] = []byte("/hippo")
+	host.Files.Modes["/hippo/link"] = fs.ModeSymlink | 0o777
+	port := host.Port()
+	if resolved, err := port.Files.EvalSymlinks("/hippo"); err != nil || resolved != "/hippo" {
+		t.Fatalf("resolve %q %v", resolved, err)
+	}
+	if _, err := port.Files.EvalSymlinks("/hippo/absent"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("missing path: %v", err)
+	}
+	if _, err := port.Files.EvalSymlinks("/hippo/link"); !errors.Is(err, fs.ErrInvalid) {
+		t.Fatalf("link: %v", err)
+	}
+	first, err := port.Files.Stat("/hippo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := port.Files.Stat("/hippo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !port.Files.SameFile(first, again) {
+		t.Fatal("the same entry was not the same file")
+	}
+	if port.Files.SameFile(first, otherIdentity{first}) {
+		t.Fatal("an entry with another identity was the same file")
+	}
+	if port.Files.SameFile(first, nil) {
+		t.Fatal("a missing file info was the same file")
+	}
+}
+
 func TestProcessesAnswerLivenessAndRecordSignals(t *testing.T) {
 	host := NewHost(start)
 	host.Processes.Pid = 42
@@ -282,6 +321,17 @@ func TestRunnerAnswersCapturesAndRecordsEveryCall(t *testing.T) {
 	captures := host.Runner.Captures
 	if len(captures) != 3 || captures[0].Name != "ps" || !slices.Equal(captures[0].Arguments, []string{"-o", "rss="}) || captures[2].Name != "absent" {
 		t.Fatalf("captures %+v", captures)
+	}
+}
+
+func TestRunnerRefusesToStartOrWaitForProcesses(t *testing.T) {
+	port := NewHost(start).Port()
+	command := &exec.Cmd{Path: "true"}
+	if err := port.Runner.Start(command); err == nil {
+		t.Fatal("the double started a process")
+	}
+	if err := port.Runner.Wait(command); err == nil {
+		t.Fatal("the double waited for a process")
 	}
 }
 

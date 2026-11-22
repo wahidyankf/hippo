@@ -110,7 +110,8 @@ func Execute(ctx context.Context, host system.System, args []string) int {
 }
 
 // ConformanceService composes the real consumer-conformance capabilities. The clock is the caller's port, so the
-// entry point that supplies it decides where time comes from.
+// entry point that supplies it decides where time comes from. The environment reads and runs through the production
+// host, so a conformance run touches the real file system and processes.
 func ConformanceService(clock system.Clock) app.ConformanceService {
-	return app.ConformanceService{Environment: conformance.Environment{}, Now: clock.Now}
+	return app.ConformanceService{Environment: conformance.Environment{Host: system.Production}, Now: clock.Now}
 }

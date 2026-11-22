@@ -172,7 +172,9 @@ func (signals *Signals) port() system.SignalSource {
 }
 
 // Files is an in-memory file tree. Parents are not checked on create, and links are
-// not modelled: Link, Symlink, and Readlink fail with fs.ErrInvalid or ErrUnsupported.
+// not modelled: Link, Symlink, and Readlink fail with fs.ErrInvalid, and EvalSymlinks
+// fails for a link entry. SameFile compares the name and the Sys value of two entries,
+// the only identity a double carries, so a test replaces an entry by giving it another Sys.
 type Files struct {
 	Contents map[string][]byte
 	Modes    map[string]fs.FileMode
@@ -255,6 +257,24 @@ func (files *Files) port() system.FileSystem {
 			files.Modes[name] = mode
 
 			return nil
+		},
+		EvalSymlinks: func(name string) (string, error) {
+			info, exists := files.info(name)
+			if !exists {
+				return "", pathError("lstat", name, fs.ErrNotExist)
+			}
+			if info.Mode()&fs.ModeSymlink != 0 {
+				return "", pathError("readlink", name, fs.ErrInvalid)
+			}
+
+			return path.Clean(name), nil
+		},
+		SameFile: func(first, second fs.FileInfo) bool {
+			if first == nil || second == nil {
+				return false
+			}
+
+			return first.Name() == second.Name() && first.Sys() == second.Sys()
 		},
 	}
 }
@@ -401,7 +421,7 @@ func (processes *Processes) port() system.ProcessTable {
 // Runner resolves executables from a fixed table, reports a fixed own path, and answers
 // captured runs from fixed standard output or a fixed failure, keyed by command name. A
 // failure wins over output. A command with neither fails as not found. Every capture is
-// recorded in Captures in call order.
+// recorded in Captures in call order. Start and Wait fail: a double runs no process.
 type Runner struct {
 	Executables map[string]string
 	Self        string
@@ -439,8 +459,13 @@ func (runner *Runner) port() system.ProcessRunner {
 		},
 		Executable:    func() (string, error) { return runner.Self, nil },
 		CaptureOutput: runner.capture,
+		Start:         func(*exec.Cmd) error { return errNoProcesses },
+		Wait:          func(*exec.Cmd) error { return errNoProcesses },
 	}
 }
+
+// errNoProcesses is what the double returns for a process it was asked to start or wait for.
+var errNoProcesses = errors.New("systemtest: the double does not run processes")
 
 // Random yields the configured bytes, repeated, and fails when none are configured.
 type Random struct {

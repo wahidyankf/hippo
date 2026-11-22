@@ -8,29 +8,33 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
 )
 
-// FileSystem is the file-system port: whole-file reads and writes, directory and link operations, and the
-// metadata calls. Each field carries the signature of the standard-library function it is bound to.
+// FileSystem is the file-system port: whole-file reads and writes, directory and link operations, the metadata
+// calls, path resolution, and file identity. Each field carries the signature of the standard-library function it is
+// bound to.
 type FileSystem struct {
-	ReadFile  func(name string) ([]byte, error)
-	WriteFile func(name string, data []byte, perm fs.FileMode) error
-	ReadDir   func(name string) ([]fs.DirEntry, error)
-	Stat      func(name string) (fs.FileInfo, error)
-	Lstat     func(name string) (fs.FileInfo, error)
-	Readlink  func(name string) (string, error)
-	Mkdir     func(name string, perm fs.FileMode) error
-	MkdirAll  func(path string, perm fs.FileMode) error
-	MkdirTemp func(dir, pattern string) (string, error)
-	Remove    func(name string) error
-	RemoveAll func(path string) error
-	Rename    func(oldpath, newpath string) error
-	Link      func(oldname, newname string) error
-	Symlink   func(oldname, newname string) error
-	Chmod     func(name string, mode fs.FileMode) error
+	ReadFile     func(name string) ([]byte, error)
+	WriteFile    func(name string, data []byte, perm fs.FileMode) error
+	ReadDir      func(name string) ([]fs.DirEntry, error)
+	Stat         func(name string) (fs.FileInfo, error)
+	Lstat        func(name string) (fs.FileInfo, error)
+	Readlink     func(name string) (string, error)
+	Mkdir        func(name string, perm fs.FileMode) error
+	MkdirAll     func(path string, perm fs.FileMode) error
+	MkdirTemp    func(dir, pattern string) (string, error)
+	Remove       func(name string) error
+	RemoveAll    func(path string) error
+	Rename       func(oldpath, newpath string) error
+	Link         func(oldname, newname string) error
+	Symlink      func(oldname, newname string) error
+	Chmod        func(name string, mode fs.FileMode) error
+	EvalSymlinks func(path string) (string, error)
+	SameFile     func(first, second fs.FileInfo) bool
 }
 
 // Clock is the time port. Timers and tickers are not in it yet: their methods need a handle a double can
@@ -59,13 +63,16 @@ type ProcessTable struct {
 	Kill    func(pid int, signal syscall.Signal) error
 }
 
-// ProcessRunner is the port for locating and identifying executables and for capturing the standard output of a
-// command that runs to completion. Starting a child and driving its pipes step by step is still bound by the adapter
-// that first needs one, because it needs a handle a double can control.
+// ProcessRunner is the port for locating and identifying executables, for capturing the standard output of a command
+// that runs to completion, and for starting and waiting on a command value the caller built. Start and Wait take the
+// command as their handle, so a double can answer them. Driving the command's pipes step by step is still bound by the
+// adapter that first needs one.
 type ProcessRunner struct {
 	LookPath      func(file string) (string, error)
 	Executable    func() (string, error)
 	CaptureOutput func(ctx context.Context, name string, arguments ...string) ([]byte, error)
+	Start         func(command *exec.Cmd) error
+	Wait          func(command *exec.Cmd) error
 }
 
 // Environment is the process environment port: variables, the working and home directories, the platform, the
@@ -116,13 +123,17 @@ var Production = System{
 		ReadFile: os.ReadFile, WriteFile: os.WriteFile, ReadDir: os.ReadDir, Stat: os.Stat, Lstat: os.Lstat,
 		Readlink: os.Readlink, Mkdir: os.Mkdir, MkdirAll: os.MkdirAll, MkdirTemp: os.MkdirTemp, Remove: os.Remove,
 		RemoveAll: os.RemoveAll, Rename: os.Rename, Link: os.Link, Symlink: os.Symlink, Chmod: os.Chmod,
+		EvalSymlinks: filepath.EvalSymlinks, SameFile: os.SameFile,
 	},
 	Clock: Clock{Now: time.Now, Since: time.Since, Sleep: time.Sleep, After: time.After},
 	Signals: SignalSource{
 		Notify: signal.Notify, Stop: signal.Stop, Ignore: signal.Ignore, Reset: signal.Reset,
 	},
 	Processes: ProcessTable{Getpid: os.Getpid, Getpgrp: syscall.Getpgrp, Getpgid: syscall.Getpgid, Kill: syscall.Kill},
-	Runner:    ProcessRunner{LookPath: exec.LookPath, Executable: os.Executable, CaptureOutput: captureOutput},
+	Runner: ProcessRunner{
+		LookPath: exec.LookPath, Executable: os.Executable, CaptureOutput: captureOutput,
+		Start: (*exec.Cmd).Start, Wait: (*exec.Cmd).Wait,
+	},
 	Environment: Environment{
 		Environ: os.Environ, Getenv: os.Getenv, LookupEnv: os.LookupEnv, UserHomeDir: os.UserHomeDir,
 		TempDir: os.TempDir, Getwd: os.Getwd, Exit: os.Exit, GOOS: runtime.GOOS, Args: os.Args,

@@ -4,16 +4,20 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 )
 
-// Environment materializes validated manifests and their environmental resources.
-type Environment struct{}
+// Environment materializes validated manifests and their environmental resources. Host is the system every session
+// reads, verifies, and runs commands through; the zero value has no ports and must not open a session.
+type Environment struct {
+	Host system.System
+}
 
 type session struct {
+	host               system.System
 	manifest           Manifest
 	identity           binaryIdentity
 	checkoutIdentities map[string]checkoutIdentity
@@ -22,8 +26,9 @@ type session struct {
 }
 
 // Open validates input and captures concrete binary, checkout and shared-root identities.
-func (Environment) Open(_ context.Context, manifestPath string) (application.ConformanceSession, error) {
-	data, err := os.ReadFile(filepath.Clean(manifestPath))
+func (source Environment) Open(_ context.Context, manifestPath string) (application.ConformanceSession, error) {
+	host := source.Host
+	data, err := host.Files.ReadFile(filepath.Clean(manifestPath))
 	if err != nil {
 		return application.ConformanceSession{}, errors.New("conformance manifest is unavailable")
 	}
@@ -34,36 +39,36 @@ func (Environment) Open(_ context.Context, manifestPath string) (application.Con
 	if err = validateRawManifest(manifest); err != nil {
 		return application.ConformanceSession{}, err
 	}
-	manifest, err = canonicalizeManifest(manifest, filepath.Dir(filepath.Clean(manifestPath)))
+	manifest, err = canonicalizeManifest(host, manifest, filepath.Dir(filepath.Clean(manifestPath)))
 	if err != nil {
 		return application.ConformanceSession{}, err
 	}
-	if err = validateManifest(manifest); err != nil {
+	if err = validateManifest(host, manifest); err != nil {
 		return application.ConformanceSession{}, err
 	}
-	identities, err := captureCheckoutIdentities(manifest.Consumers)
+	identities, err := captureCheckoutIdentities(host, manifest.Consumers)
 	if err != nil {
 		return application.ConformanceSession{}, err
 	}
-	identity, err := captureBinaryIdentity(manifest)
+	identity, err := captureBinaryIdentity(host, manifest)
 	if err != nil {
 		return application.ConformanceSession{}, err
 	}
-	if err = os.MkdirAll(filepath.Clean(manifest.SharedRoot), 0o700); err != nil {
-		return application.ConformanceSession{}, errors.Join(errors.New("conformance shared root is unavailable"), cleanupBinary(identity))
+	if err = host.Files.MkdirAll(filepath.Clean(manifest.SharedRoot), 0o700); err != nil {
+		return application.ConformanceSession{}, errors.Join(errors.New("conformance shared root is unavailable"), cleanupBinary(host, identity))
 	}
-	sharedIdentity, err := captureSharedRootIdentity(manifest.SharedRoot)
+	sharedIdentity, err := captureSharedRootIdentity(host, manifest.SharedRoot)
 	if err != nil {
-		return application.ConformanceSession{}, errors.Join(err, cleanupBinary(identity))
+		return application.ConformanceSession{}, errors.Join(err, cleanupBinary(host, identity))
 	}
-	environment := removeEnvironment(os.Environ(), "HIPPO_SESSION", "HIPPO_PROFILE", "HIPPO_CONCURRENCY", "HIPPO_RESERVED_MEMORY_BYTES", "HIPPO_DEFAULT_CONFIG", "HIPPO_DEFAULT_IDENTITY")
+	environment := removeEnvironment(host.Environment.Environ(), "HIPPO_SESSION", "HIPPO_PROFILE", "HIPPO_CONCURRENCY", "HIPPO_RESERVED_MEMORY_BYTES", "HIPPO_DEFAULT_CONFIG", "HIPPO_DEFAULT_IDENTITY")
 	environment = replaceEnvironment(environment, "HIPPO_ROOT", manifest.SharedRoot)
-	run := &session{manifest: manifest, identity: identity, checkoutIdentities: identities, sharedRootIdentity: sharedIdentity, environment: environment}
+	run := &session{host: host, manifest: manifest, identity: identity, checkoutIdentities: identities, sharedRootIdentity: sharedIdentity, environment: environment}
 	return run.capabilities(), nil
 }
 
-func cleanupBinary(identity binaryIdentity) error {
-	if err := identity.cleanup(); err != nil {
+func cleanupBinary(host system.System, identity binaryIdentity) error {
+	if err := identity.cleanup(host); err != nil {
 		return errors.New("verified HIPPO binary cleanup failed")
 	}
 	return nil
@@ -81,13 +86,13 @@ func (run *session) consumer(name string) Consumer {
 func (run *session) Verify(name string) error {
 	var checkoutError error
 	if name != "" {
-		checkoutError = verifyCheckoutIdentity(run.consumer(name), run.checkoutIdentities[name])
+		checkoutError = verifyCheckoutIdentity(run.host, run.consumer(name), run.checkoutIdentities[name])
 	}
-	return errors.Join(checkoutError, verifySharedRootIdentity(run.manifest.SharedRoot, run.sharedRootIdentity))
+	return errors.Join(checkoutError, verifySharedRootIdentity(run.host, run.manifest.SharedRoot, run.sharedRootIdentity))
 }
-func (run *session) VerifyBinary() error { return run.identity.verify() }
+func (run *session) VerifyBinary() error { return run.identity.verify(run.host) }
 func (run *session) Snapshot(ctx context.Context, name string) (application.ConformanceCheckoutState, error) {
-	state, err := snapshot(ctx, run.consumer(name), run.checkoutIdentities[name])
+	state, err := snapshot(run.host, ctx, run.consumer(name), run.checkoutIdentities[name])
 	return application.ConformanceCheckoutState{Head: state.head, Dirty: state.dirty}, err
 }
 
@@ -96,17 +101,17 @@ func (run *session) Execute(ctx context.Context, name string, command applicatio
 	if root != "" {
 		environment = replaceEnvironment(environment, "HIPPO_ROOT", root)
 	}
-	return executeVerifiedCommand(ctx, run.consumer(name).Path, command, environment, output, run.identity)
+	return executeVerifiedCommand(run.host, ctx, run.consumer(name).Path, command, environment, output, run.identity)
 }
 
 func (run *session) Receipts() (map[string]struct{}, error) {
-	return receiptSnapshot(run.manifest.SharedRoot)
+	return receiptSnapshot(run.host, run.manifest.SharedRoot)
 }
 
 func (run *session) NeverStartedReceipt(before map[string]struct{}) (bool, error) {
-	return newNeverStartedReceipt(run.manifest.SharedRoot, before)
+	return newNeverStartedReceipt(run.host, run.manifest.SharedRoot, before)
 }
-func (run *session) Close() error { return cleanupBinary(run.identity) }
+func (run *session) Close() error { return cleanupBinary(run.host, run.identity) }
 
 const (
 	capacityHoldName        = "conformance-capacity-held"
@@ -115,32 +120,35 @@ const (
 
 var neverStartedReceiptDocument = []byte("{\"schemaVersion\":1,\"state\":\"never-started\",\"reason\":\"capacity\"}\n")
 
-type deferralFixture struct{ root string }
+type deferralFixture struct {
+	host system.System
+	root string
+}
 
 func (run *session) DeferralFixture() (application.ConformanceDeferralFixture, error) {
-	root, err := os.MkdirTemp("", "hippo-deferral-probe-")
+	root, err := run.host.Files.MkdirTemp("", "hippo-deferral-probe-")
 	if err != nil {
 		return application.ConformanceDeferralFixture{}, errors.New("deferral retry probe root is unavailable")
 	}
-	fixture := &deferralFixture{root: root}
-	if err = os.WriteFile(filepath.Join(root, capacityHoldName), []byte("held\n"), 0o600); err != nil {
+	fixture := &deferralFixture{host: run.host, root: root}
+	if err = run.host.Files.WriteFile(filepath.Join(root, capacityHoldName), []byte("held\n"), 0o600); err != nil {
 		return application.ConformanceDeferralFixture{}, errors.Join(errors.New("deferral retry probe root could not be saturated"), fixture.Close())
 	}
-	if err = os.WriteFile(filepath.Join(root, neverStartedReceiptName), neverStartedReceiptDocument, 0o600); err != nil {
+	if err = run.host.Files.WriteFile(filepath.Join(root, neverStartedReceiptName), neverStartedReceiptDocument, 0o600); err != nil {
 		return application.ConformanceDeferralFixture{}, errors.Join(errors.New("deferral retry probe receipt is unavailable"), fixture.Close())
 	}
 	return application.ConformanceDeferralFixture{Root: fixture.Root, Release: fixture.Release, Close: fixture.Close}, nil
 }
 func (fixture *deferralFixture) Root() string { return fixture.root }
 func (fixture *deferralFixture) Release() error {
-	if err := os.Remove(filepath.Join(fixture.root, capacityHoldName)); err != nil {
+	if err := fixture.host.Files.Remove(filepath.Join(fixture.root, capacityHoldName)); err != nil {
 		return errors.New("deferral retry probe capacity release failed")
 	}
 	return nil
 }
 
 func (fixture *deferralFixture) Close() error {
-	if err := os.RemoveAll(fixture.root); err != nil {
+	if err := fixture.host.Files.RemoveAll(fixture.root); err != nil {
 		return errors.New("deferral retry probe cleanup failed")
 	}
 	return nil

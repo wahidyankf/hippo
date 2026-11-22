@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -92,12 +94,14 @@ type commandRuntime struct {
 	alive  func(*os.Process) (bool, error)
 }
 
-func defaultCommandRuntime() commandRuntime {
+func defaultCommandRuntime(port system.System) commandRuntime {
 	return commandRuntime{
-		start:  func(command *exec.Cmd) error { return command.Start() },
-		wait:   func(command *exec.Cmd) error { return command.Wait() },
-		signal: signalProcessGroup,
-		alive:  processGroupAlive,
+		start: port.Runner.Start,
+		wait:  port.Runner.Wait,
+		signal: func(process *os.Process, signal syscall.Signal) error {
+			return signalProcessGroup(port, process, signal)
+		},
+		alive: func(process *os.Process) (bool, error) { return processGroupAlive(port, process) },
 	}
 }
 
@@ -130,10 +134,8 @@ func consumeManifestJSON(decoder *json.Decoder) error {
 			if keyError != nil {
 				return keyError
 			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return errors.New("conformance object key is not a string")
-			}
+			// Token returns a string for every object key; any other token is the keyError above.
+			key := keyToken.(string)
 			if seen[key] {
 				return fmt.Errorf("duplicate conformance manifest field %q", key)
 			}
@@ -169,9 +171,6 @@ func decodeManifest(data []byte) (Manifest, error) {
 	if err := decoder.Decode(&manifest); err != nil {
 		return Manifest{}, err
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return Manifest{}, errors.New("conformance manifest must contain one JSON value")
-	}
 
 	return manifest, nil
 }
@@ -197,27 +196,40 @@ func validateRawManifest(manifest Manifest) error {
 	return nil
 }
 
-func canonicalPath(base, value string, mustExist bool) (string, error) {
+// absolutePath makes a clean path absolute against the host's working directory, as filepath.Abs does.
+func absolutePath(port system.System, path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	working, err := port.Environment.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(working, path), nil
+}
+
+func canonicalPath(port system.System, base, value string, mustExist bool) (string, error) {
 	path := value
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(base, path)
 	}
-	absolute, err := filepath.Abs(filepath.Clean(path))
+	absolute, err := absolutePath(port, filepath.Clean(path))
 	if err != nil {
 		return "", err
 	}
-	canonical, err := filepath.EvalSymlinks(absolute)
+	canonical, err := port.Files.EvalSymlinks(absolute)
 	if err == nil {
 		return filepath.Clean(canonical), nil
 	}
-	if mustExist || !errors.Is(err, os.ErrNotExist) {
+	if mustExist || !errors.Is(err, fs.ErrNotExist) {
 		return "", err
 	}
 	ancestor, suffix := absolute, []string{}
 	for {
-		if _, statError := os.Lstat(ancestor); statError == nil {
+		if _, statError := port.Files.Lstat(ancestor); statError == nil {
 			break
-		} else if !errors.Is(statError, os.ErrNotExist) {
+		} else if !errors.Is(statError, fs.ErrNotExist) {
 			return "", statError
 		}
 		parent := filepath.Dir(ancestor)
@@ -227,7 +239,7 @@ func canonicalPath(base, value string, mustExist bool) (string, error) {
 		suffix = append(suffix, filepath.Base(ancestor))
 		ancestor = parent
 	}
-	ancestor, err = filepath.EvalSymlinks(ancestor)
+	ancestor, err = port.Files.EvalSymlinks(ancestor)
 	if err != nil {
 		return "", err
 	}
@@ -248,18 +260,18 @@ func pathsOverlap(first, second string) bool {
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func canonicalizeManifest(manifest Manifest, base string) (Manifest, error) {
+func canonicalizeManifest(port system.System, manifest Manifest, base string) (Manifest, error) {
 	var err error
-	manifest.HIPPOBinary, err = canonicalPath(base, manifest.HIPPOBinary, true)
+	manifest.HIPPOBinary, err = canonicalPath(port, base, manifest.HIPPOBinary, true)
 	if err != nil {
 		return Manifest{}, errors.New("HIPPO binary identity is unavailable")
 	}
-	manifest.SharedRoot, err = canonicalPath(base, manifest.SharedRoot, false)
+	manifest.SharedRoot, err = canonicalPath(port, base, manifest.SharedRoot, false)
 	if err != nil {
 		return Manifest{}, errors.New("shared root identity is unavailable")
 	}
 	for index := range manifest.Consumers {
-		manifest.Consumers[index].Path, err = canonicalPath(base, manifest.Consumers[index].Path, true)
+		manifest.Consumers[index].Path, err = canonicalPath(port, base, manifest.Consumers[index].Path, true)
 		if err != nil {
 			return Manifest{}, fmt.Errorf("consumer %q checkout is unavailable", manifest.Consumers[index].Name)
 		}
@@ -268,7 +280,7 @@ func canonicalizeManifest(manifest Manifest, base string) (Manifest, error) {
 	return manifest, nil
 }
 
-func validateManifest(manifest Manifest) error {
+func validateManifest(port system.System, manifest Manifest) error {
 	if manifest.SchemaVersion != manifestSchemaVersion {
 		return fmt.Errorf("unsupported conformance manifest schema %d", manifest.SchemaVersion)
 	}
@@ -290,7 +302,7 @@ func validateManifest(manifest Manifest) error {
 			return errors.New("shared root and consumer checkout scopes must not overlap")
 		}
 		names[consumer.Name], paths[consumer.Path] = true, true
-		info, err := os.Stat(consumer.Path)
+		info, err := port.Files.Stat(consumer.Path)
 		if err != nil || !info.IsDir() {
 			return fmt.Errorf("consumer %q checkout is unavailable", consumer.Name)
 		}
@@ -315,10 +327,10 @@ func validateManifest(manifest Manifest) error {
 	return nil
 }
 
-func captureCheckoutIdentities(consumers []Consumer) (map[string]checkoutIdentity, error) {
+func captureCheckoutIdentities(port system.System, consumers []Consumer) (map[string]checkoutIdentity, error) {
 	identities := make(map[string]checkoutIdentity, len(consumers))
 	for _, consumer := range consumers {
-		info, err := os.Stat(consumer.Path)
+		info, err := port.Files.Stat(consumer.Path)
 		if err != nil || !info.IsDir() {
 			return nil, fmt.Errorf("consumer %q checkout identity is unavailable", consumer.Name)
 		}
@@ -328,20 +340,20 @@ func captureCheckoutIdentities(consumers []Consumer) (map[string]checkoutIdentit
 	return identities, nil
 }
 
-func verifyCheckoutIdentity(consumer Consumer, identity checkoutIdentity) error {
-	info, err := os.Stat(consumer.Path)
+func verifyCheckoutIdentity(port system.System, consumer Consumer, identity checkoutIdentity) error {
+	info, err := port.Files.Stat(consumer.Path)
 	if err != nil || !info.IsDir() {
 		return fmt.Errorf("consumer %q checkout identity is unavailable", consumer.Name)
 	}
-	if !os.SameFile(identity.info, info) {
+	if !port.Files.SameFile(identity.info, info) {
 		return fmt.Errorf("consumer %q checkout identity changed", consumer.Name)
 	}
 
 	return nil
 }
 
-func captureSharedRootIdentity(path string) (checkoutIdentity, error) {
-	info, err := os.Stat(path)
+func captureSharedRootIdentity(port system.System, path string) (checkoutIdentity, error) {
+	info, err := port.Files.Stat(path)
 	if err != nil || !info.IsDir() {
 		return checkoutIdentity{}, errors.New("conformance shared-root identity is unavailable")
 	}
@@ -349,146 +361,134 @@ func captureSharedRootIdentity(path string) (checkoutIdentity, error) {
 	return checkoutIdentity{info: info}, nil
 }
 
-func verifySharedRootIdentity(path string, identity checkoutIdentity) error {
-	info, err := os.Stat(path)
+func verifySharedRootIdentity(port system.System, path string, identity checkoutIdentity) error {
+	info, err := port.Files.Stat(path)
 	if err != nil || !info.IsDir() {
 		return errors.New("conformance shared-root identity is unavailable")
 	}
-	if !os.SameFile(identity.info, info) {
+	if !port.Files.SameFile(identity.info, info) {
 		return errors.New("conformance shared-root identity changed")
 	}
 
 	return nil
 }
 
-func openBinaryObject(path string) (*os.File, os.FileInfo, error) {
-	file, err := os.OpenFile(filepath.Clean(path), os.O_RDONLY|syscall.O_NONBLOCK, 0)
+// openBinaryObject reads a regular executable file. The type is checked before the read, so a directory or a
+// special file is never read.
+func openBinaryObject(port system.System, path string) ([]byte, os.FileInfo, error) {
+	cleaned := filepath.Clean(path)
+	info, err := port.Files.Stat(cleaned)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return nil, nil, errors.New("binary object must be a regular executable file")
+	}
+	content, err := port.Files.ReadFile(cleaned)
 	if err != nil {
 		return nil, nil, err
 	}
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		_ = file.Close()
 
-		return nil, nil, errors.New("binary object must be a regular executable file")
-	}
-
-	return file, info, nil
+	return content, info, nil
 }
 
-func checksumOpenFile(file *os.File) (string, error) {
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
+func checksumContent(content []byte) string {
+	digest := sha256.Sum256(content)
 
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	return hex.EncodeToString(digest[:])
 }
 
-func captureBinaryIdentity(manifest Manifest) (binaryIdentity, error) {
+func captureBinaryIdentity(port system.System, manifest Manifest) (binaryIdentity, error) {
 	decoded, err := hex.DecodeString(manifest.HIPPOSHA256)
 	if err != nil || len(decoded) != sha256.Size || strings.ToLower(manifest.HIPPOSHA256) != manifest.HIPPOSHA256 {
 		return binaryIdentity{}, errors.New("HIPPO binary checksum must be full lowercase SHA-256")
 	}
-	file, info, err := openBinaryObject(manifest.HIPPOBinary)
+	content, info, err := openBinaryObject(port, manifest.HIPPOBinary)
 	if err != nil {
 		return binaryIdentity{}, errors.New("HIPPO binary identity is unavailable")
 	}
-	defer func() { _ = file.Close() }()
-	temporaryRoot, err := os.MkdirTemp("", "hippo-conformance-bin.")
+	checksum := checksumContent(content)
+	if checksum != manifest.HIPPOSHA256 {
+		return binaryIdentity{}, errors.New("HIPPO binary checksum does not match the manifest")
+	}
+	temporaryRoot, err := port.Files.MkdirTemp("", "hippo-conformance-bin.")
 	if err != nil {
 		return binaryIdentity{}, errors.New("HIPPO verified binary storage is unavailable")
 	}
 	executablePath := filepath.Join(temporaryRoot, "hippo")
-	executable, err := os.OpenFile(executablePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
-	if err != nil {
-		_ = os.RemoveAll(temporaryRoot)
+	if err = port.Files.WriteFile(executablePath, content, 0o700); err != nil {
+		_ = port.Files.RemoveAll(temporaryRoot)
 
 		return binaryIdentity{}, errors.New("HIPPO verified binary storage is unavailable")
 	}
-	hash := sha256.New()
-	var content bytes.Buffer
-	_, copyError := io.Copy(io.MultiWriter(executable, hash, &content), file)
-	closeError := executable.Close()
-	checksum := hex.EncodeToString(hash.Sum(nil))
-	if copyError != nil || closeError != nil {
-		_ = os.RemoveAll(temporaryRoot)
-
-		return binaryIdentity{}, errors.New("HIPPO binary identity is unavailable")
-	}
-	if checksum != manifest.HIPPOSHA256 {
-		_ = os.RemoveAll(temporaryRoot)
-
-		return binaryIdentity{}, errors.New("HIPPO binary checksum does not match the manifest")
-	}
-	executableInfo, err := os.Stat(executablePath)
+	executableInfo, err := port.Files.Stat(executablePath)
 	if err != nil {
-		_ = os.RemoveAll(temporaryRoot)
+		_ = port.Files.RemoveAll(temporaryRoot)
 
 		return binaryIdentity{}, errors.New("HIPPO verified binary storage is unavailable")
 	}
-	if err = os.Chmod(executablePath, 0o500); err != nil || os.Chmod(temporaryRoot, 0o500) != nil {
-		_ = os.Chmod(temporaryRoot, 0o700)
-		_ = os.RemoveAll(temporaryRoot)
+	if err = port.Files.Chmod(executablePath, 0o500); err != nil || port.Files.Chmod(temporaryRoot, 0o500) != nil {
+		_ = port.Files.Chmod(temporaryRoot, 0o700)
+		_ = port.Files.RemoveAll(temporaryRoot)
 
 		return binaryIdentity{}, errors.New("HIPPO verified binary storage is unavailable")
 	}
 
 	return binaryIdentity{
 		path: manifest.HIPPOBinary, executablePath: executablePath, checksum: checksum, info: info,
-		executableInfo: executableInfo, temporaryRoot: temporaryRoot, content: slices.Clone(content.Bytes()),
+		executableInfo: executableInfo, temporaryRoot: temporaryRoot, content: content,
 	}, nil
 }
 
-func verifyBinaryObject(path string, expected os.FileInfo, checksum string) error {
-	file, info, err := openBinaryObject(path)
-	if err != nil || !os.SameFile(expected, info) {
+func verifyBinaryObject(port system.System, path string, expected os.FileInfo, checksum string) error {
+	content, info, err := openBinaryObject(port, path)
+	if err != nil || !port.Files.SameFile(expected, info) {
 		return errors.New("HIPPO binary identity changed during conformance")
 	}
-	defer func() { _ = file.Close() }()
-	observed, err := checksumOpenFile(file)
-	if err != nil || observed != checksum {
+	if checksumContent(content) != checksum {
 		return errors.New("HIPPO binary identity changed during conformance")
 	}
 
 	return nil
 }
 
-func (identity binaryIdentity) verify() error {
+func (identity binaryIdentity) verify(port system.System) error {
 	return errors.Join(
-		verifyBinaryObject(identity.path, identity.info, identity.checksum),
-		verifyBinaryObject(identity.executablePath, identity.executableInfo, identity.checksum),
+		verifyBinaryObject(port, identity.path, identity.info, identity.checksum),
+		verifyBinaryObject(port, identity.executablePath, identity.executableInfo, identity.checksum),
 	)
 }
 
-func (identity binaryIdentity) cleanup() error {
+// removeTemporaryRoot makes a verified-binary directory writable and removes it with its contents.
+func removeTemporaryRoot(port system.System, root string) error {
+	return errors.Join(port.Files.Chmod(root, 0o700), port.Files.RemoveAll(root))
+}
+
+func (identity binaryIdentity) cleanup(port system.System) error {
 	if identity.temporaryRoot == "" {
 		return nil
 	}
 
-	return errors.Join(os.Chmod(identity.temporaryRoot, 0o700), os.RemoveAll(identity.temporaryRoot))
+	return removeTemporaryRoot(port, identity.temporaryRoot)
 }
 
-func (identity binaryIdentity) materializeCommandBinary() (commandBinaryIdentity, error) {
-	temporaryRoot, err := os.MkdirTemp("", "hippo-conformance-command.")
+func (identity binaryIdentity) materializeCommandBinary(port system.System) (commandBinaryIdentity, error) {
+	temporaryRoot, err := port.Files.MkdirTemp("", "hippo-conformance-command.")
 	if err != nil {
 		return commandBinaryIdentity{}, errors.New("HIPPO verified command binary storage is unavailable")
 	}
 	executablePath := filepath.Join(temporaryRoot, "hippo")
-	if err = os.WriteFile(executablePath, identity.content, 0o700); err != nil {
-		_ = os.RemoveAll(temporaryRoot)
+	if err = port.Files.WriteFile(executablePath, identity.content, 0o700); err != nil {
+		_ = port.Files.RemoveAll(temporaryRoot)
 
 		return commandBinaryIdentity{}, errors.New("HIPPO verified command binary storage is unavailable")
 	}
-	info, err := os.Stat(executablePath)
+	info, err := port.Files.Stat(executablePath)
 	if err != nil {
-		_ = os.RemoveAll(temporaryRoot)
+		_ = port.Files.RemoveAll(temporaryRoot)
 
 		return commandBinaryIdentity{}, errors.New("HIPPO verified command binary storage is unavailable")
 	}
-	if err = os.Chmod(executablePath, 0o500); err != nil || os.Chmod(temporaryRoot, 0o500) != nil {
-		_ = os.Chmod(temporaryRoot, 0o700)
-		_ = os.RemoveAll(temporaryRoot)
+	if err = port.Files.Chmod(executablePath, 0o500); err != nil || port.Files.Chmod(temporaryRoot, 0o500) != nil {
+		_ = port.Files.Chmod(temporaryRoot, 0o700)
+		_ = port.Files.RemoveAll(temporaryRoot)
 
 		return commandBinaryIdentity{}, errors.New("HIPPO verified command binary storage is unavailable")
 	}
@@ -498,12 +498,12 @@ func (identity binaryIdentity) materializeCommandBinary() (commandBinaryIdentity
 	}, nil
 }
 
-func (identity commandBinaryIdentity) verify() error {
-	return verifyBinaryObject(identity.executablePath, identity.info, identity.checksum)
+func (identity commandBinaryIdentity) verify(port system.System) error {
+	return verifyBinaryObject(port, identity.executablePath, identity.info, identity.checksum)
 }
 
-func (identity commandBinaryIdentity) cleanup() error {
-	return errors.Join(os.Chmod(identity.temporaryRoot, 0o700), os.RemoveAll(identity.temporaryRoot))
+func (identity commandBinaryIdentity) cleanup(port system.System) error {
+	return removeTemporaryRoot(port, identity.temporaryRoot)
 }
 
 func replaceEnvironment(environment []string, name, value string) []string {
@@ -534,11 +534,11 @@ func removeEnvironment(environment []string, names ...string) []string {
 	return result
 }
 
-func signalProcessGroup(process *os.Process, signal syscall.Signal) error {
+func signalProcessGroup(port system.System, process *os.Process, signal syscall.Signal) error {
 	if process == nil {
 		return nil
 	}
-	err := syscall.Kill(-process.Pid, signal)
+	err := port.Processes.Kill(-process.Pid, signal)
 	// ESRCH means the group is gone, and on Darwin EPERM means its members have
 	// exited but have not been reaped yet, so no member is left to signal.
 	// Neither answer says the group is still running, and retiring a group that
@@ -550,11 +550,11 @@ func signalProcessGroup(process *os.Process, signal syscall.Signal) error {
 	return err
 }
 
-func processGroupAlive(process *os.Process) (bool, error) {
+func processGroupAlive(port system.System, process *os.Process) (bool, error) {
 	if process == nil {
 		return false, nil
 	}
-	err := syscall.Kill(-process.Pid, 0)
+	err := port.Processes.Kill(-process.Pid, 0)
 	if err == nil || errors.Is(err, syscall.EPERM) {
 		return true, nil
 	}
@@ -565,24 +565,24 @@ func processGroupAlive(process *os.Process) (bool, error) {
 	return true, err
 }
 
-func observeCommandGroupRetirement(runtime commandRuntime, process *os.Process, limit time.Duration) (bool, error) {
+func observeCommandGroupRetirement(port system.System, runtime commandRuntime, process *os.Process, limit time.Duration) (bool, error) {
 	if runtime.alive == nil {
 		return true, nil
 	}
-	deadline := time.Now().Add(limit)
+	deadline := port.Clock.Now().Add(limit)
 	for {
 		alive, err := runtime.alive(process)
 		if err != nil || !alive {
 			return !alive, err
 		}
-		if !time.Now().Before(deadline) {
+		if !port.Clock.Now().Before(deadline) {
 			return false, nil
 		}
-		time.Sleep(min(commandGroupPoll, time.Until(deadline)))
+		port.Clock.Sleep(min(commandGroupPoll, deadline.Sub(port.Clock.Now())))
 	}
 }
 
-func retireCompletedCommandGroup(runtime commandRuntime, process *os.Process) error {
+func retireCompletedCommandGroup(port system.System, runtime commandRuntime, process *os.Process) error {
 	if runtime.alive == nil {
 		return nil
 	}
@@ -594,12 +594,12 @@ func retireCompletedCommandGroup(runtime commandRuntime, process *os.Process) er
 		return nil
 	}
 	termError := runtime.signal(process, syscall.SIGTERM)
-	retired, observeError := observeCommandGroupRetirement(runtime, process, commandStopGrace)
+	retired, observeError := observeCommandGroupRetirement(port, runtime, process, commandStopGrace)
 	if retired {
 		return errors.Join(termError, observeError)
 	}
 	killError := runtime.signal(process, syscall.SIGKILL)
-	retired, reapError := observeCommandGroupRetirement(runtime, process, commandReapGrace)
+	retired, reapError := observeCommandGroupRetirement(port, runtime, process, commandReapGrace)
 	if !retired {
 		return errors.Join(termError, observeError, killError, reapError, errors.New("command group retirement timed out"))
 	}
@@ -618,9 +618,9 @@ func commandResult(waitError error) error {
 	return &commandError{category: "wait failed", exitCode: -1}
 }
 
-func receiptSnapshot(root string) (map[string]struct{}, error) {
-	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
-	if errors.Is(err, os.ErrNotExist) {
+func receiptSnapshot(port system.System, root string) (map[string]struct{}, error) {
+	entries, err := port.Files.ReadDir(filepath.Join(root, "receipts"))
+	if errors.Is(err, fs.ErrNotExist) {
 		return map[string]struct{}{}, nil
 	}
 	if err != nil {
@@ -637,9 +637,9 @@ func receiptSnapshot(root string) (map[string]struct{}, error) {
 	return names, nil
 }
 
-func newNeverStartedReceipt(root string, before map[string]struct{}) (bool, error) {
-	entries, err := os.ReadDir(filepath.Join(root, "receipts"))
-	if errors.Is(err, os.ErrNotExist) {
+func newNeverStartedReceipt(port system.System, root string, before map[string]struct{}) (bool, error) {
+	entries, err := port.Files.ReadDir(filepath.Join(root, "receipts"))
+	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
@@ -655,29 +655,23 @@ func newNeverStartedReceipt(root string, before map[string]struct{}) (bool, erro
 			continue
 		}
 		path := filepath.Join(root, "receipts", entry.Name())
-		pathInfo, lstatError := os.Lstat(path)
-		if lstatError != nil || !pathInfo.Mode().IsRegular() {
+		pathInfo, lstatError := port.Files.Lstat(path)
+		if lstatError != nil || !pathInfo.Mode().IsRegular() || pathInfo.Size() > maximumReceiptBytes {
 			return false, errors.New("new capacity receipt is invalid")
 		}
-		file, openError := os.Open(path)
-		if openError != nil {
+		data, readError := port.Files.ReadFile(path)
+		if readError != nil {
 			return false, errors.New("new capacity receipt is unavailable")
-		}
-		info, statError := file.Stat()
-		if statError != nil || !info.Mode().IsRegular() || info.Size() > maximumReceiptBytes {
-			_ = file.Close()
-			return false, errors.New("new capacity receipt is invalid")
 		}
 		var receipt struct {
 			SchemaVersion int    `json:"schemaVersion"`
 			State         string `json:"state"`
 		}
-		decoder := json.NewDecoder(io.LimitReader(file, maximumReceiptBytes+1))
+		decoder := json.NewDecoder(bytes.NewReader(data))
 		decodeError := decoder.Decode(&receipt)
 		var trailing any
 		trailingError := decoder.Decode(&trailing)
-		closeError := file.Close()
-		if decodeError != nil || !errors.Is(trailingError, io.EOF) || closeError != nil ||
+		if decodeError != nil || !errors.Is(trailingError, io.EOF) ||
 			receipt.SchemaVersion != 1 || receipt.State != "never-started" {
 			return false, errors.New("new capacity receipt does not prove a never-started run")
 		}
@@ -687,11 +681,12 @@ func newNeverStartedReceipt(root string, before map[string]struct{}) (bool, erro
 	return found, nil
 }
 
-func execute(ctx context.Context, directory string, command Command, environment []string, output io.Writer) error {
-	return executeWithRuntime(ctx, directory, command, environment, output, defaultCommandRuntime())
+func execute(port system.System, ctx context.Context, directory string, command Command, environment []string, output io.Writer) error {
+	return executeWithRuntime(port, ctx, directory, command, environment, output, defaultCommandRuntime(port))
 }
 
 func executeVerifiedCommand(
+	port system.System,
 	ctx context.Context,
 	directory string,
 	command Command,
@@ -699,14 +694,14 @@ func executeVerifiedCommand(
 	output io.Writer,
 	identity binaryIdentity,
 ) error {
-	executionIdentity, err := identity.materializeCommandBinary()
+	executionIdentity, err := identity.materializeCommandBinary(port)
 	if err != nil {
 		return err
 	}
 	environment = replaceEnvironment(environment, "HIPPO_BIN", executionIdentity.executablePath)
-	executeError := execute(ctx, directory, command, environment, output)
-	verifyError := executionIdentity.verify()
-	cleanupError := executionIdentity.cleanup()
+	executeError := execute(port, ctx, directory, command, environment, output)
+	verifyError := executionIdentity.verify(port)
+	cleanupError := executionIdentity.cleanup(port)
 	if cleanupError != nil {
 		cleanupError = errors.New("verified HIPPO binary cleanup failed")
 	}
@@ -714,7 +709,7 @@ func executeVerifiedCommand(
 	return errors.Join(executeError, verifyError, cleanupError)
 }
 
-func executeWithRuntime(ctx context.Context, directory string, command Command, environment []string, output io.Writer, runtime commandRuntime) error {
+func executeWithRuntime(port system.System, ctx context.Context, directory string, command Command, environment []string, output io.Writer, runtime commandRuntime) error {
 	if err := ctx.Err(); err != nil {
 		return &commandError{category: "cancelled before start", exitCode: -1, cause: err}
 	}
@@ -730,23 +725,22 @@ func executeWithRuntime(ctx context.Context, directory string, command Command, 
 	go func() { done <- runtime.wait(process) }()
 	select {
 	case err := <-done:
-		if retireError := retireCompletedCommandGroup(runtime, process.Process); retireError != nil {
+		if retireError := retireCompletedCommandGroup(port, runtime, process.Process); retireError != nil {
 			return &commandError{category: "group retirement failed", exitCode: -1, cause: retireError}
 		}
 
 		return commandResult(err)
 	case <-ctx.Done():
 		termError := runtime.signal(process.Process, syscall.SIGTERM)
-		timer := time.NewTimer(commandStopGrace)
-		defer timer.Stop()
+		timer := port.Clock.After(commandStopGrace)
 		select {
 		case <-done:
-			retired, observeError := observeCommandGroupRetirement(runtime, process.Process, commandStopGrace)
+			retired, observeError := observeCommandGroupRetirement(port, runtime, process.Process, commandStopGrace)
 			if retired {
 				return &commandError{category: commandCancelled, exitCode: -1, cause: errors.Join(ctx.Err(), termError, observeError)}
 			}
 			killError := runtime.signal(process.Process, syscall.SIGKILL)
-			retired, reapError := observeCommandGroupRetirement(runtime, process.Process, commandReapGrace)
+			retired, reapError := observeCommandGroupRetirement(port, runtime, process.Process, commandReapGrace)
 			if !retired {
 				return &commandError{category: commandReapTimedOut, exitCode: -1, cause: ctx.Err()}
 			}
@@ -755,13 +749,12 @@ func executeWithRuntime(ctx context.Context, directory string, command Command, 
 			}
 
 			return &commandError{category: commandCancelled, exitCode: -1, cause: errors.Join(ctx.Err(), termError, observeError, reapError)}
-		case <-timer.C:
+		case <-timer:
 			killError := runtime.signal(process.Process, syscall.SIGKILL)
-			reapTimer := time.NewTimer(commandReapGrace)
-			defer reapTimer.Stop()
+			reapTimer := port.Clock.After(commandReapGrace)
 			select {
 			case <-done:
-				retired, observeError := observeCommandGroupRetirement(runtime, process.Process, commandReapGrace)
+				retired, observeError := observeCommandGroupRetirement(port, runtime, process.Process, commandReapGrace)
 				if !retired {
 					return &commandError{category: commandReapTimedOut, exitCode: -1, cause: ctx.Err()}
 				}
@@ -770,17 +763,16 @@ func executeWithRuntime(ctx context.Context, directory string, command Command, 
 				}
 
 				return &commandError{category: commandCancelled, exitCode: -1, cause: errors.Join(ctx.Err(), termError, observeError)}
-			case <-reapTimer.C:
+			case <-reapTimer:
 				return &commandError{category: commandReapTimedOut, exitCode: -1, cause: ctx.Err()}
 			}
 		}
 	}
 }
 
-func gitOutput(ctx context.Context, directory string, arguments ...string) (string, error) {
-	command := exec.CommandContext(ctx, "git", arguments...)
-	command.Dir = directory
-	output, err := command.Output()
+// gitOutput runs git in the directory. The capture port takes no directory, so git's own -C option selects it.
+func gitOutput(port system.System, ctx context.Context, directory string, arguments ...string) (string, error) {
+	output, err := port.Runner.CaptureOutput(ctx, "git", append([]string{"-C", directory}, arguments...)...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -795,22 +787,22 @@ func gitOutput(ctx context.Context, directory string, arguments ...string) (stri
 	return string(bytes.TrimSpace(output)), nil
 }
 
-func snapshot(ctx context.Context, consumer Consumer, identity checkoutIdentity) (checkoutState, error) {
-	if err := verifyCheckoutIdentity(consumer, identity); err != nil {
+func snapshot(port system.System, ctx context.Context, consumer Consumer, identity checkoutIdentity) (checkoutState, error) {
+	if err := verifyCheckoutIdentity(port, consumer, identity); err != nil {
 		return checkoutState{}, err
 	}
-	head, err := gitOutput(ctx, consumer.Path, "rev-parse", "HEAD")
+	head, err := gitOutput(port, ctx, consumer.Path, "rev-parse", "HEAD")
 	if err != nil {
 		return checkoutState{}, fmt.Errorf("consumer %q HEAD snapshot: %w", consumer.Name, err)
 	}
-	if err = verifyCheckoutIdentity(consumer, identity); err != nil {
+	if err = verifyCheckoutIdentity(port, consumer, identity); err != nil {
 		return checkoutState{}, err
 	}
-	dirty, err := gitOutput(ctx, consumer.Path, "status", "--porcelain=v1", "--untracked-files=all")
+	dirty, err := gitOutput(port, ctx, consumer.Path, "status", "--porcelain=v1", "--untracked-files=all")
 	if err != nil {
 		return checkoutState{}, fmt.Errorf("consumer %q dirty snapshot: %w", consumer.Name, err)
 	}
-	if err = verifyCheckoutIdentity(consumer, identity); err != nil {
+	if err = verifyCheckoutIdentity(port, consumer, identity); err != nil {
 		return checkoutState{}, err
 	}
 
