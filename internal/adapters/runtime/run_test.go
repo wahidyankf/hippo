@@ -59,7 +59,7 @@ func requireContextualReleaseOwnership(t *testing.T, kind, variant string) {
 			}
 		}
 	})
-	lock, err := lockCoordinationForRelease(root)
+	lock, err := lockCoordinationForRelease(system.Production, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func requireContextualReleaseOwnership(t *testing.T, kind, variant string) {
 	case <-probe.C:
 	}
 	probe.Stop()
-	if err := releaseCoordinationLock(lock); err != nil {
+	if err := releaseCoordinationLock(system.Production, lock); err != nil {
 		t.Error(err)
 	}
 	if finished {
@@ -856,18 +856,18 @@ func TestRunLosingSupervisionAfterLaunchRecordsSupervisionFailed(t *testing.T) {
 
 func TestCoordinationLockSerializesSameProcessByRoot(t *testing.T) {
 	root := t.TempDir()
-	first, err := acquireCoordinationLock(context.Background(), root, time.Second)
+	first, err := acquireCoordinationLock(system.Production, context.Background(), root, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = releaseCoordinationLock(first) }()
+	defer func() { _ = releaseCoordinationLock(system.Production, first) }()
 
 	started := make(chan struct{})
 	acquired := make(chan *os.File, 1)
 	failed := make(chan error, 1)
 	go func() {
 		close(started)
-		lock, lockError := acquireCoordinationLock(context.Background(), root, 200*time.Millisecond)
+		lock, lockError := acquireCoordinationLock(system.Production, context.Background(), root, 200*time.Millisecond)
 		if lockError != nil {
 			failed <- lockError
 
@@ -878,19 +878,19 @@ func TestCoordinationLockSerializesSameProcessByRoot(t *testing.T) {
 	<-started
 	select {
 	case lock := <-acquired:
-		_ = releaseCoordinationLock(lock)
+		_ = releaseCoordinationLock(system.Production, lock)
 		t.Fatal("same-process coordination acquisition bypassed the existing critical section")
 	case err = <-failed:
 		t.Fatalf("same-process coordination acquisition failed before release: %v", err)
 	case <-time.After(25 * time.Millisecond):
 	}
-	if err = releaseCoordinationLock(first); err != nil {
+	if err = releaseCoordinationLock(system.Production, first); err != nil {
 		t.Fatal(err)
 	}
 	first = nil
 	select {
 	case lock := <-acquired:
-		if err = releaseCoordinationLock(lock); err != nil {
+		if err = releaseCoordinationLock(system.Production, lock); err != nil {
 			t.Fatal(err)
 		}
 	case err = <-failed:
@@ -907,11 +907,11 @@ func TestCoordinationLockSerializesSameProcessByRoot(t *testing.T) {
 func TestCoordinationLockGrantsFreeRootWhenBudgetIsNearlySpent(t *testing.T) {
 	root := t.TempDir()
 	for attempt := range 200 {
-		lock, err := acquireCoordinationLock(context.Background(), root, time.Nanosecond)
+		lock, err := acquireCoordinationLock(system.Production, context.Background(), root, time.Nanosecond)
 		if err != nil {
 			t.Fatalf("attempt %d: uncontended coordination lock refused with a spent budget: %v", attempt, err)
 		}
-		if err = releaseCoordinationLock(lock); err != nil {
+		if err = releaseCoordinationLock(system.Production, lock); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -923,24 +923,24 @@ func TestCoordinationLockGrantsFreeRootWhenBudgetIsNearlySpent(t *testing.T) {
 // it means "no contention" only while a zero wait refuses a held lock.
 func TestCoordinationLockAllowsDistinctRootsInParallel(t *testing.T) {
 	held := t.TempDir()
-	first, err := acquireCoordinationLock(context.Background(), held, time.Second)
+	first, err := acquireCoordinationLock(system.Production, context.Background(), held, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = releaseCoordinationLock(first) }()
+	defer func() { _ = releaseCoordinationLock(system.Production, first) }()
 
-	second, err := acquireCoordinationLock(context.Background(), t.TempDir(), 0)
+	second, err := acquireCoordinationLock(system.Production, context.Background(), t.TempDir(), 0)
 	if err != nil {
 		t.Fatalf("distinct-root coordination was serialized: %v", err)
 	}
-	if err = releaseCoordinationLock(second); err != nil {
+	if err = releaseCoordinationLock(system.Production, second); err != nil {
 		t.Fatal(err)
 	}
 
-	contended, err := acquireCoordinationLock(context.Background(), held, 0)
+	contended, err := acquireCoordinationLock(system.Production, context.Background(), held, 0)
 	if contended != nil || !IsCoordinationDeferred(err) {
 		if contended != nil {
-			_ = releaseCoordinationLock(contended)
+			_ = releaseCoordinationLock(system.Production, contended)
 		}
 		t.Fatalf("a zero wait did not refuse the held root: lock=%v error=%v", contended, err)
 	}
@@ -949,10 +949,10 @@ func TestCoordinationLockAllowsDistinctRootsInParallel(t *testing.T) {
 func TestCoordinationLockRejectsPreCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	lock, err := acquireCoordinationLock(ctx, t.TempDir(), time.Second)
+	lock, err := acquireCoordinationLock(system.Production, ctx, t.TempDir(), time.Second)
 	if lock != nil || !errors.Is(err, context.Canceled) {
 		if lock != nil {
-			_ = releaseCoordinationLock(lock)
+			_ = releaseCoordinationLock(system.Production, lock)
 		}
 		t.Fatalf("pre-cancelled coordination acquisition succeeded: lock=%v error=%v", lock, err)
 	}
@@ -963,10 +963,10 @@ func TestCoordinationLockRejectsPreCanceledContext(t *testing.T) {
 // found held may be refused.
 func TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent(t *testing.T) {
 	root := t.TempDir()
-	if err := ensureReservationCoordination(root); err != nil {
+	if err := ensureReservationCoordination(system.Production, root); err != nil {
 		t.Fatal(err)
 	}
-	value, err := token()
+	value, err := token(system.Production)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -983,10 +983,10 @@ func TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err = removeReservationWaiterAfterCancellation(root, value, 0); err != nil {
+	if err = removeReservationWaiterAfterCancellation(system.Production, root, value, 0); err != nil {
 		t.Fatalf("cleanup refused a free coordination lock: %v", err)
 	}
-	ledger, err := readReservationLedger(root)
+	ledger, err := readReservationLedger(system.Production, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -997,17 +997,17 @@ func TestCancelledWaiterCleanupTakesAFreeLockWithItsBudgetSpent(t *testing.T) {
 
 func TestCoordinationLockUsesOneBoundedWaitBudget(t *testing.T) {
 	root := t.TempDir()
-	first, err := acquireCoordinationLock(context.Background(), root, time.Second)
+	first, err := acquireCoordinationLock(system.Production, context.Background(), root, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = releaseCoordinationLock(first) }()
+	defer func() { _ = releaseCoordinationLock(system.Production, first) }()
 
 	start := time.Now()
-	second, err := acquireCoordinationLock(context.Background(), root, 30*time.Millisecond)
+	second, err := acquireCoordinationLock(system.Production, context.Background(), root, 30*time.Millisecond)
 	if second != nil || !IsCoordinationDeferred(err) {
 		if second != nil {
-			_ = releaseCoordinationLock(second)
+			_ = releaseCoordinationLock(system.Production, second)
 		}
 		t.Fatalf("same-root deadline did not defer: lock=%v error=%v", second, err)
 	}
@@ -1148,7 +1148,7 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	}
 	assertReservationIdentityExternallyLocked(t, identityPath)
 
-	coordination, err := acquireCoordinationLock(context.Background(), root, 10*time.Second)
+	coordination, err := acquireCoordinationLock(system.Production, context.Background(), root, 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1157,7 +1157,7 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	select {
 	case run = <-done:
 		if outcomeError := requireDeferredCleanupOutcome(run.code, run.err); outcomeError != nil {
-			_ = releaseCoordinationLock(coordination)
+			_ = releaseCoordinationLock(system.Production, coordination)
 			t.Fatal(outcomeError)
 		}
 	// The property is that cancellation returns at all while this test holds the
@@ -1166,33 +1166,33 @@ func TestOwnerCancellationRetainsIdentityAcrossSameProcessCoordination(t *testin
 	// the 200 ms termination grace, force-stop, and reap before it returns, and
 	// the bound outlasts that grace plus the configured confirmation window.
 	case <-time.After(2 * guardLivenessLimit):
-		_ = releaseCoordinationLock(coordination)
+		_ = releaseCoordinationLock(system.Production, coordination)
 		t.Fatal("owner cancellation blocked on same-process coordination")
 	}
 	pidData, err := os.ReadFile(marker)
 	if err != nil {
-		_ = releaseCoordinationLock(coordination)
+		_ = releaseCoordinationLock(system.Production, coordination)
 		t.Fatal(err)
 	}
 	childPID, err := strconv.Atoi(string(pidData))
 	if err != nil {
-		_ = releaseCoordinationLock(coordination)
+		_ = releaseCoordinationLock(system.Production, coordination)
 		t.Fatal(err)
 	}
 	if signalError := syscall.Kill(-childPID, 0); !errors.Is(signalError, syscall.ESRCH) {
-		_ = releaseCoordinationLock(coordination)
+		_ = releaseCoordinationLock(system.Production, coordination)
 		t.Fatalf("cancelled child group remains live after reap: %v", signalError)
 	}
 	after, err := os.ReadFile(ledgerPath)
 	if err != nil || !bytes.Equal(before, after) {
-		_ = releaseCoordinationLock(coordination)
+		_ = releaseCoordinationLock(system.Production, coordination)
 		t.Fatalf("release failure changed ledger bytes: equal=%v error=%v", bytes.Equal(before, after), err)
 	}
 	if probeError := probeReservationIdentityExternallyLocked(identityPath); probeError != nil {
-		_ = releaseCoordinationLock(coordination)
+		_ = releaseCoordinationLock(system.Production, coordination)
 		t.Fatalf("%v; release error=%v", probeError, run.err)
 	}
-	if err = releaseCoordinationLock(coordination); err != nil {
+	if err = releaseCoordinationLock(system.Production, coordination); err != nil {
 		t.Fatal(err)
 	}
 	deadline = time.Now().Add(time.Second)
@@ -1324,8 +1324,8 @@ func TestStalledLifetimeHandshakeRetainsOwnershipUntilLauncherExit(t *testing.T)
 		t.Fatal(err)
 	}
 	lifetime, launchError := startSupervisedLifetimeWithLauncher(
-		context.Background(), RunConfig{ChildStdin: release}, "/bin/true", os.Environ(), launcher, 10*time.Millisecond,
-		session.identityLock, lease.identityLock,
+		system.Production, context.Background(), RunConfig{ChildStdin: release}, "/bin/true", os.Environ(), launcher,
+		10*time.Millisecond, session.identityLock, lease.identityLock,
 	)
 	_ = release.Close()
 	if lifetime == nil || launchError == nil {
@@ -2421,7 +2421,7 @@ func TestReservationIdentityPathCorruptionFailClosed(t *testing.T) { //nolint:cy
 					case <-time.After(guardLivenessLimit):
 						t.Fatal("waiter did not park")
 					}
-					ledger, readError := readReservationLedger(root)
+					ledger, readError := readReservationLedger(system.Production, root)
 					if readError != nil || len(ledger.Waiters) != 1 {
 						t.Fatalf("waiter did not enqueue: waiters=%d error=%v", len(ledger.Waiters), readError)
 					}
@@ -2741,7 +2741,7 @@ func awaitReservationActivation(t *testing.T, reservationRoot string) {
 	t.Helper()
 	deadline := time.Now().Add(unconfirmedRetirementHangLimit)
 	for {
-		ledger, ledgerError := readReservationLedger(reservationRoot)
+		ledger, ledgerError := readReservationLedger(system.Production, reservationRoot)
 		if ledgerError == nil && len(ledger.Owners) == 1 && ledger.Owners[0].ProcessGroup > 0 {
 			return
 		}
@@ -3143,7 +3143,7 @@ func contendedReservationConfig(t *testing.T, root string, hold func(string)) Ru
 			environment []string,
 			identities ...*os.File,
 		) (*supervisedLifetime, error) {
-			lifetime, err := startSupervisedLifetime(ctx, config, executable, environment, identities...)
+			lifetime, err := startSupervisedLifetime(system.Production, ctx, config, executable, environment, identities...)
 			hold(root)
 
 			return lifetime, err
@@ -3156,13 +3156,13 @@ func holdCoordinationLock(t *testing.T, root string, after, duration time.Durati
 	ready := make(chan struct{})
 	go func() {
 		time.Sleep(after)
-		lock, err := acquireCoordinationLock(context.Background(), root, 2*time.Second)
+		lock, err := acquireCoordinationLock(system.Production, context.Background(), root, 2*time.Second)
 		close(ready)
 		if err != nil {
 			return
 		}
 		time.Sleep(duration)
-		_ = releaseCoordinationLock(lock)
+		_ = releaseCoordinationLock(system.Production, lock)
 	}()
 	if after == 0 {
 		<-ready
@@ -3288,11 +3288,11 @@ func TestReservationStatusWaitsOutABusyCoordinationRoot(t *testing.T) {
 	if err := writeCoordinationMarker(root, marker); err != nil {
 		t.Fatal(err)
 	}
-	lock, err := acquireCoordinationLock(context.Background(), root, time.Second)
+	lock, err := acquireCoordinationLock(system.Production, context.Background(), root, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.AfterFunc(300*time.Millisecond, func() { _ = releaseCoordinationLock(lock) })
+	time.AfterFunc(300*time.Millisecond, func() { _ = releaseCoordinationLock(system.Production, lock) })
 
 	totals, statusError := ReservationStatus(context.Background(), root)
 

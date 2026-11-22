@@ -14,6 +14,7 @@ import (
 
 type admissionState struct {
 	engine            *Engine
+	system            system.System
 	config            application.RunConfig
 	minimum, maximum  coordination.ReservationVector
 	value             string
@@ -46,7 +47,9 @@ func (engine *Engine) BeginAdmission(ctx context.Context, config application.Run
 		config.Now = time.Now
 	}
 	config.Label = application.ResolveDisplayLabel(config.Command, config.Label)
-	state := &admissionState{engine: engine, config: config, cleanupWait: coordinationLifecycleWait}
+	state := &admissionState{
+		engine: engine, system: system.Production, config: config, cleanupWait: coordinationLifecycleWait,
+	}
 	if config.AdmissionCleanupWait != 0 {
 		state.cleanupWait = config.AdmissionCleanupWait
 	}
@@ -77,7 +80,7 @@ func (engine *Engine) BeginAdmission(ctx context.Context, config application.Run
 			return application.Admission{Admitted: engine.rememberSession(session), Close: func() {}}, nil
 		}
 	}
-	state.value, err = token()
+	state.value, err = token(state.system)
 	if err != nil {
 		return application.Admission{}, err
 	}
@@ -87,15 +90,15 @@ func (engine *Engine) BeginAdmission(ctx context.Context, config application.Run
 }
 
 func (state *admissionState) inheritedAdmission(ctx context.Context, inheritedToken string, wait time.Duration) (*Session, error) {
-	lock, lockError := acquireCoordinationLock(ctx, state.config.EvidenceRoot, wait)
+	lock, lockError := acquireCoordinationLock(state.system, ctx, state.config.EvidenceRoot, wait)
 	if lockError != nil {
 		return nil, lockError
 	}
-	ledger, readError := readReservationLedger(state.config.EvidenceRoot)
+	ledger, readError := readReservationLedger(state.system, state.config.EvidenceRoot)
 	if readError == nil {
-		readError = reconcileReservationLedger(state.config.EvidenceRoot, &ledger)
+		readError = reconcileReservationLedger(state.system, state.config.EvidenceRoot, &ledger)
 	}
-	session, inheritError := inheritedReservation(state.config.EvidenceRoot, inheritedToken, ledger)
+	session, inheritError := inheritedReservation(state.system, state.config.EvidenceRoot, inheritedToken, ledger)
 	var registeredSession *Session
 	if readError == nil && inheritError == nil && session != nil {
 		inheritError = application.RegisterDisplay(
@@ -103,7 +106,7 @@ func (state *admissionState) inheritedAdmission(ctx context.Context, inheritedTo
 			displayRegistrationEffects(state.config.EvidenceRoot, func() error { registeredSession = session; return nil }), state.displayAdvisories(),
 		)
 	}
-	if err := errors.Join(readError, inheritError, releaseCoordinationLock(lock)); err != nil {
+	if err := errors.Join(readError, inheritError, releaseCoordinationLock(state.system, lock)); err != nil {
 		return nil, err
 	}
 	return registeredSession, nil
@@ -112,13 +115,13 @@ func (state *admissionState) inheritedAdmission(ctx context.Context, inheritedTo
 func (state *admissionState) attemptExclusive(ctx context.Context, remaining time.Duration, _ time.Time) (application.AdmissionResult, error) {
 	defer state.reportDisplayAdvisories()
 	config := state.config
-	lock, err := acquireCoordinationLock(ctx, config.EvidenceRoot, remaining)
+	lock, err := acquireCoordinationLock(state.system, ctx, config.EvidenceRoot, remaining)
 	if err != nil {
 		return application.AdmissionResult{}, err
 	}
-	housekeepDisplayLocked(system.Production, config.EvidenceRoot, config.Now())
+	housekeepDisplayLocked(state.system, config.EvidenceRoot, config.Now())
 	session, deferred, acquireError := acquireSessionLocked(config.EvidenceRoot, environmentValue(config.Environment, "HIPPO_SESSION"), config.TaskClass, config.Label, state)
-	if err = errors.Join(acquireError, releaseCoordinationLock(lock)); err != nil {
+	if err = errors.Join(acquireError, releaseCoordinationLock(state.system, lock)); err != nil {
 		return application.AdmissionResult{}, err
 	}
 	if !deferred {
@@ -142,43 +145,45 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 	maxActiveOwners := coordination.NormalizedOwnerLimit(config.ReservationPolicy.MaxActiveOwners)
 	options := ReservationAdmissionOptions{Metadata: config.ReservationMetadata}
 	var err error
-	coordinationLock, lockError := acquireCoordinationLock(ctx, root, remaining)
+	coordinationLock, lockError := acquireCoordinationLock(state.system, ctx, root, remaining)
 	if lockError != nil {
-		return application.AdmissionResult{}, neverStartedAtCoordinationLock(root, value, options.Metadata, class, now(), lockError)
+		return application.AdmissionResult{}, neverStartedAtCoordinationLock(
+			state.system, root, value, options.Metadata, class, now(), lockError,
+		)
 	}
-	if lockError = ensureReservationCoordination(root); lockError != nil {
-		_ = releaseCoordinationLock(coordinationLock)
+	if lockError = ensureReservationCoordination(state.system, root); lockError != nil {
+		_ = releaseCoordinationLock(state.system, coordinationLock)
 
 		return application.AdmissionResult{}, lockError
 	}
-	ledger, readError := readReservationLedger(root)
+	ledger, readError := readReservationLedger(state.system, root)
 	if readError != nil {
-		_ = releaseCoordinationLock(coordinationLock)
+		_ = releaseCoordinationLock(state.system, coordinationLock)
 
 		return application.AdmissionResult{}, readError
 	}
-	if reconcileError := reconcileReservationLedger(root, &ledger); reconcileError != nil {
-		_ = releaseCoordinationLock(coordinationLock)
+	if reconcileError := reconcileReservationLedger(state.system, root, &ledger); reconcileError != nil {
+		_ = releaseCoordinationLock(state.system, coordinationLock)
 
 		return application.AdmissionResult{}, reconcileError
 	}
-	housekeepDisplayLocked(system.Production, root, current)
+	housekeepDisplayLocked(state.system, root, current)
 	if identity == nil {
-		identity, lockError = openReservationIdentity(root, value)
+		identity, lockError = openReservationIdentity(state.system, root, value)
 		if lockError != nil {
-			_ = releaseCoordinationLock(coordinationLock)
+			_ = releaseCoordinationLock(state.system, coordinationLock)
 
 			return application.AdmissionResult{}, lockError
 		}
 	}
 	identityDevice, identityInode, identityError := reservationIdentityMetadata(identity)
 	if identityError != nil {
-		_ = releaseCoordinationLock(coordinationLock)
+		_ = releaseCoordinationLock(state.system, coordinationLock)
 
 		return application.AdmissionResult{}, identityError
 	}
 	if !coordination.UpdateCapacity(&ledger, plan.Capacity) {
-		_ = releaseCoordinationLock(coordinationLock)
+		_ = releaseCoordinationLock(state.system, coordinationLock)
 
 		return application.AdmissionResult{}, ErrReservationDeferred
 	}
@@ -186,16 +191,16 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 		// Live owners keep the shared pool at its smaller size, so this request waits
 		// without a queue place. The bounded wait still ends in a never-started receipt
 		// and a capacity deferral, and the ledger is never written with an unfitting waiter.
-		_ = releaseCoordinationLock(coordinationLock)
+		_ = releaseCoordinationLock(state.system, coordinationLock)
 
 		return application.AdmissionResult{Waiting: true, Status: coordination.ReservationWaitStatus{RunID: value, Remaining: max(deadline.Sub(current), 0)}}, nil
 	}
 	if !queued {
 		if options.Metadata.Source != "" {
 			if lockError = writeReservationMetadata(
-				system.Production, root, value, options.Metadata, minimum, maximum, started, deadline,
+				state.system, root, value, options.Metadata, minimum, maximum, started, deadline,
 			); lockError != nil {
-				_ = releaseCoordinationLock(coordinationLock)
+				_ = releaseCoordinationLock(state.system, coordinationLock)
 
 				return application.AdmissionResult{}, lockError
 			}
@@ -220,7 +225,7 @@ func (state *admissionState) attemptReservation(ctx context.Context, remaining t
 			return writeReservationLedger(root, ledger)
 		}), state.displayAdvisories(),
 	)
-	releaseError := releaseCoordinationLock(coordinationLock)
+	releaseError := releaseCoordinationLock(state.system, coordinationLock)
 	if err = errors.Join(writeError, releaseError); err != nil {
 		return application.AdmissionResult{}, err
 	}
@@ -251,7 +256,7 @@ func (state *admissionState) receipt(reason string, now time.Time) error {
 		return nil
 	}
 	return writeSafetyReceipt(
-		system.Production, state.config.EvidenceRoot, state.value, "never-started", reason,
+		state.system, state.config.EvidenceRoot, state.value, "never-started", reason,
 		state.config.ReservationMetadata, state.config.TaskClass, now,
 	)
 }
@@ -263,18 +268,21 @@ func (state *admissionState) close() {
 	}
 	state.closed = true
 	if state.queued {
-		if err := removeReservationWaiterWithAdvisories(state.config.EvidenceRoot, state.value, state.cleanupWait, state.advisories); err != nil && state.identity != nil {
-			retainReservationWaiterUntilCleanup(state.config.EvidenceRoot, state.value, state.identity)
+		cleanupError := removeReservationWaiterWithAdvisories(
+			state.system, state.config.EvidenceRoot, state.value, state.cleanupWait, state.advisories,
+		)
+		if cleanupError != nil && state.identity != nil {
+			retainReservationWaiterUntilCleanup(state.system, state.config.EvidenceRoot, state.value, state.identity)
 			state.identity = nil
 		}
 	}
 	if state.identity != nil {
 		if !state.queued {
 			retireUnregisteredDisplay(
-				system.Production, state.config.EvidenceRoot, state.value, state.cleanupWait, state.advisories,
+				state.system, state.config.EvidenceRoot, state.value, state.cleanupWait, state.advisories,
 			)
 		}
-		_ = unix.Flock(int(state.identity.Fd()), unix.LOCK_UN)
+		_ = state.system.Files.Flock(state.identity, unix.LOCK_UN)
 		_ = state.identity.Close()
 		_ = removeReservationIdentity(state.config.EvidenceRoot, state.value)
 		state.identity = nil

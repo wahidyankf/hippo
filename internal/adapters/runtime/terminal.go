@@ -2,11 +2,10 @@ package runtime
 
 import (
 	"os"
-	"os/signal"
 	"sync"
 	"syscall"
 
-	"golang.org/x/sys/unix"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
 
 var terminalForegroundMutex sync.Mutex
@@ -17,16 +16,16 @@ type terminalForeground struct {
 	locked        bool
 }
 
-func prepareTerminalForeground(stdin any) *terminalForeground {
+func prepareTerminalForeground(port system.System, stdin any) *terminalForeground {
 	file, ok := stdin.(*os.File)
 	if !ok {
 		return &terminalForeground{}
 	}
-	foregroundGroup, err := unix.IoctlGetInt(int(file.Fd()), unix.TIOCGPGRP)
+	foregroundGroup, err := port.Terminal.ForegroundGroup(file)
 	if err != nil {
 		return &terminalForeground{}
 	}
-	if foregroundGroup != unix.Getpgrp() {
+	if foregroundGroup != port.Processes.Getpgrp() {
 		return &terminalForeground{}
 	}
 
@@ -37,11 +36,11 @@ func prepareTerminalForeground(stdin any) *terminalForeground {
 
 // ForegroundProcessGroup reports the terminal foreground group for integration verification.
 func ForegroundProcessGroup(file *os.File) (int, error) {
-	return unix.IoctlGetInt(int(file.Fd()), unix.TIOCGPGRP)
+	return system.Production.Terminal.ForegroundGroup(file)
 }
 
 // CurrentProcessGroup reports HIPPO's process group for integration verification.
-func CurrentProcessGroup() int { return unix.Getpgrp() }
+func CurrentProcessGroup() int { return system.Production.Processes.Getpgrp() }
 
 func (terminal *terminalForeground) configure(attributes *syscall.SysProcAttr) {
 	if terminal == nil || terminal.file == nil {
@@ -52,7 +51,7 @@ func (terminal *terminalForeground) configure(attributes *syscall.SysProcAttr) {
 	attributes.Ctty = int(terminal.file.Fd())
 }
 
-func (terminal *terminalForeground) restore() error {
+func (terminal *terminalForeground) restore(port system.System) error {
 	if terminal == nil || !terminal.locked {
 		return nil
 	}
@@ -61,11 +60,11 @@ func (terminal *terminalForeground) restore() error {
 		terminalForegroundMutex.Unlock()
 	}()
 
-	ignored := signal.Ignored(syscall.SIGTTOU)
+	ignored := port.Signals.Ignored(syscall.SIGTTOU)
 	if !ignored {
-		signal.Ignore(syscall.SIGTTOU)
-		defer signal.Reset(syscall.SIGTTOU)
+		port.Signals.Ignore(syscall.SIGTTOU)
+		defer port.Signals.Reset(syscall.SIGTTOU)
 	}
 
-	return unix.IoctlSetPointerInt(int(terminal.file.Fd()), unix.TIOCSPGRP, terminal.originalGroup)
+	return port.Terminal.SetForegroundGroup(terminal.file, terminal.originalGroup)
 }

@@ -21,11 +21,11 @@ func ExclusiveStatus(ctx context.Context, root string) (ReservationTotals, error
 	if err != nil || !present {
 		return totals, err
 	}
-	lock, err := acquireCoordinationLock(ctx, root, coordinationObservationWait)
+	lock, err := acquireCoordinationLock(system.Production, ctx, root, coordinationObservationWait)
 	if err != nil {
 		return ReservationTotals{}, err
 	}
-	defer releaseCoordinationLock(lock) //nolint:errcheck // Read-only status already has its result.
+	defer releaseCoordinationLock(system.Production, lock) //nolint:errcheck // Read-only status already has its result.
 
 	present, err = exclusiveMarkerPresent(root)
 	if err != nil || !present {
@@ -85,7 +85,7 @@ func liveExclusiveSessionOwners(port system.System, root string) ([]leaseOwner, 
 	}
 	for _, entry := range entries {
 		recordToken := strings.TrimSuffix(entry.Name(), ".json")
-		owner, alive, readError := liveExclusiveSessionOwner(root, recordToken)
+		owner, alive, readError := liveExclusiveSessionOwner(port, root, recordToken)
 		if readError != nil {
 			return nil, readError
 		}
@@ -97,7 +97,7 @@ func liveExclusiveSessionOwners(port system.System, root string) ([]leaseOwner, 
 	return owners, nil
 }
 
-func liveExclusiveSessionOwner(root, token string) (*leaseOwner, bool, error) {
+func liveExclusiveSessionOwner(port system.System, root, token string) (*leaseOwner, bool, error) {
 	owner, err := readSessionRecord(root, token)
 	if err != nil {
 		return nil, false, compatibilityStateError("exclusive compatibility session record cannot be decoded")
@@ -114,7 +114,7 @@ func liveExclusiveSessionOwner(root, token string) (*leaseOwner, bool, error) {
 	if !validSessionRecord(owner, token) {
 		return nil, false, compatibilityStateError("exclusive compatibility session record is invalid")
 	}
-	alive, err := compatibilityOwnerAlive(root, owner)
+	alive, err := compatibilityOwnerAlive(port, root, owner)
 	if err != nil {
 		return nil, false, compatibilityStateError("exclusive compatibility session identity is unverifiable")
 	}
@@ -142,7 +142,7 @@ func liveExclusiveHeavyOwner(port system.System, root string) (*leaseOwner, bool
 
 		return nil, false, compatibilityStateError("exclusive compatibility heavy owner schema is missing")
 	}
-	alive, err := compatibilityOwnerAlive(root, owner)
+	alive, err := compatibilityOwnerAlive(port, root, owner)
 	if err != nil {
 		return nil, false, compatibilityStateError("exclusive compatibility heavy owner identity is unverifiable")
 	}

@@ -252,7 +252,11 @@ func launchConfiguredLifetime(
 		portIdentity = portLease.identityLock
 	}
 
-	starter := startSupervisedLifetime
+	starter := func(
+		ctx context.Context, config RunConfig, executable string, environment []string, identity ...*os.File,
+	) (*supervisedLifetime, error) {
+		return startSupervisedLifetime(port, ctx, config, executable, environment, identity...)
+	}
 	if config.startLifetime != nil {
 		starter = config.startLifetime
 	}

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
 
 	"golang.org/x/sys/unix"
@@ -184,18 +185,20 @@ func releaseCoordinationProcessGate(lock *os.File) {
 	coordinationProcessGates.Unlock()
 }
 
-func releaseCoordinationLock(lock *os.File) error {
+func releaseCoordinationLock(port system.System, lock *os.File) error {
 	if lock == nil {
 		return nil
 	}
-	unlockError := unix.Flock(int(lock.Fd()), unix.LOCK_UN)
+	unlockError := port.Files.Flock(lock, unix.LOCK_UN)
 	closeError := lock.Close()
 	releaseCoordinationProcessGate(lock)
 
 	return errors.Join(unlockError, closeError)
 }
 
-func acquireCoordinationLock(ctx context.Context, root string, wait time.Duration) (*os.File, error) {
+func acquireCoordinationLock(
+	port system.System, ctx context.Context, root string, wait time.Duration,
+) (*os.File, error) {
 	lock, err := openCoordinationLock(root)
 	if err != nil {
 		return nil, err
@@ -208,7 +211,7 @@ func acquireCoordinationLock(ctx context.Context, root string, wait time.Duratio
 		return nil, err
 	}
 	for {
-		err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+		err = port.Files.Flock(lock, unix.LOCK_EX|unix.LOCK_NB)
 		if err == nil {
 			return lock, nil
 		}
@@ -242,18 +245,20 @@ func acquireCoordinationLock(ctx context.Context, root string, wait time.Duratio
 	}
 }
 
-func lockCoordinationForRelease(root string) (*os.File, error) {
-	return lockCoordinationForReleaseContext(context.Background(), root)
+func lockCoordinationForRelease(port system.System, root string) (*os.File, error) {
+	return lockCoordinationForReleaseContext(port, context.Background(), root)
 }
 
-func lockCoordinationForReleaseContext(ctx context.Context, root string) (*os.File, error) {
+func lockCoordinationForReleaseContext(
+	port system.System, ctx context.Context, root string,
+) (*os.File, error) {
 	// Retirement must survive caller cancellation while retaining its context
 	// values and the same finite coordination-lock allowance as legacy release.
-	return acquireCoordinationLock(context.WithoutCancel(ctx), root, coordinationLifecycleWait)
+	return acquireCoordinationLock(port, context.WithoutCancel(ctx), root, coordinationLifecycleWait)
 }
 
-func lockCoordinationForActivation(root string) (*os.File, error) {
-	return acquireCoordinationLock(context.Background(), root, coordinationActivationWait)
+func lockCoordinationForActivation(port system.System, root string) (*os.File, error) {
+	return acquireCoordinationLock(port, context.Background(), root, coordinationActivationWait)
 }
 
 func readCoordinationMarker(root string) (coordinationMarker, bool, error) {

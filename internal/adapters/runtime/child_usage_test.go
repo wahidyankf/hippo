@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 )
 
@@ -31,7 +32,11 @@ const usageFloor = 800 * time.Millisecond
 func startUsageEngine(t *testing.T, script string) (*Engine, *application.Lease, application.RunConfig) {
 	t.Helper()
 	engine := NewEngine()
-	engine.hooks.startLifetime = startSupervisedLifetime
+	engine.hooks.startLifetime = func(
+		ctx context.Context, config RunConfig, executable string, environment []string, identities ...*os.File,
+	) (*supervisedLifetime, error) {
+		return startSupervisedLifetime(system.Production, ctx, config, executable, environment, identities...)
+	}
 	engine.leases["usage"] = &Session{Token: "usage"}
 	config := application.RunConfig{
 		Command: "/bin/sh", Arguments: []string{"-c", script}, WorkingDirectory: t.TempDir(),
@@ -46,7 +51,9 @@ func startUsageEngine(t *testing.T, script string) (*Engine, *application.Lease,
 // the capture is ordered before the exit is observed.
 func TestLifetimeRecordsWaitedChildUsageBeforeExit(t *testing.T) {
 	config := RunConfig{WorkingDirectory: t.TempDir(), Arguments: []string{"-c", usageBusyRound + "; exit 0"}}
-	lifetime, err := startSupervisedLifetime(context.Background(), config, "/bin/sh", os.Environ())
+	lifetime, err := startSupervisedLifetime(
+		system.Production, context.Background(), config, "/bin/sh", os.Environ(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

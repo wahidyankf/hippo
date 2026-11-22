@@ -56,7 +56,7 @@ func retireUnregisteredDisplay(
 	if err != nil || !present {
 		return
 	}
-	lock, err := acquireCoordinationLock(context.Background(), root, wait)
+	lock, err := acquireCoordinationLock(port, context.Background(), root, wait)
 	if err != nil {
 		return
 	}
@@ -64,7 +64,7 @@ func retireUnregisteredDisplay(
 		application.DisplayRetirement{RunID: runID, Ownership: application.DisplayOwnershipOwned},
 		func(id string) error { return evidence.RemoveDisplay(root, id) }, advisories,
 	)
-	if err = releaseCoordinationLock(lock); err != nil {
+	if err = releaseCoordinationLock(port, lock); err != nil {
 		return
 	}
 }
@@ -117,14 +117,14 @@ func displayReservationCensus(port system.System, root string, live *[]applicati
 		return err
 	}
 	for _, owner := range ledger.Owners {
-		alive, aliveError := reservationIdentityAlive(root, owner.Token, owner.IdentityDevice, owner.IdentityInode)
+		alive, aliveError := reservationIdentityAlive(port, root, owner.Token, owner.IdentityDevice, owner.IdentityInode)
 		if aliveError != nil {
 			return aliveError
 		}
 		*live = append(*live, application.DisplayLiveness{RunID: owner.Token, Live: alive})
 	}
 	for _, waiter := range ledger.Waiters {
-		alive, aliveError := reservationIdentityAlive(root, waiter.Token, waiter.IdentityDevice, waiter.IdentityInode)
+		alive, aliveError := reservationIdentityAlive(port, root, waiter.Token, waiter.IdentityDevice, waiter.IdentityInode)
 		if aliveError != nil {
 			return aliveError
 		}
@@ -148,7 +148,7 @@ func displayExclusiveCensus(port system.System, root string, live *[]application
 		if readError != nil || !present || !validSessionRecord(&owner, runID) {
 			return errors.New("display census session record is unverifiable")
 		}
-		alive, aliveError := compatibilityOwnerAlive(root, &owner)
+		alive, aliveError := compatibilityOwnerAlive(port, root, &owner)
 		if aliveError != nil {
 			return aliveError
 		}
@@ -177,7 +177,7 @@ func displayExclusiveCensus(port system.System, root string, live *[]application
 	if !sessionTokenPattern.MatchString(heavy.Token) || !validSessionRecord(&heavy, heavy.Token) {
 		return errors.New("display census heavy owner is unverifiable")
 	}
-	alive, err := compatibilityOwnerAlive(root, &heavy)
+	alive, err := compatibilityOwnerAlive(port, root, &heavy)
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func displayIdentityCensus(port system.System, root string, live *[]application.
 		if pair != 3 {
 			return errors.New("display census identity pair is incomplete")
 		}
-		alive, aliveError := reservationIdentityAlive(root, runID, 0, 0)
+		alive, aliveError := reservationIdentityAlive(port, root, runID, 0, 0)
 		if aliveError != nil {
 			return aliveError
 		}
@@ -281,12 +281,12 @@ func housekeepIdleDisplay(ctx context.Context, port system.System, root string) 
 	if err != nil || !present {
 		return
 	}
-	lock, err := acquireCoordinationLock(ctx, root, coordinationObservationWait)
+	lock, err := acquireCoordinationLock(port, ctx, root, coordinationObservationWait)
 	if err != nil {
 		return
 	}
 	housekeepDisplayLocked(port, root, time.Now())
-	if err = releaseCoordinationLock(lock); err != nil {
+	if err = releaseCoordinationLock(port, lock); err != nil {
 		return
 	}
 }
