@@ -28,6 +28,7 @@ type Host struct {
 	Clock       *Clock
 	Environment *Environment
 	Signals     *Signals
+	Terminal    *Terminal
 	Files       *Files
 	Processes   *Processes
 	Runner      *Runner
@@ -44,11 +45,12 @@ func NewHost(start time.Time) *Host {
 		Clock:       clock,
 		Environment: &Environment{Values: map[string]string{}, Input: strings.NewReader("")},
 		Signals:     &Signals{},
+		Terminal:    &Terminal{Groups: map[string]int{}},
 		Files: &Files{
 			Contents: map[string][]byte{}, Modes: map[string]fs.FileMode{}, Dirs: map[string]bool{},
 			Modified: map[string]time.Time{}, clock: clock,
 		},
-		Processes: &Processes{Alive: map[int]bool{}, Groups: map[int]int{}},
+		Processes: &Processes{Alive: map[int]bool{}, NoAccess: map[int]bool{}, Groups: map[int]int{}},
 		Runner:    &Runner{Executables: map[string]string{}, Stdout: map[string][]byte{}, Failures: map[string]error{}},
 		Random:    &Random{},
 		Disk:      &Disk{},
@@ -61,6 +63,7 @@ func (host *Host) Port() system.System {
 		Files:       host.Files.port(),
 		Clock:       host.Clock.port(),
 		Signals:     host.Signals.port(),
+		Terminal:    host.Terminal.port(),
 		Processes:   host.Processes.port(),
 		Runner:      host.Runner.port(),
 		Environment: host.Environment.port(),
@@ -69,10 +72,14 @@ func (host *Host) Port() system.System {
 	}
 }
 
-// Clock moves only when a test sets Current or an adapter sleeps.
+// Clock moves only when a test sets Current or an adapter sleeps. NewTicker
+// hands out one buffered tick at the current time and records the stop, so a
+// test observes exactly one sample per timer without waiting.
 type Clock struct {
 	Current time.Time
 	Slept   []time.Duration
+	Ticks   []chan time.Time
+	Stops   int
 }
 
 func (clock *Clock) port() system.Clock {
@@ -88,6 +95,13 @@ func (clock *Clock) port() system.Clock {
 			channel <- clock.Current
 
 			return channel
+		},
+		NewTicker: func(time.Duration) system.Ticker {
+			channel := make(chan time.Time, 1)
+			channel <- clock.Current
+			clock.Ticks = append(clock.Ticks, channel)
+
+			return system.Ticker{Ticks: channel, Stop: func() { clock.Stops++ }}
 		},
 	}
 }
@@ -174,8 +188,52 @@ func (signals *Signals) port() system.SignalSource {
 		},
 		Ignore: func(list ...os.Signal) { signals.Ignored = append(signals.Ignored, list...) },
 		Reset:  func(list ...os.Signal) { signals.Restored = append(signals.Restored, list...) },
+		Ignored: func(signal os.Signal) bool {
+			return slices.Contains(signals.Ignored, signal)
+		},
 	}
 }
+
+// Terminal answers foreground queries from a table keyed by file name, so
+// adapter logic is testable without a terminal. A name absent from Groups
+// reports no foreground group, as an ioctl on a non-terminal file fails.
+type Terminal struct {
+	Groups        map[string]int
+	ForegroundErr error
+	SetErr        error
+	Set           []ForegroundSet
+}
+
+// ForegroundSet records one placement of group on the named file.
+type ForegroundSet struct {
+	Name  string
+	Group int
+}
+
+func (terminal *Terminal) port() system.Terminal {
+	return system.Terminal{
+		ForegroundGroup: func(file *os.File) (int, error) {
+			if terminal.ForegroundErr != nil {
+				return 0, terminal.ForegroundErr
+			}
+			group, ok := terminal.Groups[file.Name()]
+			if !ok {
+				return 0, errNoForeground
+			}
+
+			return group, nil
+		},
+		SetForegroundGroup: func(file *os.File, group int) error {
+			terminal.Set = append(terminal.Set, ForegroundSet{Name: file.Name(), Group: group})
+
+			return terminal.SetErr
+		},
+	}
+}
+
+// errNoForeground is what the double answers for a file with no configured
+// foreground group.
+var errNoForeground = errors.New("systemtest: the file has no foreground group")
 
 // Files is an in-memory file tree. Contents holds the bytes of each file, Dirs each directory, and Modes the mode of
 // each entry. Modified holds the modification time a test or Chtimes sets. An entry without one reads the host
@@ -192,6 +250,13 @@ type Files struct {
 	Modified map[string]time.Time
 	clock    *Clock
 	temps    int
+	// Pipes counts the pipes handed out. PipeErr, when set, fails every pipe
+	// instead of opening kernel descriptors.
+	Pipes   int
+	PipeErr error
+	// FlockErr, when set, fails every lock instead of granting it, so a test
+	// observes contention without racing another holder.
+	FlockErr error
 }
 
 func (files *Files) port() system.FileSystem {
@@ -270,8 +335,19 @@ func (files *Files) port() system.FileSystem {
 		OpenFile:      files.open,
 		CreateTemp:    files.createTemp,
 		OpenDirectory: files.openDirectory,
-		// The double has no other holder of a lock, so every lock is granted.
-		Flock: func(system.File, int) error { return nil },
+		// The double has no other holder of a lock, so every lock is granted
+		// unless FlockErr names a failure.
+		Flock: func(system.File, int) error { return files.FlockErr },
+		Pipe: func() (*os.File, *os.File, error) {
+			if files.PipeErr != nil {
+				return nil, nil, files.PipeErr
+			}
+			files.Pipes++
+			// Pipe descriptors cross the exec boundary into the launcher
+			// child, which no in-memory double can stand in for, so the
+			// double opens kernel descriptors and counts them.
+			return os.Pipe()
+		},
 	}
 }
 
@@ -572,12 +648,15 @@ func (entry dirEntry) Type() fs.FileMode          { return entry.info.Mode().Typ
 func (entry dirEntry) Info() (fs.FileInfo, error) { return entry.info, nil }
 
 // Processes reports the liveness and group of each process ID a test registers, and
-// records every signal sent to them. Kill fails with ESRCH for an unregistered process.
+// records every signal sent to them. Kill fails with ESRCH for an unregistered
+// process, and with EPERM for a process in NoAccess, which reads as live under
+// another owner.
 type Processes struct {
-	Pid    int
-	Alive  map[int]bool
-	Groups map[int]int
-	Sent   []SentSignal
+	Pid      int
+	Alive    map[int]bool
+	NoAccess map[int]bool
+	Groups   map[int]int
+	Sent     []SentSignal
 }
 
 // SentSignal is one call to Kill.
@@ -599,6 +678,9 @@ func (processes *Processes) port() system.ProcessTable {
 		},
 		Kill: func(pid int, signal syscall.Signal) error {
 			processes.Sent = append(processes.Sent, SentSignal{Pid: pid, Signal: signal})
+			if processes.NoAccess[pid] {
+				return syscall.EPERM
+			}
 			if !processes.Alive[pid] {
 				return syscall.ESRCH
 			}

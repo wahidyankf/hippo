@@ -41,6 +41,12 @@ type FileSystem struct {
 	CreateTemp    func(dir, pattern string) (File, error)
 	OpenDirectory func(name string) (Directory, error)
 	Flock         func(file File, how int) error
+	// Pipe creates the launcher handshake channels. The ends stay *os.File
+	// because they cross the exec boundary as inherited descriptors, which no
+	// in-memory double can stand in for: the port exists so tests inject a
+	// failure and observe the wiring, while kernel behavior stays in
+	// integration coverage (R-6).
+	Pipe func() (reader *os.File, writer *os.File, err error)
 }
 
 // File is an open file. The operating-system *os.File satisfies it, and so does a double.
@@ -68,21 +74,39 @@ type Directory interface {
 	Close() error
 }
 
-// Clock is the time port. Timers and tickers are not in it yet: their methods need a handle a double can
-// control, which the adapter that first needs them adds with its own binding.
+// Ticker is a stoppable sampling timer. Ticks carries the samples and Stop
+// releases the timer, so a double can control both ends.
+type Ticker struct {
+	Ticks <-chan time.Time
+	Stop  func()
+}
+
+// Clock is the time port. After fires once without a handle; NewTicker returns
+// a stoppable timer whose ticks and stop a double controls.
 type Clock struct {
-	Now   func() time.Time
-	Since func(start time.Time) time.Duration
-	Sleep func(duration time.Duration)
-	After func(duration time.Duration) <-chan time.Time
+	Now       func() time.Time
+	Since     func(start time.Time) time.Duration
+	Sleep     func(duration time.Duration)
+	After     func(duration time.Duration) <-chan time.Time
+	NewTicker func(duration time.Duration) Ticker
 }
 
 // SignalSource is the operating-system signal port. A double delivers signals to the channels it was given.
 type SignalSource struct {
-	Notify func(channel chan<- os.Signal, signals ...os.Signal)
-	Stop   func(channel chan<- os.Signal)
-	Ignore func(signals ...os.Signal)
-	Reset  func(signals ...os.Signal)
+	Notify  func(channel chan<- os.Signal, signals ...os.Signal)
+	Stop    func(channel chan<- os.Signal)
+	Ignore  func(signals ...os.Signal)
+	Reset   func(signals ...os.Signal)
+	Ignored func(signal os.Signal) bool
+}
+
+// Terminal is the controlling-terminal port: foreground-group queries and
+// placement. Only the production binding touches the kernel; a double answers
+// from a table so adapter logic is unit-testable while kernel behavior stays in
+// integration coverage (R-6).
+type Terminal struct {
+	ForegroundGroup    func(file *os.File) (int, error)
+	SetForegroundGroup func(file *os.File, group int) error
 }
 
 // ProcessTable is the process-identity and signal port: the calling process, its process group, and group or
@@ -140,6 +164,7 @@ type System struct {
 	Files       FileSystem
 	Clock       Clock
 	Signals     SignalSource
+	Terminal    Terminal
 	Processes   ProcessTable
 	Runner      ProcessRunner
 	Environment Environment
@@ -155,12 +180,20 @@ var Production = System{
 		Readlink: os.Readlink, Mkdir: os.Mkdir, MkdirAll: os.MkdirAll, MkdirTemp: os.MkdirTemp, Remove: os.Remove,
 		RemoveAll: os.RemoveAll, Rename: os.Rename, Link: os.Link, Symlink: os.Symlink, Chmod: os.Chmod,
 		Chtimes: os.Chtimes, EvalSymlinks: filepath.EvalSymlinks, SameFile: os.SameFile,
-		OpenFile: openFile, CreateTemp: createTemp, OpenDirectory: openDirectory, Flock: flock,
+		OpenFile: openFile, CreateTemp: createTemp, OpenDirectory: openDirectory, Flock: flock, Pipe: os.Pipe,
 	},
-	Clock: Clock{Now: time.Now, Since: time.Since, Sleep: time.Sleep, After: time.After},
+	Clock: Clock{
+		Now: time.Now, Since: time.Since, Sleep: time.Sleep, After: time.After,
+		NewTicker: func(duration time.Duration) Ticker {
+			ticker := time.NewTicker(duration)
+			return Ticker{Ticks: ticker.C, Stop: ticker.Stop}
+		},
+	},
 	Signals: SignalSource{
 		Notify: signal.Notify, Stop: signal.Stop, Ignore: signal.Ignore, Reset: signal.Reset,
+		Ignored: signal.Ignored,
 	},
+	Terminal:  Terminal{ForegroundGroup: foregroundGroup, SetForegroundGroup: setForegroundGroup},
 	Processes: ProcessTable{Getpid: os.Getpid, Getpgrp: syscall.Getpgrp, Getpgid: syscall.Getpgid, Kill: syscall.Kill},
 	Runner: ProcessRunner{
 		LookPath: exec.LookPath, Executable: os.Executable, CaptureOutput: captureOutput,
