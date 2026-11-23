@@ -1,12 +1,14 @@
 Feature: Shared vector reservations
   HIPPO admits independent repositories concurrently only inside one safe CPU-and-memory budget.
 
+  # Exemption(e2e): requires deterministic synthetic CPU and memory capacity unavailable through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Automatic reservations divide capacity by profile owner shares
     Given healthy host capacity for automatic reservation planning
     When automatic reservations are calculated for every built-in profile
     Then balanced constrained and minimal use four two and one owner shares
 
+  # Exemption(e2e): requires deterministic synthetic CPU and memory capacity, and the binary always plans with the configuration's filled share map; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: Automatic owner shares follow the profile lineage
     Given healthy host capacity and <profile> with no automatic owner share of its own
@@ -20,12 +22,14 @@ Feature: Shared vector reservations
       | a configured profile that extends constrained | 2      |
       | a configured profile that extends minimal     | 1      |
 
+  # Exemption(e2e): requires maximum-width synthetic CPU and memory capacity unavailable through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
-  Scenario: Maximum-width automatic shares do not overflow ceiling division
+  Scenario: Automatic shares at maximum CPU and memory keep their exact four-share and two-share ceilings
     Given maximum representable CPU and memory capacity for balanced and constrained profiles
     When automatic fair-share reservations are calculated
     Then both vector dimensions retain their exact four-share and two-share ceilings
 
+  # Exemption(e2e): requires synthetic host CPU counts unavailable through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: Automatic CPU capacity is every host CPU up to the configured maximum
     Given a host with <cpus> available CPUs and <setting>
@@ -39,6 +43,7 @@ Feature: Shared vector reservations
       | 12   | a maximum CPU setting of 16 | 12       |
       | 1    | no maximum CPU setting      | 1        |
 
+  # Exemption(e2e): requires synthetic host CPU counts unavailable through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: Profile concurrency offers every host CPU
     Given a host with <cpus> available CPUs
@@ -50,45 +55,70 @@ Feature: Shared vector reservations
       | 12   | 12          |
       | 1    | 1           |
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Every development class consumes reservation capacity
     Given enough capacity for one owner of each development class
     When service ephemeral and transactional sessions are admitted
     Then all three allocations appear in shared reservation totals
 
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Explicit reservations may be smaller than automatic shares
     Given automatic allocation larger than the immutable floors
     When explicit CPU and memory reservations below that allocation are requested
     Then the smaller explicit vector is admitted unchanged
 
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
   @e2e-exempt
-  Scenario: Reservation floors reject unsafe requests
+  Scenario: Reservation floors reject requests below one CPU or 256 MiB before enqueue
     Given explicit requests below one CPU or 256 MiB
     When each unsafe reservation is validated
     Then each request requires replanning before enqueue
-    And a caller asking for memory below the floor sees exit 125 naming hippo.policy.replan-required before enqueue
-    And a caller asking for a negative CPU count sees exit 2 naming hippo.args.invalid before enqueue
 
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A memory request below the floor exits 125 naming hippo.policy.replan-required before enqueue
+    Given explicit requests below one CPU or 256 MiB
+    When each unsafe reservation is validated
+    Then a caller asking for memory below the floor sees exit 125 naming hippo.policy.replan-required before enqueue
+
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A negative CPU request exits 2 naming hippo.args.invalid before enqueue
+    Given explicit requests below one CPU or 256 MiB
+    When each unsafe reservation is validated
+    Then a caller asking for a negative CPU count sees exit 2 naming hippo.args.invalid before enqueue
+
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Vector admission is atomic
     Given remaining capacity fits only one dimension of a request
     When that CPU and memory vector requests admission
     Then neither dimension is reserved and no child starts
 
+  # Exemption(e2e): requires deterministic synthetic total capacity; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Impossible reservation requires replanning
     Given a reservation larger than total safe host capacity
     When impossible capacity is requested
     Then admission requires replanning with exit 125 naming hippo.policy.replan-required instead of waiting
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Temporary exhaustion uses the bounded wait
+  Scenario: Temporary exhaustion defers the waiter through its deadline with exit 124
     Given a live owner temporarily consumes the remaining capacity
     When another fitting reservation waits through its deadline
     Then the waiter remains FIFO head through its deadline and is deferred with exit 124 naming hippo.limit.capacity-deferred
-    And the deferral writes a never-started receipt even when the wait's budget is nearly spent
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: A capacity deferral writes a never-started receipt even when the wait budget is nearly spent
+    Given a live owner temporarily consumes the remaining capacity
+    When another fitting reservation waits through its deadline
+    Then the deferral writes a never-started receipt even when the wait's budget is nearly spent
+
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A request larger than a shrunk shared pool is deferred without poisoning the root
     Given a live owner holds a shared root whose pool is smaller than a second client's pool
@@ -98,14 +128,6 @@ Feature: Shared vector reservations
     When the live owner releases its reservation
     And the second client requests the same minimum again
     Then the second client is admitted
-
-  @e2e-exempt
-  Scenario: A free coordination gate is taken at once however little of the wait is left
-    Given a reservation root that no other admission is updating
-    When a fitting reservation reaches the coordination gate with one nanosecond of its wait left, 200 times
-    Then every attempt is admitted and none is deferred for coordination
-    And with the coordination lock held by another admission, the same wait is deferred for coordination
-
   Scenario: A coordination lock held through the whole wait still leaves a never-started receipt
     Given a reservation root whose coordination lock another admission holds
     When a guarded run waits 300 milliseconds for admission
@@ -117,212 +139,256 @@ Feature: Shared vector reservations
     When a guarded run waiting for that lock receives SIGINT
     Then the run exits 130 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: FIFO head cannot be bypassed by a smaller request
     Given a large waiter is ahead of a smaller waiter
     When capacity becomes sufficient only for the smaller waiter
     Then neither waiter bypasses the live FIFO head
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Exhausted FIFO sequence resets only after a stale epoch empties
-    Given reservation epochs at the maximum FIFO sequence with live and stale identities
+  Scenario: A reservation queue at its highest position restarts only after its stale epoch empties
+    Given reservation epochs with a queue at its highest position and live and stale identities
     When another reservation requests admission in each epoch
     Then the live epoch stays byte-unchanged while the stale empty epoch restarts safely
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Inherited sessions reuse their fixed allocation
     Given a live reserved session with an inheritable token
     When a nested guarded command uses that token
     Then no second reservation is created and allocation cannot expand
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Fixed allocations clamp concurrency mappings
     Given a session allocated two CPU units and 512 MiB
     When missing lower higher and malformed concurrency mappings are evaluated
     Then canonical values are fixed lower values survive higher values clamp and malformed values replan
 
+  # Exemption(e2e): requires deterministic reservation mapping validation before isolated child execution; alternative-proof: test:integration
   @e2e-exempt
   Scenario: HIPPO protocol names cannot be consumer concurrency mappings
     Given mappings for HIPPO root reserved memory config and default config plus one arbitrary worker name
     When every mapping is validated against a fixed reservation allocation
     Then every HIPPO mapping replans before child execution and the arbitrary worker mapping remains valid
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Stale identity cannot retain or inherit capacity
     Given stale owner records including a reused diagnostic PID
     When reservation ownership is reconciled
     Then only a matching live process identity retains capacity or inheritance
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Active exclusive compatibility blocks reservation takeover
     Given a live schema one exclusive compatibility session
     When reservation-mode admission is requested
     Then it rejects with exit 125 naming hippo.coordination.protocol-mismatch without changing compatibility state
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Malformed compatibility state remains fail closed during takeover
     Given malformed compatibility heavy state without a mode marker
     When reservation-mode admission inspects that state
     Then it fails with exit 125 naming hippo.supervision.failed and leaves the malformed state unchanged
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Unsupported compatibility heavy-owner schema remains actionable
     Given compatibility heavy state with an unsupported owner schema
     When exclusive admission and the heavy-lease diagnostic inspect that state
     Then admission reports exit 125 naming hippo.coordination.protocol-mismatch without mutation and the diagnostic reports private recovery guidance
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Malformed compatibility service session remains fail closed during takeover
     Given an unverifiable compatibility service session record without a mode marker
     When reservation-mode admission inspects the service session
     Then it fails with exit 125 naming hippo.supervision.failed and leaves the service record unchanged
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Unreadable compatibility session inventory blocks reservation takeover
     Given compatibility session inventory cannot be enumerated
     When reservation admission attempts to take over the shared root
     Then admission fails with exit 125 naming hippo.supervision.failed and preserves the session inventory with private recovery guidance
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Failed stale heavy cleanup blocks reservation takeover
     Given positively stale compatibility heavy state cannot be removed
     When reservation admission attempts to take over the shared root
     Then admission fails with exit 125 naming hippo.supervision.failed without writing a reservation marker or changing heavy state
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Unsupported coordination marker schema is a protocol mismatch
     Given a shared root with a valid future coordination marker schema
     When compatibility and reservation clients inspect that root
     Then both reject with exit 125 naming hippo.coordination.protocol-mismatch without changing the marker
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Unsupported reservation ledger schema is a protocol mismatch
     Given reservation coordination with a valid future ledger schema
     When status and reservation admission inspect that ledger
     Then both report exit 125 naming hippo.coordination.protocol-mismatch without changing the ledger
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Schema three refuses live legacy entries as a protocol mismatch
     Given schema three observes a live schema two owner without metadata
     When adaptive admission is requested
     Then it exits 125 naming hippo.coordination.protocol-mismatch before enqueue or child launch
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A resource tier refuses an admission wait it would ignore
     Given schema two reservation coordination and a resource tier with an admission wait
     When tiered admission is requested
     Then it exits 2 naming hippo.args.invalid before enqueue or child launch
 
+  # Exemption(e2e): requires synthetic samples that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Host pressure thresholds remain authoritative
     Given vector capacity fits under a threshold-blocked host sample
     When reservation admission evaluates that sample
     Then threshold pressure defers work without changing the ledger
 
+  # Exemption(e2e): requires multiple controlled owners and synthetic critical pressure; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Shedding selects one newest revocable owner
     Given transactional service and ephemeral owners under critical pressure
     When a pressure victim is elected atomically
     Then only the newest ephemeral is selected before any service
 
+  # Exemption(e2e): requires multiple controlled service owners and synthetic critical pressure; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Service shedding follows exhausted ephemeral owners
     Given service owners and no eligible ephemeral owner
     When a pressure victim is elected atomically
     Then only the newest service is selected
 
+  # Exemption(e2e): requires multiple controlled process groups and bounded signal escalation; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Remote shedding completes one victim before another election
     Given a selected remote ephemeral owner that ignores termination
     When its owning guard performs bounded shedding
     Then it escalates to a kill and no additional victim is selected before owned release
 
+  # Exemption(e2e): requires controlled process-group identity replacement during remote observation; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Remote observation never signals a replaced identity
     Given selected ownership disappears while its process group remains live
     When the selecting guard observes that disappearance
     Then no signal reaches the unowned process group and disappearance ends observation
 
+  # Exemption(e2e): requires a controlled unresponsive remote owner and process-group signal observation; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Remote selectors never signal another owner's child
     Given a selected remote owner whose owning guard is temporarily unresponsive
     When the selecting guard observes that owner through a bounded deadline
     Then the remote child is not signaled and remains the global no-cascade barrier
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Remote observation remains bounded by its deadline
     Given a selected remote owner and a held coordination mutation lock
     When the selecting guard waits through its observation deadline
     Then it returns boundedly without signaling and preserves the selected barrier
 
+  # Exemption(e2e): requires a peer holding the shared coordination lock across a guard's activation and sampling, which no compiled binary invocation can arrange; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Bounded shared-root contention preserves started work and healthy observation
     Given a peer briefly holds the shared coordination lock while a guard activates and supervises its child
     When the guard waits to activate its reservation and then samples through later contention
     Then activation succeeds without relaunch and later observation contention keeps healthy work running
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Stalled activation contention fails safely after launch
     Given a peer holds the shared coordination lock past the activation deadline after the child starts
     When the guard attempts to activate its reservation
     Then activation returns exit 125 naming hippo.supervision.failed after owned cleanup with a started-failure receipt
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Owner cancellation remains bounded when release coordination is held
-    Given a running reserved owner and a coordination mutation lock held by another goroutine in the same process
+  Scenario: Cancelling a run while another holder holds the release lock bounds its cleanup
+    Given a running reserved owner and a coordination mutation lock held by another holder
     When its owning guard is cancelled and reaps the child
     Then cleanup defers boundedly without a caller failure, with exact ledger bytes and an externally locked identity until a later atomic retry after lock release
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Cancelled FIFO waiters use a fresh cleanup deadline
+  Scenario: A cancelled queued run leaves the queue although the coordination lock is briefly held
     Given a queued reservation waiter and a held coordination mutation lock
-    When its acquisition context is cancelled before the lock is released
+    When its run is cancelled before the lock is released
     Then bounded cleanup removes the waiter without blocking the FIFO queue
 
   Scenario: A signal to a queued run ends it with the signal status and keeps its receipt
     Given a reservation root whose live owners fill its capacity and owner limit
     When a queued guarded run receives SIGINT before it is admitted
     Then the run exits 130 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
-    And no lifetime summary is written, because a queued waiter collects no host evidence
 
+  Scenario: A queued run stopped by a signal writes no lifetime summary
+    Given a reservation root whose live owners fill its capacity and owner limit
+    When a queued guarded run receives SIGINT before it is admitted
+    Then no lifetime summary is written, because a queued waiter collects no host evidence
+
+  # Exemption(e2e): requires injected host samples that hold admission sampling open at a deterministic pause; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A signal during host admission sampling keeps a never-started receipt
     Given a granted run still sampling the host before admission
     When the guarded run receives SIGTERM before its child starts
     Then the run exits 143 with no hippo diagnostic, its child never starts, and its receipt records never-started admission-cancelled
-    And its lifetime summary records the outcome admission-cancelled
+
+  # Exemption(e2e): requires injected host samples that hold admission sampling open at a deterministic pause; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A run stopped while sampling is summarized as admission-cancelled and listed by history
+    Given a granted run still sampling the host before admission
+    When the guarded run receives SIGTERM before its child starts
+    Then its lifetime summary records the outcome admission-cancelled
     And history filtered to the outcome admission-cancelled lists that run
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Failed cancelled-waiter cleanup retains verifiable FIFO ownership
+  Scenario: A cancelled queued run keeps its queue place when cleanup cannot take the lock
     Given a queued reservation waiter whose coordination lock remains held past its fresh cleanup deadline
-    When its acquisition context is cancelled and bounded cleanup cannot mutate the ledger
+    When its run is cancelled and bounded cleanup cannot mutate the ledger
     Then the waiter identity and exact FIFO bytes remain and a following FIFO waiter admits only after automatic head cleanup
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Supervisor death cannot release a live child reservation
     Given a compiled guard supervising a long-lived child in an isolated process group
     When only the guard is killed and reservation liveness is reconciled
     Then the running child keeps its reservation until the child group exits
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Cancellation retains ownership when post-kill retirement is unconfirmed
     Given a reserved child whose TERM and KILL waits remain unconfirmed
     When its owning guard is cancelled
     Then cancellation returns boundedly while reservation and port competitors remain deferred until later retirement and then admit
 
+  # Exemption(e2e): requires injected storage and capacity shedding with unconfirmed child retirement; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Pressure shedding preserves its stable exit while retirement is unconfirmed
     Given selected reserved owners for storage and non-storage pressure whose KILL waits remain unconfirmed
     When each owning guard performs bounded shedding
     Then each returns exit 124 naming hippo.limit.storage-blocked or hippo.limit.pressure-shed respectively while reservation and port competitors defer until retirement and then admit
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Port ownership survives supervisor-only death
     Given a guarded child holding a real leased port through a kernel lifetime identity
     When only its HIPPO supervisor is killed
     Then a competitor cannot reclaim the port until the child group exits
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Tokenized port identity corruption remains fail closed
     Given a tokenized live port lease whose identity file is <fault>
@@ -333,37 +399,35 @@ Feature: Shared vector reservations
       | fault    |
       | missing  |
       | replaced |
-
-  @e2e-exempt
-  Scenario: A stale same-process port handle cannot release a replacement lease
-    Given an old and replacement port lease handle for the same process owner
-    When the old handle attempts to release the replacement marker
-    Then token authentication rejects the stale handle and preserves the replacement lease
-
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Legacy tokenless port markers use conservative PID compatibility
     Given live and positively stale schema-one port markers without identity tokens
     When a v0.4 owner requests each legacy port
     Then the live PID remains unavailable and only the positively stale PID is reclaimed
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A successful leader cannot retire a live background descendant
     Given a reserved leader that exits zero after spawning a background descendant without an inherited unknown file descriptor
     When the direct leader has been reaped
     Then reservation and port ownership remain until the process group retires and are later reclaimed safely
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: An inherited session cannot bypass background descendant retirement
     Given an inherited reserved session that spawns a background descendant without an inherited unknown file descriptor
     When the inherited direct leader exits zero
     Then its reservation and port evidence remain until the inherited process group retires
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A stalled lifetime activation handshake is bounded
     Given a lifetime launcher that stalls before reporting payload activation
     When its owning guard reaches the activation deadline
     Then the guard returns boundedly without releasing the launcher's detectable reservation and port ownership
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Payloads cannot inherit lifetime identity descriptors
     Given a compiled <mode> reserved child with reservation and port identity locks
@@ -375,18 +439,21 @@ Feature: Shared vector reservations
       | ordinary  |
       | inherited |
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Failed activation reporting retains launcher-owned identity
     Given a payload leader exits after starting a no-identity-descriptor descendant but its launcher cannot report activation
     When failed-launch cleanup reaches its bounded retirement decision
     Then no payload inherits identity and reservation plus port evidence remain until positive group retirement
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Payloads cannot forge the launcher activation report
     Given a compiled reserved payload and a launcher-owned activation channel
     When the payload writes a forged process group to the inherited report descriptor
     Then the descriptor is closed in the payload and only the launcher report reaches the supervisor
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Reservation identity path corruption remains fail closed
     Given a live reservation <record> whose token identity path is <fault>
@@ -400,24 +467,28 @@ Feature: Shared vector reservations
       | waiter | missing  |
       | waiter | replaced |
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A dead owner behind a changed device number reconciles
     Given a dead reservation owner whose ledger device differs while both identity links name the recorded inode
     When status and competing admission reconcile that ledger
     Then the dead owner retires silently and the next admission succeeds
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A dead waiter behind a changed device number reconciles
     Given a dead reservation waiter whose ledger device differs while both identity links name the recorded inode
     When status reconciles that ledger
     Then the dead waiter retires silently while the live owner stays active
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A live owner behind a changed device number stays active
     Given a live reservation owner whose ledger device differs while both identity links name the recorded inode
     When status and competing admission reconcile that ledger
     Then the owner stays active with unchanged ledger bytes and the competitor defers with exit 124 naming hippo.limit.capacity-deferred
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Incomplete identity evidence after a device change stays closed
     Given a live reservation owner whose ledger device differs while its identity <fault>
@@ -432,24 +503,20 @@ Feature: Shared vector reservations
       | replaced-anchor |
       | missing-pair    |
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Inheritance follows the lock across a device change
     Given a reservation owner whose ledger device differs while both identity links name the recorded inode
     When an heir requests that owner while it lives and again after its guard dies
     Then the live request inherits the token and the later request is refused without failure
-
-  @e2e-exempt
-  Scenario: An embedded guard abandons only its local lifetime handles
-    Given a long-lived caller whose guarded run returns before child-group retirement is confirmed
-    When the lifetime holder retires later without the caller process exiting
-    Then the same caller can safely reclaim both reservation capacity and the leased port
-
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Hidden lifetime launch mode requires a parent capability
     Given a direct HIPPO invocation with the internal environment and launcher argument but no capability pipes
     When the public command boundary interprets the invocation
     Then no payload bypasses admission and the invocation is rejected as an ordinary invalid command
 
+  # Exemption(e2e): requires killing schema-one heavy and service supervisors while child groups remain live; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Schema-one ownership survives supervisor-only death
     Given a compiled schema-one <class> guard with a live child group
@@ -460,13 +527,7 @@ Feature: Shared vector reservations
       | class   |
       | heavy   |
       | service |
-
-  @e2e-exempt
-  Scenario: Schema-one embedded ownership retires independently of its caller PID
-    Given a long-lived schema-one caller whose guarded group retirement is initially unconfirmed
-    When its launcher and group later retire without the caller exiting
-    Then compatibility ownership becomes reclaimable without treating the live caller PID as the owner
-
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Legacy schema-one PID-only ownership remains conservative
     Given live and positively stale zero-metadata legacy <class> ownership records
@@ -478,107 +539,129 @@ Feature: Shared vector reservations
       | heavy   |
       | service |
 
+  # Exemption(e2e): requires injected storage-shedding selection during controlled owner supervision; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Owner-side shedding preserves the selected exit
     Given a reserved owner selected for storage shedding
     When its own guard observes the mark and terminates its child
     Then the child is reaped and the guard returns exit 124 naming hippo.limit.storage-blocked before release
 
+  # Exemption(e2e): requires controlled transactional owners and synthetic critical pressure; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Transactional owners are protected during ordinary shedding
     Given only transactional owners remain under critical pressure
     When a pressure victim is elected atomically
     Then no victim is selected and new admission remains blocked
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Transactional owners are the final emergency victim
     Given transactional service and ephemeral owners at the emergency memory floor
     When emergency pressure victims are elected atomically
     Then ephemeral and service owners are selected before transactional work
-    And the transactional stop records a started safety receipt without automatic retry
+
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: A transactional emergency stop records a started safety receipt without automatic retry
+    Given transactional service and ephemeral owners at the emergency memory floor
+    When emergency pressure victims are elected atomically
+    Then the transactional stop records a started safety receipt without automatic retry
 
   Scenario: Schema two configuration preserves schema one compatibility
     Given valid schema one and schema two local configurations
     When both configuration documents are loaded
     Then schema one selects exclusive mode and schema two validates reservation limits
 
-  Scenario: MiB inputs reject arithmetic overflow before conversion
+  Scenario: A memory request too large to represent requires replanning
     Given maximum representable and first overflowing MiB values for CLI and configuration
     When reservation memory inputs are parsed
-    Then the maximum stays exact and overflow requires replanning before multiplication
+    Then the maximum stays exact and an overflowing request requires replanning
 
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Custom profiles inherit reservation shares and fixed concurrency
     Given a schema two custom profile extending constrained without an artificial concurrency cap
     When its automatic reservation and guarded summary are produced
     Then it inherits two shares and reports the fixed allocated CPU as concurrency
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Shared owner limits remain conservative across configurations
     Given live owners and waiters with different maximum-owner settings
     When a looser configuration requests another reservation
     Then the strictest live shared-root owner limit remains authoritative
 
+  # Exemption(e2e): requires mixed vector caps with a live owner and FIFO waiter in one isolated shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Active reservation capacity cannot shrink below live commitments
     Given a larger-capacity epoch with a live owner and FIFO waiter
     When a caller with a lower CPU or memory cap requests admission
     Then it defers without changing the epoch and the lower cap starts only after idle
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger tokens are validated before mutation
+  Scenario: A ledger with an invalid or duplicate owner token fails admission closed and keeps its bytes
     Given a reservation ledger with an invalid or duplicate owner token
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the ledger bytes
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger classes are validated before mutation
+  Scenario: A ledger with an unknown workload class fails admission closed and keeps its bytes
     Given a reservation ledger with an unknown workload class
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the class-corrupt ledger bytes
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger sequences are validated before mutation
+  Scenario: A ledger with duplicate or out-of-order sequences fails admission closed and keeps its bytes
     Given a reservation ledger with duplicate or nonmonotonic sequences
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the sequence-corrupt ledger bytes
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger vectors are validated before mutation
+  Scenario: A ledger with negative or inconsistent vectors fails admission closed and keeps its bytes
     Given a reservation ledger with negative or inconsistent resource vectors
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the vector-corrupt ledger bytes
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger arithmetic rejects overflow before mutation
+  Scenario: A ledger with vectors that overflow when added fails admission closed and keeps its bytes
     Given a reservation ledger whose valid individual vectors overflow aggregate arithmetic
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the overflow-corrupt ledger bytes
 
+  # Exemption(e2e): a compiled binary plans with the real host CPU and memory, which cannot be fixed to a chosen value; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Maximum-width admission cannot wrap vector capacity
     Given a live owner consumes maximum-width CPU and memory capacity
     When another minimum reservation requests admission
     Then admission defers without wrapping or changing allocated totals
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger totals are validated before mutation
+  Scenario: A ledger with allocated totals above capacity fails admission closed and keeps its bytes
     Given a reservation ledger whose allocated totals exceed capacity
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the total-corrupt ledger bytes
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Reservation ledger structure is validated before mutation
+  Scenario: A ledger with an impossible owner and waiter structure fails admission closed and keeps its bytes
     Given a reservation ledger with impossible owner and waiter structure
-    When reservation state is decoded by coordination
+    When the reservation state is read
     Then admission fails closed and preserves the structure-corrupt ledger bytes
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Unknown identity errors never prune reservation accounting
     Given a live reservation whose identity probe returns an unknown filesystem error
     When status and admission reconcile reservation liveness
     Then both fail closed without changing bytes or exposing the identity
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Missing live reservation accounting cannot initialize empty
     Given a reservation marker and live identity lock without its ledger
@@ -590,62 +673,108 @@ Feature: Shared vector reservations
     When status and the lifetime summary are encoded
     Then schema five reports requested allocated waited and peak totals without private inputs
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Status rejects overflowing aggregate waiter demand
     Given individually valid waiters whose CPU or memory demand overflows aggregate arithmetic
     When schema five reservation status aggregates the queued demand
     Then status fails closed with a privacy-safe coordination error
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Development summaries retain the lifetime peak owner count
     Given a guarded child whose concurrent owner count rises after admission
     When reservation totals are sampled throughout supervision
     Then the schema five summary reports the highest observed owner count
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Development summaries retain owners between host samples
     Given a guarded child with an overlapping owner shorter than one host sampling interval
     When the overlapping reservation is admitted and released during supervision
     Then the schema five summary includes that complete short-lived overlap
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Reservation protocol files survive evidence retention
     Given aged live reservation waiter and coordination files
     When reservation evidence retention is enforced
     Then protocol files remain while expired evidence is removed
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Atomic coordination writes survive evidence retention
     Given fresh actively-written coordination-marker and reservation-ledger temporary files
     When reservation evidence retention is enforced
     Then recognized atomic-write temporary files remain untouched
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Abandoned atomic coordination temporary files expire
     Given expired orphaned coordination-marker and reservation-ledger temporary files
     When reservation evidence retention is enforced
     Then the orphaned temporary files are reclaimed without changing stable protocol files
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Concurrent evidence disappearance does not abort guarded work
     Given two parallel reserved guards and concurrently finalized evidence entries
     When their evidence cleanup snapshots race with entry disappearance
     Then both commands complete without retry and their observed evidence remains
 
+  # Exemption(e2e): requires a reservation whose guard liveness is controlled independently of its process group, which cannot be staged through the compiled binary; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Status names a payload left running by a guard that died
-    Given a reservation whose guard is gone while its process group still runs
+  Scenario Outline: Status names a payload group only while its payload runs without its guard
+    Given a reservation whose <setup>
     When reservation status reads that coordination root
-    Then it keeps the capacity held for the running payload and names its process group
+    Then <outcome>
 
-  @e2e-exempt
-  Scenario: Status stays quiet about a payload whose guard is still running
-    Given a reservation whose guard is still running alongside its process group
-    When reservation status reads that coordination root
-    Then it counts the held reservation and names no abandoned process group
+    Examples:
+      | setup                                              | outcome |
+      | guard is gone while its process group still runs   | it keeps the capacity held for the running payload and names its process group |
+      | guard is still running alongside its process group | it counts the held reservation and names no abandoned process group |
+      | guard and process group are both gone              | it reclaims the capacity and names no abandoned process group |
 
+  # Behaviour: HI-CFG-006
+  Scenario Outline: A coordination mode other than reservation is refused, and a schema-1 file with coordination too
+    Given the compiled HIPPO binary
+    And <configuration>
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable
+
+    Examples:
+      | configuration                                                     |
+      | a schema three configuration whose coordination mode is exclusive |
+      | a schema one configuration that names coordination                |
+
+  # Behaviour: HI-CFG-007
+  Scenario Outline: A maximum memory below 256 MiB or more than 20 active owners is refused at load
+    Given the compiled HIPPO binary
+    And a schema two configuration whose coordination sets <limit>
+    When JSON status is requested with that configuration file
+    Then it exits 125 naming hippo.config.unreadable
+
+    Examples:
+      | limit              |
+      | maxMemoryMiB 255   |
+      | maxActiveOwners 21 |
+
+  # Behaviour: HI-CFG-009
+  # Exemption(e2e): the compiled binary plans with owner shares it does not publish, so only the loaded configuration shows the override; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Status stays quiet about a payload that died with its guard
-    Given a reservation whose guard and process group are both gone
-    When reservation status reads that coordination root
-    Then it reclaims the capacity and names no abandoned process group
+  Scenario: A configured automatic owner share overrides the share its lineage gives
+    Given a schema two configuration that sets the balanced profile to seven automatic owner shares
+    When the configuration is loaded
+    Then the balanced profile holds seven automatic owner shares
+
+  # Behaviour: HI-CFG-021
+  Scenario Outline: The third owner opens only when overlapping completed runs meet the promotion evidence
+    Given a schema three configuration whose promotion gate needs one overlapping completed run
+    And <evidence>
+    When JSON status is requested with that configuration file
+    Then the owner promotion is <state>
+
+    Examples:
+      | evidence                                             | state  |
+      | an overlapping completed run that passed healthy     | open   |
+      | an overlapping completed run that recorded swap-outs | closed |

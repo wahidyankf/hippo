@@ -3,8 +3,6 @@ package support
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +25,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	"github.com/wahidyankf/hippo/internal/adapters/host"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	releaseguard "github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
@@ -163,17 +162,15 @@ func (collector *sequenceCollector) Collect(ctx context.Context, previous policy
 
 // Driver carries isolated scenario state for one adapter suite.
 type Driver struct {
-	architectureGraphError   error
-	architectureFixtureError error
-	annotationRun            *annotationRunState
-	annotations              *annotationBDD
-	ownedMixedSessions       []*guard.Session
-	compatibilityBodies      []string
-	compatibilityWatch       []string
-	mode                     string
-	samples                  []policy.Sample
-	assessment               policy.Assessment
-	admitted, accepted       bool
+	annotationRun       *annotationRunState
+	annotations         *annotationBDD
+	ownedMixedSessions  []*guard.Session
+	compatibilityBodies []string
+	compatibilityWatch  []string
+	mode                string
+	samples             []policy.Sample
+	assessment          policy.Assessment
+	admitted, accepted  bool
 	// admission is the path DecideAdmission took for the scenario's samples, which
 	// the scenarios that assert why work was not admitted read, so a rule broken
 	// inside the decision fails them even where the profile resolution says the same.
@@ -186,8 +183,6 @@ type Driver struct {
 	binary, summaryPath      string
 	temporaryPaths           []string
 	lifecycleOK              bool
-	e2eSelection             e2eBinarySelection
-	gate                     coordinationGateScenario
 	sharedPool               sharedPoolState
 	cacheRoot                string
 	historicalCaches         []string
@@ -198,20 +193,10 @@ type Driver struct {
 	ambientHead              string
 	fixtureCheckout          string
 	gateScripts              map[string]string
-	strictAdapters           bool
-	unitExemptionsForbidden  bool
-	approvedExemptions       bool
-	serialCompliance         bool
-	e2ePlacement             bool
-	conventionalCommits      bool
-	pullRequestOnlyGate      bool
 	postMerge                postMergeWiring
 	sharedDocumentationCheck bool
 	pinnedValidatorsRun      bool
 	threeHarnessProfiles     bool
-	stagedFormatting         bool
-	pushQuickGate            bool
-	coreCoverage             bool
 	resolution               policy.Resolution
 	thresholds               thresholdScenario
 	automaticPlan            guard.ReservationPlan
@@ -232,9 +217,6 @@ type Driver struct {
 	availableMemory          int64
 	configPath               string
 	configDocument           string
-	privateArtifacts         bool
-	exampleTracked           bool
-	applicationLayout        bool
 	leaseRoot                string
 	leaseHolder              int
 	heavySession             *guard.Session
@@ -284,9 +266,6 @@ type Driver struct {
 	releaseDeadlinePassed    bool
 	loadedGateScript         string
 	saturationReaders        []string
-	loadSaturationDeclared   bool
-	guardedChildStarted      bool
-	deferralAccepted         bool
 	streamCloseCalls         int
 	invalidMappingsRejected  bool
 	v04Error                 error
@@ -304,6 +283,8 @@ type Driver struct {
 	// over each reading, standing in for a runner the scheduler starves. It is
 	// zero in every scenario.
 	readingStall time.Duration
+	// addCLI is the state of the public command boundary scenarios the spec review added.
+	addCLI publicCLIAddState
 }
 
 type failingStream struct {
@@ -417,11 +398,21 @@ func (driver *Driver) Close() {
 	}
 }
 
+// developerConfigurationNames are the configuration variables a developer's shell
+// may export. A child the harness starts never inherits them, so a scenario that
+// names no configuration cannot read the developer's file.
+var developerConfigurationNames = []string{tierEnvironmentConfig, defaultConfigEnvironment}
+
 func environmentWith(values map[string]string) []string {
-	prefixes := make([]string, 0, len(values))
+	prefixes := make([]string, 0, len(values)+len(developerConfigurationNames))
 
 	for name := range values {
 		prefixes = append(prefixes, name+"=")
+	}
+	for _, name := range developerConfigurationNames {
+		if _, set := values[name]; !set {
+			prefixes = append(prefixes, name+"=")
+		}
 	}
 
 	environment := make([]string, 0, len(os.Environ())+len(values))
@@ -728,7 +719,7 @@ func (driver *Driver) inspectGuardedEnvironment() error {
 	)
 	environment := append([]string{}, driver.childEnvironment...)
 	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      stdout,
 		Stderr:      stderr,
 		Environment: environment,
@@ -819,7 +810,7 @@ func (driver *Driver) copyGuardedStreams() error {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	environment := append([]string{}, driver.childEnvironment...)
 	environment = append(environment, "HIPPO_ROOT="+driver.leaseRoot)
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdin:       strings.NewReader(driver.childInput),
 		Stdout:      stdout,
 		Stderr:      stderr,
@@ -1930,7 +1921,7 @@ func (driver *Driver) jsonStatus() error {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	var stdout, stderr bytes.Buffer
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    &stdout,
 		Stderr:    &stderr,
 		Collector: collector,
@@ -1950,7 +1941,7 @@ func (driver *Driver) jsonVersion() error {
 	}
 
 	var stdout bytes.Buffer
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:  &stdout,
 		Stderr:  &bytes.Buffer{},
 		Version: "v0.0.0-test",
@@ -2011,7 +2002,7 @@ func (driver *Driver) runCLI(arguments ...string) error {
 	}
 
 	var stdout, stderr bytes.Buffer
-	exitCode, err := bootstrap.WithDefaults(cli.Application{
+	exitCode, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}).Run(context.Background(), arguments)
@@ -2148,7 +2139,7 @@ func (driver *Driver) invalidRun() error {
 		return nil
 	}
 
-	_, err := bootstrap.WithDefaults(cli.Application{
+	_, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    &bytes.Buffer{},
 		Stderr:    &bytes.Buffer{},
 		Collector: &sequenceCollector{},
@@ -2276,7 +2267,7 @@ func (driver *Driver) assessSummaryInput() error {
 		driver.runBinaryWithInput(driver.childInput, arguments...)
 	} else {
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-		code, err := bootstrap.WithDefaults(cli.Application{
+		code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdin:  strings.NewReader(driver.childInput),
 			Stdout: stdout,
 			Stderr: stderr,
@@ -2328,7 +2319,7 @@ func (driver *Driver) monitorJSON() error {
 	collector := &sequenceCollector{samples: driver.samples, cancel: cancel, cancelAfter: len(driver.samples)}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    stdout,
 		Stderr:    stderr,
 		Collector: collector,
@@ -2383,7 +2374,7 @@ func (driver *Driver) releasePathsWithoutEndpoints() error {
 
 func runReleaseMonitorCLI(arguments []string, standardOutput io.Writer) (int, string, error) {
 	standardError := &bytes.Buffer{}
-	application := bootstrap.WithDefaults(cli.Application{
+	application := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      standardOutput,
 		Stderr:      standardError,
 		Environment: []string{},
@@ -2656,7 +2647,7 @@ func (driver *Driver) runReleaseMonitoring(ctx context.Context) {
 		collector = &sequenceCollector{samples: []policy.Sample{healthySample(base)}}
 	}
 	stderr := &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:      &bytes.Buffer{},
 		Stderr:      stderr,
 		Environment: []string{},
@@ -2826,171 +2817,6 @@ func (driver *Driver) requireRejected() error {
 	return nil
 }
 
-func (driver *Driver) inspectBuildCaching() error {
-	repository, rootError := toolRoot()
-	if rootError != nil {
-		return rootError
-	}
-	command := GitCommand(repository, "check-ignore", "--quiet", "dist/hippo_test_linux_amd64.tar.gz")
-
-	driver.lifecycleOK = command.Run() == nil
-
-	return nil
-}
-
-func (driver *Driver) requireBuildCacheDisabled() error {
-	if !driver.lifecycleOK {
-		return errors.New("generated release binaries are not ignored")
-	}
-	return nil
-}
-
-func (driver *Driver) runTemporaryHarness(testExit int) error {
-	realGo := os.Getenv("HIPPO_GO_BINARY")
-	if realGo == "" {
-		realGo = "go"
-	}
-	realGo, err := exec.LookPath(realGo)
-	if err != nil {
-		return fmt.Errorf("resolve temporary E2E harness toolchain: %w", err)
-	}
-
-	repository, rootError := toolRoot()
-	if rootError != nil {
-		return rootError
-	}
-	temporaryParent, err := os.MkdirTemp("", "hippo-e2e-parent-")
-	if err != nil {
-		return err
-	}
-
-	fakeDirectory, err := os.MkdirTemp("", "hippo-fake-go-")
-	if err != nil {
-		_ = os.RemoveAll(temporaryParent)
-		return err
-	}
-
-	driver.temporaryPaths = append(driver.temporaryPaths, temporaryParent, fakeDirectory)
-	fakeGo := filepath.Join(fakeDirectory, "go")
-
-	program := `#!/bin/sh
-set -eu
-case "$1" in
-  build)
-    shift
-    output=
-    while [ "$#" -gt 0 ]; do
-      if [ "$1" = "-o" ]; then
-        output=$2
-        break
-      fi
-      shift
-    done
-    [ -n "$output" ]
-    printf '#!/bin/sh\nexit 0\n' > "$output"
-    chmod 700 "$output"
-    ;;
-  test)
-    [ -x "${HIPPO_BIN:-}" ]
-    exit "${FAKE_GO_TEST_EXIT:-0}"
-    ;;
-  run)
-    # Only the declared immutable-release receipt validators use real Go.
-    if [ "$#" -eq 4 ] && [ "$2" = -p=1 ] && [ "$3" = ./tests/support/oldidentity ]; then
-      exec ` + shellQuoteV04(realGo) + ` "$@"
-    fi
-    if [ "$#" -eq 5 ] && [ "$2" = -p=1 ] && [ "$3" = ./tests/support/oldidentity ] &&
-      { [ "$4" = --v085 ] || [ "$4" = --v0100 ]; }; then
-      exec ` + shellQuoteV04(realGo) + ` "$@"
-    fi
-    exit 64
-    ;;
-  *) exit 64 ;;
-esac
-`
-	// Confine the executable writes to the directory this fixture created and owns.
-	fakeRoot, err := os.OpenRoot(fakeDirectory)
-	if err != nil {
-		return err
-	}
-	helperDigest, helperError := writeStandInHostHelper(fakeRoot)
-	if err := errors.Join(fakeRoot.WriteFile("go", []byte(program), 0o700), helperError, fakeRoot.Close()); err != nil {
-		return err
-	}
-
-	command := exec.Command(filepath.Join(repository, "tests", e2eMode, "run.sh"))
-	// The harness is handed a prepared host helper, as a gate hands it to every dependent test. Without one,
-	// run.sh would build a race-instrumented helper itself, which this fake toolchain cannot do and which
-	// belongs to an admitted gate caller rather than to a behaviour scenario.
-	command.Env = environmentWith(map[string]string{
-		"FAKE_GO_TEST_EXIT":               strconv.Itoa(testExit),
-		"HIPPO_E2E_TEMP_PARENT":           temporaryParent,
-		"HIPPO_GO_BINARY":                 fakeGo,
-		"HIPPO_PUBLIC_HOST_HELPER":        filepath.Join(fakeDirectory, standInHostHelperName),
-		"HIPPO_PUBLIC_HOST_HELPER_SHA256": helperDigest,
-	})
-	// Each release preparer must establish its own receipt before exporting it.
-	// Inherited exported receipts would mask a broken fake-validator dispatch.
-	command.Env = slices.DeleteFunc(command.Env, func(entry string) bool {
-		return strings.HasPrefix(entry, "HIPPO_PUBLIC_OLD_VERSION_RECEIPT=") ||
-			strings.HasPrefix(entry, "HIPPO_PUBLIC_V085_VERSION_RECEIPT=") ||
-			strings.HasPrefix(entry, "HIPPO_PUBLIC_V0100_VERSION_RECEIPT=")
-	})
-
-	output, runError := command.CombinedOutput()
-	if testExit == 0 && runError != nil {
-		return fmt.Errorf("temporary E2E harness failed: %w: %s", runError, output)
-	}
-	if testExit != 0 {
-		var exitError *exec.ExitError
-		if !errors.As(runError, &exitError) || exitError.ExitCode() != testExit {
-			return fmt.Errorf("temporary E2E harness returned %w, want exit %d: %s", runError, testExit, output)
-		}
-	}
-
-	entries, err := os.ReadDir(temporaryParent)
-	if err != nil {
-		return err
-	}
-	if len(entries) != 0 {
-		return fmt.Errorf("temporary E2E parent retained %d artifact(s)", len(entries))
-	}
-
-	return nil
-}
-
-const standInHostHelperName = "hostprobe"
-
-// writeStandInHostHelper writes an executable that does nothing into the fixture directory and returns its SHA-256,
-// the two inputs tests/support/hostprobe/prepare.sh validates in place of building the real host helper.
-func writeStandInHostHelper(fixture *os.Root) (string, error) {
-	body := []byte("#!/bin/sh\nexit 0\n")
-	digest := sha256.Sum256(body)
-
-	return hex.EncodeToString(digest[:]), fixture.WriteFile(standInHostHelperName, body, 0o700)
-}
-
-func (driver *Driver) inspectE2ELifecycle() error {
-	if err := driver.runTemporaryHarness(0); err != nil {
-		return err
-	}
-
-	if err := driver.runTemporaryHarness(23); err != nil {
-		return err
-	}
-
-	driver.lifecycleOK = true
-
-	return nil
-}
-
-func (driver *Driver) requireE2ECleanup() error {
-	if !driver.lifecycleOK {
-		return errors.New("temporary E2E binary was not removed after every outcome")
-	}
-	return nil
-}
-
 func (driver *Driver) historicalGenerations() error {
 	cacheRoot, err := os.MkdirTemp("", "hippo-cache-")
 	if err != nil {
@@ -3117,28 +2943,6 @@ func (driver *Driver) inspectLintEnforcement() error {
 	return nil
 }
 
-func (driver *Driver) requireExhaustiveLint() error {
-	required := []string{"default: all", "max-issues-per-linter: 0", "max-same-issues: 0"}
-	for _, value := range required {
-		if !strings.Contains(driver.lintConfiguration, value) {
-			return fmt.Errorf("lint configuration does not enforce %q", value)
-		}
-	}
-
-	return nil
-}
-
-func (driver *Driver) requirePackageDocumentation() error {
-	if strings.Contains(driver.lintConfiguration, "- stylecheck") {
-		return errors.New("stylecheck is disabled")
-	}
-
-	if !strings.Contains(driver.lintConfiguration, "name: exported") || !strings.Contains(driver.lintConfiguration, "severity: error") {
-		return errors.New("exported documentation is not an error")
-	}
-	return nil
-}
-
 // requireNilnessAndExhaustiveMaps pins the two lint settings that reach beyond the default analyzers: govet's nilness
 // and exhaustive's map-literal check, which makes a keyed enumeration name every member.
 func (driver *Driver) requireNilnessAndExhaustiveMaps() error {
@@ -3203,13 +3007,6 @@ func listItems(block string) []string {
 	return items
 }
 
-func (driver *Driver) requireModuleScopedLint() error {
-	if !strings.Contains(driver.lintCommand, "go tool golangci-lint run") || strings.Contains(driver.lintCommand, "../") {
-		return errors.New("lint is not scoped to the standalone module")
-	}
-	return nil
-}
-
 // requirePinnedNilAway pins NilAway as a failing quick-gate step: a go.mod tool directive, and an invocation that runs
 // after golangci-lint over the whole module without -json, whose exit status is always zero.
 func (driver *Driver) requirePinnedNilAway() error {
@@ -3253,10 +3050,6 @@ func (driver *Driver) requirePinnedNilAway() error {
 		return errors.New("NilAway runs before golangci-lint")
 	}
 
-	if !validArchitectureGateOrder(driver.lintCommand) {
-		return errors.New("production import check must execute all graph and fixture tests after NilAway and before package tests")
-	}
-
 	modulePins, err := os.ReadFile(filepath.Join(repository, "go.mod"))
 	if err != nil {
 		return err
@@ -3266,95 +3059,6 @@ func (driver *Driver) requirePinnedNilAway() error {
 		return errors.New("go.mod does not pin NilAway as a tool")
 	}
 
-	return nil
-}
-
-func (driver *Driver) inspectBehaviourCoverage() error {
-	repository, rootError := toolRoot()
-	if rootError != nil {
-		return rootError
-	}
-	driver.strictAdapters = true
-
-	for _, adapter := range contract.Adapters() {
-		driver.strictAdapters = driver.strictAdapters && contract.SuiteOptions(adapter).Strict
-	}
-
-	unitAdapter, err := contract.AdapterByName(contract.Unit)
-	if err != nil {
-		return err
-	}
-
-	driver.unitExemptionsForbidden = unitAdapter.ExemptionTag == "" && len(contract.ApprovedExemptions[contract.Unit]) == 0
-	driver.approvedExemptions = true
-
-	for _, exemptions := range contract.ApprovedExemptions {
-		for _, exemption := range exemptions {
-			driver.approvedExemptions = driver.approvedExemptions &&
-				strings.TrimSpace(exemption.Boundary) != "" &&
-				strings.TrimSpace(exemption.Reason) != ""
-		}
-	}
-
-	fullData, err := os.ReadFile(filepath.Join(repository, "scripts", "test.sh"))
-	if err != nil {
-		return err
-	}
-
-	quickData, err := os.ReadFile(filepath.Join(repository, "scripts", "test-quick.sh"))
-	if err != nil {
-		return err
-	}
-
-	fullText, quickText := string(fullData), string(quickData)
-	effectiveText := quickText + fullText
-
-	unit := strings.Index(effectiveText, "HIPPO_BDD_ADAPTER=unit")
-	integration := strings.Index(effectiveText, "HIPPO_BDD_ADAPTER=integration")
-	e2e := strings.Index(effectiveText, "HIPPO_BDD_ADAPTER=e2e")
-	driver.serialCompliance = unit >= 0 && unit < integration && integration < e2e
-	driver.e2ePlacement = strings.Contains(fullText, "./tests/e2e/run.sh") && !strings.Contains(quickText, "./tests/e2e/run.sh")
-
-	return nil
-}
-
-func (driver *Driver) requireStrictAdapters() error {
-	if !driver.strictAdapters {
-		return errors.New("one or more behavior adapters do not use strict step resolution")
-	}
-	return nil
-}
-
-func (driver *Driver) requirePairedBindings() error {
-	return errors.Join(contract.ValidateHandlers(driver.Bindings())...)
-}
-
-func (driver *Driver) requireNoUnitExemptions() error {
-	if !driver.unitExemptionsForbidden {
-		return errors.New("unit behavior adapter permits exemptions")
-	}
-
-	return nil
-}
-
-func (driver *Driver) requireApprovedExemptions() error {
-	if !driver.approvedExemptions {
-		return errors.New("behavior exemptions do not name a concrete boundary and reason")
-	}
-	return nil
-}
-
-func (driver *Driver) requireSerialCompliance() error {
-	if !driver.serialCompliance {
-		return errors.New("behavior compliance does not run every adapter serially")
-	}
-	return nil
-}
-
-func (driver *Driver) requireE2EPlacement() error {
-	if !driver.e2ePlacement {
-		return errors.New("full end-to-end behavior is not isolated from quick checks")
-	}
 	return nil
 }
 
@@ -3379,122 +3083,6 @@ func containsAll(value string, needles ...string) bool {
 		}
 	}
 	return true
-}
-
-func (driver *Driver) inspectContributorEnforcement() error {
-	repository, rootError := toolRoot()
-	if rootError != nil {
-		return rootError
-	}
-	root := repository
-
-	read := func(parts ...string) (string, error) {
-		data, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
-
-		return string(data), err
-	}
-
-	commitHook, err := read(".husky", "commit-msg")
-	if err != nil {
-		return err
-	}
-
-	preCommitHook, err := read(".husky", "pre-commit")
-	if err != nil {
-		return err
-	}
-
-	prePushHook, err := read(".husky", "pre-push")
-	if err != nil {
-		return err
-	}
-
-	stagedConfig, err := read("lint-staged.config.mjs")
-	if err != nil {
-		return err
-	}
-
-	workflow, err := read(".github", "workflows", "pr-quality-gate.yml")
-	if err != nil {
-		return err
-	}
-
-	manifest, err := read("package.json")
-	if err != nil {
-		return err
-	}
-
-	quick, err := read("scripts", "test-quick.sh")
-	if err != nil {
-		return err
-	}
-
-	config, err := read("repo-config.yml")
-	if err != nil {
-		return err
-	}
-
-	commitMessage := gateBlock(config, "commit-message")
-	formatStaged := gateBlock(config, "format-staged")
-	publicSafetyRange := gateBlock(config, "public-safety-range")
-	quickGate := gateBlock(config, "quick")
-
-	driver.conventionalCommits = strings.Contains(commitHook, `--surface commit-msg --message-file "$1"`) &&
-		containsAll(commitMessage,
-			"message: { kind: commit-message }",
-			"scripts/check-commit-message.sh",
-			"RHINO_GATE_MESSAGE: { input: message.text }",
-			"source: hook-message-file",
-			"source: explicit-range, range: explicit") &&
-		strings.Contains(workflow, `--surface pull-request --base "$BASE_SHA" --head "$HEAD_SHA"`)
-	driver.pullRequestOnlyGate = workflowTriggers(workflow) == "pull_request"
-	driver.stagedFormatting = strings.Contains(preCommitHook, "--surface pre-commit") &&
-		!strings.Contains(preCommitHook, `-- "$@"`) &&
-		containsAll(formatStaged,
-			"type: mutation",
-			"mutation: { local: apply-index, ci: verify-clean }",
-			"scripts/format-staged.sh",
-			"source: git-index",
-			"source: explicit-range, range: explicit") &&
-		formatsEveryStagedLanguage(stagedConfig)
-	driver.pushQuickGate = strings.Contains(prePushHook, "--surface pre-push --push-updates-stdin") &&
-		containsAll(publicSafetyRange,
-			"range: { kind: commit-range }",
-			"source: push-updates, fallback: refs/remotes/origin/main") &&
-		containsAll(quickGate, "scripts/test-quick.sh", "run-on: { pre-push: {}, pull-request: {}, main: {} }") &&
-		strings.Contains(manifest, `"test:quick": "./scripts/test-quick.sh"`) &&
-		!strings.Contains(prePushHook, "npm exec -- nx") &&
-		!strings.Contains(prePushHook, "npx nx") &&
-		!strings.Contains(manifest, `"nx":`)
-	driver.coreCoverage = validCoreCoverageSelectors(quick)
-
-	return nil
-}
-
-// formatsEveryStagedLanguage reports whether the lint-staged configuration
-// formats each language this repository writes, with the formatter named. A
-// configuration that matched the glob and ran nothing would satisfy a check
-// that only looked for the glob.
-func formatsEveryStagedLanguage(stagedConfig string) bool {
-	wanted := []string{
-		`"**/*.go"`, "goimports -w", "gofumpt -w",
-		`"**/*.sh"`, "shfmt -w",
-		`"**/*.{json,md,yaml,yml}"`, "prettier --write",
-	}
-	for _, needle := range wanted {
-		if !strings.Contains(stagedConfig, needle) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (driver *Driver) requireConventionalCommits() error {
-	if !driver.conventionalCommits {
-		return errors.New("the one commit-message gate does not bind the canonical hook message and reviewed pull-request range")
-	}
-	return nil
 }
 
 type pinnedValidator struct {
@@ -3560,14 +3148,14 @@ func (driver *Driver) inspectDocumentationGate() error {
 	// Rhino's closed v0.4 surfaces, and review binds one immutable base/head.
 	driver.sharedDocumentationCheck = strings.Contains(config, "schema: rhino/repo-config/v2") &&
 		strings.Contains(prePushHook, "--surface pre-push --push-updates-stdin") &&
-		strings.Contains(workflow, `--surface pull-request --base "$BASE_SHA" --head "$HEAD_SHA"`) &&
+		containsAll(workflow, "--surface pull-request", `--base "${BASE_SHA}" --head "${HEAD_SHA}"`) &&
 		!strings.Contains(config, "\n        ci:")
 
 	driver.pinnedValidatorsRun = true
 	for _, validator := range pinnedValidators {
 		driver.pinnedValidatorsRun = driver.pinnedValidatorsRun &&
 			containsAll(gateBlock(config, validator.gate), validator.commands...) &&
-			strings.Contains(gateBlock(config, validator.gate), "run-on: { pre-push: {}, pull-request: {}, main: {} }")
+			strings.Contains(gateBlock(config, validator.gate), "\n        pull-request:")
 	}
 
 	harness, _, _ := strings.Cut(config, "\npolicies:")
@@ -3603,13 +3191,6 @@ func (driver *Driver) requireThreeHarnessProfiles() error {
 	return nil
 }
 
-func (driver *Driver) requirePullRequestOnlyGate() error {
-	if !driver.pullRequestOnlyGate {
-		return errors.New("the quality gate does not run on pull requests alone")
-	}
-	return nil
-}
-
 // workflowTriggers joins the event names under a workflow's `on:` block. A gate
 // that also fired on `push` would re-run against `main` after every merge and
 // re-report a verdict it had already given, so the contract is the whole set of
@@ -3634,27 +3215,6 @@ func workflowTriggers(workflow string) string {
 		events = append(events, strings.TrimSuffix(strings.TrimSpace(line), ":"))
 	}
 	return strings.Join(events, ",")
-}
-
-func (driver *Driver) requireStagedFormatting() error {
-	if !driver.stagedFormatting {
-		return errors.New("the pre-commit surface does not invoke formatting for every supported staged file type")
-	}
-	return nil
-}
-
-func (driver *Driver) requirePushQuickGate() error {
-	if !driver.pushQuickGate {
-		return errors.New("the pre-push surface does not invoke the direct no-Nx quick gate")
-	}
-	return nil
-}
-
-func (driver *Driver) requireCoreCoverage() error {
-	if !driver.coreCoverage {
-		return errors.New("the quick gate does not invoke deterministic core coverage at 99 percent")
-	}
-	return nil
 }
 
 func capacitySample(memory, available int64) policy.Sample {
@@ -3868,7 +3428,7 @@ func (driver *Driver) statusWithConfig() {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	stdout := &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout:    stdout,
 		Stderr:    &bytes.Buffer{},
 		Collector: collector,
@@ -3891,156 +3451,6 @@ func (driver *Driver) requireConfigExit() error {
 	return nil
 }
 
-func repositoryRoot() (string, error) {
-	return toolRoot()
-}
-
-func (driver *Driver) inspectArtifactPolicy() error {
-	root, err := repositoryRoot()
-	if err != nil {
-		return err
-	}
-	ignoredPaths := []string{
-		"hippo.local.json",
-		".env",
-		".env.local",
-		".cache/example",
-		"dist/example",
-		"coverage/example",
-		"local-tmp/example",
-		"generated-reports/example",
-		"node_modules/example",
-		"example.test",
-		".commandcode/taste/example",
-		".commandcode/settings.local.json",
-	}
-
-	driver.privateArtifacts = true
-	for _, path := range ignoredPaths {
-		ignore := GitCommand(root, "check-ignore", "--quiet", path)
-		if ignore.Run() != nil {
-			driver.privateArtifacts = false
-		}
-	}
-
-	tracked := exec.Command(
-		"git",
-		"ls-files",
-		".env",
-		".env.*",
-		".cache/**",
-		"dist/**",
-		"coverage/**",
-		"local-tmp/**",
-		"generated-reports/**",
-		"node_modules/**",
-		"*.test",
-		".commandcode/taste/**",
-		".commandcode/settings.local.json",
-	)
-	tracked.Dir = root
-	trackedOutput, trackedError := tracked.Output()
-	driver.privateArtifacts = driver.privateArtifacts && trackedError == nil && len(bytes.TrimSpace(trackedOutput)) == 0
-
-	examplePath := "hippo.local.json.example"
-	example := GitCommand(root, "ls-files", "--error-unmatch", examplePath)
-	driver.exampleTracked = example.Run() == nil
-
-	moduleData, moduleError := os.ReadFile(filepath.Join(root, "go.mod"))
-	packageData, packageError := os.ReadFile(filepath.Join(root, "package.json"))
-	manifest := map[string]any{}
-	manifestError := json.Unmarshal(packageData, &manifest)
-	private, privateOK := manifest["private"].(bool)
-	_, hasWorkspaces := manifest["workspaces"]
-	hasNxDependency := false
-
-	for _, section := range []string{"dependencies", "devDependencies", "peerDependencies", "optionalDependencies"} {
-		dependencies, ok := manifest[section].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		_, hasNxDependency = dependencies["nx"]
-		if hasNxDependency {
-			break
-		}
-	}
-
-	driver.applicationLayout = moduleError == nil &&
-		bytes.Contains(moduleData, []byte("module github.com/wahidyankf/hippo")) &&
-		packageError == nil && manifestError == nil && privateOK && private &&
-		!hasWorkspaces && !hasNxDependency &&
-		!pathExists(filepath.Join(root, "project.json")) &&
-		!pathExists(filepath.Join(root, "nx.json")) &&
-		pathExists(filepath.Join(root, "specs", "behaviours"))
-	return nil
-}
-
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-
-	return err == nil || !errors.Is(err, os.ErrNotExist)
-}
-
-func (driver *Driver) requirePrivateArtifacts() error {
-	if !driver.privateArtifacts {
-		return errors.New("local config, generated artifacts, or generated reports are not ignored and untracked")
-	}
-	return nil
-}
-
-func (driver *Driver) requireExampleTracked() error {
-	if !driver.exampleTracked {
-		return errors.New("local config example is not tracked")
-	}
-	return nil
-}
-
-func (driver *Driver) requireApplicationLayout() error {
-	if !driver.applicationLayout {
-		return errors.New("HIPPO is not a standalone Go module with co-owned specifications")
-	}
-	return nil
-}
-
-// validCoreCoverageSelectors verifies executed selectors, not promises in comments.
-func validCoreCoverageSelectors(script string) bool {
-	coverageCommand, thresholdCommand := "", ""
-	for line := range strings.SplitSeq(strings.ReplaceAll(script, "\\\n", " "), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "go test ") && strings.Contains(line, "-coverprofile=coverage/unit.out") {
-			if coverageCommand != "" {
-				return false
-			}
-			coverageCommand = line
-		}
-		if strings.HasPrefix(line, "go run ./tests/coverage ") {
-			if thresholdCommand != "" {
-				return false
-			}
-			thresholdCommand = line
-		}
-	}
-	if coverageCommand == "" || thresholdCommand == "" {
-		return false
-	}
-	calls, valid := gateTestCommands(coverageCommand)
-	if !valid || len(calls) != 1 || calls[0].suite != "" || calls[0].adapter != "" ||
-		!slices.Contains(calls[0].args, "./tests/bdd") ||
-		!gateOrdinarySelection(calls[0].args, gateMeasuredEntries()) ||
-		strings.ContainsAny(thresholdCommand, "|&;") {
-		return false
-	}
-	if !validCoverageTargets(coverageCommand, thresholdCommand) {
-		return false
-	}
-	fields := strings.Fields(coverageCommand)
-	return slices.Contains(fields, "./tests/unit") && slices.Contains(fields, "./internal/application") &&
-		slices.Contains(fields, "./internal/domain/coordination") && slices.Contains(fields, "./internal/domain/evidence") &&
-		slices.Contains(fields, "./internal/identity") && slices.Contains(fields, "./internal/status") &&
-		selectorFlag(thresholdCommand, "--minimum") == "99"
-}
-
 func selectorFlag(command, name string) string {
 	fields := strings.Fields(command)
 	for index, field := range fields {
@@ -4056,46 +3466,4 @@ func selectorFlag(command, name string) string {
 
 func csvSelectorContains(value, path string) bool {
 	return slices.Contains(strings.Split(value, ","), path)
-}
-
-func validArchitectureGateOrder(script string) bool {
-	nilaway, architecture, packages := -1, -1, -1
-	for index, line := range strings.Split(strings.ReplaceAll(script, "\\\n", " "), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "go tool nilaway ") {
-			nilaway = index
-		}
-		if line == "go test -count=1 ./tests/architecture" {
-			if architecture >= 0 {
-				return false
-			}
-			architecture = index
-		}
-		if strings.HasPrefix(line, "go test -count=1 ./cmd/...") {
-			packages = index
-		}
-	}
-	return nilaway >= 0 && nilaway < architecture && architecture < packages
-}
-
-func validCoverageTargets(coverageCommand, thresholdCommand string) bool {
-	packages := selectorFlag(coverageCommand, "-coverpkg=")
-	directories := selectorFlag(thresholdCommand, "--directories")
-	files := selectorFlag(thresholdCommand, "--files")
-	for _, path := range []string{"internal/policy", "internal/domain/coordination", "internal/domain/evidence", "internal/identity", "internal/status", "internal/application"} {
-		if !csvSelectorContains(packages, "./"+path) || !csvSelectorContains(directories, path) {
-			return false
-		}
-	}
-	for _, path := range []string{"internal/adapters/config/config.go", "internal/adapters/host/collector.go", "internal/adapters/host/linux_parsers.go"} {
-		if !csvSelectorContains(files, path) {
-			return false
-		}
-	}
-	for _, path := range []string{"./internal/adapters/config", "./internal/adapters/host", "./internal/adapters/evidence"} {
-		if !csvSelectorContains(packages, path) {
-			return false
-		}
-	}
-	return true
 }

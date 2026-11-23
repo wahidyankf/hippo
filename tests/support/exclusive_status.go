@@ -17,6 +17,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -72,7 +73,7 @@ func (driver *Driver) inspectExclusiveStatusOwner() error {
 
 	base := time.Unix(0, 0)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr,
 		Collector: &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 		Sleep:     func(time.Duration) {}, Environment: []string{hippoRootEnvironment + "=" + driver.evidenceRoot},

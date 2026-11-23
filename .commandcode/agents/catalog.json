@@ -80,7 +80,7 @@
     {
       "id": "skill/release-cut",
       "path": ".agents/skills/release-cut/SKILL.md",
-      "digest": "e626b8b08eb13400a395f7e1b98af1bbb480be5a378c7f7c53be8b67675d6366"
+      "digest": "449f23a66ddf201f825c2a9d173fc3cf5f346df4816b627c8db4e6aaa3dffdf6"
     },
     {
       "id": "skill/spec-impact-assessment",
@@ -95,12 +95,12 @@
     {
       "id": "skill/worktree-to-pr",
       "path": ".agents/skills/worktree-to-pr/SKILL.md",
-      "digest": "3b5b75018818ab3ffa3832fb2b11f96dfb3c723ffd2e2dbc24f8f4fee69da701"
+      "digest": "bf9197e9391bd975a1ff545a6ebbfc97055dcb145a5988fa9e22913d89fb4b4c"
     },
     {
       "id": "instruction",
       "path": "AGENTS.md",
-      "digest": "d8e682fcbd553152634cc7714cc3df7ca0d07d05d87a2770cad7dd22bd556035"
+      "digest": "40d83c23b21c7aaa19a638b7ed0f286990661ac624a0f983ef57d11a967faad0"
     },
     {
       "id": "agent/ci-checker",

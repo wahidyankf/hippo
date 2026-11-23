@@ -1,19 +1,28 @@
 Feature: Bounded runtime evidence
   Raw evidence retains a recent window while summaries cover the complete monitored lifetime.
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: Active evidence rotates without truncating its lifetime summary
+  Scenario: Active evidence keeps only the newest raw chunks
     Given a guarded evidence stream with small test chunks
     When the stream exceeds all retained raw chunks
     Then only the bounded newest raw chunks remain
-    And the evidence summary counts every recorded sample
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: A lifetime summary counts every recorded sample after the raw chunks rotate
+    Given a guarded evidence stream with small test chunks
+    When the stream exceeds all retained raw chunks
+    Then the evidence summary counts every recorded sample
+
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A shared root admits at most twenty live evidence streams
     Given twenty live evidence streams in one shared root
     When another evidence stream starts
     Then the new stream is rejected before raw evidence is created
 
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Inactive evidence is pruned to the shared storage budget
     Given inactive evidence above the shared storage budget
@@ -46,13 +55,13 @@ Feature: Bounded runtime evidence
     When the queued run receives SIGINT before it is admitted
     Then it exits 125 naming hippo.evidence.unwritable and no child starts
 
+  # Exemption(e2e): requires injected host samples that fail, or change the command, at a deterministic point in admission sampling; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: A run HIPPO stops before launch is summarized as admission-failed
     Given a guarded run that has begun sampling the host
     When <failure> before its child starts
     Then it exits 125 naming <reason>, its child never starts, and its lifetime summary records the outcome admission-failed
     And history filtered to the outcome admission-failed lists that run
-    And its lifetime summary carries no child usage fields
 
     Examples:
       | failure                                                    | reason                    |
@@ -60,12 +69,30 @@ Feature: Bounded runtime evidence
       | a signal stops it and its never-started receipt is refused | hippo.evidence.unwritable |
       | its command stops being executable                         | hippo.supervision.failed  |
 
+  # Exemption(e2e): requires host samples that fail, or a command that stops being executable, at a deterministic point in admission sampling; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario Outline: An admission-failed summary carries no child usage fields
+    Given a guarded run that has begun sampling the host
+    When <failure> before its child starts
+    Then its lifetime summary carries no child usage fields
+
+    Examples:
+      | failure                                                    |
+      | its host evidence becomes unreadable                       |
+      | a signal stops it and its never-started receipt is refused |
+      | its command stops being executable                         |
+
   Scenario: A passed run records the CPU and wall time its child used
     Given an empty evidence root for guarded runs
     When a guarded child keeps one CPU busy for about one second
     And JSON history is requested for thirty days
     Then the history row records at least 0.8 seconds of child CPU and at least 1 second of child wall time
-    And the history row carries no command, argument, working directory, or path
+
+  Scenario: A history row carries no command, argument, working directory, or path after a passed run
+    Given an empty evidence root for guarded runs
+    When a guarded child keeps one CPU busy for about one second
+    And JSON history is requested for thirty days
+    Then the history row carries no command, argument, working directory, or path
 
   Scenario: A waited grandchild counts toward the run's child CPU
     Given an empty evidence root for guarded runs
@@ -79,6 +106,7 @@ Feature: Bounded runtime evidence
     And JSON history is requested for thirty days
     Then the history row outcome reads task-failed and records at least 0.8 seconds of child CPU
 
+  # Exemption(e2e): requires synthetic critical pressure and an unreaped grandchild that the compiled binary cannot inject; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A shed run records only a lower bound of its child usage
     Given an empty evidence root for guarded runs
@@ -96,3 +124,11 @@ Feature: Bounded runtime evidence
     Given a passed run whose summary predates child usage fields
     When JSON history is requested for thirty days
     Then the history row reads passed and carries no child usage fields
+
+  # Behaviour: HI-EVD-004
+  # Exemption(e2e): a compiled binary run cannot age, seed, or count evidence files in its shared root; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: Completed prior-day evidence is compacted into daily raw and history files within their windows
+    Given completed prior-day evidence and aged raw and history archives in one shared root
+    When evidence retention is enforced on the next day
+    Then prior-day evidence is archived, today's stream is kept as written, and only archives within seven days of raw and thirty days of history remain

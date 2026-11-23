@@ -27,6 +27,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/conformance"
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 	"golang.org/x/sys/unix" //nolint:depguard // Cross-process flock fixtures must exercise the production kernel primitive.
@@ -399,7 +400,7 @@ func (driver *Driver) requireCheckedMiBConversionV04(root string) error {
 	}
 	base := time.Unix(0, 0)
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, runError := bootstrap.WithDefaults(cli.Application{
+	code, runError := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr,
 		Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(base)}},
 		Environment: []string{"HIPPO_ROOT=" + filepath.Join(root, "cli-root")},
@@ -1134,10 +1135,6 @@ func requireV04SchemaOneSupervisorLifetime(class string) error {
 	return runInternalGuardRegressionV04("TestSchemaOneOwnershipSurvivesSupervisorDeath/" + class)
 }
 
-func requireV04SchemaOneEmbeddedRetirement(string) error {
-	return runInternalGuardRegressionV04("TestSchemaOneEmbeddedOwnershipRetiresAfterHolder")
-}
-
 func requireV04LegacySchemaOneOwnership(class string) error {
 	return runInternalGuardRegressionV04("TestLegacySchemaOnePIDOnlyOwnershipCompatibility/" + class)
 }
@@ -1159,14 +1156,6 @@ func requireV072BoundedActivationContention(string) error {
 
 func requireV072StalledActivationContention(string) error {
 	return runInternalGuardRegressionV04("TestStalledActivationContentionFailsAfterOwnedCleanup")
-}
-
-func requireV04AggressiveGraceRetirement(string) error {
-	return runInternalGuardRegressionV04("TestTerminateAndWaitConfirmsRetirementAfterAnAggressiveGrace")
-}
-
-func requireV04ExitedUnreapedGroupStop(string) error {
-	return runInternalGuardRegressionV04("TestSignalGroupAcceptsAnExitedButUnreapedProcessGroup")
 }
 
 func requireV04BoundedGuardCancellation(string) error {
@@ -1225,16 +1214,8 @@ func requireV04LifetimeCapability(root string) error {
 	return nil
 }
 
-func requireV04AbandonedLocalHandles(string) error {
-	return runInternalGuardRegressionV04("TestRunUnconfirmedRetirementPreservesOwnershipAndExit/cancellation")
-}
-
 func requireV04PortIdentityCorruption(fault string) error {
 	return runInternalGuardRegressionV04("TestTokenizedPortIdentityCorruptionFailClosed/" + fault)
-}
-
-func requireV04PortHandleABA(string) error {
-	return runInternalGuardRegressionV04("TestStaleSameProcessPortHandleCannotReleaseReplacement")
 }
 
 func requireV04LegacyPortCompatibility(string) error {
@@ -2241,13 +2222,6 @@ func requireV04ConformanceCancellation(root string) error {
 	}
 }
 
-func requireV04ReapedGroupRetirement(string) error {
-	return errors.Join(
-		runInternalConformanceRegressionV04("TestSignalProcessGroupAcceptsAnExitedButUnreapedGroup"),
-		runInternalConformanceRegressionV04("TestCommandGroupRetirementToleratesDelayedReaping"),
-	)
-}
-
 func runInternalConformanceRegressionV04(name string) error {
 	moduleRoot, err := moduleRootV04()
 	if err != nil {
@@ -2722,7 +2696,7 @@ func (driver *Driver) statusModeV04(configPath, root string) (string, error) {
 	} else {
 		base := time.Unix(0, 0)
 		stdout := &bytes.Buffer{}
-		code, err := bootstrap.WithDefaults(cli.Application{
+		code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdout: stdout, Stderr: &bytes.Buffer{},
 			Collector: &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 			Sleep:     func(time.Duration) {}, Environment: []string{"HIPPO_ROOT=" + root},
@@ -2809,7 +2783,7 @@ func (driver *Driver) requestCompiledWaiterOverflowStatusV04() error {
 		driver.exitCode = exitCode(err)
 	} else {
 		base := time.Unix(0, 0)
-		driver.exitCode, err = bootstrap.WithDefaults(cli.Application{
+		driver.exitCode, err = bootstrap.WithDefaults(system.Production, cli.Application{
 			Stdout: stdout, Stderr: stderr, Sleep: func(time.Duration) {},
 			Collector:   &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}},
 			Environment: []string{"HIPPO_ROOT=" + root},

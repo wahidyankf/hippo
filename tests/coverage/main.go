@@ -19,8 +19,13 @@ func run() int {
 	files := flag.String("files", "", "comma-separated production files")
 	directories := flag.String("directories", "", "comma-separated deterministic production directories")
 	minimum := flag.Float64("minimum", 99, "minimum covered statement percentage")
+	packages := flag.String("packages", "", "comma-separated import paths, each gated on its own and on the aggregate")
 
 	flag.Parse()
+
+	if *packages != "" {
+		return reportPackages(*profile, *packages, *minimum)
+	}
 
 	selected := map[string]bool{}
 

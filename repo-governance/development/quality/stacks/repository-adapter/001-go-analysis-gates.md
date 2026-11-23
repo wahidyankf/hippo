@@ -49,9 +49,9 @@ versions: [`go.mod`](../../../../../go.mod).
 ## Domain Literal Analysis
 
 - form: standard-library repository Go test [`domain_literals.go`](../../../../../tests/support/domain_literals.go),
-  bound to "Production code compares no domain value with a literal" in
-  [`quality-gates.feature`](../../../../../specs/behaviours/quality-gates.feature). No private golangci-lint build or
-  new test-support dependency.
+  covered by `TestProductionCodeComparesNoDomainValueWithLiteral` in
+  [`domain_literals_internal_test.go`](../../../../../tests/support/domain_literals_internal_test.go). No private
+  golangci-lint build or new test-support dependency.
 - reach: running-platform non-test `cmd/`/`internal/` files. Its header records both rules/name list. Platform-specific
   collection in `internal/adapters/host` contains no domain name.
 - findings: zero required; fix violations in place. No allowlist, waiver or exemption.

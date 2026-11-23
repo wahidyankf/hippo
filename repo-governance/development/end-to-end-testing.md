@@ -18,17 +18,18 @@ proves nothing the unit adapter did not.
 
 ## Placement
 
-Run the canonical executing E2E corpus and compiled-only public suites only in the full gate. Ordinary quick support
-controls may acquire and use a temporary stamped candidate; that fixture does not execute an E2E journey.
+Run the canonical executing E2E corpus and compiled-only public suites only through `npm run test:e2e`, which the `main`
+surface runs after each merge. Ordinary quick support controls may acquire and use a temporary stamped candidate; that
+fixture does not execute an E2E journey.
 
-Run the full E2E suite on its scheduled CI workflow (CRON) by default in every repository that has E2E; keep local E2E
-selective to the touched flow. The nightly loaded-host workflow runs the release gate, including E2E, under synthetic
-load. `pre-push` must stay fast enough that nobody looks for a way around it — a slow hook is a hook that gets bypassed,
-and [push hook verification](../conventions/push-hook-verification.md) exists because that bypass is restricted to its
+The E2E suite never runs per pull request. Keep local E2E selective to the touched flow. The nightly loaded-host
+workflow runs the quick, integration, and E2E targets under synthetic load. `pre-push` runs only the leak scan, and it
+must stay fast enough that nobody looks for a way around it — a slow hook is a hook that gets bypassed, and
+[push hook verification](../conventions/push-hook-verification.md) exists because that bypass is restricted to its
 worktree-to-PR exception.
 
-This adapts the `ose-rules` end-to-end standard to HIPPO's quick/full gates: private fixture controls retain candidate
-acquisition while public journeys stay out of hooks.
+This adapts the `ose-rules` end-to-end standard to HIPPO's targets and surfaces: private fixture controls retain
+candidate acquisition while public journeys stay out of hooks and pull requests.
 
 ## Exemptions
 

@@ -13,6 +13,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	coordination "github.com/wahidyankf/hippo/internal/domain/coordination"
 
@@ -692,13 +693,18 @@ func buildCatalog(decoded file) (policy.Catalog, error) { //nolint:gocognit // R
 	return catalog, nil
 }
 
-// Load reads an explicit or optional local configuration.
+// Load reads an explicit or optional local configuration from the host's file system.
 func Load(path string, explicit bool) (Result, error) {
+	return load(system.Production, path, explicit)
+}
+
+// load reads an explicit or optional local configuration through the host's file port.
+func load(host system.System, path string, explicit bool) (Result, error) {
 	if path == "" {
 		return Result{Catalog: policy.BuiltinCatalog(), Coordination: exclusiveCoordination()}, nil
 	}
 
-	data, err := os.ReadFile(filepath.Clean(path))
+	data, err := host.Files.ReadFile(filepath.Clean(path))
 	if errors.Is(err, os.ErrNotExist) && !explicit {
 		return Result{Catalog: policy.BuiltinCatalog(), Coordination: exclusiveCoordination()}, nil
 	}

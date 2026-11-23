@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -24,6 +25,7 @@ type SafetyReceipt struct {
 }
 
 func writeSafetyReceipt(
+	port system.System,
 	root, runID, state, reason string,
 	metadata ReservationMetadata,
 	class policy.TaskClass,
@@ -33,7 +35,7 @@ func writeSafetyReceipt(
 		return nil
 	}
 	directory := filepath.Join(root, "receipts")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	if err := port.Files.MkdirAll(directory, 0o700); err != nil {
 		return err
 	}
 	receipt := SafetyReceipt{
@@ -41,7 +43,7 @@ func writeSafetyReceipt(
 		State: state, Reason: reason, Source: metadata.Source, Tags: metadata.Tags,
 		ResourceTier: metadata.Tier, TaskClass: class,
 	}
-	temporary, err := os.CreateTemp(directory, ".receipt-*.tmp")
+	temporary, err := port.Files.CreateTemp(directory, ".receipt-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -51,7 +53,7 @@ func writeSafetyReceipt(
 		if !closed {
 			returnError = errors.Join(returnError, temporary.Close())
 		}
-		if removeError := os.Remove(temporaryPath); !errors.Is(removeError, os.ErrNotExist) {
+		if removeError := port.Files.Remove(temporaryPath); !errors.Is(removeError, os.ErrNotExist) {
 			returnError = errors.Join(returnError, removeError)
 		}
 	}()
@@ -70,5 +72,5 @@ func writeSafetyReceipt(
 	closed = true
 	destination := filepath.Join(directory, now.UTC().Format("20060102T150405.000000000Z")+"-"+runID+".json")
 
-	return os.Rename(temporaryPath, destination)
+	return port.Files.Rename(temporaryPath, destination)
 }

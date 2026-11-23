@@ -68,10 +68,6 @@ func complianceOnlySelection(selector string) bool {
 	return !slices.ContainsFunc([]string{"TestUnitBehaviours", "TestIntegrationBehaviours", "TestE2EBehaviours"}, pattern.MatchString)
 }
 
-func TestUnitBehaviours(t *testing.T)        { runBehaviours(t, contract.Unit) }
-func TestIntegrationBehaviours(t *testing.T) { runBehaviours(t, contract.Integration) }
-func TestE2EBehaviours(t *testing.T)         { runBehaviours(t, contract.E2E) }
-
 func TestFeatureCompliance(t *testing.T) {
 	name := os.Getenv("HIPPO_BDD_ADAPTER")
 	if name == "" {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
 	"github.com/wahidyankf/hippo/internal/policy"
@@ -118,26 +119,34 @@ func (engine *Engine) configured(config application.RunConfig) RunConfig {
 	return result
 }
 
-// Normalize supplies OS streams/environment at the runtime edge and serializes shared writers.
-func (engine *Engine) Normalize(config application.RunConfig) application.RunConfig {
+// defaultRunEnvironment supplies streams and environment from the port at the
+// runtime edge. A caller-provided value always wins; only a missing one falls
+// back to the host the port names.
+func defaultRunEnvironment(port system.System, config application.RunConfig) application.RunConfig {
 	if config.Stderr == nil {
-		config.Stderr = os.Stderr
+		config.Stderr = port.Environment.Stderr
 	}
 	if config.ChildStdin == nil {
-		config.ChildStdin = os.Stdin
+		config.ChildStdin = port.Environment.Stdin
 	}
 	if config.ChildStdout == nil {
-		config.ChildStdout = os.Stdout
+		config.ChildStdout = port.Environment.Stdout
 	}
 	if config.ChildStderr == nil {
-		config.ChildStderr = os.Stderr
+		config.ChildStderr = port.Environment.Stderr
 	}
 	if config.Environment == nil {
-		config.Environment = os.Environ()
+		config.Environment = port.Environment.Environ()
 	}
 	if config.PortLeaseRoot == "" {
-		config.PortLeaseRoot = filepath.Join(os.TempDir(), "hippo-port-leases")
+		config.PortLeaseRoot = filepath.Join(port.Environment.TempDir(), "hippo-port-leases")
 	}
+	return config
+}
+
+// Normalize supplies OS streams/environment at the runtime edge and serializes shared writers.
+func (engine *Engine) Normalize(config application.RunConfig) application.RunConfig {
+	config = defaultRunEnvironment(system.Production, config)
 	current := engine.configured(config)
 	serializeWriters(&current)
 	config.Stderr = current.Stderr
@@ -148,7 +157,7 @@ func (engine *Engine) Normalize(config application.RunConfig) application.RunCon
 
 // ValidateCommand checks executable availability without starting a payload.
 func (*Engine) ValidateCommand(command string) *status.Failure {
-	return checkCommandIsRunnable(command)
+	return checkCommandIsRunnable(system.Production, command)
 }
 
 // Release drops only this invocation's positively retired ownership.
@@ -222,7 +231,7 @@ func (engine *Engine) Start(ctx context.Context, config application.RunConfig, l
 	if port != nil {
 		portLease = engine.ports[port.ID]
 	}
-	lifetime, err := launchConfiguredLifetime(ctx, engine.configured(config), session, portLease)
+	lifetime, err := launchConfiguredLifetime(system.Production, ctx, engine.configured(config), session, portLease)
 	if lifetime == nil {
 		return nil, err
 	}
@@ -252,7 +261,7 @@ func (engine *Engine) Stop(config application.RunConfig, workload *application.W
 	}
 	lifetime := *entry.lifetime
 	lifetime.exited = entry.stopExited
-	waitError, stopError := stopConfiguredLifetime(engine.configured(config), &lifetime)
+	waitError, stopError := stopConfiguredLifetime(system.Production, engine.configured(config), &lifetime)
 	if !errors.Is(stopError, errChildRetirementUnconfirmed) {
 		entry.closeBridge()
 	}
@@ -284,7 +293,7 @@ func (*Engine) Snapshot(ctx context.Context, root, mode string) (coordination.Re
 		return totals, refusedEvidenceWrite("reading coordination evidence", err)
 	}
 	if !present {
-		housekeepIdleDisplay(ctx, root)
+		housekeepIdleDisplay(ctx, system.Production, root)
 		return totals, nil
 	}
 	if active != "reservation" {
@@ -315,7 +324,7 @@ func (*Engine) SelectVictim(root string, cause coordination.ShedCause, emergency
 
 // VictimPresent observes a remote victim once and never signals it.
 func (*Engine) VictimPresent(ctx context.Context, root string, victim coordination.ReservationOwner) (bool, error) {
-	return reservationVictimPresent(ctx, root, victim)
+	return reservationVictimPresent(system.Production, ctx, root, victim)
 }
 
 // Cleanup applies the existing private evidence retention policy.
@@ -342,27 +351,38 @@ func (*Engine) Open(config application.RunConfig) (application.RunSink, error) {
 
 // Receipt records a never-started or safety outcome without exposing persistence.
 func (*Engine) Receipt(root, runID, state, reason string, metadata coordination.ReservationMetadata, class policy.TaskClass, now time.Time) error {
-	return writeSafetyReceipt(root, runID, state, reason, metadata, class, now)
+	return writeSafetyReceipt(system.Production, root, runID, state, reason, metadata, class, now)
 }
 
 // WriteRefused identifies refused filesystem evidence writes at the adapter boundary.
 func (*Engine) WriteRefused(err error) bool { return evidence.WriteRefused(err) }
 
-// RunClock supplies real time and the existing deterministic pause seam.
-type RunClock struct{}
+// RunClock supplies time and the existing deterministic pause seam. System
+// names the delegated host; a nil System keeps the production host, so the
+// zero value behaves as before without a decision at the call site (Q24).
+type RunClock struct {
+	System *system.System
+}
+
+func (clock RunClock) port() system.System {
+	if clock.System != nil {
+		return *clock.System
+	}
+	return system.Production
+}
 
 // Now returns the current time.
-func (RunClock) Now() time.Time { return time.Now() }
+func (clock RunClock) Now() time.Time { return clock.port().Clock.Now() }
 
 // Wait waits cancellably, preserving explicit fixture pauses.
-func (RunClock) Wait(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
-	return waitForContext(ctx, duration, pause)
+func (clock RunClock) Wait(ctx context.Context, duration time.Duration, pause func(time.Duration)) error {
+	return waitForContext(ctx, clock.port().Clock, duration, pause)
 }
 
 // Ticker creates an owned sampling timer.
-func (RunClock) Ticker(interval time.Duration) application.RunTicker {
-	ticker := time.NewTicker(interval)
-	return application.RunTicker{Ticks: ticker.C, Stop: ticker.Stop}
+func (clock RunClock) Ticker(interval time.Duration) application.RunTicker {
+	ticker := clock.port().Clock.NewTicker(interval)
+	return application.RunTicker{Ticks: ticker.Ticks, Stop: ticker.Stop}
 }
 
 // BeginPort validates a port request before exposing atomic attempts.
@@ -374,7 +394,7 @@ func (engine *Engine) BeginPort(config application.RunConfig) (application.PortA
 		return application.PortAdmission{}, err
 	}
 	return application.PortAdmission{Attempt: func() (application.PortResult, error) {
-		lease, retry, err := attemptPortLease(config.PortLeaseRoot, config.LeasePort, config.LeaseOwner)
+		lease, retry, err := attemptPortLease(system.Production, config.PortLeaseRoot, config.LeasePort, config.LeaseOwner)
 		if lease == nil {
 			return application.PortResult{Retry: retry}, err
 		}

@@ -11,27 +11,31 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"os"
 	"time"
+
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
 
 // unixOS is the gzip header's operating-system byte for Unix, the value the
 // archives carried when GNU tar on the Linux release runner wrote them.
 const unixOS = 3
 
+// process is the host the command runs against. A test replaces it with an in-memory host.
+var process = system.Production
+
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "release-archive:", err)
-		os.Exit(1)
+	if err := run(process.Files, process.Environment.Args[1:]); err != nil {
+		_, _ = fmt.Fprintln(process.Environment.Stderr, "release-archive:", err)
+		process.Environment.Exit(1)
 	}
 }
 
-func run(arguments []string) error {
+func run(files system.FileSystem, arguments []string) error {
 	flags := flag.NewFlagSet("release-archive", flag.ContinueOnError)
 	binary := flags.String("binary", "", "the binary to archive as hippo")
 	modified := flags.Int64("mtime", -1, "the member's modification time, in Unix seconds")
@@ -43,30 +47,32 @@ func run(arguments []string) error {
 		return errors.New("usage: release-archive -binary <path> -mtime <unix-seconds> -output <path>")
 	}
 
-	return write(*binary, time.Unix(*modified, 0), *output)
+	return write(files, *binary, time.Unix(*modified, 0), *output)
 }
 
 // write archives the binary as the single member hippo: a regular file, mode
-// 0755, owned by root, in the ustar format every tar implementation reads.
-func write(binary string, modified time.Time, output string) (err error) {
-	source, err := os.Open(binary)
+// 0755, owned by root, in the ustar format every tar implementation reads. It
+// reads the binary and writes the archive as whole files, so a failed encoding
+// leaves no archive behind.
+func write(files system.FileSystem, binary string, modified time.Time, output string) error {
+	data, err := files.ReadFile(binary)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, source.Close()) }()
-
-	info, err := source.Stat()
+	archive, err := encode(data, modified)
 	if err != nil {
 		return err
 	}
 
-	destination, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, destination.Close()) }()
+	return files.WriteFile(output, archive, 0o644)
+}
 
-	compressed := gzip.NewWriter(destination)
+// encode returns the gzip-compressed tar archive of the member. The header
+// write decides whether the body is written; the closing calls always run, and
+// the joined error keeps every failure that occurred.
+func encode(data []byte, modified time.Time) ([]byte, error) {
+	var buffer bytes.Buffer
+	compressed := gzip.NewWriter(&buffer)
 	compressed.OS = unixOS
 
 	archive := tar.NewWriter(compressed)
@@ -76,19 +82,16 @@ func write(binary string, modified time.Time, output string) (err error) {
 		Mode:     0o755,
 		Uname:    "root",
 		Gname:    "root",
-		Size:     info.Size(),
+		Size:     int64(len(data)),
 		ModTime:  modified,
 		Format:   tar.FormatUSTAR,
 	}
-	if err = archive.WriteHeader(header); err != nil {
-		return err
+	err := archive.WriteHeader(header)
+	if err == nil {
+		_, err = archive.Write(data)
 	}
-	if _, err = io.Copy(archive, source); err != nil {
-		return err
-	}
-	if err = archive.Close(); err != nil {
-		return err
-	}
+	err = errors.Join(err, archive.Close())
+	err = errors.Join(err, compressed.Close())
 
-	return compressed.Close()
+	return buffer.Bytes(), err
 }

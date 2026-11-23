@@ -37,10 +37,11 @@ func NewExclusiveSessionRecord(pid int, token string, class policy.TaskClass, de
 // Encode returns exactly the newline-terminated bytes persisted by lease and
 // session writers; it performs no host or filesystem operation.
 func (record CompatibilityOwnerRecord) Encode() ([]byte, error) {
-	data, err := json.Marshal(record)
-	if err != nil {
-		return nil, err
-	}
+	// json.Marshal fails only on unsupported values (channels, functions, or a
+	// failing Marshaler). Every field here is an int, a string, or a
+	// RecordedTaskClass whose MarshalText never fails, so the error below is
+	// discarded rather than exempted.
+	data, _ := json.Marshal(record) //nolint:errchkjson // Proven infallible above.
 
 	return append(data, '\n'), nil
 }
@@ -64,10 +65,9 @@ func NewExclusiveCoordinationMarker() CoordinationMarkerRecord {
 // Encode returns exactly the newline-terminated bytes persisted by the shared
 // mode writer; it performs no host or filesystem operation.
 func (record CoordinationMarkerRecord) Encode() ([]byte, error) {
-	data, err := json.Marshal(record)
-	if err != nil {
-		return nil, err
-	}
+	// json.Marshal fails only on unsupported values. Both fields here are an
+	// int and a string, so the error below is discarded rather than exempted.
+	data, _ := json.Marshal(record) //nolint:errchkjson // Proven infallible above.
 
 	return append(data, '\n'), nil
 }

@@ -9,12 +9,14 @@ Feature: Release resource ownership
   hosts with less than 10 GiB, so a fixed absolute threshold does not punish a small-RAM host. Summaries without
   physical memory keep 4 GiB.
 
+  # Exemption(e2e): requires synthetic release capacity that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Release admission preserves the requested capacity envelope
     Given a release host below its requested balanced capacity
     When release admission is assessed
     Then the release requires replanning instead of automatic fallback
 
+  # Exemption(e2e): requires synthetic release pressure, disk, and collector failures that cannot be injected through the compiled binary; alternative-proof: test:quick
   @e2e-exempt
   Scenario Outline: A failed release stability check names its own reason in one line
     Given a release host whose <condition>
@@ -63,42 +65,18 @@ Feature: Release resource ownership
     When release overlap evidence is assessed
     Then the release evidence is accepted
 
-  Scenario: Release overlap rejects swap-outs with low available memory
-    Given a release summary with 1024 swap-outs and under 4 GiB available memory
+  Scenario Outline: Release overlap judges swap-outs against the memory-scaled threshold
+    Given a release summary <origin> <swap_outs> swap-outs and <available> available memory
     When release overlap evidence is assessed
-    Then the release evidence is rejected
+    Then the release evidence is <outcome>
 
-  Scenario: Release overlap accepts swap-outs with 4 GiB available memory
-    Given a release summary with 1024 swap-outs and 4 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap accepts swap-outs above the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 1024 swap-outs and 3.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap accepts 31 swap-outs below the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 31 swap-outs and 2.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap accepts 1023 swap-outs below the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 1023 swap-outs and 2.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is accepted
-
-  Scenario: Release overlap rejects 1024 swap-outs below the scaled threshold of an 8 GiB host
-    Given a release summary from an 8 GiB host with 1024 swap-outs and 2.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is rejected
-
-  Scenario: Release overlap keeps the 4 GiB swap threshold on a 16 GiB host
-    Given a release summary from a 16 GiB host with 1024 swap-outs and 3.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is rejected
-
-  Scenario: Release overlap keeps the 4 GiB swap threshold when physical memory is absent
-    Given a release summary without physical memory with 1024 swap-outs and 3.5 GiB available memory
-    When release overlap evidence is assessed
-    Then the release evidence is rejected
+    Examples:
+      | origin                       | swap_outs | available   | outcome  |
+      | with                         | 1024      | under 4 GiB | rejected |
+      | with                         | 1024      | 4 GiB       | accepted |
+      | from an 8 GiB host with      | 1024      | 3.5 GiB     | accepted |
+      | from an 8 GiB host with      | 31        | 2.5 GiB     | accepted |
+      | from an 8 GiB host with      | 1023      | 2.5 GiB     | accepted |
+      | from an 8 GiB host with      | 1024      | 2.5 GiB     | rejected |
+      | from a 16 GiB host with      | 1024      | 3.5 GiB     | rejected |
+      | without physical memory with | 1024      | 3.5 GiB     | rejected |

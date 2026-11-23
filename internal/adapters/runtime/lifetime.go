@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"golang.org/x/sys/unix"
 )
 
@@ -79,7 +80,7 @@ func (usage *childUsage) snapshot() (time.Duration, bool) {
 //
 //nolint:gochecknoinits // A self-exec boundary must precede every possible main, including Go test binaries.
 func init() {
-	if !lifetimeLauncherAuthorized(os.Args, os.Environ()) {
+	if !lifetimeLauncherAuthorized(os.Args, os.Environ(), descriptorIsPipe) {
 		return
 	}
 
@@ -93,9 +94,9 @@ func descriptorIsPipe(descriptor uintptr) bool {
 	return err == nil && info.Mode&unix.S_IFMT == unix.S_IFIFO
 }
 
-func lifetimeLauncherAuthorized(arguments, environment []string) bool {
+func lifetimeLauncherAuthorized(arguments, environment []string, isPipe func(descriptor uintptr) bool) bool {
 	return lifetimeLauncherInputsAuthorized(
-		arguments, environment, descriptorIsPipe(3), descriptorIsPipe(4),
+		arguments, environment, isPipe(3), isPipe(4),
 	)
 }
 
@@ -170,24 +171,26 @@ func awaitLifetimeHandshake(ctx context.Context, report io.Reader, timeout time.
 }
 
 func startSupervisedLifetime(
-	ctx context.Context,
+	port system.System,
+	ctx context.Context, //nolint:revive // The system port leads every adapter signature; the context follows it.
 	config RunConfig,
 	executable string,
 	environment []string,
 	identityFiles ...*os.File,
 ) (*supervisedLifetime, error) {
-	launcher, err := os.Executable()
+	launcher, err := port.Runner.Executable()
 	if err != nil {
 		return nil, err
 	}
 
 	return startSupervisedLifetimeWithLauncher(
-		ctx, config, executable, environment, launcher, lifetimeHandshakeTimeout, identityFiles...,
+		port, ctx, config, executable, environment, launcher, lifetimeHandshakeTimeout, identityFiles...,
 	)
 }
 
 func startSupervisedLifetimeWithLauncher(
-	ctx context.Context,
+	port system.System,
+	ctx context.Context, //nolint:revive // The system port leads every adapter signature; the context follows it.
 	config RunConfig,
 	executable string,
 	environment []string,
@@ -198,19 +201,19 @@ func startSupervisedLifetimeWithLauncher(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	reportReader, reportWriter, err := os.Pipe()
+	reportReader, reportWriter, err := port.Files.Pipe()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = reportReader.Close() }()
-	capabilityReader, capabilityWriter, err := os.Pipe()
+	capabilityReader, capabilityWriter, err := port.Files.Pipe()
 	if err != nil {
 		_ = reportWriter.Close()
 
 		return nil, err
 	}
 	defer func() { _ = capabilityReader.Close() }()
-	capability, err := token()
+	capability, err := token(port)
 	if err != nil {
 		_ = reportWriter.Close()
 		_ = capabilityWriter.Close()
@@ -237,7 +240,7 @@ func startSupervisedLifetimeWithLauncher(
 			command.ExtraFiles = append(command.ExtraFiles, identity)
 		}
 	}
-	if err = command.Start(); err != nil {
+	if err = port.Runner.Start(command); err != nil {
 		_ = reportWriter.Close()
 
 		return nil, err
@@ -289,8 +292,18 @@ func waitForProcessGroupRetirement(processGroup int) error {
 }
 
 func runLifetimeLauncher(workingDirectory, executable string, arguments []string) int {
-	report := os.NewFile(3, "hippo-lifetime-report")
-	capabilityReader := os.NewFile(4, "hippo-lifetime-capability")
+	return runLifetimeLauncherFiles(
+		os.NewFile(3, "hippo-lifetime-report"), os.NewFile(4, "hippo-lifetime-capability"),
+		workingDirectory, executable, arguments,
+	)
+}
+
+// runLifetimeLauncherFiles is the launcher body behind its descriptor binding:
+// file descriptors 3 and 4 only exist across the exec boundary, so the binding
+// stays in runLifetimeLauncher while everything after it is directly testable.
+func runLifetimeLauncherFiles(
+	report, capabilityReader *os.File, workingDirectory, executable string, arguments []string,
+) int {
 	if report == nil || capabilityReader == nil {
 		return 1
 	}
@@ -323,11 +336,11 @@ func runLifetimeLauncher(workingDirectory, executable string, arguments []string
 	command.Env = withoutEnvironment(command.Env, lifetimeCapabilityEnvironment)
 	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	terminal := prepareTerminalForeground(os.Stdin)
+	terminal := prepareTerminalForeground(system.Production, os.Stdin)
 	terminal.configure(command.SysProcAttr)
 	if err := command.Start(); err != nil {
 		_ = reportLifetimeHandshake(report, lifetimeHandshake{Failure: "payload start failed"})
-		_ = terminal.restore()
+		_ = terminal.restore(system.Production)
 
 		return 1
 	}
@@ -336,7 +349,7 @@ func runLifetimeLauncher(workingDirectory, executable string, arguments []string
 		_ = syscall.Kill(-processGroup, syscall.SIGKILL)
 		_ = command.Wait()
 		_ = waitForProcessGroupRetirement(processGroup)
-		_ = terminal.restore()
+		_ = terminal.restore(system.Production)
 
 		return 1
 	}
@@ -358,7 +371,7 @@ func runLifetimeLauncher(workingDirectory, executable string, arguments []string
 	signal.Stop(forwardedSignals)
 	close(forwardedSignals)
 	<-forwardingDone
-	restoreError := terminal.restore()
+	restoreError := terminal.restore(system.Production)
 	if retirementError != nil || restoreError != nil {
 		return 1
 	}

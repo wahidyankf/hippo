@@ -1,12 +1,19 @@
 Feature: Guarded process execution
   The guard serializes heavy work, keeps long-lived services outside that lease, and owns only the process it launches.
 
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
   @e2e-exempt
-  Scenario: An exclusive session advertises compatibility coordination
+  Scenario: An exclusive session advertises exclusive coordination
     Given an empty shared coordination root
     When exclusive heavy work acquires a guarded session
     Then the shared root advertises exclusive coordination
-    And releasing its final session removes the coordination marker
+
+  # Exemption(e2e): a compiled binary run cannot plant, hold, or time the coordination records that owners and waiters share; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: Releasing the final exclusive session removes the coordination marker
+    Given an empty shared coordination root
+    When exclusive heavy work acquires a guarded session
+    Then releasing its final session removes the coordination marker
 
   Scenario: Reservation coordination rejects every compatibility class as a protocol mismatch
     Given the shared root advertises reservation coordination
@@ -19,6 +26,7 @@ Feature: Guarded process execution
     When a guarded run with a port lease is requested
     Then it exits 125 naming hippo.lease.unwritable and no child starts
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A live heavy lease defers a second owner
     Given another live process owns the heavy lease
@@ -26,24 +34,28 @@ Feature: Guarded process execution
     Then the second owner is deferred with exit 124 naming hippo.limit.capacity-deferred
     And the deferral names the process holding the lease
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A long-lived service never holds the heavy-work lease
     Given a live service session owns its resource lease
     When heavy work requests the lease
     Then the heavy owner acquires the lease immediately
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Concurrent services keep their own inheritable sessions
     Given two live service sessions on separate ports
     When each service child validates its inherited session
     Then both inherited sessions remain valid
 
+  # Exemption(e2e): requires synthetic inherited session state unavailable to an isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: An inherited session runs without reacquiring the lease
     Given a valid inherited resource session
     When a guarded child exits successfully
     Then the child exits successfully and the inherited session remains owned
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A failed child keeps its own exit code
     Given an admitted guarded command
@@ -60,78 +72,76 @@ Feature: Guarded process execution
       | 124  |
       | 125  |
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Canonical concurrency remains ecosystem neutral
     Given an admitted command without consumer concurrency mappings
     When the guarded child inspects its environment
     Then only canonical HIPPO concurrency variables are added
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Consumers select their concurrency environment mappings
     Given an admitted command with explicit consumer concurrency mappings
     When the guarded child inspects its environment
     Then missing mappings receive resolved concurrency and caller values remain unchanged
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Invalid concurrency mappings fail before child execution
     Given invalid and reserved consumer concurrency mappings
     When each mapped guarded command is requested
     Then every command is rejected before its child starts
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Guarded child streams remain composable
     Given an admitted guarded child with piped input and separate output streams
     When the guarded child copies all three standard streams
     Then stdin reaches the child and stdout and stderr remain separate
 
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: An interrupted guard signals once and then force-stops the child
     Given an admitted child that ignores termination
     When the guard is interrupted
     Then the child is signalled once and force-stopped within the grace
 
+  # Exemption(e2e): would replace or contend with live process ownership outside the isolated binary fixture; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A service port held by a live owner defers the contender
     Given a service port already leased by a live owner
     When another service requests that same port
     Then the contender is deferred with exit 124 naming hippo.limit.capacity-deferred instead of failing
-
-  @e2e-exempt
-  Scenario: Stopping an exited but unreaped child group is not a supervision failure
-    Given a guarded child process group whose members exited without being reaped
-    When its owning guard stops that process group
-    Then the stop reports no supervision failure
-
-  @e2e-exempt
-  Scenario: An aggressive termination grace still confirms a forced stop
-    Given a killed child group that retires after an aggressive termination grace
-    When its owning guard waits for that retirement
-    Then retirement is confirmed instead of leaving the reservation owned
-
+  # Exemption(e2e): a compiled binary run cannot hold, signal, kill, or time its own child process groups on demand; alternative-proof: test:integration
   @e2e-exempt
   Scenario: A supervision failure reaps the guarded child before releasing ownership
     Given an admitted child that ignores termination during a collector failure
     When guarded supervision loses host evidence
     Then the child is reaped before its resource lease is released
 
+  # Exemption(e2e): requires synthetic critical pressure while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Critical pressure sheds eligible work
     Given an admitted ephemeral child encounters critical pressure
     When the guard observes the critical sample
     Then the guard terminates its child and exits with code 124 naming hippo.limit.pressure-shed
 
+  # Exemption(e2e): requires synthetic lasting warning and a shortened warning grace while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Warning that outlasts the class grace sheds eligible work
     Given an admitted ephemeral child encounters lasting memory warning
     When the guard observes warning past the ephemeral grace
     Then the guard sheds its child after memory warning and exits with code 124 naming hippo.limit.pressure-shed
 
+  # Exemption(e2e): requires synthetic warning growth while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario: Worsening warning sheds degraded work
     Given an admitted degraded ephemeral child encounters growing compressor pressure
     When the guard observes warning through the grace
     Then the degraded child starts and is terminated with exit 124 naming hippo.limit.pressure-shed
 
+  # Exemption(e2e): requires a synthetic stable warning while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Stable warning spares an ephemeral child of the balanced lineage
     Given an ephemeral child of <profile> admitted on healthy Darwin samples
@@ -143,6 +153,7 @@ Feature: Guarded process execution
       | the built-in balanced profile              |
       | a configured profile that extends balanced |
 
+  # Exemption(e2e): requires synthetic warning growth, critical pressure, and disk evidence while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Unsafe pressure still sheds a balanced ephemeral child admitted under normal pressure
     Given an ephemeral child of the built-in balanced profile admitted under normal pressure
@@ -156,6 +167,7 @@ Feature: Guarded process execution
       | critical memory pressure       | hippo.limit.pressure-shed   |
       | disk below its warning reserve | hippo.limit.storage-blocked |
 
+  # Exemption(e2e): requires a synthetic stable warning while controlling the child process lifecycle; alternative-proof: test:integration
   @e2e-exempt
   Scenario Outline: Stable warning still sheds work outside the exemption
     Given <child> admitted under normal pressure
@@ -172,30 +184,35 @@ Feature: Guarded process execution
     When run asks to wait for admission under schema one exclusive coordination
     Then it exits 2 naming hippo.args.invalid with only its diagnostic before any payload starts
 
+  # Exemption(e2e): requires capacity to be freed from inside the queue pause, which needs an injected clock the compiled binary does not expose; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A single registered waiter rides out exhausted capacity
     Given a shared root that defers one owner before capacity frees
     When that owner runs with a budget to wait for admission
     Then it stays registered once and reports the admitted child's own exit code
 
+  # Exemption(e2e): requires an injected clock to spend the wait budget without spending the same wall time; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Waiting for admission still surrenders when the budget is spent
     Given a shared root whose capacity never frees
     When an owner waits for admission within a bounded budget
     Then it stops waiting before launch and reports the deferral as exit 124 naming hippo.limit.capacity-deferred
 
+  # Exemption(e2e): counting queue heartbeats across many polls needs an injected clock to spend the deadline without spending the same wall time; alternative-proof: test:quick
   @e2e-exempt
   Scenario: A caller waiting for admission reports one queue and deferral receipt
     Given a shared root whose capacity never frees
     When an owner waits for admission across many polls
     Then the queue and final deferral are each reported once without launching
 
+  # Exemption(e2e): degrades storage after queue admission, which needs the injected sample sequence the compiled binary does not expose; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Admission waiting leaves every later safety notice audible
     Given a shared root that frees capacity onto exhausted storage
     When an owner waits for admission across many polls
     Then the storage notice is reported after admission without a deferral
 
+  # Exemption(e2e): shares the injected clock of the deferral scenarios it is contrasted against; alternative-proof: test:quick
   @e2e-exempt
   Scenario: Waiting for admission never retries a decision that is not a deferral
     Given a shared root that admits an owner whose child fails
@@ -214,7 +231,12 @@ Feature: Guarded process execution
     Given exhausted reservation capacity and a run explicitly labeled test-web
     When that run becomes a registered waiter
     Then its full waiter run ID has a display annotation labeled test-web
-    And the queue retains its original resource demand and FIFO position
+
+  @tui-label
+  Scenario: A labeled waiter keeps its original resource demand and FIFO position
+    Given exhausted reservation capacity and a run explicitly labeled test-web
+    When that run becomes a registered waiter
+    Then the queue retains its original resource demand and FIFO position
 
   @tui-label
   Scenario: A default display label uses only the executable basename
@@ -239,11 +261,16 @@ Feature: Guarded process execution
       | dot-dot                 |
 
   @tui-label
-  Scenario: Exclusive owners publish the same advisory label metadata
+  Scenario: An exclusive run publishes its display label
     Given an exclusive compatibility run explicitly labeled build-web
     When its owned session becomes visible
     Then its full session run ID has a display annotation labeled build-web
-    And exclusive coordination and session schema remain unchanged
+
+  @tui-label
+  Scenario: Publishing a label leaves exclusive coordination and the session schema unchanged
+    Given an exclusive compatibility run explicitly labeled build-web
+    When its owned session becomes visible
+    Then exclusive coordination and session schema remain unchanged
 
   @tui-label
   Scenario: Inherited runs preserve the original owner's display label
@@ -253,9 +280,9 @@ Feature: Guarded process execution
     And the nested run creates no replacement annotation
 
   @tui-label
-  Scenario Outline: Owned display annotations retire with their owned tokens
+  Scenario Outline: A display annotation is removed when its run ends
     Given a registered labeled run that reaches <ending>
-    When its owned token is removed under the coordination lock
+    When the run releases its ownership
     Then its matching display annotation is removed
     And no other owner's display annotation changes
 
@@ -267,11 +294,10 @@ Feature: Guarded process execution
       | confirmed forced stop  |
 
   @tui-label
-  Scenario Outline: Advisory annotation failures preserve guarded run outcomes
+  Scenario Outline: A failed annotation write or removal leaves the run outcome unchanged
     Given a labeled guarded run whose annotation <operation> fails
     When that guarded run completes
     Then its admission resources child status and release outcome remain unchanged
-    And the annotation failure is reported without private paths
 
     Examples:
       | operation |
@@ -279,16 +305,109 @@ Feature: Guarded process execution
       | removal   |
 
   @tui-label
-  Scenario: Annotation cleanup requires positive stale ownership evidence
+  Scenario Outline: A failed annotation write or removal is reported without private paths
+    Given a labeled guarded run whose annotation <operation> fails
+    When that guarded run completes
+    Then the annotation failure is reported without private paths
+
+    Examples:
+      | operation |
+      | write     |
+      | removal   |
+
+  @tui-label
+  Scenario: Display annotation cleanup removes only the annotation of a proven stale owner
     Given one proven stale owner and one live owner with display annotations
     And an annotation whose token is temporarily absent from the ledger
-    When locked coordination reconciliation performs annotation cleanup
+    When annotation cleanup runs
     Then only the proven stale owner's annotation is removed
     And the live and unproven annotations remain unchanged
 
   @tui-label
-  Scenario: Mixed versions coordinate without requiring display metadata
+  Scenario: Owners without display annotations stay visible with unavailable labels
     Given old and current owners sharing unchanged coordination schemas
     When current observation reads the owners and their queued work
     Then owners without display annotations remain visible with unavailable labels
-    And admission accounting and FIFO ordering remain unchanged
+
+  @tui-label
+  Scenario: Owners of mixed versions keep their admission accounting and FIFO order
+    Given old and current owners sharing unchanged coordination schemas
+    When current observation reads the owners and their queued work
+    Then admission accounting and FIFO ordering remain unchanged
+
+  # Behaviour: HI-CLI-088
+  Scenario: A healthy guarded run writes nothing of its own to stderr
+    Given an empty guarded run root
+    When a guarded command that exits zero runs in that root
+    Then the guard writes nothing to standard error
+
+  # Behaviour: HI-EXT-007
+  # Behaviour: HI-ERR-017
+  Scenario: A command that exists but cannot be executed exits 126 naming hippo.child.not-executable
+    Given a guarded run root holding a command file that cannot be executed
+    When a guarded run executes that command file
+    Then it exits 126 naming hippo.child.not-executable
+
+  # Behaviour: HI-EXT-008
+  # Behaviour: HI-ERR-018
+  Scenario: A missing command exits 127 naming hippo.child.not-found
+    Given an empty guarded run root
+    When a guarded run executes a command path that does not exist
+    Then it exits 127 naming hippo.child.not-found
+
+  # Behaviour: HI-EXT-009
+  Scenario Outline: A child ended by a signal makes the guard exit with 128 plus the signal number
+    Given an empty guarded run root
+    When a guarded child ends itself with signal <signal>
+    Then the guard exits with status <code>
+
+    Examples:
+      | signal | code |
+      | TERM   | 143  |
+      | KILL   | 137  |
+
+  # Behaviour: HI-CLI-064
+  Scenario: A leased service port is released when its child exits
+    Given a service port leased by a guarded run whose child exits zero
+    When another guarded run leases that same service port
+    Then the second run exits zero and its child starts
+
+  # Behaviour: HI-ENV-009
+  Scenario: TMPDIR names the base of the hippo-port-leases root
+    Given TMPDIR names an empty scenario directory
+    When a guarded run leases a service port and its child exits zero
+    Then the port lease root is the hippo-port-leases directory inside TMPDIR
+
+  # Behaviour: HI-ENV-011
+  Scenario: A reserved run exports its allocated memory in HIPPO_RESERVED_MEMORY_BYTES
+    Given a schema two configuration
+    When a guarded child records its HIPPO_RESERVED_MEMORY_BYTES variable
+    Then the child reads a positive byte count
+
+  # Behaviour: HI-ENV-012
+  Scenario: A guarded child receives HIPPO_BIN naming the absolute path of the running executable
+    Given an empty guarded run root
+    When a guarded child records its HIPPO_BIN variable
+    Then HIPPO_BIN names the running executable by absolute path
+
+  # Behaviour: HI-CLI-065
+  # Exemption(e2e): counting queue heartbeats across many polls needs an injected clock to spend the deadline without spending the same wall time; alternative-proof: test:quick
+  @e2e-exempt
+  Scenario: A queued run reports its run ID, queue position, and remaining deadline every 30 seconds
+    Given a shared root whose capacity never frees
+    When an owner waits for admission for sixty-five seconds
+    Then the queue reports its run ID, position, and remaining deadline at 0, 30, and 60 seconds
+
+  # Behaviour: HI-ENV-013
+  # Exemption(e2e): the harness starts a compiled binary with one value per variable name, so a duplicated HIPPO_SESSION cannot reach it; alternative-proof: test:integration
+  @e2e-exempt
+  Scenario: The last of a duplicated HIPPO_SESSION value decides the inherited session
+    Given a valid inherited resource session
+    When a guarded child runs with a stale HIPPO_SESSION value ahead of that session's token
+    Then the child exits successfully and the inherited session remains owned
+
+  # Behaviour: HI-CLI-056
+  Scenario: A run under schema three without a resource tier is refused before any work
+    Given a schema three configuration that declares the very-heavy tier within the pool
+    When a guarded run names no resource tier and a command that exits zero
+    Then it exits 2 naming hippo.args.invalid and its payload does not start

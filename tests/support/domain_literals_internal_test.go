@@ -316,3 +316,16 @@ func TestDomainLiteralFailsWhereNoModuleLoads(t *testing.T) {
 		t.Fatal("a directory without a module was analysed")
 	}
 }
+
+// TestProductionCodeComparesNoDomainValueWithLiteral covers the removed scenario "Production code compares no domain
+// value with a literal". The analysis reads every production package under cmd and internal, and reports nothing.
+func TestProductionCodeComparesNoDomainValueWithLiteral(t *testing.T) {
+	driver := &Driver{}
+	if err := driver.runDomainLiteralAnalysis(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := driver.requireNoDomainLiteralFinding(); err != nil {
+		t.Fatal(err)
+	}
+}

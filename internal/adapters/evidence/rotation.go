@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"golang.org/x/sys/unix"
 )
 
@@ -19,9 +21,10 @@ const (
 // Writer stores newline-delimited JSON in a bounded set of recent chunks.
 // A Writer is owned by one goroutine and is not safe for concurrent use.
 type Writer struct {
+	host       system.System
 	path       string
 	markerPath string
-	file       *os.File
+	file       system.File
 	written    int64
 	limits     Limits
 }
@@ -31,17 +34,17 @@ type activeMarker struct {
 	PID           int `json:"pid"`
 }
 
-func withWriterLock(root string, operation func() error) error {
-	lock, err := os.OpenFile(filepath.Join(root, ".writers.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+func withWriterLock(port system.System, root string, operation func() error) error {
+	lock, err := port.Files.OpenFile(filepath.Join(root, ".writers.lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
 
-	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+	if err := port.Files.Flock(lock, unix.LOCK_EX); err != nil {
 		return err
 	}
-	defer func() { _ = unix.Flock(int(lock.Fd()), unix.LOCK_UN) }()
+	defer func() { _ = port.Files.Flock(lock, unix.LOCK_UN) }()
 
 	return operation()
 }
@@ -77,24 +80,28 @@ func rotatedPath(path string, generation int) string {
 
 // NewWriter creates an exclusive current chunk and its live-owner marker.
 func NewWriter(path string, limits Limits) (*Writer, error) {
+	return newWriter(system.Production, path, limits)
+}
+
+func newWriter(port system.System, path string, limits Limits) (*Writer, error) {
 	limits, err := normalizeLimits(limits)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := port.Files.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
 
 	marker := markerPath(path)
-	var file *os.File
-	err = withWriterLock(filepath.Dir(path), func() error {
-		entries, readError := os.ReadDir(filepath.Dir(path))
+	var file system.File
+	err = withWriterLock(port, filepath.Dir(path), func() error {
+		entries, readError := port.Files.ReadDir(filepath.Dir(path))
 		if readError != nil {
 			return readError
 		}
 
-		active, activeError := activePrefixes(entries, filepath.Dir(path))
+		active, activeError := activePrefixes(port, entries, filepath.Dir(path))
 		if activeError != nil {
 			return activeError
 		}
@@ -102,29 +109,27 @@ func NewWriter(path string, limits Limits) (*Writer, error) {
 			return fmt.Errorf("live evidence session limit reached (%d)", maximumLiveWriters)
 		}
 
-		file, readError = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		file, readError = port.Files.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if readError != nil {
 			return readError
 		}
 
-		encoded, encodeError := json.Marshal(activeMarker{SchemaVersion: 1, PID: os.Getpid()})
-		if encodeError != nil {
-			return encodeError
-		}
+		// The marker holds two integers, which encoding/json always encodes, so Marshal reports no error here.
+		encoded, _ := json.Marshal(activeMarker{SchemaVersion: 1, PID: port.Processes.Getpid()})
 
-		return os.WriteFile(marker, append(encoded, '\n'), 0o600)
+		return port.Files.WriteFile(marker, append(encoded, '\n'), 0o600)
 	})
 	if err != nil {
 		if file != nil {
 			_ = file.Close()
 		}
-		_ = os.Remove(path)
-		_ = os.Remove(marker)
+		_ = port.Files.Remove(path)
+		_ = port.Files.Remove(marker)
 
 		return nil, err
 	}
 
-	return &Writer{path: path, markerPath: marker, file: file, limits: limits}, nil
+	return &Writer{host: port, path: path, markerPath: marker, file: file, limits: limits}, nil
 }
 
 func (writer *Writer) abandon() {
@@ -132,37 +137,38 @@ func (writer *Writer) abandon() {
 		_ = writer.file.Close()
 		writer.file = nil
 	}
-	_ = os.Remove(writer.markerPath)
+	_ = writer.host.Files.Remove(writer.markerPath)
 }
 
 func (writer *Writer) rotate() error {
+	files := writer.host.Files
 	if err := writer.file.Close(); err != nil {
 		return err
 	}
 	writer.file = nil
 
 	oldest := rotatedPath(writer.path, writer.limits.Chunks-1)
-	if err := os.Remove(oldest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := files.Remove(oldest); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 
 	for generation := writer.limits.Chunks - 2; generation >= 1; generation-- {
 		from := rotatedPath(writer.path, generation)
 		to := rotatedPath(writer.path, generation+1)
-		if err := os.Rename(from, to); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := files.Rename(from, to); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 	}
 
 	if writer.limits.Chunks > 1 {
-		if err := os.Rename(writer.path, rotatedPath(writer.path, 1)); err != nil {
+		if err := files.Rename(writer.path, rotatedPath(writer.path, 1)); err != nil {
 			return err
 		}
-	} else if err := os.Remove(writer.path); err != nil {
+	} else if err := files.Remove(writer.path); err != nil {
 		return err
 	}
 
-	file, err := os.OpenFile(writer.path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := files.OpenFile(writer.path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
@@ -210,10 +216,10 @@ func (writer *Writer) Close() error {
 
 	closeError := writer.file.Close()
 	writer.file = nil
-	removeError := withWriterLock(filepath.Dir(writer.path), func() error {
-		return os.Remove(writer.markerPath)
+	removeError := withWriterLock(writer.host, filepath.Dir(writer.path), func() error {
+		return writer.host.Files.Remove(writer.markerPath)
 	})
-	if errors.Is(removeError, os.ErrNotExist) {
+	if errors.Is(removeError, fs.ErrNotExist) {
 		removeError = nil
 	}
 

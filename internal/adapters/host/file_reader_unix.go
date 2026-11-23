@@ -178,12 +178,26 @@ func waitFileContext(ctx context.Context, path string, descriptor int, operation
 }
 
 func pollFileDescriptor(descriptor, timeout int) (bool, error) {
-	// Open returned this native descriptor; it fits the pollfd ABI.
+	return pollDescriptor(pollRevents, descriptor, timeout)
+}
+
+// pollRevents asks the kernel for the readiness mask of one descriptor. Open returned this native descriptor, so it
+// fits the pollfd ABI.
+func pollRevents(descriptor, timeout int) (int16, error) {
 	value := []unix.PollFd{{Fd: int32(descriptor), Events: unix.POLLIN}} //nolint:gosec // Native open descriptors fit int32.
-	if _, err := unix.Poll(value, timeout); err != nil {
+	_, err := unix.Poll(value, timeout)
+
+	return value[0].Revents, err
+}
+
+// pollDescriptor classifies the readiness a poll reports, and a failed poll is returned as its error.
+func pollDescriptor(poll func(int, int) (int16, error), descriptor, timeout int) (bool, error) {
+	events, err := poll(descriptor, timeout)
+	if err != nil {
 		return false, err
 	}
-	return classifyFilePoll(value[0].Revents)
+
+	return classifyFilePoll(events)
 }
 
 func classifyFilePoll(events int16) (bool, error) {

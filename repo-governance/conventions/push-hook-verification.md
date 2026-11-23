@@ -12,9 +12,9 @@ narrower guard-stop exception — a guard stop before any check started, on a hu
 whose hosted pull-request gate mirrors the hook — lives in
 [Capacity-Held Hook](push-hook-verification/001-capacity-held-hook.md).
 
-The hooks are `commit-msg` (Conventional Commits), `pre-commit` (staged formatting), and `pre-push` (the quick gate and
-the documentation gates). Each mirrors a job in the [pull-request gate](../development/quality-gates.md), so a bypassed
-hook does not skip the check — it moves the failure to CI, where it costs more and blocks the merge anyway.
+The hooks are `commit-msg` (Conventional Commits), `pre-commit` (staged formatting), and `pre-push` (the leak scan of
+the pushed range). Each mirrors a check in the [pull-request gate](../development/quality-gates.md), so a bypassed hook
+does not skip the check — it moves the failure to CI, where it costs more and blocks the merge anyway.
 
 ## Worktree-to-PR Exception
 

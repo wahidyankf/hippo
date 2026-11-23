@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.16.7/schemas/repo-config/v2.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/wahidyankf/rhino/v0.19.0/schemas/repo-config/v2.schema.json
 # HIPPO owns this consumer policy. RHINO owns the schema and renderer; the
 # repository declares only its lifecycle, canonical harness, and validators.
 
@@ -509,6 +509,7 @@ policies:
       authoring-rule: rendered
       node-label-graphemes: 32
       edge-label-graphemes: 24
+      require-default-class: true
       fill-colors:
         - "#0173B2"
         - "#DE8F05"
@@ -591,10 +592,42 @@ policies:
         - family: ci
         - family: pr-review
         - family: specs
+  behaviour:
+    corpus:
+      - specs/behaviours
+    fixtures:
+      - specs/fixtures
+    levels:
+      unit:
+        - internal/**/*_test.go
+        - cmd/**/*_test.go
+        - tests/unit/**/*_test.go
+        - tests/bdd/unit_*_test.go
+      integration:
+        - tests/integration/**/*_test.go
+        - tests/bdd/integration_*_test.go
+      e2e:
+        - tests/e2e/**/*_test.go
+        - tests/bdd/e2e_*_test.go
+    # The test files of a runner that executes whole feature files, so a
+    # `<feature>: *` reference in them covers every scenario of the file (B05).
+    whole-file:
+      - tests/bdd/unit_*_test.go
+      - tests/bdd/integration_*_test.go
+      - tests/bdd/e2e_*_test.go
 
 gates:
   composition:
     pull-request: { relation: at-least }
+  wiring:
+    hooks:
+      directory: .husky
+    ci:
+      directory: .github/workflows
+    local-surfaces:
+      pre-commit: [format-staged]
+      commit-msg: [commit-message]
+      pre-push: [public-safety-range]
   entries:
     - id: public-safety-tree
       type: check
@@ -602,9 +635,8 @@ gates:
         executable: bash
         args: [{ literal: scripts/public-safety/check.sh }]
       run-on:
-        pre-commit: {}
-        pull-request: {}
-        main: {}
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: public-safety-message
       type: check
       inputs:
@@ -615,10 +647,8 @@ gates:
         environment:
           PUBLIC_SAFETY_MESSAGE: { input: message.text }
       run-on:
-        commit-msg:
-          bind:
-            message: { source: hook-message-file }
         pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
           bind:
             message: { source: explicit-range, range: explicit }
     - id: public-safety-range
@@ -684,31 +714,43 @@ gates:
       command:
         executable: sh
         args: [{ literal: scripts/shell-lint.sh }]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: remote-dispatch-refusal
       type: check
       command:
         executable: bash
         args: [{ literal: scripts/check-remote-dispatch-refusal.sh }]
-      run-on: { pre-commit: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: quick
       type: check
       command:
         executable: bash
         args: [{ literal: scripts/test-quick.sh }]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: the quick gate runs at pull-request and on main, never in a local hook."
+        main:
+          reason: "The main surface runs the quick gate after each merge, unfiltered."
     - id: markdown-line-length
       type: check
       command:
         executable: sh
         args: [{ literal: scripts/check-markdown-line-length.sh }]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: repo-config
       type: check
       command:
         executable: ./rhino
         args: [{ literal: repo-config }, { literal: validate }]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: word-budget
       type: check
       command:
@@ -719,7 +761,9 @@ gates:
             { literal: word-budget },
             { literal: validate },
           ]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: quality-gates
       type: check
       command:
@@ -730,7 +774,9 @@ gates:
             { literal: quality-gates },
             { literal: validate },
           ]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: directory-map
       type: check
       command:
@@ -741,7 +787,9 @@ gates:
             { literal: directory-map },
             { literal: validate },
           ]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: harness-adapters
       type: check
       command:
@@ -750,20 +798,121 @@ gates:
           - literal: harness
           - literal: adapters
           - literal: validate
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: internal-links
       type: check
       command:
         executable: ./rhino
         args:
           [{ literal: md }, { literal: internal-link }, { literal: validate }]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
     - id: mermaid
       type: check
       command:
         executable: ./rhino
         args: [{ literal: md }, { literal: mermaid }, { literal: validate }]
-      run-on: { pre-push: {}, pull-request: {}, main: {} }
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: worktree-layout
+      type: check
+      command:
+        executable: sh
+        args: [{ literal: scripts/check-worktree-layout.sh }]
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: format-check
+      type: check
+      command:
+        executable: npm
+        args: [{ literal: run }, { literal: format:check }]
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: hook-transport-tests
+      type: check
+      command:
+        executable: bash
+        args:
+          - literal: -c
+          - literal: "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_PREFIX && bash .commandcode/hooks/agent-policy-selector.test.sh && bash .commandcode/hooks/git-fixture-isolation.test.sh && bash .muse/hooks/run-policy-hook.test.sh && exec bash scripts/agent-hippo-guard.test.sh"
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: architecture-tests
+      type: check
+      command:
+        executable: go
+        args:
+          [
+            { literal: test },
+            { literal: -count=1 },
+            { literal: ./tests/architecture },
+          ]
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: contract-tests
+      type: check
+      command:
+        executable: go
+        args:
+          [
+            { literal: test },
+            { literal: -race },
+            { literal: -count=1 },
+            { literal: ./tests/contract },
+          ]
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: artifact-tests
+      type: check
+      command:
+        executable: sh
+        args: [{ literal: tests/artifacts/run.sh }]
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: gate-wiring
+      type: check
+      command:
+        executable: ./rhino
+        args: [{ literal: gate }, { literal: wiring }, { literal: validate }]
+      run-on:
+        pull-request:
+          reason: "C6: a check outside the local hooks' allowed lists runs at pull-request only."
+    - id: test-integration
+      type: check
+      command:
+        executable: npm
+        args: [{ literal: run }, { literal: test:integration }]
+      run-on:
+        pull-request:
+          reason: "The integration suites run at pull-request; no local hook runs them."
+        main:
+          reason: "The integration suites also run on main after each merge."
+    - id: test-e2e
+      type: check
+      command:
+        executable: npm
+        args: [{ literal: run }, { literal: test:e2e }]
+      run-on:
+        main:
+          reason: "The end-to-end suites run on main, never per pull request."
+    - id: vuln-scan
+      type: check
+      command:
+        executable: go
+        args: [{ literal: tool }, { literal: govulncheck }, { literal: ./... }]
+      run-on:
+        main:
+          reason: "The vulnerability database is fetched over the network, so the scan runs on main rather than in the offline pull-request gate."
 
 extensions:
   # Owner: repo-governance/development/quality/stacks/repository-adapter.md

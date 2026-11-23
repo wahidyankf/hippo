@@ -57,7 +57,7 @@ materially changed.
 ## Focused Validation
 
 For local changed-diagram checks, use RHINO's `--file` once per changed repository-relative Markdown file. It validates
-only selected files; pre-push remains full-repository. See the
+only selected files; the pull-request gate still validates the whole tree. See the
 [RHINO command line reference](https://github.com/wahidyankf/rhino/blob/v0.1.1/docs/reference/cli.md) for the command,
 pinned to the release [`rhino.lock`](../../rhino.lock) names.
 

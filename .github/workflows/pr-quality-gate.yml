@@ -4,14 +4,20 @@ name: PR Quality Gate
 # rest on this workstation's Git hooks need a server-side mirror: a pull request
 # can be opened from any checkout, including one whose hooks never ran.
 #
-# This workflow replaces `ci.yml` rather than sitting beside it. Two workflows
-# would mean two places to edit when a hook contract changes, and one of them
-# would eventually be missed. Everything the retired workflow ran is here.
+# The gates themselves come only from the registry in `repo-config.yml`. The
+# pull-request surface is split into jobs by level, and each job names its
+# registry entries with `--entry`, so no job copies a gate's command and every
+# pull-request entry runs in exactly one job (C1). The mixed-version leaf is an
+# end-to-end layer (D20), so it runs in the e2e suite and not per pull request.
 #
 # Nothing here is wrapped in the guard, and here that is not a judgement call:
 # HIPPO cannot guard HIPPO. The wrapper builds this same tool from the working
 # tree, so a gate that ran under it would be arbitrated by the change under
 # test. The local hooks run the gate directly for the same reason.
+#
+# Every action reference names a full commit SHA, with the release tag it was
+# resolved from in a trailing comment. The version of each runtime and tool is
+# recorded with its source in phase-5-hippo-workflow-versions.md.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -25,78 +31,133 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  formatting:
-    name: Formatting
+  # The quick entry alone: typecheck, strict lint, the unit suites with -race,
+  # and the static behaviour checks.
+  test-quick:
+    name: Test quick
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci --ignore-scripts
-
-      # `scripts/test.sh` runs this too, after merge in the main test workflow.
-      # Named here because the pre-commit format gate only ever sees staged
-      # paths, so formatting is the one hook contract with no independent
-      # signal -- and a formatting failure should be legible in the job list
-      # rather than found by reading a long test log.
-      - name: Formatters and Prettier across the repository
-        run: ./scripts/format-check.sh
-
-  repository-contract:
-    name: Repository contract
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v6
+      # The head is checked out with its history, because the gate reads the
+      # explicit base and head range from the commits themselves.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v6
+      # Node 24 is pinned to the resolved patch release, not the major line, so
+      # a runner's cached image cannot move the formatter or the test runner.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 24
+          node-version: "24.22.3"
           cache: npm
 
       - run: npm ci --ignore-scripts
 
-      # One typed lifecycle replay. Rhino derives every child command from the
-      # registry and refuses a caller that supplies an incomplete or mutable
-      # review range.
-      - name: Repository policy under the pinned RHINO
+      - name: Run the quick gate
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eu
-          export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
-          ./rhino gate run --surface pull-request --base "$BASE_SHA" --head "$HEAD_SHA"
+          export PATH="${GITHUB_WORKSPACE}/node_modules/.bin:${PATH}"
+          ./rhino gate run --surface pull-request --entry quick \
+            --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
+  test-integration:
+    name: Test integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24.22.3"
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Run the integration target
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          export PATH="${GITHUB_WORKSPACE}/node_modules/.bin:${PATH}"
+          ./rhino gate run --surface pull-request --entry test-integration \
+            --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+  # Every other pull-request entry: the public-safety screens, the commit and
+  # message checks, the formatter replays, the repository documents and
+  # governance, the hook transport tests, the architecture and contract suites,
+  # the artifact checks, and the wiring rules.
+  pull-request-checks:
+    name: Pull-request checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24.22.3"
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Run the pull-request checks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          export PATH="${GITHUB_WORKSPACE}/node_modules/.bin:${PATH}"
+          ./rhino gate run --surface pull-request \
+            --entry public-safety-tree --entry public-safety-range \
+            --entry public-safety-message --entry public-safety-tests \
+            --entry format-staged --entry commit-message --entry shell-lint \
+            --entry remote-dispatch-refusal --entry markdown-line-length \
+            --entry repo-config --entry word-budget --entry quality-gates \
+            --entry directory-map --entry harness-adapters --entry internal-links \
+            --entry mermaid --entry worktree-layout --entry format-check \
+            --entry hook-transport-tests --entry architecture-tests \
+            --entry contract-tests --entry artifact-tests --entry gate-wiring \
+            --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+  # The pinned RHINO release, verified on a clean runner. Narrower than the rest
+  # of the gate on purpose: an ordinary pull request pays nothing for a
+  # consumer boundary it did not touch.
   consumer-bootstrap:
     name: Pinned RHINO bootstrap
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
-      # Narrower than the rest of the gate on purpose: an ordinary pull request
-      # pays nothing for a consumer boundary it did not touch.
       - name: Route on the pinned consumer boundary
         id: route
         env:
@@ -105,7 +166,7 @@ jobs:
           set -eu
           git fetch --no-tags origin "${BASE_REF}"
           changed=$(git diff --name-only FETCH_HEAD...HEAD -- \
-            rhino rhino.lock '.github/workflows/pr-quality-gate.yml')
+            rhino rhino.lock ferret.lock shellcheck.lock '.github/workflows/pr-quality-gate.yml')
           if [ -n "${changed}" ]; then
             echo "changed=true" >> "${GITHUB_OUTPUT}"
           else
@@ -119,33 +180,14 @@ jobs:
         if: steps.route.outputs.changed == 'true'
         run: ./rhino version
 
-  mixed-version:
-    # The one released-binary check that depends on the host's CPU count. The
-    # released build subtracts a CPU before its cap, so a shared ledger can
-    # disagree with the current build on hosts this runner size. The full suite
-    # runs this same leaf after merge; here only the leaf runs, on this runner.
-    name: Mixed-version compatibility
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
-      - name: Released v0.10.0 compatibility leaf
-        run: ./tests/e2e/mixed-version.sh
-
   release-build:
     name: Release build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: false
@@ -173,16 +215,16 @@ jobs:
   quality-gate:
     name: Quality gate
     # The single required status check. Branch protection names one context, so
-    # adding or splitting a job below never means editing the ruleset -- and a
+    # adding or splitting a job above never means editing the ruleset -- and a
     # job that is added but forgotten here still cannot pass unnoticed, because
     # `needs` fails the aggregate when any dependency does.
     needs:
       [
-        formatting,
-        repository-contract,
+        test-quick,
+        test-integration,
+        pull-request-checks,
         consumer-bootstrap,
         release-build,
-        mixed-version,
       ]
     if: always()
     runs-on: ubuntu-24.04

@@ -50,6 +50,10 @@ func forbiddenImport(owner, imported string) bool {
 	if strings.HasPrefix(imported, "charm.land/") || strings.HasPrefix(imported, "github.com/charmbracelet/") {
 		return true
 	}
+	// In-memory system doubles are test support: only _test.go files and tests/ may import them (C21).
+	if imported == module+"internal/adapters/system/systemtest" {
+		return true
+	}
 	if imported == "github.com/spf13/cobra" || imported == "github.com/spf13/pflag" {
 		return owner != "internal/adapters/cli"
 	}
@@ -138,6 +142,8 @@ func TestFixtureDependencies(t *testing.T) {
 		{"application-cobra", "internal/application", true},
 		{"application-charm", "internal/application", true},
 		{"inward", "internal/application", false},
+		{"systemtest-production", "internal/adapters/cli", true},
+		{"system-adapter", "internal/adapters/cli", false},
 	}
 	for _, fixture := range cases {
 		t.Run(fixture.name, func(t *testing.T) {

@@ -22,6 +22,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/adapters/conformance"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -855,7 +856,7 @@ func (driver *Driver) requestCorruptCoordinationStatusV04() error {
 	base := time.Unix(0, 0)
 	collector := &sequenceCollector{samples: []policy.Sample{healthySample(base), healthySample(base.Add(time.Second))}}
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	code, err := bootstrap.WithDefaults(cli.Application{
+	code, err := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdout: stdout, Stderr: stderr, Collector: collector, Sleep: func(time.Duration) {},
 		Environment: []string{"HIPPO_ROOT=" + driver.evidenceRoot},
 	}).Run(context.Background(), []string{statusCommandName, jsonFlag, configFlag, driver.configPath, diskPathFlag, "."})

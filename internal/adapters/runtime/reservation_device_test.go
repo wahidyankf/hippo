@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
 
@@ -37,7 +38,7 @@ func acquireDeviceOwnerForTest(t *testing.T, root string) *Session {
 // remount, without needing one.
 func rewriteReservationIdentityDeviceForTest(t *testing.T, root, token string) {
 	t.Helper()
-	ledger, err := readReservationLedger(root)
+	ledger, err := readReservationLedger(system.Production, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,11 +234,11 @@ func TestReservationIdentityDeviceChangeIncompleteStaysClosed(t *testing.T) {
 // releases it, as a killed guard would.
 func fabricateReservationWaiterForTest(t *testing.T, root string, live bool) (string, *os.File) {
 	t.Helper()
-	value, err := token()
+	value, err := token(system.Production)
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := openReservationIdentity(root, value)
+	identity, err := openReservationIdentity(system.Production, root, value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +252,7 @@ func fabricateReservationWaiterForTest(t *testing.T, root string, live bool) (st
 		}
 		identity = nil
 	}
-	ledger, err := readReservationLedger(root)
+	ledger, err := readReservationLedger(system.Production, root)
 	if err != nil {
 		t.Fatal(err)
 	}

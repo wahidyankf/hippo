@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for require-hippo-boundary.sh. The guard always exits 0; what varies is whether a `deny`
+# Tests for agent-hippo-guard.sh. The guard always exits 0; what varies is whether a `deny`
 # payload is emitted. Both directions are asserted — a guard verified only on its denying cases
 # would pass while denying everything, which in a PreToolUse hook means the session cannot run any
 # command at all.

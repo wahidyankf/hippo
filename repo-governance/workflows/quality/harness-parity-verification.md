@@ -39,5 +39,4 @@ Validation is whole-roster only: every declared profile and generated artifact i
 ## When to Run It
 
 On every contract change, and on every gate run: the check is a
-[declared gate](../../development/software-quality-enforcement.md) on the `pre-push`, `pull-request`, and `main`
-surfaces.
+[declared gate](../../development/software-quality-enforcement.md) on the `pull-request` surface.

@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 )
 
 const (
@@ -38,17 +39,19 @@ type retainedFile struct {
 	modified time.Time
 }
 
-func livePID(pid int) bool {
+// livePID reports whether a process with the identifier exists, or exists under another owner. A signal of zero
+// is only a probe, so no process is affected.
+func livePID(port system.System, pid int) bool {
 	if pid <= 0 {
 		return false
 	}
 
-	err := syscall.Kill(pid, 0)
+	err := port.Processes.Kill(pid, 0)
 
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-func activePrefixes(entries []os.DirEntry, root string) (map[string]bool, error) {
+func activePrefixes(port system.System, entries []fs.DirEntry, root string) (map[string]bool, error) {
 	active := map[string]bool{}
 
 	for _, entry := range entries {
@@ -57,8 +60,8 @@ func activePrefixes(entries []os.DirEntry, root string) (map[string]bool, error)
 		}
 
 		path := filepath.Join(root, entry.Name())
-		data, err := os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
+		data, err := port.Files.ReadFile(path)
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
@@ -66,14 +69,14 @@ func activePrefixes(entries []os.DirEntry, root string) (map[string]bool, error)
 		}
 
 		var marker activeMarker
-		if json.Unmarshal(data, &marker) == nil && marker.SchemaVersion == 1 && livePID(marker.PID) {
+		if json.Unmarshal(data, &marker) == nil && marker.SchemaVersion == 1 && livePID(port, marker.PID) {
 			prefix := strings.TrimSuffix(path, ".active.json") + "."
 			active[prefix] = true
 
 			continue
 		}
 
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := port.Files.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
 	}
@@ -91,13 +94,14 @@ func protectedByActiveWriter(path string, active map[string]bool) bool {
 	return false
 }
 
-func cleanupLocked(root string, now time.Time, preserve ...string) error { //nolint:cyclop,gocognit // One pass classifies every protected, active, expired, and capped evidence entry.
-	entries, err := os.ReadDir(root)
+//nolint:cyclop,gocognit // One pass classifies every protected, active, expired, and capped evidence entry.
+func cleanupLocked(port system.System, root string, now time.Time, preserve ...string) error {
+	entries, err := port.Files.ReadDir(root)
 	if err != nil {
 		return err
 	}
 
-	active, err := activePrefixes(entries, root)
+	active, err := activePrefixes(port, entries, root)
 	if err != nil {
 		return err
 	}
@@ -106,10 +110,10 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error { //nol
 	for _, path := range preserve {
 		preserved[path] = true
 	}
-	if err = compactLocked(root, now, active, preserved); err != nil {
+	if err = compactLocked(port, root, now, active, preserved); err != nil {
 		return err
 	}
-	entries, err = os.ReadDir(root)
+	entries, err = port.Files.ReadDir(root)
 	if err != nil {
 		return err
 	}
@@ -123,7 +127,7 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error { //nol
 
 		path := filepath.Join(root, entry.Name())
 		info, infoError := entry.Info()
-		if errors.Is(infoError, os.ErrNotExist) {
+		if errors.Is(infoError, fs.ErrNotExist) {
 			continue
 		}
 		if infoError != nil {
@@ -134,7 +138,7 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error { //nol
 			if age < 0 || age < atomicWriteTemporaryRetention {
 				continue
 			}
-			if removeError := os.Remove(path); removeError != nil && !errors.Is(removeError, os.ErrNotExist) {
+			if removeError := port.Files.Remove(path); removeError != nil && !errors.Is(removeError, fs.ErrNotExist) {
 				return removeError
 			}
 
@@ -148,7 +152,7 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error { //nol
 
 		protected := preserved[path] || protectedByActiveWriter(path, active)
 		if now.Sub(info.ModTime()) > retention && !protected {
-			if removeError := os.Remove(path); removeError != nil && !errors.Is(removeError, os.ErrNotExist) {
+			if removeError := port.Files.Remove(path); removeError != nil && !errors.Is(removeError, fs.ErrNotExist) {
 				return removeError
 			}
 
@@ -175,7 +179,7 @@ func cleanupLocked(root string, now time.Time, preserve ...string) error { //nol
 		if preserved[entry.path] {
 			continue
 		}
-		if removeError := os.Remove(entry.path); removeError != nil && !errors.Is(removeError, os.ErrNotExist) {
+		if removeError := port.Files.Remove(entry.path); removeError != nil && !errors.Is(removeError, fs.ErrNotExist) {
 			return removeError
 		}
 
@@ -197,18 +201,22 @@ func WriteRefused(err error) bool {
 // Cleanup removes expired evidence and prunes inactive files to the global cap.
 // Active streams are excluded from that cap because each has its own hard limit.
 func Cleanup(root string, now time.Time, preserve ...string) error {
+	return cleanup(system.Production, root, now, preserve...)
+}
+
+func cleanup(port system.System, root string, now time.Time, preserve ...string) error {
 	if root == "" {
 		return errors.New("evidence root is empty")
 	}
 
-	if err := os.MkdirAll(root, 0o700); err != nil {
+	if err := port.Files.MkdirAll(root, 0o700); err != nil {
 		return err
 	}
-	if err := os.Chmod(root, 0o700); err != nil {
+	if err := port.Files.Chmod(root, 0o700); err != nil {
 		return err
 	}
 
-	return withWriterLock(root, func() error {
-		return cleanupLocked(root, now, preserve...)
+	return withWriterLock(port, root, func() error {
+		return cleanupLocked(port, root, now, preserve...)
 	})
 }

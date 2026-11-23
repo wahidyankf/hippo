@@ -81,3 +81,9 @@ func TestRunAggregateUnavailableAndResetCountersStayUnknownOrZero(t *testing.T) 
 		})
 	}
 }
+
+func TestSetChildUsageOnNilAccumulatorIsANoOp(_ *testing.T) {
+	var accumulator *evidence.RunAccumulator
+	accumulator.SetChildUsage(time.Second, time.Second, true)
+	accumulator.ObserveReservationOwners(1)
+}

@@ -21,6 +21,7 @@ import (
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	runtimeadapter "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/application"
 	"github.com/wahidyankf/hippo/internal/bootstrap"
 	"github.com/wahidyankf/hippo/internal/domain/coordination"
@@ -107,12 +108,12 @@ func (fixture *annotationBDD) Bindings() []contract.StepBinding {
 		{Pattern: `^the inherited owner remains labeled parent-build$`, Handler: func() error { return fixture.requireLabel("parent-build") }},
 		{Pattern: `^the nested run creates no replacement annotation$`, Handler: fixture.requireInherited},
 		{Pattern: `^a registered labeled run that reaches (child completion|cancellation in queue|admission deferral|confirmed forced stop)$`, Handler: fixture.prepareRetirement},
-		{Pattern: `^its owned token is removed under the coordination lock$`, Handler: fixture.retire},
+		{Pattern: `^the run releases its ownership$`, Handler: fixture.retire},
 		{Pattern: `^its matching display annotation is removed$`, Handler: fixture.requireRetired},
 		{Pattern: `^no other owner's display annotation changes$`, Handler: fixture.requireOtherOwner},
 		{Pattern: `^one proven stale owner and one live owner with display annotations$`, Handler: fixture.prepareCleanup},
 		{Pattern: `^an annotation whose token is temporarily absent from the ledger$`, Handler: fixture.prepareUnproven},
-		{Pattern: `^locked coordination reconciliation performs annotation cleanup$`, Handler: fixture.cleanup},
+		{Pattern: `^annotation cleanup runs$`, Handler: fixture.cleanup},
 		{Pattern: `^only the proven stale owner's annotation is removed$`, Handler: fixture.requireStaleRemoved},
 		{Pattern: `^the live and unproven annotations remain unchanged$`, Handler: fixture.requireCleanupRetained},
 	}
@@ -927,7 +928,10 @@ func (fixture *annotationBDD) start(parent context.Context, label, inherited str
 	var stdout io.Writer = &job.output
 	if printf {
 		// The actual printf child blocks on its owned output pipe until assertions
-		// inspect the live annotation, rather than racing a fast child exit.
+		// inspect the live annotation, rather than racing a fast child exit. The
+		// output must exceed the 64 KiB Linux pipe capacity, but GNU and uutils
+		// printf do not share a width limit above 65536. Reusing the format for a
+		// second argument writes 131072 bytes within both limits.
 		job.pipeReader, job.pipeWriter, err = os.Pipe()
 		if err != nil {
 			cancel()
@@ -936,7 +940,7 @@ func (fixture *annotationBDD) start(parent context.Context, label, inherited str
 		}
 		stdout = job.pipeWriter
 		args = args[:len(args)-5]
-		args = append(args, "--", "/usr/bin/printf", "%1048576s", "private text")
+		args = append(args, "--", "/usr/bin/printf", "%65536s", "private text", "private text")
 	}
 	if fixture.adapter.Name == contract.E2E {
 		if err := fixture.startPublicJob(ctx, job, args, environment, stdout); err != nil {
@@ -947,7 +951,7 @@ func (fixture *annotationBDD) start(parent context.Context, label, inherited str
 	} else {
 		go func() {
 			defer close(job.joined)
-			boundary := bootstrap.WithDefaults(cli.Application{Stdin: strings.NewReader(""), Stdout: stdout, Stderr: &job.diagnostic, Environment: environment, Collector: annotationBDDCollector{}, Sleep: func(time.Duration) {}})
+			boundary := bootstrap.WithDefaults(system.Production, cli.Application{Stdin: strings.NewReader(""), Stdout: stdout, Stderr: &job.diagnostic, Environment: environment, Collector: annotationBDDCollector{}, Sleep: func(time.Duration) {}})
 			job.code, job.err = boundary.Run(ctx, args)
 		}()
 	}

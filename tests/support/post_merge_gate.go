@@ -64,7 +64,7 @@ func (driver *Driver) requireNoFullGateOnPullRequests() error {
 func (driver *Driver) requirePostMergeFullGate() error {
 	wiring := driver.postMerge
 	if wiring.mainTrigger != "push,workflow_dispatch" ||
-		!containsAll(wiring.mainTest, "branches: [main]", "./scripts/test.sh", "os: [ubuntu-24.04, macos-15]",
+		!containsAll(wiring.mainTest, "branches: [main]", "./rhino gate run --surface main", "os: [ubuntu-24.04, macos-15]",
 			"fail-fast: false", "timeout-minutes: 45", "permissions:\n  contents: read") {
 		return errors.New("the post-merge workflow does not run the full gate on push to main across both operating systems")
 	}

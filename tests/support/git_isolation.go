@@ -25,7 +25,6 @@ var redirectingGitVariables = []string{
 // Anything they call inherits the environment they leave behind.
 var gateScriptNames = []string{
 	filepath.Join("scripts", "test-quick.sh"),
-	filepath.Join("scripts", "test.sh"),
 	filepath.Join("scripts", "build-release.sh"),
 }
 

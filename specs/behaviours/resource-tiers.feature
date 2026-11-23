@@ -7,7 +7,11 @@ Feature: Optional very-heavy resource tier
     When a guarded run requests the very-heavy tier with a command that exits zero
     Then the tier run exits 0
     And the tier history row reads very-heavy with outcome passed
-    And the very-heavy tier queue deadline is four hours
+
+  Scenario: The very-heavy tier queue deadline is the declared four hours
+    Given a schema three configuration that declares the very-heavy tier within the pool
+    When a guarded run requests the very-heavy tier with a command that exits zero
+    Then the very-heavy tier queue deadline is four hours
 
   Scenario: A declared very-heavy tier refuses an explicit CPU outside its bounds
     Given a schema three configuration that declares the very-heavy tier within the pool
@@ -64,3 +68,17 @@ Feature: Optional very-heavy resource tier
       | a schema three configuration without the very-heavy tier |
       | a schema three configuration that declares the very-heavy tier within the pool |
       | no configuration file                                    |
+
+  # Behaviour: HI-CFG-005
+  Scenario Outline: A schema-3 file missing a required pool, owner, promotion, or tier field is refused
+    Given a schema three configuration without <missing>
+    When a guarded run requests the light tier with a command that exits zero
+    Then the tier run exits 125 naming hippo.config.unreadable with "<message>"
+    And the tier payload did not run and no history row was written
+
+    Examples:
+      | missing            | message                                          |
+      | a pool limit       | schema 3 requires positive pool and owner limits |
+      | an owner limit     | schema 3 requires positive pool and owner limits |
+      | the promotion gate | schema 3 requires a promotion gate               |
+      | the heavy tier     | schema 3 requires heavy resource tier            |

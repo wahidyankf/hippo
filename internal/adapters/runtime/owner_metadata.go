@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/identity"
 	"github.com/wahidyankf/hippo/internal/policy"
 )
@@ -37,6 +38,7 @@ func reservationMetadataPath(root, token string) (string, error) {
 }
 
 func writeReservationMetadata(
+	port system.System,
 	root, token string,
 	metadata ReservationMetadata,
 	minimum, maximum ReservationVector,
@@ -51,7 +53,7 @@ func writeReservationMetadata(
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err = port.Files.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	value := reservationMetadataFile{
@@ -61,14 +63,14 @@ func writeReservationMetadata(
 		RegisteredAt: registeredAt.UTC().Format(time.RFC3339Nano),
 		Deadline:     deadline.UTC().Format(time.RFC3339Nano),
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".owner-metadata-*.tmp")
+	temporary, err := port.Files.CreateTemp(filepath.Dir(path), ".owner-metadata-*.tmp")
 	if err != nil {
 		return err
 	}
 	temporaryPath := temporary.Name()
 	defer func() {
 		returnError = errors.Join(returnError, temporary.Close())
-		if removeError := os.Remove(temporaryPath); !errors.Is(removeError, os.ErrNotExist) {
+		if removeError := port.Files.Remove(temporaryPath); !errors.Is(removeError, os.ErrNotExist) {
 			returnError = errors.Join(returnError, removeError)
 		}
 	}()
@@ -82,15 +84,15 @@ func writeReservationMetadata(
 		return err
 	}
 
-	return os.Rename(temporaryPath, path)
+	return port.Files.Rename(temporaryPath, path)
 }
 
-func readReservationMetadata(root, token string) (reservationMetadataFile, bool, error) {
+func readReservationMetadata(port system.System, root, token string) (reservationMetadataFile, bool, error) {
 	path, err := reservationMetadataPath(root, token)
 	if err != nil {
 		return reservationMetadataFile{}, false, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := port.Files.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return reservationMetadataFile{}, false, nil
 	}
@@ -115,21 +117,21 @@ func readReservationMetadata(root, token string) (reservationMetadataFile, bool,
 	return value, true, nil
 }
 
-func removeReservationMetadata(root, token string) error {
+func removeReservationMetadata(port system.System, root, token string) error {
 	path, err := reservationMetadataPath(root, token)
 	if err != nil {
 		return err
 	}
-	if err = os.Remove(path); errors.Is(err, os.ErrNotExist) {
+	if err = port.Files.Remove(path); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 
 	return err
 }
 
-func pruneReservationMetadata(root string, ledger reservationLedger) error {
+func pruneReservationMetadata(port system.System, root string, ledger reservationLedger) error {
 	directory := filepath.Join(root, "owner-metadata")
-	entries, err := os.ReadDir(directory)
+	entries, err := port.Files.ReadDir(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -151,7 +153,7 @@ func pruneReservationMetadata(root string, ledger reservationLedger) error {
 		if live[token] || !sessionTokenPattern.MatchString(token) {
 			continue
 		}
-		if err = os.Remove(filepath.Join(directory, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err = port.Files.Remove(filepath.Join(directory, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
@@ -160,6 +162,7 @@ func pruneReservationMetadata(root string, ledger reservationLedger) error {
 }
 
 func reservationEntry(
+	port system.System,
 	root, token, state string,
 	position int,
 	class policy.TaskClass,
@@ -170,7 +173,7 @@ func reservationEntry(
 		RunID: token, State: state, Position: position, Class: class, Profile: profile,
 		Requested: requested, Allocated: allocated,
 	}
-	metadata, present, err := readReservationMetadata(root, token)
+	metadata, present, err := readReservationMetadata(port, root, token)
 	if err != nil {
 		return ReservationEntry{}, err
 	}

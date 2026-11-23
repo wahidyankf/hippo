@@ -15,6 +15,7 @@ import (
 	resourceconfig "github.com/wahidyankf/hippo/internal/adapters/config"
 	"github.com/wahidyankf/hippo/internal/adapters/evidence"
 	"github.com/wahidyankf/hippo/internal/adapters/health"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/tests/support/runtimewiring"
 
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
@@ -569,7 +570,7 @@ func wiredApplication(application Application) Application {
 	application.Configuration = resourceconfig.Provider{}
 	engine := guard.NewEngine()
 	application.RunServices = app.RunServices{Coordination: engine, Workload: engine, Ports: engine, Evidence: engine, Clock: guard.RunClock{}}
-	application.ReleaseServices = app.ReleaseServices{Configuration: application.Configuration, Collector: application.Collector, Environment: environmentMap(application.Environment), Clock: guard.ReleaseClock{NowFunc: application.Now, Pause: application.Sleep}, Health: health.Probe{}, Evidence: evidence.ReleaseRepository{}}
+	application.ReleaseServices = app.ReleaseServices{Configuration: application.Configuration, Collector: application.Collector, Environment: environmentMap(application.Environment), Clock: guard.ReleaseClock{NowFunc: application.Now, Pause: application.Sleep}, Health: health.Probe{Host: system.Production}, Evidence: evidence.ReleaseRepository{}}
 	if application.MonitorRelease == nil {
 		application.MonitorRelease = application.ReleaseServices.RunMonitor
 	}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/wahidyankf/hippo/internal/adapters/cli"
 	guard "github.com/wahidyankf/hippo/internal/adapters/runtime"
+	"github.com/wahidyankf/hippo/internal/adapters/system"
 	"github.com/wahidyankf/hippo/internal/policy"
 	"github.com/wahidyankf/hippo/internal/status"
 )
@@ -68,7 +69,7 @@ func runGuardedAtBoundary(root, configDocument string, samples []policy.Sample, 
 		samples = []policy.Sample{healthySample(time.Now())}
 	}
 	stderr := &bytes.Buffer{}
-	code, _ := bootstrap.WithDefaults(cli.Application{
+	code, _ := bootstrap.WithDefaults(system.Production, cli.Application{
 		Stdin:       strings.NewReader(""),
 		Stdout:      &bytes.Buffer{},
 		Stderr:      stderr,

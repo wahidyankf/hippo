@@ -72,7 +72,8 @@ type ConformanceSession struct {
 	Close               func() error
 }
 
-// ConformanceService executes manifest-driven consumer verification.
+// ConformanceService executes manifest-driven consumer verification. The composition root supplies Now; the
+// service never reads the clock itself.
 type ConformanceService struct {
 	Environment ConformanceEnvironment
 	Now         func() time.Time
@@ -119,9 +120,6 @@ func (service ConformanceService) Run(ctx context.Context, path string, output i
 		return err
 	}
 	defer func() { returnError = errors.Join(returnError, session.Close()) }()
-	if service.Now == nil {
-		service.Now = time.Now
-	}
 	if service.Wait == nil {
 		service.Wait = waitConformanceHold
 	}

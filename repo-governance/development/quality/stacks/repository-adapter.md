@@ -67,18 +67,19 @@ Grouped by the source that leaves the choice open; each entry reads decision: ch
 - `swe-releaser`
   - Deploy targets: none; releases follow [release cut](../../../workflows/maintenance/release-cut.md)
 - **test-driven development**
-  - coverage floor: 99% over the deterministic core, in the unit run — local floor; integration and end-to-end prove
-    boundaries instead
+  - coverage floor: 99% in the unit run, over named packages — open toward
+    [C15](../../quality-gates.md#the-test-and-gate-contract); integration and end-to-end prove boundaries instead
 - **quality gates**
-  - task runner: plain scripts behind `npm run test:quick` and `npm test` — this repository never acquires Nx
+  - task runner: plain scripts behind `npm run test:quick`, `test:integration`, `test:e2e`, and
+    `test:behaviour:coverage` — this repository never acquires Nx
 - `golang-standards.md`
   - assertions: the `testing` package only — no assertion dependency
   - integration selection: deviation: [whole-corpus host](../../behaviour-driven-development.md#suite-host) uses
     explicit modes; ordinary tests remain `tests/integration` — private TUI access
   - unit test placement: deviation: most ordinary tests live in `tests/unit`; whole corpus uses that host — private
     seams
-  - race detection: deviation: [full gate](../../quality-gates.md#the-full-gate) retains existing patterns and relocated
-    Unit/Integration — quick remains fast
+  - race detection: deviation: [quality gates](../../quality-gates.md#targets) run `-race` with relocated Unit and
+    Integration — quick remains fast
   - gates: every golangci-lint linter, NilAway, and the domain literal analysis — stronger than the standard, per
     [Go Analysis Gates](repository-adapter/001-go-analysis-gates.md)
   - context parameter: deviation: `noctx` disabled — host probes and supervised process groups have no request context

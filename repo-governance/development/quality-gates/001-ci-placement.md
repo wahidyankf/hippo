@@ -1,6 +1,6 @@
 # CI Placement
 
-The pull-request gate mirrors the hooks and nothing heavier. Heavy gates run after merge on `main`, so a regression can
+The pull-request gate mirrors the hooks and adds the rest. Heavy gates run after merge on `main`, so a regression can
 reach `main` before it is detected. That cost is accepted: each merge would otherwise send every other pull request back
 to rebase and wait for macOS.
 
@@ -8,27 +8,33 @@ to rebase and wait for macOS.
 
 [`pr-quality-gate.yml`](../../../.github/workflows/pr-quality-gate.yml) runs these jobs:
 
-- `Formatting`: `scripts/format-check.sh`.
-- `Repository contract`: `./rhino gate run --surface pull-request`. That surface runs the `quick` gate (typecheck, lint,
-  unit, and behaviour adapters) with the documentation and configuration gates.
-- `Pinned RHINO bootstrap`: only when the consumer boundary changes.
-- `Mixed-version compatibility`: `tests/e2e/mixed-version.sh`, the tagged leaves that compare the released v0.8.5 and
-  v0.10.0 binaries with the current build on a shared ledger. Its result depends on the host's CPU count, so the
-  runner's own count is the evidence. It runs on the same `ubuntu-24.04` runner as the other jobs and nothing else from
-  the full suite.
-- `Release build`: every release asset, and the Linux checksum inventory.
+- `Test quick`: `./rhino gate run --surface pull-request --entry quick`. Typecheck, strict lint, NilAway, unit tests,
+  and the behaviour checks.
+- `Test integration`: the `test-integration` entry, with the integration suites.
+- `Pull-request checks`: every other pull-request entry, named one by one with `--entry`, so each runs in exactly one
+  job.
+- `Pinned RHINO bootstrap`: `./rhino version`, only when the consumer boundary or the workflow changes.
+- `Release build`: every release asset, its inventory, and the Linux checksums.
+- `Quality gate`: the aggregate. It fails when any job is not an explicit success, so a skipped or cancelled job cannot
+  pass.
 
-The aggregate `Quality gate` is the required check. It fails skipped or cancelled jobs, because a skipped required check
-never reports. The [leak review](../../workflows/quality/pr-leak-review/003-enforcement.md) is a local harness verdict,
-not a required check. Keep storage within the [GitHub Actions storage](../github-actions-storage.md) allowance.
+The mixed-version compatibility leaf is an end-to-end layer. It runs in the e2e suite, not per pull request. The full
+list of entries and their surfaces is in the [gate inventory](002-gate-inventory.md).
 
 ## After Merge
 
 [`main-test.yml`](../../../.github/workflows/main-test.yml) runs on each push to `main` and on manual dispatch. Each
-`main` commit keeps its own result, because the run is never cancelled by a later commit. It runs:
+`main` commit keeps its own result, because a later commit never cancels an earlier run. It runs:
 
-- the full gate, `./scripts/test.sh`, on `ubuntu-24.04` and `macos-15`;
-- the macOS release reproducibility check: the same commit must rebuild the Linux checksums byte for byte.
+- `./rhino gate run --surface main` on `ubuntu-24.04` and `macos-15`: `quick`, `test-integration`, `test-e2e`, and
+  `vuln-scan`. The macOS leg is the only proof of the darwin-tagged host code, because Linux cannot compile it.
+- the release reproducibility check: a macOS rebuild must produce the Linux checksums byte for byte.
+
+## Scheduled
+
+[`loaded-host.yml`](../../../.github/workflows/loaded-host.yml) runs nightly on both systems. It runs
+`scripts/test-loaded.sh`: the quick, integration, and end-to-end targets under synthetic CPU load. A failure is a
+finding to triage, usually a fixture bound tighter than the host's jitter. The job is not required.
 
 ## A Failure on Main
 

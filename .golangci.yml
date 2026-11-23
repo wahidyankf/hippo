@@ -73,6 +73,15 @@ linters:
             - github.com/cucumber/godog
             - github.com/cucumber/messages/go/v34
             - github.com/wahidyankf/hippo
+        production-without-systemtest:
+          # In-memory doubles stand in for the host only in _test.go files and the tests tree (C21).
+          files:
+            - $all
+            - "!$test"
+            - "!**/tests/**/*.go"
+          deny:
+            - pkg: github.com/wahidyankf/hippo/internal/adapters/system/systemtest
+              desc: in-memory system doubles are imported by test files and the tests tree only
     exhaustive:
       # A map keyed by an enumerated type must name every member, as a switch over it must.
       check:

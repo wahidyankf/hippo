@@ -9,9 +9,12 @@ Publishing a version. A released tag is permanent: it is never rebuilt, never re
   not assumed.
 - The working tree is clean **including untracked files**. `scripts/build-release.sh` verifies this itself and refuses
   otherwise.
-- The [post-merge main test](../../../.github/workflows/main-test.yml) run of the exact commit passed: the full gate,
-  `scripts/test.sh`, on both operating systems. Wait for it before pushing the tag. `release.yml` refuses a commit with
-  no passing run: a run still in progress is fixed by re-running that workflow, but a failed run means the commit is not
+- The change that merged the commit passed the `pull-request` surface, read as its `Quality gate` result.
+- The [post-merge main test](../../../.github/workflows/main-test.yml) run of the exact commit passed on both operating
+  systems. That run is the `main` surface, `./rhino gate run --surface main`: `npm run test:quick`,
+  `npm run test:integration`, `npm run test:e2e`, and the `vuln-scan` entry. It replaces the retired `scripts/test.sh`
+  and runs on the same two systems. Wait for it before pushing the tag. `release.yml` refuses a commit with no passing
+  run: a run still in progress is fixed by re-running that workflow, but a failed run means the commit is not
   releasable, and the next version is the fix.
 - A [docs quality gate](../quality/docs-quality-gate.md) verdict on subject `all` is recorded, so `CHANGELOG.md`,
   `README.md`, and `docs/` are checked against the binary being cut. A documented contract the binary breaks is fixed in
